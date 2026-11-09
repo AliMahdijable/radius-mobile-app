@@ -19,12 +19,20 @@ class EmployeeLimitsCard extends StatefulWidget {
   /// للاختبار: مصدرٌ بديل لـ[EmployeeLimitsApi.me].
   final Future<EmployeeLimitStatus?> Function()? loader;
 
+  /// للاختبار: تعود مطويّةً (حالة الفتح تبقى ما دام التطبيق مفتوحاً).
+  @visibleForTesting
+  static void resetForTest() => _EmployeeLimitsCardState._open = false;
+
   @override
   State<EmployeeLimitsCard> createState() => _EmployeeLimitsCardState();
 }
 
 class _EmployeeLimitsCardState extends State<EmployeeLimitsCard> {
   EmployeeLimitStatus? _s;
+
+  /// مطويّةٌ افتراضيّاً (المالك ٩ نوفمبر: «خليها افتراضي تكون مقفولة وبيها بس أرقامهن») — الأرقام الثلاثة بسطر، والنقر يفتح التفصيل.
+  /// تبقى كما تركها الموظّف ما دام التطبيق مفتوحاً، وتعود مطويّةً مع كلّ تشغيل.
+  static bool _open = false;
 
   @override
   void initState() {
@@ -56,19 +64,141 @@ class _EmployeeLimitsCardState extends State<EmployeeLimitsCard> {
   Widget build(BuildContext context) {
     final s = _s;
     if (s == null || !s.started || s.limits.isEmpty) return const SizedBox.shrink();
+    void toggle() => setState(() => _open = !_open);
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.md),
-      child: EmployeeLimitsPanel(status: s, title: 'حسابي مع المدير', selfView: true),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 180),
+        alignment: Alignment.topCenter,
+        child: _open
+            ? EmployeeLimitsPanel(
+                key: const ValueKey('emp-limits-open'),
+                status: s,
+                title: 'حسابي مع المدير',
+                selfView: true,
+                onHeaderTap: toggle,
+              )
+            : _CollapsedLimits(key: const ValueKey('emp-limits-collapsed'), status: s, onTap: toggle),
+      ),
+    );
+  }
+}
+
+/// البطاقة مطويّةً: العنوان وسهمٌ للفتح، وتحته الأرقام وحدها — النقد/سقفه، الديون المفتوحة/سقفها، والربح.
+class _CollapsedLimits extends StatelessWidget {
+  const _CollapsedLimits({super.key, required this.status, required this.onTap});
+  final EmployeeLimitStatus status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final s = status;
+    final blocked = s.cashBlocked || s.debtBlocked;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.card),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.card),
+            border: Border.all(color: blocked ? AppColors.error.withValues(alpha: 0.45) : AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.walletCards, size: 16, color: AppColors.brand),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: Text('حسابي مع المدير', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                  ),
+                  Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textLow),
+                ],
+              ),
+              const SizedBox(height: Sp.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: _Num(
+                      key: const ValueKey('emp-limits-num-cash'),
+                      label: 'نقد',
+                      value: _pair(s.cashUsed, s.limits.cashCap),
+                      color: _tone(s.cashUsed, s.limits.cashCap, s.cashBlocked),
+                    ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: _Num(
+                      key: const ValueKey('emp-limits-num-debt'),
+                      label: 'ديون',
+                      value: _pair(s.debtUsed, s.limits.debtCap),
+                      color: _tone(s.debtUsed, s.limits.debtCap, s.debtBlocked),
+                    ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: _Num(
+                      key: const ValueKey('emp-limits-num-profit'),
+                      label: 'ربح',
+                      value: formatIQD(s.profit),
+                      color: s.profit > 0 ? AppColors.success : AppColors.textHi,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _pair(double used, double? cap) => cap == null ? formatIQD(used) : '${formatIQD(used)} / ${formatIQD(cap)}';
+
+  static Color _tone(double used, double? cap, bool blocked) {
+    if (blocked) return AppColors.error;
+    if (cap != null && cap > 0 && used / cap >= 0.85) return AppColors.warning;
+    return AppColors.textHi;
+  }
+}
+
+class _Num extends StatelessWidget {
+  const _Num({super.key, required this.label, required this.value, required this.color});
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textLow)),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(value, maxLines: 1, textDirection: TextDirection.rtl, style: AppType.bodyBold(color: color)),
+        ),
+      ],
     );
   }
 }
 
 /// لوحة أرقام الفترة: النقد/السقف، الدين/السقف، العمليّات والربح — للموظّف ([selfView]) وللمدير.
 class EmployeeLimitsPanel extends StatelessWidget {
-  const EmployeeLimitsPanel({super.key, required this.status, this.title, this.selfView = false});
+  const EmployeeLimitsPanel({super.key, required this.status, this.title, this.selfView = false, this.onHeaderTap});
   final EmployeeLimitStatus status;
   final String? title;
   final bool selfView;
+
+  /// بطاقة الموظّف المفتوحة: النقر على العنوان يطويها (سهمٌ للأعلى). null ⇒ لوحة المدير كما هي.
+  final VoidCallback? onHeaderTap;
 
   @override
   Widget build(BuildContext context) {
@@ -86,16 +216,24 @@ class EmployeeLimitsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(LucideIcons.walletCards, size: 16, color: AppColors.brand),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                child: Text(title ?? 'حساب الموظف', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
-              ),
-              if (since != null)
-                Text('منذ ${_dateAr(since)}', style: AppType.micro(color: AppColors.textLow)),
-            ],
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onHeaderTap,
+            child: Row(
+              children: [
+                Icon(LucideIcons.walletCards, size: 16, color: AppColors.brand),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(title ?? 'حساب الموظف', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                ),
+                if (since != null)
+                  Text('منذ ${_dateAr(since)}', style: AppType.micro(color: AppColors.textLow)),
+                if (onHeaderTap != null) ...[
+                  const SizedBox(width: Sp.x6),
+                  Icon(LucideIcons.chevronUp, size: 18, color: AppColors.textLow),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: Sp.md),
           _CapRow(
