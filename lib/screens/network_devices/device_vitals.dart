@@ -178,10 +178,17 @@ class DeviceDetail {
     this.extras = const [],
     this.glance = const DeviceGlance(),
     this.onuLights = const [],
+    this.onuLightsWanted,
+    this.onuLightsAnswered,
   });
 
-  /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (detailed).
+  /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (`withOnuLights`).
   final List<OnuLight> onuLights;
+
+  /// كم ONU متّصلة يسألها قارئ الضوء فعلاً (null = لم يُطلب أو لا قارئ للطراز) — أكثر من [onuLights] المقروءة ⇒ «قُرئ n من N» لا
+  /// «ضوءهم كلّه جيّد» (٩ نوفمبر)؛ و[onuLightsAnswered] كم أجاب منها (بقيمةٍ صالحة أو بلا) — يفصل «ما لحق» عن «بلا قراءة».
+  final int? onuLightsWanted;
+  final int? onuLightsAnswered;
 
   final String? uptime;
   final String? firmware;
@@ -239,6 +246,7 @@ class DeviceGlance {
     this.uptimeSec,
     this.linkUptime = false,
     this.peersKnown = false,
+    this.radioUnread = false,
   });
 
   /// مدّة التشغيل بالثواني — أو مدّة **الوصلة** حين [linkUptime] (ميموزا: عمر وكيل SNMP يُصفَّر بلا سقوط، فلا يُعرض).
@@ -248,6 +256,11 @@ class DeviceGlance {
   /// قائمة العملاء/المحطّات في [DeviceDetail.peers] قُرئت فعلاً — فراغها «لا متّصلين» لا «لم تُقرأ بعد». القراءة الخفيفة
   /// (ميكروتك بلا جدول التسجيل، ميموزا بلا محطّاتها) تتركها false فلا يظهر «0 متّصل» كاذب.
   final bool peersKnown;
+
+  /// للجهاز راديو مفعّل (أو واجهاتٌ لم تُقرأ) وطبقة اللاسلكيّ لم تُقرأ هذه المرّة — طبقة ميكروتك الأولى، القراءة الخفيفة، أو أمر
+  /// اللاسلكيّ فشل. دوره (سكتر/وصلة) ومشتركوه وإشارته مجهولة: «الفحص الشامل» لا يحكم عليه من نوع سجلّه (٩ نوفمبر — المراجعة:
+  /// سكتر بيس بوكس محفوظٌ «راوتر» كان «راوتر · سليم» ولم يُقرأ مشتركوه).
+  final bool radioUnread;
 
   /// المعالج والذاكرة ٪، الحرارة °م، الفولتيّة، استهلاك PoE (واط)، جلسات PPP.
   final int? cpu, mem, temp;
@@ -360,6 +373,17 @@ class DeviceVitals {
   /// ستّ وتنتظر مهلتها كاملةً.
   /// سبب الامتناع خارج شبكة الوكيل — البطاقة الكبيرة تعرضه سطراً ([DeviceBigCard]).
   static const offNetworkReason = 'خارج شبكتك';
+
+  /// من أين يبدأ ضوء كلّ أولت في الفحص التالي (فهرس الواجهة) — حين لم يكتمل بمهلته.
+  static final Map<int, int> _lightsFrom = {};
+
+  @visibleForTesting
+  static void resetLightsCursorForTest() => _lightsFrom.clear();
+
+  /// وكيل SNMP لقراءة ضوء الأولت — يُستبدل في الاختبار.
+  @visibleForTesting
+  static SnmpV2c Function(String host, int port, String community) snmpFor =
+      (host, port, community) => SnmpV2c(host: host, port: port, community: community);
 
   static String? skipReason(NetworkDevice d) {
     // ٥ نوفمبر: خارج شبكة الوكيل لا جلسة تصل الجهاز من الموبايل — محاولاتٌ تفشل وتحجز الخانات، وتُظهر «راجع الإعدادات» لجهازٍ
@@ -547,21 +571,44 @@ class DeviceVitals {
     );
   }
 
+  /// [withOnuLights] (٩ نوفمبر — «الفحص الشامل» وحده): ضوء كلّ ONU متّصلة بعد البنية، حتى [lightsUntil] أو [isCancelled] —
+  /// والحكم من البنية نفسها ولو لم يكتمل الضوء. البطاقة الكبيرة والبرج لا يطلبانه (لا يعرضانه، وكان يخنق وكيل VSOL ٣٤–١٠٢ث).
+  ///
+  /// [onPartial] (ميكروتك المفصّلة): الطبقة الأولى حين تصل، قبل جدول التسجيل وما بعده.
   static Future<ProbeResult> fetch(NetworkDevice d,
-      {CounterSample? prev, bool detailed = false}) async {
-    final r = await _fetch(d, prev: prev, detailed: detailed);
+      {CounterSample? prev,
+      bool detailed = false,
+      bool withOnuLights = false,
+      DateTime? lightsUntil,
+      bool Function()? isCancelled,
+      void Function(ProbeResult partial)? onPartial}) async {
+    final r = await _fetch(d,
+        prev: prev,
+        detailed: detailed,
+        withOnuLights: withOnuLights,
+        lightsUntil: lightsUntil,
+        isCancelled: isCancelled,
+        onPartial: onPartial);
     // «القراءات الحسّاسة» (٤ نوفمبر): ما قُرئ يُرفع للخادم — المعالج والحرارة والفولتيّة والإشارة وCCQ ([VitalsReporter]؛ لا شيء ما لم
     // تُفتح للشركة)
     VitalsReporter.instance.record(d, r.detail.glance, peers: r.detail.peers);
     return r;
   }
 
-  static Future<ProbeResult> _fetch(NetworkDevice d, {CounterSample? prev, bool detailed = false}) async {
+  static Future<ProbeResult> _fetch(NetworkDevice d,
+      {CounterSample? prev,
+      bool detailed = false,
+      bool withOnuLights = false,
+      DateTime? lightsUntil,
+      bool Function()? isCancelled,
+      void Function(ProbeResult partial)? onPartial}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
-    if (_isOlt(d)) return _olt(d, creds, detailed: detailed);
+    if (_isOlt(d)) {
+      return _olt(d, creds, withOnuLights: withOnuLights, lightsUntil: lightsUntil, isCancelled: isCancelled);
+    }
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
-        return _mikrotik(d, creds, prev, detailed);
+        return _mikrotik(d, creds, prev, detailed, onPartial: onPartial);
       case 'ubnt':
         return _ubnt(d, creds, prev);
       case 'mimosa':
@@ -629,15 +676,25 @@ class DeviceVitals {
   // ── ميكروتك: معالج · ذاكرة · حرارة ───────────────────────────────
 
   static Future<ProbeResult> _mikrotik(NetworkDevice d,
-      Map<String, dynamic> creds, CounterSample? prev, bool detailed) async {
+      Map<String, dynamic> creds, CounterSample? prev, bool detailed,
+      {void Function(ProbeResult partial)? onPartial}) async {
     final s = await MikrotikApi.fetchStatsFor(
       ip: d.ip,
       protocol: d.protocol,
       apiPort: d.apiPort,
       creds: creds,
       vitalsOnly: !detailed,
+      // الطبقة الأولى (الموارد والصحّة والمنافذ) لمن يطلبها — «الفحص الشامل» يحكم بها إن تأخّر الباقي (٩ نوفمبر)
+      onPartialReady: onPartial == null || !detailed ? null : (t1) => onPartial(mikrotikResult(d, t1, prev, detailed: true)),
     );
+    return mikrotikResult(d, s, prev, detailed: detailed);
+  }
 
+  /// أنواع واجهات RouterOS اللاسلكيّة (wireless · wifi · wifiwave2 · 60GHz · CAPsMAN) — تلميح الراديو في الطبقة الأولى.
+  static const radioInterfaceTypes = {'wlan', 'wifi', 'wifiwave2', 'w60g', 'cap'};
+
+  /// قراءة ميكروتك ⇒ الخانات والتفصيل — من جلسةٍ كاملة أو من طبقتها الأولى (عملاؤها «لم تُقرأ»: [MikrotikStats.clientsRead]).
+  static ProbeResult mikrotikResult(NetworkDevice d, MikrotikStats s, CounterSample? prev, {required bool detailed}) {
     final counters = <String, ({int rx, int tx})>{};
     final ports = <PortTraffic>[];
     for (final i in s.interfaces) {
@@ -708,10 +765,13 @@ class DeviceVitals {
     final isAp = wl == null ? (w60 != null ? false : null) : (wlMode.contains('ap') || wlMode == 'bridge' || wlMode == 'wds-master');
     final upstream = isAp == false && s.wirelessClients.isNotEmpty ? s.wirelessClients.first : null;
     int? pos(int? v) => v != null && v > 0 ? v : null;
+    // راديو مفعّل بواجهات الطبقة الأولى (wlan/wifi/w60g…) — أو واجهاتٌ لم تُقرأ أصلاً (طبقة SNMP الأولى)
+    final radio = s.interfaces.isEmpty || s.interfaces.any((i) => !i.disabled && radioInterfaceTypes.contains(i.type.toLowerCase()));
     final glance = DeviceGlance(
       uptimeSec: routerOsSeconds(s.uptime),
       // ٩ نوفمبر: المفصّلة وحدها لا تكفي — جدول تسجيلٍ انتهت مهلته يصل فارغاً ([MikrotikStats.clientsRead])
       peersKnown: detailed && s.clientsRead,
+      radioUnread: radio && !s.clientsRead,
       cpu: s.cpuKnown ? s.cpuLoad : null,
       mem: s.memKnown ? s.memUsedPercent : null,
       temp: s.temperature,
@@ -1070,7 +1130,8 @@ class DeviceVitals {
 ///
 /// ⚡ والحمولة لقطة أولت كاملة البنية: تُحفظ في المخزن فتُفتح اللوحة
 /// المفردة بالمشتركين ومنافذ PON فوراً، كما تُفتح لوحة ميكروتك بحمولة جدارها.
-Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool detailed = false}) async {
+Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds,
+    {bool withOnuLights = false, DateTime? lightsUntil, bool Function()? isCancelled}) async {
   final community = (creds['community'] ?? creds['pass'] ?? '').toString().trim();
   if (community.isEmpty) throw StateError('أدخل الـcommunity');
   final port = d.apiPort ?? 161;
@@ -1088,12 +1149,38 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool deta
     final c = s.profile.readsHsgqTables ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
     if (!c.isEmpty) s = s.copyWith(chassis: c);
   }
-  // «الفحص الشامل» (٦ نوفمبر — المالك: «+ الاولتي… مفروض هم تظهرهن»): ضوء كلّ ONU متّصلة بمسح عموده (قارئ شبكة الألياف نفسه)
+  // «الفحص الشامل» (٦ نوفمبر — المالك: «+ الاولتي… مفروض هم تظهرهن»): ضوء كلّ ONU متّصلة بمسح عموده (قارئ شبكة الألياف نفسه).
+  // ٩ نوفمبر (التحقيق R2): الحكم من البنية أعلاه (ثوانٍ)، والضوء خطوةٌ بعدها بما بقي من المهلة — كان داخل مهلة الـ٢٥ث نفسها،
+  // وضوء VSOL الكبير وحده ٣٤–١٠٢ث (أربع قيمٍ بالطلب ~١٫٤ث) ⇒ «لم يُقرأ» كلّ مرّة ويُرمى ما قُرئ. الآن يقف عند [lightsUntil] أو
+  // [isCancelled] بين طلبٍ وآخر ويُرجع ما قرأه، و«قُرئ n من N» يقول الباقي.
   var lights = const <OnuLight>[];
-  if (detailed) {
+  int? wanted;
+  var replied = const <int>{};
+  // ما يسأله قارئ الضوء فعلاً لهذا الطراز (المراجعة) — لا كلّ المتّصل: VSOL بطاقة صفر، BDCOM EPON، وطرازٌ بلا قارئ لا سطر له
+  final targets = withOnuLights ? OltFiberReads.lightTargets(s.profile, s.onus) : 0;
+  if (targets > 0) {
+    wanted = targets;
+    // تناوبٌ بين الفحوص: يبدأ من حيث وقف آخر ضوءٍ لم يكتمل — فحوصٌ متتالية تغطّي أولتاً كبيراً كلّه (كشرائح شبكة الألياف)
+    final online = [for (final o in s.onus) if (o.online) o]..sort((a, b) => a.ifIndex.compareTo(b.ifIndex));
+    final from = DeviceVitals._lightsFrom[d.id] ?? 0;
+    final start = online.indexWhere((o) => o.ifIndex >= from);
+    final ordered = start <= 0 ? online : [...online.sublist(start), ...online.sublist(0, start)];
+    bool stop() => (isCancelled?.call() ?? false) || (lightsUntil != null && !DateTime.now().isBefore(lightsUntil));
     try {
-      final snmp = SnmpV2c(host: d.ip, port: port, community: community);
-      final rx = await OltFiberReads.rxColumn(snmp, s.profile, s.onus).timeout(const Duration(seconds: 25));
+      final snmp = DeviceVitals.snmpFor(d.ip, port, community);
+      final ran = !stop();
+      final rx = ran
+          ? await OltFiberReads.rxColumn(snmp, s.profile, ordered, cancelled: stop, counts: (n, got) => replied = got)
+          : null;
+      // المؤشّر بآخر من أجاب (لا آخر قيمةٍ صالحة) — جهازٌ بلا قراءة ضوءٍ لا يُعيد التناوب إليه كلّ مرّة؛ ومسحٌ لم يبدأ لا يمسّه
+      final last = ordered.lastIndexWhere((o) => replied.contains(o.ifIndex));
+      if (!ran || last < 0) {
+        // لم يُجب أحد — يبقى من حيث هو
+      } else if (replied.length >= targets || last == ordered.length - 1) {
+        DeviceVitals._lightsFrom.remove(d.id);
+      } else {
+        DeviceVitals._lightsFrom[d.id] = ordered[last + 1].ifIndex;
+      }
       if (rx != null) {
         lights = [
           for (final o in s.onus)
@@ -1107,7 +1194,7 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool deta
       }
     } catch (_) {}
   }
-  return oltProbeResult(s, lights: lights);
+  return oltProbeResult(s, lights: lights, lightsWanted: wanted, lightsAnswered: wanted == null ? null : replied.length);
 }
 
 /// ضوء ONU واحدة (dBm) — لتقرير الأولت.
@@ -1120,7 +1207,7 @@ class OnuLight {
 }
 
 /// خانات بطاقة الأولت وتفصيلها من لقطةٍ واحدة — الجدار وشاشات الألياف بالحساب نفسه ([bridgeFiberVitals]).
-ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const []}) {
+ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const [], int? lightsWanted, int? lightsAnswered}) {
   final cpu = s.chassis?.cpuPct;
   final pct = s.onusTotal == 0 ? null : s.onusOnline * 100 / s.onusTotal;
   return ProbeResult(
@@ -1162,6 +1249,8 @@ ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const []}) {
     ],
     detail: DeviceDetail(
       onuLights: lights,
+      onuLightsWanted: lightsWanted,
+      onuLightsAnswered: lightsAnswered,
       uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
       model: s.profile.model,
       ports: [

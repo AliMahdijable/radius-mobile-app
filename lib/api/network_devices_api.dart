@@ -70,10 +70,9 @@ class NetworkDevicesApi {
         },
       );
       final data = (r.data?['data'] as List?) ?? const [];
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(NetworkDevice.fromJson)
-          .toList();
+      final rows = data.whereType<Map<String, dynamic>>().toList();
+      _noteUpdates(rows);
+      return rows.map(NetworkDevice.fromJson).toList();
     } on DioException catch (e) {
       if (kDebugMode) print('❌ NetworkDevicesApi.list: ${e.message}');
       rethrow;
@@ -192,6 +191,68 @@ class NetworkDevicesApi {
         return cached.creds;
       }
     }
+    // ٩ نوفمبر (التحقيق R6): الطلب يتعثّر دفعاتٍ عابرة (٥٠٣ بجسمٍ قصير على عدّة مسارات معاً — ٩٩ اليوم، ٦٣ منها خلال ٩
+    // دقائق) فكانت كلّ قراءةٍ بلحظتها «لم يُقرأ». العابر (٥٠٢/٥٠٣/٥٠٤ أو انقطاع) يعيده ApiClient نفسه مرّةً (GET)؛ فإن بقي ⇒
+    // آخر بياناتٍ صالحة عمرها ≤ ١٠ دقائق (هي نفسها ما لم تُعدَّل — والتعديل يمسحها). الرفض الصريح (٤xx، success:false)
+    // والتحديث القسريّ يُرميان كما هما.
+    try {
+      final c = await _fetchCredentials(id);
+      _servedStale.remove(id);
+      return c;
+    } catch (e) {
+      final last = forceRefresh || !_transient(e) ? null : _credsCache[id];
+      if (last != null && DateTime.now().difference(last.at) <= _credsStaleOk) {
+        _servedStale.add(id);
+        return last.creds;
+      }
+      rethrow;
+    }
+  }
+
+  /// أجهزةٌ أُعطيت آخر بياناتٍ محفوظة (الخادم تعثّر) — رفض الدخول بها يُقال بسببه لا «تأكّد من الرمز» (المراجعة).
+  static final Set<int> _servedStale = {};
+  static bool servedStaleCredentials(int id) => _servedStale.contains(id);
+
+  /// آخر `updated_at` رأيناه لكلّ جهاز: تعديلٌ من مكانٍ آخر (هاتفٌ ثانٍ، الحاسبة، موظّف) يغيّره ⇒ تُنسى بيانات دخوله المخبّأة
+  /// والاحتياطيّة، فلا يُجرَّب رمزٌ قديم (المراجعة).
+  static final Map<int, String> _updatedSeen = {};
+
+  static void _noteUpdates(List<Map<String, dynamic>> rows) {
+    for (final m in rows) {
+      final id = m['id'] is num ? (m['id'] as num).toInt() : int.tryParse('${m['id']}');
+      final u = m['updated_at']?.toString();
+      if (id == null || u == null) continue;
+      final seen = _updatedSeen[id];
+      if (seen != null && seen != u) invalidateCredentialsCache(id);
+      _updatedSeen[id] = u;
+    }
+  }
+
+  /// آخر بيانات صالحة تُستعمل حين يتعثّر الطلب عابراً.
+  static const _credsStaleOk = Duration(minutes: 10);
+
+  /// يبذر المخبأ بعمرٍ معيّن — للاختبار.
+  @visibleForTesting
+  static void debugSeedCredentials(int id, Map<String, dynamic> creds, DateTime at) =>
+      _credsCache[id] = (creds: creds, at: at);
+
+  /// تعثّرٌ عابر كما يعرّفه ApiClient: بوّابةٌ عابرة (٥٠٢/٥٠٣/٥٠٤) أو انقطاعٌ أو مهلة — لا ٥٠٠ (عطلٌ حقيقيّ، فكّ التشفير
+  /// مثلاً) ولا رفضٌ صريح (المراجعة).
+  static bool _transient(Object e) {
+    if (e is! DioException) return false;
+    return switch (e.type) {
+      DioExceptionType.badResponse => const {502, 503, 504}.contains(e.response?.statusCode),
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout =>
+        true,
+      DioExceptionType.unknown => e.response == null,
+      _ => false,
+    };
+  }
+
+  static Future<Map<String, dynamic>> _fetchCredentials(int id) async {
     final r = await ApiClient.dio.get<Map<String, dynamic>>(
       '/api/v2/admin/devices/$id/credentials',
     );
@@ -209,7 +270,10 @@ class NetworkDevicesApi {
   static void invalidateCredentialsCache([int? id]) {
     if (id == null) {
       _credsCache.clear();
+      _servedStale.clear();
+      _updatedSeen.clear();
     } else {
+      _servedStale.remove(id);
       _credsCache.remove(id);
     }
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
@@ -6,6 +8,7 @@ import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:rad_mysvcs/services/merged_devices_check.dart';
@@ -119,6 +122,27 @@ void main() {
         ]),
         MergedCheckPart(company: _e, devices: [_d(301, 'earthlink:77', 'برج ايرث لنك', ip: '172.16.0.1')]),
       ];
+
+  test('المراجعة: قراءة المفتوحة التي وصلت بعد السقف (بعد انتهاء الجولة) تحلّ محلّ سطرها في «كل الشركات» أيضاً', () async {
+    final late = Completer<ProbeResult>();
+    DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 3, packetLoss: 0.0, serviceOk: true);
+    DevicesCheckRunner.debugFetch = (d) => late.future;
+    DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 50), hard: const Duration(milliseconds: 150));
+    addTearDown(() {
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+    final r = MergedDevicesCheckRunner(parts(), openViaVpn: false);
+    await r.run();
+    expect(r.running, isFalse);
+    expect(r.reports[101]!.state, CheckState.unread);
+    expect(r.reports[101]!.findings.single.text, startsWith('بطيء — لم تكتمل قراءته خلال'));
+    late.complete(const ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 4, uptimeSec: 86400)), counters: {}));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(r.reports[101]!.state, CheckState.ok, reason: 'كانت تبقى «لم يُقرأ» — المستمع فُكّ بانتهاء الجولة');
+    expect(r.reports[101]!.cpu, 4);
+    r.dispose();
+  });
 
   test('كلّ شركةٍ بطريقها: المفتوحة محلّيّاً، والجزيرة عبر VPN شركتها، وايرث لنك بلا طريق تُسمّى', () async {
     final r = MergedDevicesCheckRunner(parts(), openViaVpn: false);
@@ -255,6 +279,8 @@ void main() {
       Finder card(int id) => find.byKey(ValueKey('check-card-$id'));
       int countOf(String state) {
         final chip = find.byKey(ValueKey('check-count-$state'));
+        // «الحال فقط» (٩ نوفمبر) شريحتها حين يوجد منها وحده
+        if (chip.evaluate().isEmpty) return 0;
         final texts = t.widgetList<Text>(find.descendant(of: chip, matching: find.byType(Text))).map((w) => w.data).toList();
         return int.parse(texts.first!);
       }

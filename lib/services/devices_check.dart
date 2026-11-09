@@ -12,8 +12,12 @@ import '../api/olt_profile.dart';
 import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
 
-/// حال الجهاز بالتقرير — بترتيب العرض (الأسوأ أوّلاً).
-enum CheckState { down, warn, unread, ok }
+/// خانات العدّ بالشرائح والنسخ: الحالات الطازجة، ثمّ ما زال يُقرأ، ثمّ ما عُرض من آخر قراءة.
+enum CheckBucket { down, warn, unread, ok, statusOnly, pending, stale }
+
+/// حال الجهاز بالتقرير — بترتيب العرض (الأسوأ أوّلاً). [statusOnly] (٩ نوفمبر): يُعرف حاله وحده (بلا بيانات دخول، علامةٌ بلا
+/// مقاييس، بروتوكولٌ لا يُقرأ) — قسمٌ وحده لا «لم يُقرأ».
+enum CheckState { down, warn, unread, ok, statusOnly }
 
 enum CheckLevel { bad, warn, info }
 
@@ -128,13 +132,17 @@ class PortMemo {
 }
 
 class CheckMemo {
-  const CheckMemo({this.ports = const {}, this.peers});
+  const CheckMemo({this.ports = const {}, this.peers, this.role});
   final Map<String, PortMemo> ports;
   final int? peers;
+
+  /// دوره من آخر قراءةٍ قُرئ فيها لاسلكيّه (أو لا راديو له) — يُحكم به حين لا يُقرأ اللاسلكيّ هذه المرّة ([DeviceGlance.radioUnread]).
+  final CheckRole? role;
 
   Map<String, dynamic> toJson() => {
         if (ports.isNotEmpty) 'p': {for (final e in ports.entries) e.key: e.value.toJson()},
         if (peers != null) 'n': peers,
+        if (role != null) 'r': role!.name,
       };
 
   static CheckMemo? fromJson(Object? j) {
@@ -147,6 +155,7 @@ class CheckMemo {
             if (PortMemo.fromJson(e.value) case final m?) '${e.key}': m,
       },
       peers: j['n'] is num ? (j['n'] as num).toInt() : null,
+      role: CheckRole.values.where((r) => r.name == j['r']).firstOrNull,
     );
   }
 }
@@ -179,7 +188,13 @@ class DeviceCheckReport {
     this.portsTotal,
     this.onusOnline,
     this.onusTotal,
+    this.lightsWanted,
     this.memo,
+    this.pending = false,
+    this.staleAt,
+    this.staleFrom,
+    this.readVia,
+    this.readMs,
   });
 
   final NetworkDevice device;
@@ -204,8 +219,35 @@ class DeviceCheckReport {
   final int? portsUp, portsTotal;
   final int? onusOnline, onusTotal;
 
+  /// أولت: كم ONU متّصلة طُلب ضوؤها — أكثر من [subs] المقروءة ⇒ «الضوء n من N» (٩ نوفمبر).
+  final int? lightsWanted;
+
   /// للحفظ والمقارنة بالفحص التالي.
   final CheckMemo? memo;
+
+  /// سطرٌ مؤقّت: الجهاز تجاوز المهلة الأولى وقراءته جارية (٩ نوفمبر) — يحلّ محلّه تقريره حين تصل أو عند السقف.
+  final bool pending;
+
+  /// التقرير من **آخر قراءةٍ** لا من هذا الفحص (٩ نوفمبر — الجديدة لم تكتمل): لحظتها ومصدرها («آخر قراءة» · «فحص الخادم»).
+  /// يُعرض عمرها بجانب الحال دائماً — لا يُقدَّم طازجاً.
+  final DateTime? staleAt;
+  final String? staleFrom;
+
+  /// «قبل 3 د» — عمر [staleAt].
+  String? get staleAge => staleAt == null ? null : DevicesCheck.ago(staleAt!, at);
+
+  /// طريق القراءة (API · SSH · الويب · SNMP · Telnet، و«عبر الـVPN») وزمنها بالمللي — يُكتبان على السطر («SSH · 18ث»).
+  final String? readVia;
+  final int? readMs;
+
+  /// «SSH · 18ث» — null إن لم يُعرفا.
+  String? get readLine {
+    final parts = <String>[
+      if (readVia != null) readVia!,
+      if (readMs != null) '${readMs! < 10000 ? (readMs! / 1000).toStringAsFixed(1) : (readMs! / 1000).round()}ث',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 
   int get subsWeak => subs.where((s) => s.weak).length;
   int get subsLowCcq => subs.where((s) => s.lowCcq).length;
@@ -214,12 +256,20 @@ class DeviceCheckReport {
 
   String get roleLabel => DevicesCheck.roleLabel(role, device);
 
-  String get stateLabel => switch (state) {
-        CheckState.down => 'طافي',
-        CheckState.warn => 'ملاحظات',
-        CheckState.unread => 'لم يُقرأ',
-        CheckState.ok => 'سليم',
-      };
+  /// الحال كما تُعرض — ومن آخر قراءةٍ بعمرها («سليم · قبل 3 د»)، لا تُقدَّم طازجة.
+  String get stateLabel {
+    // المؤقّت (القراءة جارية) لا يُحكم بحاله المؤقّتة — «يقرأ…»، وما عُرض من آخر قراءةٍ بعمرها دائماً (المراجعة)
+    if (pending) return staleAt == null ? 'يقرأ…' : 'يقرأ… · آخر قراءة $staleAge';
+    final s = DevicesCheck.stateName(state);
+    return staleAt == null ? s : '$s · $staleAge';
+  }
+
+  /// خانة العدّ: المؤقّت «يقرأ»، وآخر قراءةٍ «آخر قراءة»، والباقي بحاله — فلا يُعدّ القديم أو الجاري «سليماً» الآن (المراجعة).
+  CheckBucket get bucket => pending
+      ? CheckBucket.pending
+      : staleAt != null
+          ? CheckBucket.stale
+          : CheckBucket.values.byName(state.name);
 
   /// الحيويّات كما تُعرض وتُنسخ: (العنوان، القيمة).
   List<({String k, String v})> get vitals => [
@@ -269,8 +319,12 @@ class DevicesCheck {
       };
 
   /// دور الجهاز: الأولت من علامته/لقطته، والسكتر من وضعه اللاسلكيّ (نقطة وصول) أو نوعه، والوصلة محطّةٌ لاسلكيّة.
-  static CheckRole roleOf(NetworkDevice d, DeviceGlance? g) {
+  ///
+  /// [known] دوره من آخر قراءةٍ قُرئ فيها لاسلكيّه — يُحكم به حين لم يُقرأ لاسلكيّه هذه المرّة ([DeviceGlance.radioUnread]):
+  /// نوع السجلّ وحده يقول «راوتر» لسكتر بيس بوكس (٩ نوفمبر).
+  static CheckRole roleOf(NetworkDevice d, DeviceGlance? g, {CheckRole? known}) {
     if (OltProfile.fromDevice(d).opensOltPanel || (g?.onusTotal ?? 0) > 0) return CheckRole.olt;
+    if (g != null && g.radioUnread && g.isAp == null && known != null) return known;
     final t = d.type.toLowerCase();
     if (g?.isAp == true || t == 'sector' || t == 'ap') return CheckRole.sector;
     if (t == 'link' || g?.isAp == false) return CheckRole.link;
@@ -329,6 +383,20 @@ class DevicesCheck {
     return best == null || tie ? null : (user: best, approx: true);
   }
 
+  static String stateName(CheckState s) => switch (s) {
+        CheckState.down => 'طافي',
+        CheckState.warn => 'ملاحظات',
+        CheckState.unread => 'لم يُقرأ',
+        CheckState.ok => 'سليم',
+        CheckState.statusOnly => 'الحال فقط',
+      };
+
+  /// «قبل لحظات» · «قبل 3 د» — عمر قراءةٍ سابقة.
+  static String ago(DateTime then, DateTime now) {
+    final m = now.difference(then).inMinutes;
+    return m < 1 ? 'قبل لحظات' : 'قبل $m د';
+  }
+
   static String fmtMbps(int mbps) => mbps >= 1000 && mbps % 1000 == 0 ? '${mbps ~/ 1000}G' : (mbps >= 1000 ? '${mbps / 1000}G' : '${mbps}M');
 
   static String subLine(CheckSub s) => [
@@ -371,11 +439,23 @@ class DevicesCheck {
     bool portsCountsOnly = false,
     Map<String, String> macUsers = const {},
     DateTime? now,
+    String? readNote,
+    bool pending = false,
+    DateTime? staleAt,
+    String? staleFrom,
+    bool statusOnly = false,
+    String? readVia,
+    int? readMs,
   }) {
     ({String user, bool approx})? who(String? mac) => matchMac(mac, macUsers);
     final at = now ?? DateTime.now();
     final g = detail?.glance;
-    final role = roleOf(d, g);
+    // دوره المعروف: من اللقطة، وإلّا لقطةٌ قديمة فيها مشتركون (تُحفظ للسكتر وحده)
+    final known = prev?.role ?? (prev?.peers != null ? CheckRole.sector : null);
+    final role = roleOf(d, g, known: known);
+    // آخر قراءةٍ لا هذا الفحص (٩ نوفمبر): لا مقارنة منافذ ولا «ما عليه أحد الآن» ولا لقطة — أرقامها بعمرها وحدها
+    final stale = staleAt != null;
+    final countsOnly = portsCountsOnly || stale;
 
     if (alive == false) {
       final since = d.lastStatus == 'offline' ? NetworkDeviceLabels.since(d.statusSince, now: at) : null;
@@ -393,21 +473,29 @@ class DevicesCheck {
       return DeviceCheckReport(
         device: d,
         role: role,
-        state: CheckState.unread,
+        state: statusOnly ? CheckState.statusOnly : CheckState.unread,
         at: at,
         viaVpn: viaVpn,
         ms: ms,
         findings: [CheckFinding(CheckLevel.info, unreadReason ?? 'يردّ، لكن ما انقرت معلوماته')],
         memo: prev,
+        pending: pending,
+        readVia: readVia,
+        readMs: readMs,
       );
     }
 
-    final f = <CheckFinding>[];
+    final f = <CheckFinding>[
+      // عن القراءة نفسها (جزئيّة، بطيئة) — معلومةٌ لا ملاحظة على الجهاز
+      if (readNote != null) CheckFinding(CheckLevel.info, readNote),
+    ];
     // فقدان الحزم من بنك الفحص الشامل (ثلاث حزم) — الجهاز يردّ لكنّ الطريق إليه متقطّع
     if (loss != null && loss > 0) {
       f.add(CheckFinding(loss >= 50 ? CheckLevel.bad : CheckLevel.warn, 'فقدان حزم ${loss.round()}٪ — الطريق إليه متقطّع'));
     }
-    final up = g.linkUptime ? null : g.uptimeSec;
+    // قراءةٌ سابقة: مدّة التشغيل حتى الآن = مدّتها يومها + عمرها (لا «اشتغل قبل 2 د» عن جهازٍ اشتغل قبل 6)
+    final upThen = g.linkUptime ? null : g.uptimeSec;
+    final up = upThen == null || staleAt == null ? upThen : upThen + at.difference(staleAt).inSeconds;
     final upDays = up == null ? null : up / 86400;
 
     // ── الجهاز نفسه ──
@@ -457,8 +545,8 @@ class DevicesCheck {
     var subsKnown = false;
     if (role == CheckRole.sector) {
       // ٩ نوفمبر: الفراغ «ما عليه أحد» حين قُرئ جدوله فعلاً وحده — لا لأنّ الفحص من شبكتك: جدول تسجيلٍ انتهت مهلته كان يُعدّ
-      // فارغاً فيقول «ما عليه أحد الآن — كانوا N».
-      subsKnown = detail.peers.isNotEmpty || g.peersKnown;
+      // فارغاً فيقول «ما عليه أحد الآن — كانوا N». وقراءةٌ سابقة لا تقول «الآن».
+      subsKnown = detail.peers.isNotEmpty || (g.peersKnown && !stale);
       subs = [
         for (final p in detail.peers)
           CheckSub(
@@ -502,7 +590,19 @@ class DevicesCheck {
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
       if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON طافي: ${downPons.join('، ')}'));
-      // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر
+      // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
+      // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
+      final wanted = detail.onuLightsWanted;
+      if (wanted != null && wanted > 0) {
+        final read = detail.onuLights.length;
+        final answered = detail.onuLightsAnswered ?? read;
+        // «ما لحق» لما لم يُسأل/لم يجب بمهلته وحده، و«بلا قراءة ضوء» لما أجاب بلا قيمةٍ صالحة (المراجعة)
+        if (answered < wanted) {
+          f.add(CheckFinding(
+              CheckLevel.info, read == 0 ? 'ضوء المشتركين ما انقرأ هالمرّة' : 'الضوء: قُرئ $read من $wanted — الباقي ما لحق'));
+        }
+        if (answered > read) f.add(CheckFinding(CheckLevel.info, 'بلا قراءة ضوء: ${answered - read}'));
+      }
       if (detail.onuLights.isNotEmpty) {
         subsKnown = true;
         subs = [
@@ -528,7 +628,7 @@ class DevicesCheck {
     final phys = detail.ports.where((p) => p.physical && !_emptySfpCage(p, prev)).toList();
     final ports = <CheckPort>[];
     final memoPorts = <String, PortMemo>{};
-    if (!portsCountsOnly) {
+    if (!countsOnly) {
       for (final p in phys) {
         final notes = <(CheckLevel, String)>[];
         final mb = mbpsOf(p.linkSpeed);
@@ -593,10 +693,22 @@ class DevicesCheck {
       }
     }
 
+    // لاسلكيّه لم يُقرأ ولراديو مفعّل (٩ نوفمبر — المراجعة): الوصلة بلا إشارتها، وما لم يُعرف دوره بلا وضعه ومشتركيه — لا «سليم»
+    var radioGap = false;
+    if (g.radioUnread) {
+      if (role == CheckRole.link && g.signal == null && g.signalPct == null) {
+        f.add(const CheckFinding(CheckLevel.info, 'إشارة الوصلة ما انقرت'));
+        radioGap = true;
+      } else if (role != CheckRole.sector && role != CheckRole.link && role != CheckRole.olt) {
+        f.add(const CheckFinding(CheckLevel.info, 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+        radioGap = true;
+      }
+    }
+
     // «سليم» للسكتر حكمٌ عليه وعلى مشتركيه — قائمتهم لم تُقرأ ⇒ «لم يُقرأ» بحيويّاته وسطرها، لا «سليم» (٩ نوفمبر)
     final state = f.any((x) => x.level != CheckLevel.info)
         ? CheckState.warn
-        : (role == CheckRole.sector && !subsKnown ? CheckState.unread : CheckState.ok);
+        : ((role == CheckRole.sector && !subsKnown) || radioGap ? CheckState.unread : CheckState.ok);
     return DeviceCheckReport(
       device: d,
       role: role,
@@ -623,10 +735,22 @@ class DevicesCheck {
       portsTotal: phys.isEmpty ? null : phys.length,
       onusOnline: g.onusOnline,
       onusTotal: g.onusTotal,
-      memo: CheckMemo(
-        ports: portsCountsOnly ? (prev?.ports ?? const {}) : memoPorts,
-        peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,
-      ),
+      lightsWanted: role == CheckRole.olt ? detail.onuLightsWanted : null,
+      pending: pending,
+      staleAt: staleAt,
+      staleFrom: staleFrom,
+      readVia: stale ? null : readVia,
+      readMs: stale ? null : readMs,
+      // قراءةٌ سابقة لا تكتب اللقطة — المقارنة التالية بما قُرئ فعلاً
+      memo: stale
+          ? prev
+          : CheckMemo(
+              // قراءةٌ بلا منافذ (طبقة SNMP الأولى مثلاً) لا تمحو منافذ اللقطة — «طفى» التالية تبقى ممكنة
+              ports: countsOnly || phys.isEmpty ? (prev?.ports ?? const {}) : memoPorts,
+              peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,
+              // الدور يُحفظ حين قُرئ لاسلكيّه (أو لا راديو له) — لا من نوع السجلّ وقت الجهل
+              role: g.radioUnread && g.isAp == null ? prev?.role : role,
+            ),
     );
   }
 
@@ -647,15 +771,26 @@ class DevicesCheck {
     });
 
   /// التقرير كلّه نصّاً.
-  static String reportText(List<DeviceCheckReport> rs, {required bool viaVpn, DateTime? at}) {
-    final c = {for (final s in CheckState.values) s: rs.where((r) => r.state == s).length};
+  /// اسم خانة العدّ كما تُعرض وتُنسخ.
+  static String bucketName(CheckBucket b) => switch (b) {
+        CheckBucket.pending => 'يقرأ',
+        CheckBucket.stale => 'آخر قراءة',
+        _ => stateName(CheckState.values.byName(b.name)),
+      };
+
+  /// التقرير كلّه نصّاً. [progress] أثناء الفحص: «لم يكتمل — n من N» (من لم يبدأ بعد لا يغيب بصمت).
+  static String reportText(List<DeviceCheckReport> rs, {required bool viaVpn, DateTime? at, ({int done, int total})? progress}) {
+    final c = {for (final b in CheckBucket.values) b: rs.where((r) => r.bucket == b).length};
+    String part(CheckBucket b) => '${bucketName(b)} ${c[b]}';
     final head = 'الفحص الشامل — ${rs.length} جهاز${viaVpn ? ' (عبر الـVPN)' : ''}: '
         '${[
-      if (c[CheckState.down]! > 0) 'طافي ${c[CheckState.down]}',
-      if (c[CheckState.warn]! > 0) 'ملاحظات ${c[CheckState.warn]}',
-      if (c[CheckState.unread]! > 0) 'لم يُقرأ ${c[CheckState.unread]}',
-      'سليم ${c[CheckState.ok]}',
-    ].join(' · ')}';
+      for (final b in [CheckBucket.down, CheckBucket.warn, CheckBucket.unread])
+        if (c[b]! > 0) part(b),
+      part(CheckBucket.ok),
+      for (final b in [CheckBucket.statusOnly, CheckBucket.pending, CheckBucket.stale])
+        if (c[b]! > 0) part(b),
+    ].join(' · ')}'
+        '${progress != null && progress.done < progress.total ? ' — لم يكتمل: ${progress.done} من ${progress.total}' : ''}';
     return [head, for (final r in sorted(rs)) r.toText()].join('\n\n');
   }
 }

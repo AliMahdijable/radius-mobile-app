@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // «أمر صوتي» (٧ نوفمبر): الجملة ⇒ كرت التأكيد ⇒ صفحة المشترك ونافذة العمليّة نفسها (لا تنفيذ بلا ضغطة الوكيل هناك).
 // المايك لا يُشغَّل بالاختبار (autoListen:false) — النصّ يُكتب كما لو أملاه.
 import 'dart:convert';
@@ -5,6 +7,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/core/widgets/app_sheet.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
@@ -273,6 +276,51 @@ void main() {
     expect(find.textContaining('omar.weak (-79 dBm)'), findsOneWidget, reason: 'والضعيف باسمه');
     expect(find.text('التقرير الكامل'), findsOneWidget);
     expect(find.text('صفحة الجهاز'), findsOneWidget);
+    await close(t);
+  });
+
+  testWidgets('المراجعة: «افحص سكتر…» يمسك قسم الأجهزة ما دام يجري، ويُظهر سطر البطيء بعد مهلته الأولى لا دوّارةً صامتة', (t) async {
+    final sector = NetworkDevice(
+      id: 3, adminId: '2', name: 'سكتر الجنوب', type: 'sector', brand: 'ubnt', ip: '10.9.0.3', port: 443,
+      protocol: 'https', hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026, 11, 1),
+    );
+    VoiceResolver.loadDevices = () async => [sector];
+    final route = VpnNow.routeSource;
+    VpnNow.routeSource = () async => (linked: false, via: null);
+    AgentNetPresence.debugSet(NetPresence.on);
+    final slow = Completer<ProbeResult>();
+    DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+    DevicesCheckRunner.debugSubscribers = () async => const [];
+    DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+    DevicesCheckRunner.debugFetch = (d) => slow.future;
+    DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 200), hard: const Duration(seconds: 20));
+    addTearDown(() {
+      if (!slow.isCompleted) slow.complete(const ProbeResult(vitals: [], counters: {}, detail: DeviceDetail()));
+      VoiceResolver.loadDevices = () async => const [];
+      VpnNow.routeSource = route;
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+    await open(t);
+    await say(t, 'افحص سكتر الجنوب');
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await t.pump();
+    expect(DeviceSweep.suspended, isTrue, reason: 'جولة الحال والبطاقات تقف ما دام يجري');
+    // الفاحص بدأ داخل runAsync (ساعةٌ حقيقيّة) — ننتظر بالساعتين معاً
+    for (var i = 0; i < 40 && find.textContaining('يكمل قراءته').evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(t.widget<Text>(find.byKey(const ValueKey('voice-dev-progress'))).data, startsWith('يقرأ… — بطيء — يكمل قراءته'));
+    slow.complete(const ProbeResult(
+        vitals: [], counters: {}, detail: DeviceDetail(glance: DeviceGlance(isAp: true, peersKnown: true, cpu: 7))));
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle(t);
+    expect(DeviceSweep.suspended, isFalse, reason: 'انتهى ⇒ يعود القسم');
+    expect(find.byKey(const ValueKey('voice-dev-state')), findsOneWidget);
     await close(t);
   });
 }

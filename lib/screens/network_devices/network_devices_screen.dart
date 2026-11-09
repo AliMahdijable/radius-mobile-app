@@ -357,6 +357,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.isActive?.addListener(_onActiveChanged);
+    // «الفحص الشامل» فوقنا يمسك القسم ([DeviceSweep]) — نقف ونعود فور انتهائه (٩ نوفمبر)
+    DeviceSweep.holders.addListener(_onSweep);
     // تحديثٌ فوريّ حين يتغيّر أيّ جهازٍ من أيّ شاشة (تعديل/حذف/إضافة/منطقة).
     DeviceEvents.changes.addListener(_onDevicesChanged);
     // ٥ نوفمبر: «خارج شبكتك» مشتركٌ مع المشتركين، ونتائج «فحص عبر VPN» تلوّن حال الأجهزة
@@ -401,6 +403,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
     WidgetsBinding.instance.removeObserver(this);
     widget.isActive?.removeListener(_onActiveChanged);
+    DeviceSweep.holders.removeListener(_onSweep);
     DeviceEvents.changes.removeListener(_onDevicesChanged);
     _probeTimer?.cancel();
     _vitalsTimer?.cancel();
@@ -435,6 +438,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// ⚠️ لا نمسح إن كان جدار الأجهزة مفتوحاً فوقنا — راجع [DeviceSweep].
   bool get _mayProbe =>
       (widget.isActive?.value ?? true) && !DeviceSweep.suspended;
+
+  /// الإمساك يُفلَت أحياناً من dispose فاحصٍ يُغلق (والشجرة مقفلة) — الاستئناف بعدها لا داخلها (المراجعة: setState بشجرةٍ مقفلة
+  /// في نسخ التطوير كان يترك `_probing` عالقاً).
+  void _onSweep() => scheduleMicrotask(() {
+        if (mounted) _onActiveChanged();
+      });
 
   void _onActiveChanged() {
     _syncVpnAttach();

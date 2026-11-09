@@ -27,6 +27,8 @@ import 'dashboard_cache.dart';
 import 'subscribers_offline_cache.dart';
 import 'device_alerts_service.dart';
 import 'employee_session.dart';
+import '../api/network_devices_api.dart';
+import 'device_stats_cache.dart';
 import 'fiber/fiber_monitor.dart';
 import 'fiber/fiber_store.dart';
 import 'fiber/fiber_watch.dart';
@@ -119,6 +121,9 @@ class SessionManager {
     _guardSync('FiberWatch.stop', () => FiberWatch.stop());
     _guardSync('FiberMonitor.resetAll', () => FiberMonitor.resetAll());
     _guardSync('FiberStore.reset', () => FiberStore.reset());
+    // الأجهزة (٩ نوفمبر — المراجعة): بيانات دخولها المخبّأة (والاحتياطيّة) وقراءاتها لا تعبر لجلسةٍ أخرى على الهاتف
+    _guardSync('NetworkDevicesApi.invalidateCredentialsCache', () => NetworkDevicesApi.invalidateCredentialsCache());
+    _guardSync('DeviceStatsCache.clear', () => DeviceStatsCache.instance.clear());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).

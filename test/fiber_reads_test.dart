@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
 import 'package:rad_mysvcs/api/olt_profile.dart';
+import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/services/fiber/fiber_onu.dart';
 
@@ -230,5 +231,32 @@ void main() {
       expect(js.contains('karar77'), isFalse);
       expect(js.contains('secret'), isFalse);
     });
+  });
+
+  test('٩ نوفمبر: ضوء VSOL يقف عند الإلغاء بين طلبٍ وآخر ويُرجع ما قُرئ — لا يبقى يطرق الوكيل', () async {
+    // أولت ٢٠٠ متّصل: أربع قيمٍ بالطلب (~١٫٤ث على V1600D) ⇒ ٥٠ طلباً؛ يُلغى بعد ٥
+    final data = <String, Varbind>{
+      for (var i = 1; i <= 200; i++) '$e.7.${1 + i ~/ 64}.${i % 64 + 1}': snmpText('', '-2${i % 8}.5'),
+    };
+    final agent = FakeSnmpAgent(data);
+    final onus = [for (var i = 1; i <= 200; i++) o(1 + i ~/ 64, i % 64 + 1, ifIndex: i)];
+    final r = await OltFiberReads.rxColumn(agent, vsol, onus, cancelled: () => agent.gets.length >= 5);
+    expect(agent.gets, hasLength(5), reason: 'لا طلب بعد الإلغاء');
+    expect(r, isNotNull);
+    expect(r!.length, 20, reason: 'ما قُرئ قبل الإلغاء يُرجع');
+    expect(r.values.every((v) => v < 0), isTrue);
+    // وبلا إلغاء: الكلّ
+    final all = await OltFiberReads.rxColumn(FakeSnmpAgent(data), vsol, onus);
+    expect(all!.length, 200);
+  });
+
+  test('المراجعة: ضوء HSGQ/C-Data يقف بالإلغاء كذلك (كان يكمل دفعةً دفعة بعد مهلة الفحص وإغلاقه)', () async {
+    const hsgq = OltProfile(vendor: OltVendor.hsgq, oltLikely: true, identified: true);
+    final agent = FakeSnmpAgent(const {});
+    final onus = [for (var i = 1; i <= 40; i++) o(1, i, ifIndex: 0x01000000 | (1 << 8) | i)];
+    int? asked;
+    await OltFiberReads.rxColumn(agent, hsgq, onus, cancelled: () => agent.gets.isNotEmpty, counts: (n, got) => asked = n);
+    expect(agent.gets, hasLength(1), reason: 'دفعةٌ واحدة ثمّ وقف');
+    expect(asked, 40);
   });
 }

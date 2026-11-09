@@ -46,7 +46,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     final r = _run;
     return r is MergedDevicesCheckRunner ? r : null;
   }
-  CheckState? _filter;
+  /// شريحة العدّ المختارة (حالٌ طازجة، أو «يقرأ»، أو «آخر قراءة») — null الكلّ.
+  CheckBucket? _filter;
 
   /// «كل الشركات»: شركةٌ مختارة من بطاقة «الشركات» ⇒ أجهزتها وحدها وعدّاداتها (٨ نوفمبر — المالك: «خلي امكانيه ان ينقر ع الشركه
   /// ويعرض بس الاجهزه بعد نتيجه الفحص»). الضغط ثانيةً يعيد الكلّ.
@@ -70,16 +71,23 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
 
   void _toggle(String key) => setState(() => _open.contains(key) ? _open.remove(key) : _open.add(key));
 
+  /// ٩ نوفمبر (التحقيق R3): قسم الأجهزة تحت الفحص يتوقّف **ما دام الفحص يجري** — جولة الحال وتجديد البطاقات (١٥ث) والتسخين
+  /// كانت تقرأ الأجهزة نفسها بالوقت نفسه (حتى ستّ جلسات بطاقات + ستّ للفحص على جهازٍ ضعيف) فيبطؤ ويُقال «لم يُقرأ»؛ ويعود
+  /// يتحدّث فور انتهائه ولو بقي التقرير مفتوحاً (المراجعة).
+  late final CheckSectionHold _hold;
+
   @override
   void initState() {
     super.initState();
     // جهازٌ واحد: أقسامه مفتوحة (لا قائمة أجهزةٍ يُختصر لها)
     if (widget.single) _open.addAll(['${widget.devices.first.id}:subs', '${widget.devices.first.id}:ports']);
     _run.run();
+    _hold = CheckSectionHold(_run);
   }
 
   @override
   void dispose() {
+    _hold.dispose();
     _run.dispose();
     super.dispose();
   }
@@ -89,6 +97,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         CheckState.warn => AppTone.warning,
         CheckState.unread => AppTone.neutral,
         CheckState.ok => AppTone.success,
+        CheckState.statusOnly => AppTone.neutral,
       };
 
   static AppTone _levelTone(CheckLevel l) => switch (l) {
@@ -113,7 +122,11 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     if (rs.isEmpty) return;
     final m = _merged;
     if (m == null) {
-      await copyToClipboard(context, DevicesCheck.reportText(rs, viaVpn: widget.viaVpn), label: 'تقرير الفحص');
+      await copyToClipboard(
+          context,
+          DevicesCheck.reportText(rs,
+              viaVpn: widget.viaVpn, progress: _run.running ? (done: _run.done, total: _run.total) : null),
+          label: 'تقرير الفحص');
       return;
     }
     // «كل الشركات»: تقرير كلّ شركةٍ تحت اسمها، وسطر من لم تُفحص ولماذا — والمختارة وحدها إن اختيرت
@@ -129,6 +142,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       parts.add('$head\n${DevicesCheck.reportText(mine, viaVpn: s.viaVpn)}');
     }
     if (!mounted) return;
+    // أثناء الفحص: ما لم يكتمل يُقال أوّلاً (من لم يبدأ لا يغيب بصمت)
+    if (_run.running) parts.insert(0, 'لم يكتمل الفحص: ${_run.done} من ${_run.total}');
     await copyToClipboard(context, parts.join('\n\n'), label: 'تقرير الفحص');
   }
 
@@ -152,7 +167,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
               IconButton(
                 key: const ValueKey('check-copy'),
                 tooltip: 'نسخ التقرير',
-                onPressed: _run.running || _run.reports.isEmpty ? null : _copyAll,
+                // ٩ نوفمبر: يُنسخ ما اكتمل ولو بقي جهازٌ بطيء يُقرأ
+                onPressed: _run.reports.isEmpty ? null : _copyAll,
                 icon: const Icon(LucideIcons.copy, size: 20),
               ),
               IconButton(
@@ -170,7 +186,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         builder: (context, _) {
           final rs = _reports;
           final scoped = _scoped(rs);
-          final shown = _filter == null ? scoped : scoped.where((r) => r.state == _filter).toList();
+          final shown = _filter == null ? scoped : scoped.where((r) => r.bucket == _filter).toList();
           return ListView(
             padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.xxl),
             children: [
@@ -259,22 +275,41 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
             borderRadius: BorderRadius.circular(R.pill),
             child: LinearProgressIndicator(
               minHeight: 6,
-              value: (vpn && !merged) || total == 0 ? null : _run.done / total,
+              // عبر ممرّ الـVPN الفحص نفسه جهازاً جهازاً (٧ نوفمبر) ⇒ عدّادٌ حقيقيّ؛ ويتّصل بالـVPN أوّلاً بلا عدّ
+              value: (vpn && !merged && _run.line != null) || total == 0 ? null : _run.done / total,
               backgroundColor: AppColors.surfaceInput,
               color: AppColors.brand,
             ),
           ),
           const SizedBox(height: Sp.xs),
           Text(
-              merged
-                  ? (_run.line ?? 'يفحص ${_run.done} من $total…')
-                  : vpn
-                      ? (_run.line ?? 'يتّصل بالـVPN…')
-                      : 'يفحص ${_run.done} من $total…',
+              merged || vpn ? (_run.line ?? _progress()) : _progress(),
+              key: const ValueKey('check-progress'),
               style: AppType.micro(color: AppColors.textMid)),
+        ],
+        // ٩ نوفمبر: ما لم يُقرأ وحده — بلا فحصٍ كامل من جديد («كل الشركات» لا: أجهزة غيرها بفحص الخادم)
+        if (!running && !merged && _run.error == null && _run.unreadCount > 0) ...[
+          const SizedBox(height: Sp.xs),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: const ValueKey('check-rerun-unread'),
+              onPressed: _run.rerunUnread,
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
+              label: Text('أعد قراءة غير المقروء (${_run.unreadCount})'),
+            ),
+          ),
         ],
       ]),
     );
+  }
+
+  /// سطر التقدّم: «يفحص n من N…» — وحين لا يبقى إلّا البطيء «بانتظار n أجهزة بطيئة…» (٩ نوفمبر: البطيء لا يُقطع عند ٢٥ث).
+  String _progress() {
+    final slow = _run.slowPending.length;
+    final left = _run.total - _run.done;
+    if (slow > 0 && left <= slow) return 'بانتظار $slow ${slow == 1 ? 'جهاز بطيء' : 'أجهزة بطيئة'}…';
+    return 'يفحص ${_run.done} من ${_run.total}…${slow > 0 ? ' · بطيء $slow' : ''}';
   }
 
   /// «كل الشركات»: سطرٌ لكلّ شركة — طريقها وعدد أجهزتها، أو لماذا لم تُفحص (بلا VPN تُسمّى، لا «طافية»). شركةٌ لها نتائج تُضغط
@@ -380,16 +415,14 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   }
 
   Widget _counts(List<DeviceCheckReport> rs) {
-    Widget chip(CheckState s) {
-      final n = rs.where((r) => r.state == s).length;
-      final tone = _stateTone(s);
-      final on = _filter == s;
-      final label = switch (s) {
-        CheckState.down => 'طافي',
-        CheckState.warn => 'ملاحظات',
-        CheckState.unread => 'لم يُقرأ',
-        CheckState.ok => 'سليم',
+    Widget chip(CheckBucket s) {
+      final n = rs.where((r) => r.bucket == s).length;
+      final tone = switch (s) {
+        CheckBucket.pending || CheckBucket.stale => AppTone.neutral,
+        _ => _stateTone(CheckState.values.byName(s.name)),
       };
+      final on = _filter == s;
+      final label = DevicesCheck.bucketName(s);
       return InkWell(
         key: ValueKey('check-count-${s.name}'),
         borderRadius: BorderRadius.circular(R.pill),
@@ -411,7 +444,13 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       );
     }
 
-    return Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [for (final s in CheckState.values) chip(s)]);
+    // «الحال فقط» (٩ نوفمبر) قسمٌ وحده حين يوجد — لا يُعدّ «لم يُقرأ» (لا يُقرأ أصلاً بإعداده). والمؤقّت «يقرأ» وما عُرض من آخر
+    // قراءةٍ «آخر قراءة» شريحتان وحدهما حين توجدان — لا يُعدّان بحالهما «سليماً» الآن (المراجعة)
+    const always = {CheckBucket.down, CheckBucket.warn, CheckBucket.unread, CheckBucket.ok};
+    return Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
+      for (final s in CheckBucket.values)
+        if (always.contains(s) || rs.any((r) => r.bucket == s)) chip(s),
+    ]);
   }
 
   Widget _pill(String text, AppTone tone) => Container(
@@ -422,8 +461,10 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       );
 
   Widget _card(DeviceCheckReport r) {
-    final tone = _stateTone(r.state);
-    final sub = [r.roleLabel, r.device.ip].where((x) => x.isNotEmpty).join(' · ');
+    // القراءة جارية ⇒ لونٌ محايد لا لون حالها المؤقّت (المراجعة)
+    final tone = r.pending ? AppTone.neutral : _stateTone(r.state);
+    // ٩ نوفمبر: طريق القراءة وزمنها على السطر («SSH · 18ث») — السبب في الميدان يُرى
+    final sub = [r.roleLabel, r.device.ip, if (r.readLine != null) r.readLine!].where((x) => x.isNotEmpty).join(' · ');
     return Container(
       key: ValueKey('check-card-${r.device.id}'),
       decoration: _cardDeco(border: r.state == CheckState.ok ? null : tone.softBorder),
@@ -452,6 +493,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                   ]),
                 ),
                 const SizedBox(width: Sp.xs),
+                // «يقرأ…» للجاري، والعمر لما عُرض من آخر قراءة دائماً — لا يُقدَّم طازجاً (٩ نوفمبر)
                 _pill(r.stateLabel, tone),
               ]),
               if (r.vitals.isNotEmpty) ...[
@@ -520,8 +562,11 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     final bad = r.subs.where((s) => s.bad).toList();
     final shown = open ? r.subs : bad.take(3).toList();
     final olt = r.role == CheckRole.olt;
+    // ٩ نوفمبر: ضوءٌ جزئيّ ⇒ «الضوء n من N» — «كلّه جيّد» للمقروء وحده لا يُقال عن الكلّ
+    final partial = olt && (r.lightsWanted ?? 0) > r.subs.length;
     final head = olt
-        ? 'المشتركون (ONU) ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} ضوءهم ضعيف' : ' — ضوءهم كلّه جيّد'}'
+        ? '${partial ? 'الضوء ${r.subs.length} من ${r.lightsWanted}' : 'المشتركون (ONU) ${r.subs.length}'}'
+            '${r.subsBad > 0 ? ' — ${r.subsBad} ضوءهم ضعيف' : (partial ? ' — المقروء جيّد' : ' — ضوءهم كلّه جيّد')}'
         : 'المشتركون ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} فيهم مشكلة' : ' — كلّهم بخير'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.users, head),

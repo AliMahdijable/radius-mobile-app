@@ -89,6 +89,10 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
 
   int _gen = 0;
 
+  /// أجهزة الشركة المفتوحة البطيئة (سطرها مؤقّت) — «بانتظار n أجهزة بطيئة».
+  @override
+  Set<int> get slowPending => _inner?.slowPending ?? const {};
+
   @override
   bool isRemote(int deviceId) {
     final key = companyOf[deviceId];
@@ -168,25 +172,25 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
     }
     st.status = MergedCheckStatus.running;
     final inner = DevicesCheckRunner(open.devices, viaVpn: _openViaVpn);
-    _inner?.dispose();
+    _detachInner();
     _inner = inner;
+    // ٩ نوفمبر: الجهاز البطيء له سطرٌ مؤقّت ثمّ تقريره — يُنقل كلّ تحديثٍ لا الأوّل وحده، والعدّاد بما اكتمل فعلاً
+    var innerDone = 0;
     void sync() {
       if (gen != _gen) return;
       for (final e in inner.reports.entries) {
-        if (!reports.containsKey(e.key)) {
-          reports[e.key] = e.value;
-          done++;
-        }
+        if (!identical(reports[e.key], e.value)) reports[e.key] = e.value;
       }
+      done += inner.done - innerDone;
+      innerDone = inner.done;
       notifyListeners();
     }
 
+    // يبقى المستمع بعد انتهاء الجولة (حتى الجولة التالية أو الإغلاق): قراءةٌ وصلت بعد السقف تحلّ محلّ سطرها هنا كما في المفتوحة
+    // وحدها (المراجعة)
     inner.addListener(sync);
-    try {
-      await inner.run();
-    } finally {
-      inner.removeListener(sync);
-    }
+    _innerSync = sync;
+    await inner.run();
     if (gen != _gen) return;
     sync();
     if (inner.error != null) {
@@ -360,11 +364,21 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
     }
   }
 
+  VoidCallback? _innerSync;
+
+  /// فاحص المفتوحة السابق: يُفكّ مستمعه ويُتخلَّص منه.
+  void _detachInner() {
+    final i = _inner, f = _innerSync;
+    if (i != null && f != null) i.removeListener(f);
+    i?.dispose();
+    _inner = null;
+    _innerSync = null;
+  }
+
   @override
   void dispose() {
     _gen++;
-    _inner?.dispose();
-    _inner = null;
+    _detachInner();
     super.dispose();
   }
 }

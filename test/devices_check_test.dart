@@ -2,18 +2,25 @@
 // من حيث المتغيرات الحيوية فكر بيها بدقة»): المقيِّم النقيّ — الحال، حيويّات الجهاز، مشتركو السكتر، منافذ السويج، الأولت، والمقارنة
 // بالفحص السابق؛ وقراءة حقول منافذ مايكروتك الجديدة.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
+import 'package:rad_mysvcs/api/network_devices_api.dart';
+import 'package:rad_mysvcs/api/routeros_channel.dart';
 import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/device_stats_cache.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
+import 'package:rad_mysvcs/services/vpn_now.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 NetworkDevice dev(int id, {String type = 'router', String brand = 'mikrotik', String status = 'online', String name = 'جهاز'}) =>
@@ -499,14 +506,18 @@ void main() {
   });
 
   group('٩ نوفمبر — «لم يُقرأ» بسببه الحقيقيّ (لا «تأكّد من اسم المستخدم والرمز» لكلّ فشل)', () {
-    String why(Object e, {int deadline = 25, bool? serviceOk}) =>
-        DevicesCheckRunner.unreadReason(e, deadline: deadline, serviceOk: serviceOk);
+    String why(Object e, {bool? serviceOk}) => DevicesCheckRunner.unreadReason(e, serviceOk: serviceOk);
     const login = 'يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز';
     const service = 'يردّ، لكن خدمة الإدارة لا تجيب — تأكّد من المنفذ والبروتوكول';
 
-    test('المهلة كلّها ⇒ «بطيء» بثوانيها (٢٥ من شبكتك، ٤٥ عبر الممرّ)', () {
-      expect(why(TimeoutException('read', const Duration(seconds: 25))), 'بطيء — لم تكتمل قراءته خلال 25ث');
-      expect(why(TimeoutException(null), deadline: 45), 'بطيء — لم تكتمل قراءته خلال 45ث');
+    test('المهل الإنتاجيّة: ٢٥ث/٩٠ث من شبكتك و٤٥ث/١٢٠ث عبر الممرّ، وسطر السقف بثوانيه؛ ومهلة القارئ الداخليّة بلا ثوانٍ مدّعاة', () {
+      expect(DevicesCheckRunner.debugTimes, isNull);
+      expect(DevicesCheckRunner.timesFor(piped: false), (soft: const Duration(seconds: 25), hard: const Duration(seconds: 90)));
+      expect(DevicesCheckRunner.timesFor(piped: true), (soft: const Duration(seconds: 45), hard: const Duration(seconds: 120)));
+      expect(DevicesCheckRunner.capText(DevicesCheckRunner.timesFor(piped: false).hard), 'بطيء — لم تكتمل قراءته خلال 90ث');
+      expect(DevicesCheckRunner.capText(DevicesCheckRunner.timesFor(piped: true).hard), 'بطيء — لم تكتمل قراءته خلال 120ث');
+      expect(why(TimeoutException('ssh', const Duration(seconds: 12)), serviceOk: true), 'بطيء — ما كمّل جوابه بالوقت');
+      expect(why(TimeoutException('ssh'), serviceOk: false), service);
     });
 
     test('رفض الدخول الحقيقيّ وحده يقول «اسم المستخدم والرمز» — ميكروتك، يوبيكويتي، سسكو', () {
@@ -562,21 +573,816 @@ void main() {
       DevicesCheckRunner.debugLimits = () async => const CheckLimits();
       DevicesCheckRunner.debugSubscribers = () async => const [];
       DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
-      DevicesCheckRunner.debugFetch = (d) async => d.id == 1
-          ? throw TimeoutException('read', const Duration(seconds: 25))
-          : throw MikrotikException('invalid user name or password (6)', code: 'auth');
+      // ٩ نوفمبر (المرحلة ٢): المهلة لا تقطع — البطيء من لا تكتمل قراءته حتى السقف
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 50), hard: const Duration(milliseconds: 150));
+      DevicesCheckRunner.debugFetch = (d) => d.id == 1
+          ? Completer<ProbeResult>().future
+          : Future<ProbeResult>.error(MikrotikException('invalid user name or password (6)', code: 'auth'));
+      addTearDown(() {
+        DevicesCheckRunner.debugLimits = null;
+        DevicesCheckRunner.debugSubscribers = null;
+        DevicesCheckRunner.debugProbe = null;
+        DevicesCheckRunner.debugFetch = null;
+        DevicesCheckRunner.debugTimes = null;
+      });
+      final run = DevicesCheckRunner([dev(1, type: 'sector'), dev(2)], viaVpn: false);
+      await run.run();
+      expect(run.reports[1]!.state, CheckState.unread);
+      expect(texts(run.reports[1]!), ['بطيء — لم تكتمل قراءته خلال 0ث']);
+      expect(texts(run.reports[2]!), [login]);
+      // ومهلةٌ من داخل القارئ (لا الكلّيّة) والخدمة أجابت البنك ⇒ بطيء بلا ثوانٍ مدّعاة
+      expect(DevicesCheckRunner.unreadReason(TimeoutException('ssh'), serviceOk: true), 'بطيء — ما كمّل جوابه بالوقت');
+      run.dispose();
+    });
+  });
+
+  group('٩ نوفمبر — جلب بيانات الدخول يتعثّر عابراً (٥٠٣): إعادة ApiClient مرّةً، ثمّ آخر بياناتٍ ≤ ١٠ د', () {
+    late _CredsReplies srv;
+    setUp(() {
+      srv = _CredsReplies();
+      ApiClient.dio.httpClientAdapter = srv;
+      NetworkDevicesApi.invalidateCredentialsCache();
+    });
+    tearDown(NetworkDevicesApi.invalidateCredentialsCache);
+
+    test('٥٠٣ ثمّ ٢٠٠ ⇒ تُقرأ (إعادة ApiClient العابرة)', () async {
+      srv.codes.addAll([503, 200]);
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'admin');
+      expect(srv.calls, 2);
+    });
+
+    test('٥٠٣ مرّتين ⇒ آخر بياناتٍ عمرها ٤ د؛ وعمرها ١١ د ⇒ يُرمى (ولا تُختلق)', () async {
+      srv.codes.addAll([503, 503, 503, 503]);
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 4)));
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'old');
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 11)));
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<DioException>()));
+      expect(srv.calls, 4, reason: 'طلبان لكلّ قراءة — لا إعادةٌ فوق إعادة ApiClient');
+    });
+
+    test('المراجعة: ٥٠٠ (عطلٌ حقيقيّ) لا يأخذ القديم؛ والانقطاع يأخذه — كتعريف ApiClient للعابر', () async {
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      srv.codes.addAll([500]);
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<DioException>()));
+      expect(srv.calls, 1, reason: 'ApiClient لا يعيد ٥٠٠');
+      srv.codes.addAll([-1, -1]);
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'old');
+      expect(NetworkDevicesApi.servedStaleCredentials(7), isTrue);
+      srv.codes.add(200);
+      expect((await NetworkDevicesApi.getCredentials(7, forceRefresh: true))['user'], 'admin');
+      expect(NetworkDevicesApi.servedStaleCredentials(7), isFalse);
+    });
+
+    test('المراجعة: تعديلٌ من مكانٍ آخر (updated_at تغيّر بالقائمة) ينسى المخبّأ والاحتياطيّ؛ والخروج ينساها كلّها', () async {
+      srv.updatedAt[7] = '2026-11-09 10:00:00';
+      await NetworkDevicesApi.list();
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'admin');
+      expect(srv.credCalls, 1);
+      await NetworkDevicesApi.getCredentials(7);
+      expect(srv.credCalls, 1, reason: 'من المخبأ (٦٠ث)');
+      srv.updatedAt[7] = '2026-11-09 10:05:00';
+      await NetworkDevicesApi.list();
+      srv.codes.addAll([503, 503]);
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<DioException>()),
+          reason: 'عُدّل ⇒ لا رمزٌ قديم احتياطاً');
+      // الخروج (SessionManager) ينسى المخبّأ كلّه
+      NetworkDevicesApi.debugSeedCredentials(8, {'user': 'x'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      NetworkDevicesApi.invalidateCredentialsCache();
+      srv.codes.addAll([503, 503]);
+      await expectLater(NetworkDevicesApi.getCredentials(8), throwsA(isA<DioException>()));
+      final sm = File('lib/services/session_manager.dart').readAsStringSync();
+      expect(sm, contains('NetworkDevicesApi.invalidateCredentialsCache()'));
+      expect(sm, contains('DeviceStatsCache.instance.clear()'));
+    });
+
+    test('المراجعة: رُفض الدخول ببياناتٍ احتياطيّة ⇒ «ببيانات دخولٍ محفوظة… أعد الفحص» لا «تأكّد من الرمز»', () async {
+      SharedPreferences.setMockInitialValues({});
+      NetworkDevicesApi.debugSeedCredentials(9, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      srv.codes.addAll([503, 503]);
+      await NetworkDevicesApi.getCredentials(9);
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(MikrotikException('invalid user name or password (6)', code: 'auth'));
       addTearDown(() {
         DevicesCheckRunner.debugLimits = null;
         DevicesCheckRunner.debugSubscribers = null;
         DevicesCheckRunner.debugProbe = null;
         DevicesCheckRunner.debugFetch = null;
       });
-      final run = DevicesCheckRunner([dev(1, type: 'sector'), dev(2)], viaVpn: false);
+      final run = DevicesCheckRunner([dev(9)], viaVpn: false);
       await run.run();
-      expect(run.reports[1]!.state, CheckState.unread);
-      expect(texts(run.reports[1]!), ['بطيء — لم تكتمل قراءته خلال 25ث']);
-      expect(texts(run.reports[2]!), [login]);
+      expect(texts(run.reports[9]!), ['رُفض الدخول ببيانات دخولٍ محفوظة (الخادم ما ردّ وقتها) — أعد الفحص بعد قليل']);
+      run.dispose();
+    });
+
+    test('الرفض الصريح (٤٠٤ بجسم success:false) لا يأخذ القديم؛ والتحديث القسريّ لا يأخذ القديم', () async {
+      srv.codes.addAll([404]);
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<Exception>()));
+      expect(srv.calls, 1);
+      srv.codes.addAll([503, 503]);
+      await expectLater(NetworkDevicesApi.getCredentials(7, forceRefresh: true), throwsA(isA<DioException>()));
+      expect(srv.calls, 3);
+    });
+  });
+
+  group('٩ نوفمبر — المهلة الأولى لا تقطع: سطرٌ مؤقّت ثمّ التقرير، والسقف «بطيء»، والمتأخّر يحلّ محلّه', () {
+    ProbeResult res(DeviceDetail detail) => ProbeResult(vitals: const [], detail: detail, counters: const {});
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 150), hard: const Duration(milliseconds: 600));
+    });
+    tearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+
+    test('🚨 قراءةٌ أطول من المهلة الأولى وأقصر من السقف ⇒ «يقرأ…» مؤقّتاً ثمّ تقريرها — لا «لم يُقرأ»', () async {
+      DevicesCheckRunner.debugFetch = (d) => Future.delayed(
+          const Duration(milliseconds: 350), () => res(const DeviceDetail(glance: DeviceGlance(cpu: 12, uptimeSec: 86400 * 4))));
+      final run = DevicesCheckRunner([dev(1)], viaVpn: false);
+      final seen = <String>[];
+      String? interim;
+      run.addListener(() {
+        final r = run.reports[1];
+        if (r == null) return;
+        seen.add('${r.pending ? 'pending' : r.state.name}|${run.slowPending.length}|${run.done}');
+        if (r.pending) interim ??= texts(r).single;
+      });
+      await run.run();
+      expect(seen.first, 'pending|1|0', reason: 'سطرٌ مؤقّت عند المهلة الأولى، والعدّاد لا يحسبه');
+      expect(interim, startsWith('بطيء — يكمل قراءته'));
+      expect(seen.last, 'ok|0|1');
+      expect(run.reports[1]!.cpu, 12);
+      run.dispose();
+    });
+
+    test('السقف ⇒ «بطيء — لم تكتمل قراءته خلال…»، والقراءة المتأخّرة بعده تحلّ محلّه (لا تُرمى) وتُحفظ لقطتها', () async {
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) => late.future;
+      final run = DevicesCheckRunner([dev(2, type: 'switch')], viaVpn: false);
+      await run.run();
+      expect(run.running, isFalse);
+      expect(run.reports[2]!.state, CheckState.unread);
+      expect(texts(run.reports[2]!).single, startsWith('بطيء — لم تكتمل قراءته خلال'));
+      expect(run.slowPending, isEmpty);
+      late.complete(res(const DeviceDetail(glance: DeviceGlance(cpu: 7), ports: [PortTraffic(name: 'ether1', up: true, linkSpeed: '1Gbps')])));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(run.reports[2]!.state, CheckState.ok);
+      expect(run.reports[2]!.cpu, 7);
+      expect((await DevicesCheckMemoStore.load())[2]!.ports['ether1']!.mbps, 1000);
+      run.dispose();
+    });
+
+    test('أُغلق الفحص قبل أن تصل ⇒ لا تحديث بعد التخلّص (ولا استثناء)', () async {
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) => late.future;
+      final run = DevicesCheckRunner([dev(3)], viaVpn: false);
+      final f = run.run();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      run.dispose();
+      late.complete(res(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+      await f;
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      expect(run.reports[3], isNull);
+    });
+
+    test('🚨 ميكروتك بطيء بجدول التسجيل: الطبقة الأولى تُعرض عند المهلة الأولى، وعند السقف تبقى بحيويّاتها ومنافذها', () async {
+      // القارئ الحقيقيّ (لا debugFetch): RouterOS يجيب الموارد والمنافذ فوراً وجدول التسجيل لا يجيب حتى بعد السقف.
+      // المهلة الأولى ١ث (الطبقة الأولى من قناةٍ بالذاكرة ببياناتٍ مبذورة — لا سباق ساعةٍ تحت حِمل)
+      DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 2));
+      NetworkDevicesApi.debugSeedCredentials(4, {'user': 'admin', 'pass': 'x'}, DateTime.now());
+      final gate = Completer<void>();
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _SlowRegTable(holdRegTable: gate);
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+        NetworkDevicesApi.invalidateCredentialsCache();
+        MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => throw UnimplementedError(route);
+        MikrotikApi.resetRoutesForTest();
+      });
+      final run = DevicesCheckRunner([dev(4, type: 'sector')], viaVpn: false);
+      String? interim;
+      run.addListener(() {
+        final r = run.reports[4];
+        if (r != null && r.pending) interim ??= '${r.cpu}|${texts(r).join(',')}';
+      });
+      await run.run();
+      expect(interim, startsWith('9|'), reason: 'المعالج من الطبقة الأولى منذ المهلة الأولى');
+      expect(interim, contains('قراءةٌ جزئيّة — بطيء — يكمل قراءته'));
+      final r = run.reports[4]!;
+      expect(r.cpu, 9);
+      expect(r.portsTotal, 1);
+      expect(texts(r), contains('قائمة مشتركيه ما انقرت'), reason: 'لا «ما عليه أحد» من طبقةٍ بلا جدول');
+      expect(texts(r).any((t) => t.startsWith('قراءةٌ جزئيّة — بطيء — لم تكتمل قراءته خلال')), isTrue);
+      expect(r.state, CheckState.unread);
       run.dispose();
     });
   });
+
+  group('٩ نوفمبر — آخر قراءةٍ ≤ ٥ د حين لا تكتمل الجديدة: بعمرها، لا تُقدَّم طازجةً ولا تكتب اللقطة', () {
+    setUp(() {
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 80), hard: const Duration(milliseconds: 250));
+    });
+    tearDown(() {
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+      VpnNow.reset();
+    });
+
+    const shown = DeviceDetail(
+        glance: DeviceGlance(cpu: 33, temp: 41, uptimeSec: 86400 * 6),
+        ports: [PortTraffic(name: 'ether1', up: false), PortTraffic(name: 'ether2', up: true, linkSpeed: '1Gbps')]);
+
+    test('🚨 بطاقةٌ تعرض أرقاماً ⇒ الفحص يعرضها بعمرها مؤقّتاً وعند السقف — والمنفذ لا يُقارَن ولا تُكتب اللقطة', () async {
+      SharedPreferences.setMockInitialValues({});
+      await DevicesCheckMemoStore.save({
+        9: const CheckMemo(ports: {'ether1': PortMemo(up: true, mbps: 1000)})
+      });
+      DeviceStatsCache.instance.putVitals(9, const [], shown);
+      DevicesCheckRunner.debugFetch = (d) => Completer<ProbeResult>().future;
+      final run = DevicesCheckRunner([dev(9, type: 'switch')], viaVpn: false);
+      DeviceCheckReport? interim;
+      run.addListener(() {
+        final r = run.reports[9];
+        if (r != null && r.pending) interim ??= r;
+      });
+      await run.run();
+      expect(interim!.cpu, 33, reason: 'الأرقام من آخر قراءة منذ المهلة الأولى');
+      expect(interim!.staleAt, isNotNull);
+      final r = run.reports[9]!;
+      expect(r.cpu, 33);
+      expect(r.staleAge, 'قبل لحظات');
+      expect(texts(r).first, startsWith('آخر قراءة قبل لحظات؛ الجديدة: بطيء — لم تكتمل قراءته خلال'),
+          reason: 'العمر بالسطر نفسه (المراجعة)');
+      expect(texts(r).where((t) => t.contains('طفى')), isEmpty, reason: 'لا مقارنة منافذ من قراءةٍ سابقة');
+      expect(r.stateLabel, 'سليم · قبل لحظات', reason: 'الحال بعمرها — لا تُقدَّم طازجة');
+      expect(r.toText(), startsWith('جهاز 9 (سويج) — سليم · قبل لحظات'), reason: 'النسخ يحمل عمرها');
+      expect((await DevicesCheckMemoStore.load())[9]!.ports['ether1']!.up, isTrue, reason: 'اللقطة لا تُكتب من قراءةٍ سابقة');
+      run.dispose();
+    });
+
+    test('رفض الدخول يُقال وحده — لا أرقامٌ قديمة تغطّيه؛ وبلا قراءةٍ محفوظة «لم يُقرأ» بسببه', () async {
+      SharedPreferences.setMockInitialValues({});
+      DeviceStatsCache.instance.putVitals(10, const [], shown);
+      DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(d.id == 10
+          ? MikrotikException('invalid user name or password (6)', code: 'auth')
+          : const SocketException('Connection refused'));
+      final run = DevicesCheckRunner([dev(10), dev(11)], viaVpn: false);
+      await run.run();
+      expect(run.reports[10]!.staleAt, isNull);
+      expect(run.reports[10]!.cpu, isNull);
+      expect(texts(run.reports[10]!), ['يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز']);
+      expect(run.reports[11]!.state, CheckState.unread);
+      expect(run.reports[11]!.staleAt, isNull);
+      run.dispose();
+    });
+
+    test('أقدم من ٥ د أو قراءةٌ بلا أرقام لا تُستعمل؛ وعبر الـVPN ما قرأه الخادم «من فحص الخادم» بلحظة خادمه', () async {
+      final r = DevicesCheckRunner([dev(12)], viaVpn: true);
+      expect(r.lastReadingFor(dev(12)), isNull);
+      DeviceStatsCache.instance.putVitals(12, const [], const DeviceDetail());
+      expect(r.lastReadingFor(dev(12)), isNull, reason: 'لا رقم فيها');
+      final serverAt = DateTime.now().subtract(const Duration(minutes: 1));
+      VpnNow.debugApply(
+          VpnNowKind.devices,
+          VpnNowResult(ok: true, message: 'تم', atMs: serverAt.millisecondsSinceEpoch, devices: const [
+            VpnDeviceResult(id: 12, alive: true, vitals: {'kind': 'ros', 'cpu': 17, 'up': 3600}),
+            VpnDeviceResult(id: 13, alive: true, vitals: {'kind': 'olt', 'online': 90, 'total': 100}),
+          ]));
+      final last = r.lastReadingFor(dev(12))!;
+      expect(last.from, 'آخر قراءة من فحص الخادم');
+      expect(last.detail.glance.cpu, 17);
+      expect(last.at,
+          DateTime.fromMillisecondsSinceEpoch(serverAt.millisecondsSinceEpoch).subtract(DevicesCheckRunner.serverVitalsReuse),
+          reason: 'بلحظة الخادم ناقص نافذة إعادة استعماله — الأقدم المحتمل، لا لحظة وصولها');
+      expect(r.lastReadingFor(dev(13)), isNull, reason: 'ملخّص الأولت قد يبلغ ٣٠ د بلا لحظته');
+      // فحص خادمٍ انتهى قبل ٣ د ⇒ قراءته قد تكون ٥٫٥ د ⇒ لا
+      VpnNow.debugApply(
+          VpnNowKind.devices,
+          VpnNowResult(ok: true, message: 'تم', atMs: DateTime.now().subtract(const Duration(minutes: 3)).millisecondsSinceEpoch, devices: const [
+            VpnDeviceResult(id: 12, alive: true, vitals: {'kind': 'ros', 'cpu': 17, 'up': 3600}),
+          ]));
+      expect(r.lastReadingFor(dev(12)), isNull);
+      // خادمٌ يعطي لحظة القراءة نفسها (v_at_ms) ⇒ بها، وللأولت أيضاً
+      final own = DateTime.now().subtract(const Duration(minutes: 2));
+      VpnNow.debugApply(
+          VpnNowKind.devices,
+          VpnNowResult.fromJson({
+            'ok': true,
+            'message': 'تم',
+            'at_ms': DateTime.now().millisecondsSinceEpoch,
+            'devices': [
+              {'id': 13, 'alive': true, 'v': {'kind': 'olt', 'online': 90, 'total': 100}, 'v_at_ms': own.millisecondsSinceEpoch},
+            ],
+          }));
+      expect(r.lastReadingFor(dev(13))!.at, DateTime.fromMillisecondsSinceEpoch(own.millisecondsSinceEpoch));
+      expect(DevicesCheck.ago(DateTime(2026, 11, 9, 10), DateTime(2026, 11, 9, 10, 4)), 'قبل 4 د');
+      r.dispose();
+    });
+
+    test('حدود آخر قراءة: المعروضة بعمر ٦ د لا؛ الخفيفة الخام بعمرها؛ والكاملة التي جدّدت لحظتَها قراءةٌ خفيفة لا', () {
+      final r = DevicesCheckRunner([dev(14)], viaVpn: false);
+      final real = DeviceStatsCache.clock;
+      addTearDown(() => DeviceStatsCache.clock = real);
+      final t0 = DateTime.now();
+      DeviceStatsCache.clock = () => t0.subtract(const Duration(minutes: 6));
+      DeviceStatsCache.instance.putVitals(14, const [], const DeviceDetail(glance: DeviceGlance(cpu: 9)));
+      DeviceStatsCache.clock = real;
+      expect(r.lastReadingFor(dev(14)), isNull, reason: 'أقدم من ٥ د');
+      // الخفيفة الخام (التسخين) قبل ٣ د ⇒ تُستعمل بعمرها
+      const light = MikrotikStats(
+          cpuLoad: 12, memUsedPercent: 30, memTotalBytes: 64, memFreeBytes: 40, uptime: '1d', version: '7.15',
+          boardName: 'CCR1009', architectureName: 'tile', cpuCount: 9, cpuFrequencyMhz: 1200,
+          interfaces: [MikrotikInterface(name: 'ether1', type: 'ether', running: true, disabled: false)],
+          pppActiveCount: 0, clientsRead: false);
+      DeviceStatsCache.clock = () => t0.subtract(const Duration(minutes: 3));
+      DeviceStatsCache.instance.putRaw(15, light, detailed: false);
+      DeviceStatsCache.clock = real;
+      final l = r.lastReadingFor(dev(15))!;
+      expect(l.detail.glance.cpu, 12);
+      expect(t0.difference(l.at).inMinutes, 3);
+      // كاملةٌ قبل ٩٠ث (طازجةٌ للبذر) ثمّ خفيفةٌ الآن: تجدّد لحظتها ولا تغيّر أرقامها ⇒ لا تُقدَّم «قبل لحظات»
+      DeviceStatsCache.clock = () => t0.subtract(const Duration(seconds: 90));
+      DeviceStatsCache.instance.putRaw(16, light, detailed: true);
+      DeviceStatsCache.clock = real;
+      DeviceStatsCache.instance.putRaw(16, light, detailed: false);
+      expect(r.lastReadingFor(dev(16)), isNull);
+      r.dispose();
+    });
+
+    test('سكترٌ من آخر قراءةٍ بجدولٍ مقروءٍ فارغ ⇒ لا «ما عليه أحد الآن» (قراءةٌ سابقة لا تقول «الآن»)', () {
+      final now = DateTime(2026, 11, 9, 12);
+      final r = DevicesCheck.evaluate(
+          d: dev(17, type: 'sector'),
+          alive: true,
+          detail: detail(glance: const DeviceGlance(isAp: true, peersKnown: true, cpu: 4)),
+          limits: lim,
+          prev: const CheckMemo(peers: 7),
+          staleAt: now.subtract(const Duration(minutes: 2)),
+          now: now);
+      expect(texts(r).where((t) => t.contains('ما عليه أحد')), isEmpty);
+      expect(texts(r), contains('قائمة مشتركيه ما انقرت'));
+    });
+  });
+
+  group('٩ نوفمبر — «الحال فقط» قسمٌ وحده، «أعد قراءة غير المقروء»، وطريق القراءة وزمنها على السطر', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+    });
+    tearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+    });
+
+    test('بلا بيانات دخول ⇒ «الحال فقط» بسببه (لا «لم يُقرأ»)، آخراً بالترتيب ومعدودٌ وحده', () async {
+      DevicesCheckRunner.debugFetch =
+          (d) async => const ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 3)), counters: {});
+      final noCreds = NetworkDevice(
+          id: 21, adminId: '2', name: 'كاميرا', type: 'camera', brand: 'other', ip: '10.0.0.21', port: 80,
+          hasCredentials: false, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+      final run = DevicesCheckRunner([noCreds, dev(22)], viaVpn: false);
+      await run.run();
+      final r = run.reports[21]!;
+      expect(r.state, CheckState.statusOnly);
+      expect(r.stateLabel, 'الحال فقط');
+      expect(texts(r), ['بلا بيانات دخول']);
+      expect(run.unreadCount, 0, reason: 'ليس «لم يُقرأ» — لا يُعاد');
+      expect(DevicesCheck.sorted(run.reports.values).last.device.id, 21);
+      expect(DevicesCheck.reportText(run.reports.values.toList(), viaVpn: false), contains('سليم 1 · الحال فقط 1'));
+      run.dispose();
+    });
+
+    test('المراجعة: بلا بيانات دخول والبنك نفسه ما ردّ ⇒ «لم يُقرأ — وحاله لم يُعرف» لا «الحال فقط»', () async {
+      DevicesCheckRunner.debugProbe = (d) async => throw const SocketException('pipe busy');
+      final noCreds = NetworkDevice(
+          id: 23, adminId: '2', name: 'كاميرا', type: 'camera', brand: 'other', ip: '10.0.0.23', port: 80,
+          hasCredentials: false, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+      final run = DevicesCheckRunner([noCreds], viaVpn: false);
+      await run.run();
+      expect(run.reports[23]!.state, CheckState.unread);
+      expect(texts(run.reports[23]!), ['بلا بيانات دخول — وحاله لم يُعرف']);
+      run.dispose();
+    });
+
+    test('«أعد قراءة غير المقروء» يقرأ ما لم يُقرأ وحده — والباقي بتقريره بلا جلسةٍ ثانية', () async {
+      final calls = <int, int>{};
+      var fail = true;
+      DevicesCheckRunner.debugFetch = (d) async {
+        calls[d.id] = (calls[d.id] ?? 0) + 1;
+        if (d.id == 32 && fail) throw const SocketException('Connection refused');
+        return const ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 4)), counters: {});
+      };
+      final run = DevicesCheckRunner([dev(31), dev(32), dev(33)], viaVpn: false);
+      await run.run();
+      expect(run.unreadCount, 1);
+      final kept = run.reports[31];
+      fail = false;
+      await run.rerunUnread();
+      expect(calls, {31: 1, 32: 2, 33: 1});
+      expect(run.reports[32]!.state, CheckState.ok);
+      expect(identical(run.reports[31], kept), isTrue, reason: 'المقروء يبقى بتقريره');
+      expect([run.done, run.total], [3, 3]);
+      expect(run.unreadCount, 0);
+      run.dispose();
+    });
+
+    test('الطريق والزمن: ميكروتك من جلسته، وSNMP للأولت وميموزا وروجي، وسسكو ببروتوكوله، وعبر الممرّ يُقال؛ يوبيكويتي لا يُخمَّن', () {
+      const ssh = MikrotikStats(
+          cpuLoad: 1, memUsedPercent: 1, memTotalBytes: 1, memFreeBytes: 1, uptime: '', version: '', boardName: '',
+          architectureName: '', cpuCount: 1, cpuFrequencyMhz: 1, interfaces: [], pppActiveCount: 0, via: 'SSH');
+      expect(DevicesCheckRunner.viaOf(dev(1), ssh, piped: false), 'SSH');
+      expect(DevicesCheckRunner.viaOf(dev(1), ssh, piped: true), 'SSH عبر الـVPN');
+      expect(DevicesCheckRunner.viaOf(dev(2, brand: 'mimosa'), null, piped: false), 'SNMP');
+      expect(DevicesCheckRunner.viaOf(dev(3, brand: 'ubnt'), null, piped: false), isNull);
+      final r = DevicesCheck.evaluate(
+          d: dev(4), alive: true, detail: detail(glance: const DeviceGlance(cpu: 5)), readVia: 'SSH', readMs: 18300);
+      expect(r.readLine, 'SSH · 18ث');
+      final fast = DevicesCheck.evaluate(
+          d: dev(4), alive: true, detail: detail(glance: const DeviceGlance(cpu: 5)), readVia: 'API', readMs: 420);
+      expect(fast.readLine, 'API · 0.4ث');
+    });
+  });
+
+  group('المراجعة — قراءةٌ بلا طبقة اللاسلكيّ لا تُحكم «سليم» (سكتر بيس بوكس محفوظٌ «راوتر»)', () {
+    MikrotikStats tier1({bool wlan = true, bool clientsRead = false, List<MikrotikWireless> wireless = const []}) => MikrotikStats(
+          cpuLoad: 9, memUsedPercent: 30, memTotalBytes: 64, memFreeBytes: 40, uptime: '2w', version: '6.34.3',
+          boardName: 'BaseBox 5', architectureName: 'mipsbe', cpuCount: 1, cpuFrequencyMhz: 720,
+          interfaces: [
+            const MikrotikInterface(name: 'ether1', type: 'ether', running: true, disabled: false),
+            if (wlan) const MikrotikInterface(name: 'wlan1', type: 'wlan', running: true, disabled: false),
+          ],
+          pppActiveCount: 0, wirelessInterfaces: wireless, clientsRead: clientsRead);
+
+    test('الطبقة الأولى بواجهة wlan مفعّلة ⇒ لاسلكيّه لم يُقرأ؛ وبلا راديو (CCR) أو مقروءة كاملة ⇒ يُحكم عليه', () {
+      ProbeResult r(MikrotikStats s) => DeviceVitals.mikrotikResult(dev(1), s, null, detailed: true);
+      expect(r(tier1()).detail.glance.radioUnread, isTrue);
+      expect(r(tier1(wlan: false)).detail.glance.radioUnread, isFalse, reason: 'لا واجهة لاسلكيّة — راوترٌ فعلاً');
+      expect(r(tier1(clientsRead: true)).detail.glance.radioUnread, isFalse);
+      // طبقة SNMP الأولى بلا واجهات أصلاً ⇒ مجهول
+      expect(r(tier1(wlan: false).copyWith(interfaces: const [])).detail.glance.radioUnread, isTrue);
+    });
+
+    test('🚨 نوع السجلّ «راوتر» (كسجلّات المالك) ⇒ «لم يُقرأ — وضعه اللاسلكيّ ومشتركوه ما انقرأوا» لا «راوتر · سليم»', () {
+      final p = DeviceVitals.mikrotikResult(dev(1), tier1(), null, detailed: true);
+      final r = DevicesCheck.evaluate(d: dev(1), alive: true, detail: p.detail, raw: p.raw, limits: lim);
+      expect(r.role, CheckRole.router);
+      expect(r.state, CheckState.unread);
+      expect(texts(r), ['وضعه اللاسلكيّ ومشتركوه ما انقرأوا']);
+      expect(r.cpu, 9, reason: 'ما قُرئ يُعرض');
+      // وملاحظةٌ حقيقيّة تبقى «ملاحظات»
+      final hot = DeviceVitals.mikrotikResult(dev(1), tier1().copyWith(), null, detailed: true);
+      final warm = DevicesCheck.evaluate(
+          d: dev(1),
+          alive: true,
+          detail: DeviceDetail(glance: DeviceGlance(cpu: 97, radioUnread: hot.detail.glance.radioUnread)),
+          limits: lim);
+      expect(warm.state, CheckState.warn);
+    });
+
+    test('الدور من آخر قراءةٍ قُرئ لاسلكيّها: سكترٌ ⇒ «قائمة مشتركيه ما انقرت»، ووصلةٌ ⇒ «إشارة الوصلة ما انقرت»', () {
+      final full = DeviceVitals.mikrotikResult(
+          dev(1),
+          tier1(clientsRead: true, wireless: const [
+            MikrotikWireless(name: 'wlan1', ssid: 'S', mode: 'ap-bridge', band: '5ghz-a/n', frequency: 5180, channelWidth: 20, txPower: 20, disabled: false, running: true)
+          ]),
+          null,
+          detailed: true);
+      final first = DevicesCheck.evaluate(d: dev(1), alive: true, detail: full.detail, raw: full.raw, limits: lim);
+      expect(first.role, CheckRole.sector);
+      expect(first.memo!.role, CheckRole.sector, reason: 'الدور يُحفظ من قراءةٍ قُرئ لاسلكيّها');
+      final memo = CheckMemo.fromJson(first.memo!.toJson());
+      final part = DeviceVitals.mikrotikResult(dev(1), tier1(), null, detailed: true);
+      final next = DevicesCheck.evaluate(d: dev(1), alive: true, detail: part.detail, raw: part.raw, limits: lim, prev: memo);
+      expect(next.role, CheckRole.sector);
+      expect(texts(next), ['قائمة مشتركيه ما انقرت']);
+      expect(next.state, CheckState.unread);
+      expect(next.memo!.role, CheckRole.sector, reason: 'الجهل لا يمحو الدور');
+      // لقطةٌ قديمة بلا دور لكن فيها مشتركون ⇒ سكتر
+      final old = DevicesCheck.evaluate(
+          d: dev(1), alive: true, detail: part.detail, raw: part.raw, limits: lim, prev: const CheckMemo(peers: 6));
+      expect(old.role, CheckRole.sector);
+      // الوصلة (نوعها link) بلا إشارة
+      final link = DevicesCheck.evaluate(d: dev(2, type: 'link'), alive: true, detail: part.detail, raw: part.raw, limits: lim);
+      expect(link.role, CheckRole.link);
+      expect(texts(link), ['إشارة الوصلة ما انقرت']);
+      expect(link.state, CheckState.unread);
+    });
+
+    test('🚨 الفاحص: «راوتر» بطيءٌ بلاسلكيّه ⇒ المؤقّت والسقف «لم يُقرأ» بحيويّاته — لا «سليم»', () async {
+      SharedPreferences.setMockInitialValues({});
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 2));
+      NetworkDevicesApi.debugSeedCredentials(5, {'user': 'admin', 'pass': 'x'}, DateTime.now());
+      final gate = Completer<void>();
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _SlowRegTable(holdWireless: gate);
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+        DevicesCheckRunner.debugLimits = null;
+        DevicesCheckRunner.debugSubscribers = null;
+        DevicesCheckRunner.debugProbe = null;
+        DevicesCheckRunner.debugTimes = null;
+        NetworkDevicesApi.invalidateCredentialsCache();
+        MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => throw UnimplementedError(route);
+        MikrotikApi.resetRoutesForTest();
+      });
+      final run = DevicesCheckRunner([dev(5)], viaVpn: false); // النوع الافتراضيّ «router» كسجلّات المالك
+      final interim = <CheckState>[];
+      run.addListener(() {
+        final r = run.reports[5];
+        if (r != null && r.pending) interim.add(r.state);
+      });
+      await run.run();
+      expect(interim, isNotEmpty);
+      expect(interim.toSet(), {CheckState.unread}, reason: 'المؤقّت لا يُعدّ «سليم»');
+      final r = run.reports[5]!;
+      expect(r.state, CheckState.unread);
+      expect(texts(r), contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+      expect(r.cpu, 9);
+      run.dispose();
+    });
+
+    test('آخر قراءةٍ خفيفة (التسخين) لراوترٍ له راديو ⇒ «لم يُقرأ · قبل…» لا «سليم · قبل…»', () async {
+      SharedPreferences.setMockInitialValues({});
+      DeviceStatsCache.instance.clear();
+      addTearDown(DeviceStatsCache.instance.clear);
+      DeviceStatsCache.instance.putRaw(6, tier1(), detailed: false);
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(const SocketException('Connection refused'));
+      addTearDown(() {
+        DevicesCheckRunner.debugLimits = null;
+        DevicesCheckRunner.debugSubscribers = null;
+        DevicesCheckRunner.debugProbe = null;
+        DevicesCheckRunner.debugFetch = null;
+      });
+      final run = DevicesCheckRunner([dev(6)], viaVpn: false);
+      await run.run();
+      final r = run.reports[6]!;
+      expect(r.staleAt, isNotNull);
+      expect(r.state, CheckState.unread);
+      expect(r.stateLabel, startsWith('لم يُقرأ · قبل'));
+      expect(texts(r), contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+      run.dispose();
+    });
+
+    test('قراءةٌ بلا منافذ (طبقة SNMP الأولى) لا تمحو منافذ اللقطة؛ والقراءة السابقة تُقدَّم مدّة تشغيلها بعمرها', () {
+      const prev = CheckMemo(ports: {'sfp1': PortMemo(up: true, mbps: 1000)});
+      final r = DevicesCheck.evaluate(
+          d: dev(7), alive: true, detail: detail(glance: const DeviceGlance(cpu: 5)), limits: lim, prev: prev);
+      expect(r.memo!.ports['sfp1']!.up, isTrue);
+      final now = DateTime(2026, 11, 9, 12);
+      final stale = DevicesCheck.evaluate(
+          d: dev(8),
+          alive: true,
+          detail: detail(glance: const DeviceGlance(cpu: 5, uptimeSec: 120)),
+          limits: lim,
+          staleAt: now.subtract(const Duration(minutes: 4)),
+          now: now);
+      expect(texts(stale), contains('اشتغل قبل 6 د — انطفى أو أُعيد تشغيله'), reason: 'دقيقتان يومها + ٤ عمرها');
+      expect(stale.uptimeSec, 360);
+    });
+  });
+
+  group('المراجعة — المؤقّت وآخر قراءة لا يُعدّان «سليماً» الآن، والعمر ظاهرٌ دائماً', () {
+    final now = DateTime(2026, 11, 9, 12);
+    DeviceCheckReport rep(int id, {bool pending = false, DateTime? staleAt}) => DevicesCheck.evaluate(
+        d: dev(id), alive: true, detail: detail(glance: const DeviceGlance(cpu: 5)), pending: pending, staleAt: staleAt, now: now);
+
+    test('الشارة: الجاري «يقرأ…» ومن آخر قراءةٍ «يقرأ… · آخر قراءة قبل 3 د»؛ والنسخ كذلك', () {
+      final fresh = rep(1);
+      final pending = rep(2, pending: true);
+      final pendingStale = rep(3, pending: true, staleAt: now.subtract(const Duration(minutes: 3)));
+      final stale = rep(4, staleAt: now.subtract(const Duration(minutes: 3)));
+      expect([fresh.stateLabel, pending.stateLabel, pendingStale.stateLabel, stale.stateLabel],
+          ['سليم', 'يقرأ…', 'يقرأ… · آخر قراءة قبل 3 د', 'سليم · قبل 3 د']);
+      expect(pendingStale.toText(), startsWith('جهاز 3 (راوتر) — يقرأ… · آخر قراءة قبل 3 د'));
+      expect([fresh.bucket, pending.bucket, pendingStale.bucket, stale.bucket],
+          [CheckBucket.ok, CheckBucket.pending, CheckBucket.pending, CheckBucket.stale]);
+    });
+
+    test('رأس النسخ: «سليم» للطازج وحده، و«يقرأ n» و«آخر قراءة n» وحدهما، و«لم يكتمل» أثناء الفحص', () {
+      final rs = [rep(1), rep(2, pending: true), rep(4, staleAt: now.subtract(const Duration(minutes: 3)))];
+      final txt = DevicesCheck.reportText(rs, viaVpn: false, progress: (done: 2, total: 5));
+      expect(txt.split('\n').first, 'الفحص الشامل — 3 جهاز: سليم 1 · يقرأ 1 · آخر قراءة 1 — لم يكتمل: 2 من 5');
+      expect(DevicesCheck.reportText(rs, viaVpn: false).split('\n').first, isNot(contains('لم يكتمل')));
+    });
+  });
+
+  group('المراجعة — القراءة المتأخّرة لا تُسقط، و«أعد قراءة غير المقروء» لا يفتح جلسةً ثانية', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 200), hard: const Duration(milliseconds: 500));
+    });
+    tearDown(() {
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+    const ok = ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 3, uptimeSec: 86400)), counters: {});
+
+    test('🚨 جهازٌ بلغ السقف وقراءته جارية ⇒ «أعد قراءة غير المقروء» ينتظرها (لا جلسة ثانية)، ووصولها يحلّ محلّه', () async {
+      final calls = <int, int>{};
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) {
+        calls[d.id] = (calls[d.id] ?? 0) + 1;
+        return late.future;
+      };
+      final run = DevicesCheckRunner([dev(41)], viaVpn: false);
+      await run.run();
+      expect(run.unreadCount, 1);
+      final again = run.rerunUnread();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      late.complete(ok);
+      await again;
+      expect(calls[41], 1, reason: 'الجلسة نفسها — لا ثانيةٌ على الجهاز البطيء');
+      expect(run.reports[41]!.state, CheckState.ok);
+      expect(run.reports[41]!.cpu, 3);
+      run.dispose();
+    });
+
+    test('🚨 بعد «أعد قراءة غير المقروء» لجهازٍ آخر: قراءة الجهاز المسقوف تصل وتحلّ محلّ سطره (لا تُسقطها الجولة الجديدة)', () async {
+      // القارئ الحقيقيّ للاثنين: 42 راوترٌ بلا راديو طبقته الثانية معلّقة، و43 يرفض الاتّصال أوّلاً
+      for (final id in [42, 43]) {
+        NetworkDevicesApi.debugSeedCredentials(id, {'user': 'admin', 'pass': 'x'}, DateTime.now());
+      }
+      final gate = Completer<void>();
+      var refuse43 = true;
+      final realProbe = MikrotikApi.portProbe;
+      addTearDown(() => MikrotikApi.portProbe = realProbe);
+      MikrotikApi.portProbe = (ip, port) async => false;
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => ip.endsWith('.43')
+          ? (refuse43 ? _RefusedCh() : _SlowRegTable(radio: false))
+          : _SlowRegTable(holdWireless: gate, radio: false);
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+        NetworkDevicesApi.invalidateCredentialsCache();
+        MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => throw UnimplementedError(route);
+        MikrotikApi.resetRoutesForTest();
+      });
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 2));
+      final run = DevicesCheckRunner([dev(42), dev(43)], viaVpn: false);
+      await run.run();
+      final capped = run.reports[42]!;
+      expect(capped.state, CheckState.ok, reason: 'راوترٌ بلا راديو: طبقته الأولى تكفي — ليس «لم يُقرأ» فلا يُعاد');
+      expect(texts(capped).first, startsWith('قراءةٌ جزئيّة — بطيء — لم تكتمل قراءته خلال'));
+      expect(run.unreadCount, 1, reason: '43 وحده');
+      refuse43 = false;
+      MikrotikApi.resetRoutesForTest();
+      await run.rerunUnread();
+      expect(run.reports[43]!.state, CheckState.ok);
+      gate.complete();
+      for (var i = 0; i < 50 && identical(run.reports[42], capped); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(identical(run.reports[42], capped), isFalse, reason: 'وصلت كاملةً فحلّت محلّه');
+      expect(texts(run.reports[42]!).where((t) => t.startsWith('قراءةٌ جزئيّة')), isEmpty);
+      run.dispose();
+    });
+
+    test('ما عُرض من آخر قراءةٍ يُعدّ ويُعاد بـ«أعد قراءة غير المقروء»', () async {
+      DeviceStatsCache.instance.putVitals(44, const [], const DeviceDetail(glance: DeviceGlance(cpu: 8, uptimeSec: 86400)));
+      var fail = true;
+      DevicesCheckRunner.debugFetch =
+          (d) => fail ? Future<ProbeResult>.error(const SocketException('Connection refused')) : Future.value(ok);
+      final run = DevicesCheckRunner([dev(44)], viaVpn: false);
+      await run.run();
+      expect(run.reports[44]!.staleAt, isNotNull);
+      expect(run.reports[44]!.state, CheckState.ok);
+      expect(run.unreadCount, 1, reason: 'قراءته الجديدة لم تكتمل');
+      fail = false;
+      await run.rerunUnread();
+      expect(run.reports[44]!.staleAt, isNull);
+      expect(run.unreadCount, 0);
+      run.dispose();
+    });
+  });
+}
+
+/// خادمٌ يردّ بالرموز بالترتيب (٢٠٠ = بيانات الدخول).
+class _CredsReplies implements HttpClientAdapter {
+  final codes = <int>[];
+  var calls = 0;
+  /// قائمة الأجهزة (`/api/v2/admin/devices`) بحقل updated_at لكلّ جهاز.
+  final updatedAt = <int, String>{};
+  var credCalls = 0;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
+    if (o.path == '/api/v2/admin/devices') {
+      return ResponseBody.fromString(
+          jsonEncode({
+            'success': true,
+            'data': [
+              for (final e in updatedAt.entries)
+                {'id': e.key, 'admin_id': 2, 'name': 'd${e.key}', 'type': 'router', 'brand': 'mikrotik', 'ip': '10.0.0.${e.key}',
+                  'port': 8728, 'has_credentials': 1, 'created_at': '2026-11-01 10:00:00', 'updated_at': e.value},
+            ],
+          }),
+          200,
+          headers: {Headers.contentTypeHeader: ['application/json']});
+    }
+    calls++;
+    credCalls++;
+    final code = codes.isEmpty ? 200 : codes.removeAt(0);
+    // -1: انقطاعٌ (لا ردّ) — كما يرميه Dio للشبكة
+    if (code == -1) throw DioException.connectionError(requestOptions: o, reason: 'Connection refused');
+    final data = code == 200
+        ? {'success': true, 'credentials': {'user': 'admin', 'pass': 'x'}}
+        : {'success': false, 'message': 'x'};
+    return ResponseBody.fromString(jsonEncode(data), code, headers: {
+      Headers.contentTypeHeader: ['application/json'],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// RouterOS يجيب الطبقة الأولى فوراً وجدول التسجيل بعد ثانيتين (سكتر بطيء عبر SSH).
+class _SlowRegTable implements RouterOsChannel {
+  _SlowRegTable({this.holdWireless, this.holdRegTable, this.radio = true});
+
+  /// بلا راديو (CCR): لا واجهة wlan، وأمر اللاسلكيّ «no such command» (بعد بوّابته).
+  final bool radio;
+
+  /// أمر اللاسلكيّ / جدول التسجيل ينتظر حتى يُفتح البوّاب (الاختبار يفتحه بعد السقف) — لا ثوانٍ حقيقيّة.
+  final Completer<void>? holdWireless;
+  final Completer<void>? holdRegTable;
+  @override
+  String get via => 'SSH';
+  @override
+  Future<void> open() async {}
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async {
+    switch (words.first) {
+      case '/system/resource/print':
+        return [
+          {'board-name': 'BaseBox 5', 'version': '6.34.3', 'cpu-load': '9', 'total-memory': '67108864', 'free-memory': '40000000', 'uptime': '2w'}
+        ];
+      case '/interface/print':
+        return [
+          {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+          if (radio) {'name': 'wlan1', 'type': 'wlan', 'running': 'true', 'disabled': 'false'},
+        ];
+      case '/interface/wireless/print':
+        await holdWireless?.future;
+        if (!radio) throw MikrotikException('no such command prefix');
+        return [
+          {'name': 'wlan1', 'mode': 'ap-bridge', 'band': '5ghz-a/n', 'disabled': 'false', 'running': 'true'}
+        ];
+      case '/interface/wireless/registration-table/print':
+        await holdRegTable?.future;
+        return const [];
+      case '/system/health/print':
+      case '/ppp/active/print':
+        return const [];
+    }
+    throw MikrotikException('no such command');
+  }
+
+  @override
+  Future<void> close() async {}
+}
+
+/// قناةٌ يرفض جهازها الاتّصال (المنفذ مقفول).
+class _RefusedCh implements RouterOsChannel {
+  @override
+  String get via => 'API';
+  @override
+  Future<void> open() async => throw const SocketException('Connection refused');
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async => const [];
+  @override
+  Future<void> close() async {}
 }

@@ -258,41 +258,79 @@ class OltFiberReads {
   /// ⚡ **الضوء وحده بمسح عموده** — لكلّ أولت: VSOL (EPON/GPON، فهرس المنفذ.الجهاز) وBDCOM (فهرس الواجهة). ~٧ رحلاتٍ
   /// لـ٣٠٠ جهاز بدل ٥٠ طلباً بأربع قيمٍ للجهاز؛ الإرسال والحرارة والفولتيّة لجهازٍ واحد حين يُفتح ([vsolOptics] /
   /// [BdcomEpon.readings]). `null` = العمود لم يُجب (تبقى القراءة السابقة).
-  static Future<Map<int, double>?> rxColumn(SnmpV2c snmp, OltProfile profile, Iterable<VsolOnu> onus) async {
+  ///
+  /// [cancelled] (٩ نوفمبر — «الفحص الشامل»): يُسأل بين طلبٍ وآخر في سؤال VSOL المباشر (~١٫٤ث للطلب) فيقف عند مهلته أو حين
+  /// يُغلق الفحص ويُرجع ما قُرئ حتى تلك اللحظة — لا يبقى يطرق وكيل الأولت بعد أن تُرك.
+  /// كم ONU متّصلة يسألها [rxColumn] لهذا الملفّ: EPON على BDCOM، بطاقة صفر على VSOL، الكلّ على HSGQ/C-Data؛ وإلّا صفر.
+  static int lightTargets(OltProfile profile, Iterable<VsolOnu> onus) {
+    final online = onus.where((o) => o.online);
+    if (profile.readsBdcomEponTables) return online.where((o) => o.technology == VsolPonTechnology.epon).length;
+    if (profile.readsVsolTables) return online.where((o) => o.slot == 0).length;
+    if (profile.readsGetTables) return online.length;
+    return 0;
+  }
+
+  ///
+  /// [counts] (المراجعة): كم ONU يسألها هذا القارئ فعلاً لهذا الملفّ، وأيّها أجاب (بقيمةٍ أو بلا قيمةٍ صالحة) — ليُقال «ما لحق»
+  /// لما لم يُسأل/لم يجب وحده، و«بلا قراءة ضوء» لما أجاب بلا قيمة. أولتٌ لا قارئ ضوءٍ له ⇒ صفر.
+  static Future<Map<int, double>?> rxColumn(SnmpV2c snmp, OltProfile profile, Iterable<VsolOnu> onus,
+      {bool Function()? cancelled, void Function(int requested, Set<int> answered)? counts}) async {
     final online = [for (final o in onus) if (o.online) o];
-    if (online.isEmpty) return const {};
+    if (online.isEmpty) {
+      counts?.call(0, const {});
+      return const {};
+    }
     final out = <int, double>{};
+    final replied = <int>{};
     var answered = false;
     if (profile.readsBdcomEponTables) {
       final want = {for (final o in online) if (o.technology == VsolPonTechnology.epon) o.ifIndex};
-      if (want.isEmpty) return const {};
+      if (want.isEmpty) {
+        counts?.call(0, const {});
+        return const {};
+      }
       final vbs = await _walk(snmp, BdcomEpon.rxOid);
-      if (vbs == null) return null;
+      if (vbs == null) {
+        counts?.call(want.length, const {});
+        return null;
+      }
       answered = true;
       for (final vb in vbs) {
         final i = int.tryParse(vb.oid.substring(BdcomEpon.rxOid.length + 1));
         if (i == null || !want.contains(i)) continue;
+        replied.add(i);
         final r = BdcomEpon.dbmFrom(vb);
         if (FiberBands.plausible(r)) out[i] = r!;
       }
+      counts?.call(want.length, replied);
     } else if (profile.readsVsolTables) {
       // بالسؤال المباشر لا بالمسح ([_vsolOpticsPerGet]) — والمتّصل أعطاه المستدعي (شريحةٌ كلّ دورة على أولتٍ كبير).
       final mine = [for (final o in online) if (o.slot == 0) o];
-      if (mine.isEmpty) return const {};
+      if (mine.isEmpty) {
+        counts?.call(0, const {});
+        return const {};
+      }
       String oid(VsolOnu o) => '${o.technology == VsolPonTechnology.gpon ? vsolGponOptics : vsolEponOptics}.7.${_suffix(o)}';
-      final got = await _getAll(snmp, [for (final o in mine) oid(o)], null, perGet: _vsolOpticsPerGet, parallel: 1);
-      if (got.isEmpty) return null;
-      answered = true;
+      final got = await _getAll(snmp, [for (final o in mine) oid(o)], cancelled, perGet: _vsolOpticsPerGet, parallel: 1);
       for (final o in mine) {
         final vb = got[oid(o)];
         if (vb == null) continue;
+        replied.add(o.ifIndex);
         final r = dbm(vb);
         if (FiberBands.plausible(r)) out[o.ifIndex] = r!;
       }
+      counts?.call(mine.length, replied);
+      if (got.isEmpty) return null;
+      answered = true;
     } else if (profile.readsGetTables) {
-      // ⚠️ GET لا مسح: مسح جدول الضوء على HSGQ يُعلّق وكيله ([HsgqOlt])، وC-Data بالـGET كذلك ([CdataOlt]).
-      return OltGetTables.of(profile)!.rxOnly(snmp.get, [for (final o in online) o.ifIndex]);
+      // ⚠️ GET لا مسح: مسح جدول الضوء على HSGQ يُعلّق وكيله ([HsgqOlt])، وC-Data بالـGET كذلك ([CdataOlt]). والإلغاء يُمرَّر
+      // (المراجعة): يقف بين دفعةٍ وأخرى عند مهلة الفحص أو إغلاقه.
+      final rx = await OltGetTables.of(profile)!
+          .rxOnly(snmp.get, [for (final o in online) o.ifIndex], isCancelled: cancelled);
+      counts?.call(online.length, {...?rx?.keys});
+      return rx;
     } else {
+      counts?.call(0, const {});
       return const {};
     }
     return answered ? out : null;

@@ -89,6 +89,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
 
   /// «افحص سكتر فلان»: فحص الجهاز نفسه وتقريره — أو لماذا لا يُفحص ([_devNote]).
   DevicesCheckRunner? _devRun;
+
+  /// «افحص سكتر فلان» يمسك قسم الأجهزة ما دام يجري — كالفحص الشامل (المراجعة).
+  CheckSectionHold? _devHold;
   String? _devNote;
   bool _devViaVpn = false;
 
@@ -126,6 +129,8 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     _subCheck?.removeListener(_changed);
     _subCheck?.dispose();
     _subCheck = null;
+    _devHold?.dispose();
+    _devHold = null;
     _devRun?.removeListener(_changed);
     _devRun?.dispose();
     _devRun = null;
@@ -155,6 +160,8 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   /// «افحص سكتر فلان»: فحص هذا الجهاز وحده بطريقه — المفتوحة من شبكتك (أو عبر VPN بوضعه/خارج شبكتك)، وجهاز شركةٍ أخرى عبر
   /// VPN شركته (كـ«الفحص الشامل» بـ«كل الشركات»).
   Future<void> _startDeviceCheck(NetworkDevice d) async {
+    _devHold?.dispose();
+    _devHold = null;
     _devRun?.removeListener(_changed);
     _devRun?.dispose();
     _devRun = null;
@@ -199,6 +206,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     _devRun = runner..addListener(_changed);
     setState(() {});
     unawaited(runner.run());
+    _devHold = CheckSectionHold(runner);
   }
 
   Future<void> _run(String text) async {
@@ -678,6 +686,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         CheckState.warn => AppTone.warning,
         CheckState.unread => AppTone.neutral,
         CheckState.ok => AppTone.success,
+        CheckState.statusOnly => AppTone.neutral,
       };
 
   static AppTone _levelTone(CheckLevel l) => switch (l) {
@@ -685,6 +694,13 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         CheckLevel.warn => AppTone.warning,
         CheckLevel.info => AppTone.info,
       };
+
+  static String _devProgress(DevicesCheckRunner? run, DeviceCheckReport? rep) {
+    if (run?.line != null) return run!.line!;
+    if (rep == null || !rep.pending) return 'يفحص الجهاز…';
+    final why = rep.findings.map((f) => f.text).firstWhere((t) => t.contains('يكمل'), orElse: () => 'بطيء — يكمل قراءته…');
+    return '${rep.stateLabel} — $why';
+  }
 
   Widget _devAnswer(NetworkDevice d) {
     final run = _devRun;
@@ -723,7 +739,10 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
           Row(children: [
             const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
             const SizedBox(width: Sp.sm),
-            Expanded(child: Text(run?.line ?? 'يفحص الجهاز…', style: AppType.muted(color: AppColors.textMid))),
+            // البطيء بعد مهلته الأولى: سطره المؤقّت (بعمر آخر قراءته إن وُجدت) بدل دوّارةٍ صامتة حتى السقف (المراجعة)
+            Expanded(
+                child: Text(_devProgress(run, rep),
+                    key: const ValueKey('voice-dev-progress'), style: AppType.muted(color: AppColors.textMid))),
           ])
         else if (rep == null)
           Text(run.error ?? 'ما انقرى الجهاز', style: AppType.label(color: AppColors.warning))

@@ -7,6 +7,7 @@ import '../../services/vpn_now.dart';
 import '../../services/deep_probe_scheduler.dart';
 import '../../services/device_read_health.dart';
 import '../../services/device_stats_cache.dart';
+import '../../services/device_sweep_coordinator.dart';
 import 'device_vitals.dart';
 import 'widgets/device_big_card.dart';
 
@@ -223,6 +224,8 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
 
   void _kick({bool urgent = false, bool force = false}) {
     if (!mounted) return;
+    // «الفحص الشامل» مفتوحٌ فوق القسم ([DeviceSweep]) — لا جلسة بطاقةٍ تزاحمه على الجهاز نفسه؛ النبضة التالية بعد خروجه تقرأ (٩ نوفمبر)
+    if (DeviceSweep.suspended) return;
     final st = widget.vitals.value;
     final blocked = widget.blocked;
     if (blocked != null) {
@@ -281,6 +284,12 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
       // منها يُعيد التجمّد كاملاً. و`!mounted` داخله لا قبله للسبب نفسه.
       try {
         if (!mounted) return;
+        // مهمّةٌ انتظرت دورها والفحص الشامل بدأ بعدها ([DeviceSweep]) — لا جلسة تزاحمه؛ ولا تبقى البطاقة باهتة (المراجعة)
+        if (DeviceSweep.suspended) {
+          final cur = widget.vitals.value;
+          widget.onVitals(VitalsState(vitals: cur.vitals, detail: cur.detail, error: cur.error, at: cur.at));
+          return;
+        }
         final r = await DeviceVitals.fetch(
           widget.device,
           prev: widget.prevSample(),

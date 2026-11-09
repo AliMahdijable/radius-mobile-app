@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -10,16 +11,25 @@ import 'package:rad_mysvcs/api/bdcom_epon.dart';
 import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
+import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
+import 'package:rad_mysvcs/api/olt_profile.dart';
+import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_live_card.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
+import 'package:rad_mysvcs/services/deep_probe_scheduler.dart';
+import 'package:rad_mysvcs/services/device_stats_cache.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
+import 'package:rad_mysvcs/services/device_warmup.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 
 import 'support/app_fonts.dart';
 import 'support/device_cards_fixture.dart';
+import 'support/fake_snmp_agent.dart';
 
 /// «البطاقات الكبيرة» بقسم الأجهزة (المالك ٣١ أكتوبر: «نظرة عامه ع الاجهز نلغيها ونستبدل بدالها تغير نوع العرض… كارتات كبار
 /// بيها المعلومات المهمّة وملوّنة… بدقّة»): أرقام البطاقة من مسارات القراءة الحقيقيّة (ميكروتك سكتراً ومحطّةً، والأولت)، دور
@@ -87,6 +97,198 @@ void main() {
       expect([for (final f in rep.findings) f.text], ['قائمة مشتركيه ما انقرت']);
       expect(rep.state, CheckState.unread);
       expect(rep.memo!.peers, 6);
+    });
+
+    test('٩ نوفمبر: الأولت — الحكم من البنية فوراً، والضوء للفحص وحده ويقف بإلغائه جزئيّاً «قُرئ n من N»، والبطاقة لا تطلبه', () async {
+      // VSOL بـ١٩٥ متّصلاً (أحد أولتات الإنتاج): الضوء وحده ~٦٩ث — كان «لم يُقرأ» كلّ مرّة. الإيقاف بعدد الطلبات (لا ساعة)
+      const prof = OltProfile(vendor: OltVendor.vsol, oltLikely: true, identified: true, model: 'V1600D');
+      final onus = [
+        for (var i = 1; i <= 200; i++)
+          VsolOnu(ifIndex: i, slot: 0, ponPort: 1 + (i - 1) ~/ 50, onuId: (i - 1) % 50 + 1, online: i <= 195),
+      ];
+      VsolOltApi.debugFetch = () async => VsolOltStats(
+            uptime: const Duration(days: 3),
+            profile: prof,
+            ponPorts: [
+              for (var p = 1; p <= 4; p++)
+                VsolPonPort(index: 100 + p, slot: 0, port: p, up: true, rxBytes: 0, txBytes: 0, onuTotal: 50, onuOnline: p == 4 ? 45 : 50),
+            ],
+            onus: onus,
+          );
+      final agent = FakeSnmpAgent({
+        for (final o in onus)
+          if (o.online) '${OltFiberReads.vsolEponOptics}.7.${o.ponPort}.${o.onuId}': snmpText('', o.ifIndex == 7 ? '-29.5' : '-21.5'),
+      });
+      DeviceVitals.snmpFor = (h, p, c) => agent;
+      DeviceVitals.resetLightsCursorForTest();
+      addTearDown(() => DeviceVitals.snmpFor = (h, p, c) => SnmpV2c(host: h, port: p, community: c));
+      final d = NetworkDevice(
+          id: 31, adminId: '1', name: 'olt', type: 'olt', brand: 'vsol', ip: '10.0.0.31', port: 161, protocol: 'snmp',
+          hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026));
+
+      // البطاقة الكبيرة/البرج (detailed بلا الضوء) ⇒ لا طلب ضوء
+      final card = await DeviceVitals.fetch(d, detailed: true);
+      expect(agent.gets, isEmpty, reason: 'البطاقة لا تعرض الضوء — كان يخنق وكيل VSOL كلّ ١٥ث');
+      expect(card.detail.onuLightsWanted, isNull);
+
+      // الفحص: يقف بعد طلبين (٨ أجهزة) ⇒ جزءٌ من الضوء، والحكم كاملٌ من البنية
+      final r = await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, isCancelled: () => agent.gets.length >= 2);
+      expect(agent.gets, hasLength(2));
+      expect(r.detail.onuLightsWanted, 195);
+      expect(r.detail.onuLightsAnswered, 8);
+      expect(r.detail.onuLights, hasLength(8));
+      final rep = DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw);
+      expect(rep.state, isNot(CheckState.unread));
+      expect([rep.onusOnline, rep.onusTotal], [195, 200]);
+      expect([for (final f in rep.findings) f.text], contains('الضوء: قُرئ 8 من 195 — الباقي ما لحق'));
+      expect(rep.lightsWanted, 195);
+      // الضعيف يُعدّ من المقروء وحده: ONU رقم 7 ضمن الشريحة الأولى
+      expect([for (final f in rep.findings) f.text], contains('ضوء ضعيف: 1 — من 8 مشترك'));
+
+      // الفحص التالي يبدأ من حيث وقف (تناوب) — لا الشريحة نفسها، ولا فارغاً
+      final asked1 = agent.gets.expand((g) => g).toSet();
+      agent.gets.clear();
+      await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, isCancelled: () => agent.gets.length >= 2);
+      final asked2 = agent.gets.expand((g) => g).toSet();
+      expect(asked2, hasLength(8));
+      expect(asked2.intersection(asked1), isEmpty, reason: 'الشريحة التالية');
+    });
+
+    test('المراجعة: «الباقي ما لحق» لما لم يُسأل وحده — بطاقة VSOL الثانية لا تُعدّ، والجواب بلا قيمةٍ «بلا قراءة ضوء»', () async {
+      const prof = OltProfile(vendor: OltVendor.vsol, oltLikely: true, identified: true, model: 'V1600D');
+      // ١٠ على البطاقة صفر (٢ منها بلا قيمةٍ صالحة) و٥ على البطاقة ١ (لا يسألها القارئ)
+      final onus = [
+        for (var i = 1; i <= 10; i++) VsolOnu(ifIndex: i, slot: 0, ponPort: 1, onuId: i, online: true),
+        for (var i = 11; i <= 15; i++) VsolOnu(ifIndex: i, slot: 1, ponPort: 1, onuId: i, online: true),
+      ];
+      VsolOltApi.debugFetch = () async => VsolOltStats(
+            profile: prof,
+            ponPorts: const [VsolPonPort(index: 101, slot: 0, port: 1, up: true, rxBytes: 0, txBytes: 0, onuTotal: 15, onuOnline: 15)],
+            onus: onus,
+          );
+      final agent = FakeSnmpAgent({
+        for (var i = 1; i <= 10; i++) '${OltFiberReads.vsolEponOptics}.7.1.$i': snmpText('', i <= 2 ? 'N/A' : '-20.5'),
+      });
+      DeviceVitals.snmpFor = (h, p, c) => agent;
+      DeviceVitals.resetLightsCursorForTest();
+      addTearDown(() => DeviceVitals.snmpFor = (h, p, c) => SnmpV2c(host: h, port: p, community: c));
+      final d = NetworkDevice(
+          id: 32, adminId: '1', name: 'olt2', type: 'olt', brand: 'vsol', ip: '10.0.0.32', port: 161, protocol: 'snmp',
+          hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026));
+      final r = await DeviceVitals.fetch(d, detailed: true, withOnuLights: true);
+      expect([r.detail.onuLightsWanted, r.detail.onuLightsAnswered, r.detail.onuLights.length], [10, 10, 8]);
+      final texts = [for (final f in DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw).findings) f.text];
+      expect(texts.where((t) => t.contains('ما لحق')), isEmpty, reason: 'سُئلت كلّها وأجابت');
+      expect(texts, contains('بلا قراءة ضوء: 2'));
+      // طرازٌ لا قارئ ضوءٍ له ⇒ لا سطر
+      expect(OltFiberReads.lightTargets(const OltProfile(), onus), 0);
+    });
+
+    testWidgets('٩ نوفمبر: الفحص الشامل مفتوح ⇒ البطاقة الكبيرة لا تقرأ جهازها؛ وبخروجه تعود بنبضتها', (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 2);
+      };
+      DeviceStatsCache.instance.clear();
+      final vitals = ValueNotifier(VitalsState.idle);
+      DeviceSweep.acquire();
+      addTearDown(() {
+        if (DeviceSweep.suspended) DeviceSweep.release();
+      });
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DeviceLiveCard(
+              device: dev(915, 'sector', 'mikrotik'),
+              vitals: vitals,
+              onVitals: (v) => vitals.value = v,
+              medianMs: null,
+              prevSample: () => null,
+              onSample: (_) {},
+              onOpen: () {},
+            ),
+          ),
+        ),
+      ));
+      await t.pump(const Duration(seconds: 40));
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0, reason: 'لا جلسة بطاقة تزاحم الفحص');
+      DeviceSweep.release();
+      await t.pump(const Duration(seconds: 16));
+      await _drain(t, () => fetches > 0);
+      expect(fetches, 1, reason: 'النبضة التالية بعد الخروج تقرأ');
+      await t.pumpWidget(const SizedBox());
+      DeviceStatsCache.instance.clear();
+    });
+
+    testWidgets('المراجعة: جلسة بطاقةٍ كانت تنتظر دورها في المجدول والفحص بدأ بعدها ⇒ لا تُفتح', (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 2);
+      };
+      DeviceStatsCache.instance.clear();
+      // الخانات الستّ مشغولة ⇒ مهمّة البطاقة تنتظر
+      final block = Completer<void>();
+      for (var i = 0; i < DeepProbeScheduler.maxConcurrent; i++) {
+        DeepProbeScheduler.instance.submit(Object(), () => block.future);
+      }
+      final vitals = ValueNotifier(VitalsState.idle);
+      addTearDown(() {
+        if (!block.isCompleted) block.complete();
+        if (DeviceSweep.suspended) DeviceSweep.release();
+      });
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DeviceLiveCard(
+              device: dev(917, 'sector', 'mikrotik'),
+              vitals: vitals,
+              onVitals: (v) => vitals.value = v,
+              medianMs: null,
+              prevSample: () => null,
+              onSample: (_) {},
+              onOpen: () {},
+            ),
+          ),
+        ),
+      ));
+      await t.pump();
+      expect(vitals.value.loading, isTrue, reason: 'أُرسلت للمجدول وتنتظر');
+      DeviceSweep.acquire(); // الفحص الشامل بدأ
+      block.complete();
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0, reason: 'بدأت بعد الإمساك ⇒ لا جلسة');
+      expect(vitals.value.loading, isFalse, reason: 'ولا تبقى باهتة');
+      DeviceSweep.release();
+      await t.pumpWidget(const SizedBox());
+      DeviceStatsCache.instance.clear();
+    });
+
+    testWidgets('٩ نوفمبر: التسخين ينتظر ما دام الفحص الشامل مفتوحاً، ثمّ يكمل', (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 0);
+      };
+      DeviceStatsCache.instance.clear();
+      DeviceWarmup.instance.reset();
+      DeviceSweep.acquire();
+      addTearDown(() {
+        if (DeviceSweep.suspended) DeviceSweep.release();
+        DeviceWarmup.instance.reset();
+      });
+      DeviceWarmup.instance.start([dev(916, 'router', 'mikrotik')]);
+      await t.pump(const Duration(seconds: 10));
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0);
+      DeviceSweep.release();
+      await t.pump(const Duration(seconds: 4));
+      await _drain(t, () => fetches > 0);
+      expect(fetches, 1);
+      DeviceWarmup.instance.reset(); // مؤقّت الفاصل التالي — لا يبقى بعد الاختبار
+      DeviceStatsCache.instance.clear();
     });
 
     test('ميكروتك بلا مجسّ حرارة ولا SwOS معالج: «—» لا صفر', () async {
@@ -543,4 +745,12 @@ MikrotikStats _mtk({required String mode, required int clients, bool temp = true
     ],
     wirelessClients: [for (var i = 1; i <= clients; i++) c(i, -36 - i + 1)],
   );
+}
+
+/// يدير الزمنين معاً (الوهميّ للمؤقّتات والحقيقيّ لسلسلة الطلب) حتى يتحقّق [done] أو ثانيتان.
+Future<void> _drain(WidgetTester t, bool Function() done, {int rounds = 100}) async {
+  for (var i = 0; i < rounds && !done(); i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await t.pump(const Duration(milliseconds: 20));
+  }
 }

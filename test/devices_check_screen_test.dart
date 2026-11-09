@@ -1,11 +1,17 @@
 // شاشة «الفحص الشامل» (٦ نوفمبر): تقريرٌ منفصل لكلّ جهاز — الطافي أوّلاً، والسكتر بمشتركيه، والسويج بمنافذه، والأعداد فلاتر،
 // والنقر يفتح الكلّ؛ واللقطة تُحفظ للفحص التالي. الشبكة بدائل (debugProbe/debugFetch/debugLimits).
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
+import 'package:rad_mysvcs/services/device_stats_cache.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -170,6 +176,198 @@ void main() {
     await t.tap(sector);
     await settle(t);
     expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('المراجعة: الفحص يمسك قسم الأجهزة ما دام **يجري** — يفلته بانتهائه والتقرير مفتوح، ويمسكه ثانيةً بالإعادة', (t) async {
+    expect(DeviceSweep.suspended, isFalse);
+    final slow = Completer<ProbeResult>();
+    final slow2 = Completer<ProbeResult>();
+    final base = DevicesCheckRunner.debugFetch!;
+    var failSix = true;
+    DevicesCheckRunner.debugFetch = (d) => d.id == 6 ? (failSix ? slow.future : slow2.future) : base(d);
+    addTearDown(() {
+      if (!slow.isCompleted) slow.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+      if (!slow2.isCompleted) slow2.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+    });
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    await settle(t);
+    expect(DeviceSweep.suspended, isTrue, reason: 'الفحص جارٍ (جهازٌ بطيء) — جولة الحال والبطاقات والتسخين تقف');
+    slow.completeError(const SocketException('Connection refused'));
+    await settle(t);
+    expect(find.text('فُحصت 6 أجهزة'), findsOneWidget);
+    expect(DeviceSweep.suspended, isFalse, reason: 'انتهى والتقرير مفتوح ⇒ القسم يعود (رفع النتائج والتنبيهات)');
+    failSix = false;
+    await t.tap(find.byKey(const ValueKey('check-rerun-unread')));
+    await t.pump();
+    expect(DeviceSweep.suspended, isTrue, reason: 'الإعادة تجري ⇒ يُمسك ثانيةً');
+    slow2.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 5, uptimeSec: 86400))));
+    await settle(t);
+    expect(DeviceSweep.suspended, isFalse);
+    await t.pumpWidget(const SizedBox());
+    expect(DeviceSweep.suspended, isFalse);
+  });
+
+  testWidgets('٩ نوفمبر: الجهاز البطيء «يقرأ…» بسطره، والرأس «بانتظار 1 جهاز بطيء…»، والنسخ متاحٌ أثناءه — ثمّ تقريره', (t) async {
+    DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 8));
+    addTearDown(() => DevicesCheckRunner.debugTimes = null);
+    final base = DevicesCheckRunner.debugFetch!;
+    DevicesCheckRunner.debugFetch = (d) => d.id == 6
+        ? Future.delayed(const Duration(seconds: 4), () => _r(const DeviceDetail(glance: DeviceGlance(cpu: 5, uptimeSec: 86400))))
+        : base(d);
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    // الترجمة تُحمَّل أوّلاً — ننتظر حتى يبلغ الجهاز البطيء مهلته الأولى
+    const waiting = 'بانتظار 1 جهاز بطيء…';
+    for (var i = 0; i < 40 && find.text(waiting).evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text(waiting), findsOneWidget);
+    await see(t, find.byKey(const ValueKey('check-card-6')));
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-6')), matching: find.text('يقرأ…')), findsOneWidget);
+    expect(t.widget<IconButton>(find.byKey(const ValueKey('check-copy'))).onPressed, isNotNull, reason: 'يُنسخ ما اكتمل');
+    await t.scrollUntilVisible(find.byKey(const ValueKey('check-head')), -300, scrollable: find.byType(Scrollable).first);
+    for (var i = 0; i < 60 && find.text('فُحصت 6 أجهزة').evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('فُحصت 6 أجهزة'), findsOneWidget);
+    await see(t, find.byKey(const ValueKey('check-card-6')));
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-6')), matching: find.text('يقرأ…')), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('٩ نوفمبر: من آخر قراءة ⇒ الحال بعمرها «… · قبل لحظات» — لا يُقدَّم طازجاً', (t) async {
+    DeviceStatsCache.instance.clear();
+    addTearDown(DeviceStatsCache.instance.clear);
+    DeviceStatsCache.instance.putVitals(
+        6, const [], const DeviceDetail(glance: DeviceGlance(cpu: 8, uptimeSec: 86400 * 2)));
+    DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(const SocketException('Connection timed out'));
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: [devices.last], viaVpn: false));
+    // فقدان الحزم ٣٣٪ من بنك هذا الفحص ⇒ «ملاحظات» — والعمر بجانبها
+    for (var i = 0; i < 40 && find.text('ملاحظات · قبل لحظات').evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('ملاحظات · قبل لحظات'), findsOneWidget);
+    expect(find.textContaining('آخر قراءة قبل لحظات؛ الجديدة:'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('٩ نوفمبر: «الحال فقط» شريحةٌ وحدها، و«أعد قراءة غير المقروء» تعيد ما لم يُقرأ وحده', (t) async {
+    final calls = <int, int>{};
+    final base = DevicesCheckRunner.debugFetch!;
+    var fail = true;
+    DevicesCheckRunner.debugFetch = (d) {
+      calls[d.id] = (calls[d.id] ?? 0) + 1;
+      if (d.id == 6 && fail) return Future<ProbeResult>.error(const SocketException('Connection refused'));
+      return base(d);
+    };
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    await settle(t);
+    expect(find.byKey(const ValueKey('check-count-statusOnly')), findsOneWidget, reason: 'الكاميرا بلا بيانات دخول');
+    final rerun = find.byKey(const ValueKey('check-rerun-unread'));
+    expect(rerun, findsOneWidget);
+    expect(find.text('أعد قراءة غير المقروء (1)'), findsOneWidget);
+    fail = false;
+    await t.tap(rerun);
+    await settle(t);
+    expect(calls[6], 2);
+    expect(calls[1], 1, reason: 'المقروء لا يُعاد');
+    expect(rerun, findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('المراجعة: شريحتا «يقرأ» و«آخر قراءة» وحدهما، والشارة بعمرها أثناء القراءة، والنسخ أثناءه «لم يكتمل»', (t) async {
+    String? copied;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+      return null;
+    });
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    DeviceStatsCache.instance.clear();
+    addTearDown(DeviceStatsCache.instance.clear);
+    // الراوتر (1) قرأته بطاقته قبل قليل وقراءته الآن بطيئة؛ والسويج (3) قراءته تفشل ⇒ آخر قراءة
+    DeviceStatsCache.instance.putVitals(1, const [], const DeviceDetail(glance: DeviceGlance(cpu: 11, uptimeSec: 86400 * 9)));
+    DeviceStatsCache.instance.putVitals(3, const [], const DeviceDetail(glance: DeviceGlance(cpu: 6, uptimeSec: 86400 * 3)));
+    DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 30));
+    addTearDown(() => DevicesCheckRunner.debugTimes = null);
+    final base = DevicesCheckRunner.debugFetch!;
+    final slow = Completer<ProbeResult>();
+    addTearDown(() {
+      if (!slow.isCompleted) slow.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+    });
+    DevicesCheckRunner.debugFetch = (d) => switch (d.id) {
+          1 => slow.future,
+          3 => Future<ProbeResult>.error(const SocketException('Connection refused')),
+          _ => base(d),
+        };
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    for (var i = 0; i < 40 && find.byKey(const ValueKey('check-count-pending')).evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    Finder chip(String k, String n) =>
+        find.descendant(of: find.byKey(ValueKey('check-count-$k')), matching: find.text(n));
+    expect(chip('pending', '1'), findsOneWidget);
+    expect(chip('stale', '1'), findsOneWidget);
+    expect(chip('ok', '0'), findsOneWidget, reason: 'لا طازج سليم — المؤقّت والقديم لا يُعدّان «سليماً»');
+    await see(t, find.byKey(const ValueKey('check-card-1')));
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-1')), matching: find.text('يقرأ… · آخر قراءة قبل لحظات')),
+        findsOneWidget);
+    await t.scrollUntilVisible(find.byKey(const ValueKey('check-head')), -300, scrollable: find.byType(Scrollable).first);
+    await t.tap(find.byKey(const ValueKey('check-copy')));
+    await t.pump();
+    expect(copied, contains('لم يكتمل: 5 من 6'));
+    expect(copied, contains('يقرأ 1'));
+    expect(copied, contains('آخر قراءة 1'));
+    slow.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+    await settle(t);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('المراجعة: رأس ضوء الأولت — الجزئيّ «الضوء n من N — المقروء جيّد» لا «ضوءهم كلّه جيّد»، والكامل بعدد الـONU', (t) async {
+    DevicesCheckRunner.debugFetch = (d) async => switch (d.id) {
+          // ١٩٥ متّصلة والمهلة انتهت: ٣ أجابت، ٢ بقيمة ⇒ «ما لحق» للباقي و«بلا قراءة ضوء: 1»
+          7 => _r(const DeviceDetail(
+              glance: DeviceGlance(onusOnline: 195, onusTotal: 200),
+              onuLights: [OnuLight(name: 'ONU 1/1', rx: -19.5), OnuLight(name: 'ONU 1/2', rx: -21.0)],
+              onuLightsWanted: 195,
+              onuLightsAnswered: 3)),
+          // قُرئت كلّها وواحدةٌ ضعيفة
+          8 => _r(const DeviceDetail(
+              glance: DeviceGlance(onusOnline: 2, onusTotal: 2),
+              onuLights: [OnuLight(name: 'ONU 2/1', rx: -18.0), OnuLight(name: 'ONU 2/2', rx: -29.0)],
+              onuLightsWanted: 2,
+              onuLightsAnswered: 2)),
+          // قُرئت كلّها وكلّها جيّدة
+          9 => _r(const DeviceDetail(
+              glance: DeviceGlance(onusOnline: 1, onusTotal: 1),
+              onuLights: [OnuLight(name: 'ONU 3/1', rx: -17.0)],
+              onuLightsWanted: 1,
+              onuLightsAnswered: 1)),
+          _ => throw StateError('no'),
+        };
+    NetworkDevice olt(int id, String name) => NetworkDevice(
+        id: id, adminId: '2', name: name, type: 'olt', brand: 'vsol', ip: '10.9.0.$id', port: 161, protocol: 'snmp',
+        hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+    final olts = [olt(7, 'أولت البرج'), olt(8, 'أولت الحيّ'), olt(9, 'أولت القرية')];
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: olts, viaVpn: false));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    Finder inCard(int id, String s) => find.descendant(of: find.byKey(ValueKey('check-card-$id')), matching: find.text(s));
+    await see(t, find.byKey(const ValueKey('check-card-7')));
+    expect(inCard(7, 'الضوء 2 من 195 — المقروء جيّد'), findsOneWidget);
+    expect(inCard(7, 'الضوء: قُرئ 2 من 195 — الباقي ما لحق'), findsOneWidget);
+    expect(inCard(7, 'بلا قراءة ضوء: 1'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-7')), matching: find.textContaining('كلّه جيّد')), findsNothing);
+    await see(t, find.byKey(const ValueKey('check-card-8')));
+    expect(inCard(8, 'المشتركون (ONU) 2 — 1 ضوءهم ضعيف'), findsOneWidget);
+    await see(t, find.byKey(const ValueKey('check-card-9')));
+    expect(inCard(9, 'المشتركون (ONU) 1 — ضوءهم كلّه جيّد'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
 }

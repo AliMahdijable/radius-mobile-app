@@ -352,6 +352,19 @@ class MikrotikApi {
   @visibleForTesting
   static void resetSshFallbackForTest() => _sshClientsFallbackAt.clear();
 
+  /// جلسة SSH الاحتياطيّة لجدول التسجيل (عنوان، مستخدم، كلمة) — تُستبدل في الاختبار لتُعدّ مرّاتها.
+  @visibleForTesting
+  static Future<List<Map<String, String>>> Function(String ip, String user, String pass) sshClients = _fetchClientsViaSsh;
+
+  /// ردّ `print =count-only=` ⇒ العدد: الـAPI والسكربت يُرجعان صفّاً واحداً `{ret: N}`، والويب (REST) صفوفاً تُعدّ.
+  @visibleForTesting
+  static int countOf(List<Map<String, String>> rows) {
+    if (rows.length == 1 && rows.first.length == 1 && rows.first.containsKey('ret')) {
+      return int.tryParse(rows.first['ret']!.trim()) ?? 0;
+    }
+    return rows.length;
+  }
+
   /// بقيّة الجلسة بعد الدخول — مشتركةٌ بين الـAPI والويب وSSH (كلّها تُرجع صفوف الـAPI نفسها، راجع
   /// [RouterOsChannel]). جلسة SSH الاحتياطيّة لجدول التسجيل للـAPI الثنائيّ وحده (نادرة — مرّةً كلّ ١٠ دقائق).
   static Future<MikrotikStats> _collect(
@@ -380,10 +393,19 @@ class MikrotikApi {
         }
       }
     } catch (_) {}
-    List<Map<String, String>> pppRows = const [];
+    // ٩ نوفمبر (التحقيق R1a): جلسات PPP تُعدّ ولا تُسرد — راوتر PPPoE بمئات الجلسات كان يُرسل كلّ حقولها في كلّ قراءة (وعبر
+    // SSH سكربتاً يطبع كلّ حقلٍ لكلّ صفّ). `count-only` يُرجع العدد وحده؛ وإن لم يقبله الطريق/الإصدار ⇒ القائمة بعمودٍ واحد.
+    var pppCount = 0;
     try {
-      pppRows = await ch.query(['/ppp/active/print']);
-    } catch (_) {}
+      pppCount = countOf(await ch.query(['/ppp/active/print', '=count-only=']));
+    } catch (e) {
+      final m = e.toString();
+      if (!m.contains('no such command') && !m.contains('no such item')) {
+        try {
+          pppCount = (await ch.query(['/ppp/active/print', '=.proplist=.id'])).length;
+        } catch (_) {}
+      }
+    }
 
     // اجلب سرعة الـport الفعليّة (Tier 1 — قبل الـpartial callback)
     final Map<String, Map<String, String>> ethMonitorByName = {};
@@ -573,7 +595,7 @@ class MikrotikApi {
         final monitor = ethMonitorByName[name];
         return MikrotikInterface.fromApiMap(row, monitor: monitor);
       }).toList(),
-      pppActiveCount: pppRows.length,
+      pppActiveCount: pppCount,
       wirelessInterfaces: const [], // Tier 2 يملؤها
       wirelessClients: const [],
       bridgePorts: bridgePorts,
@@ -751,20 +773,26 @@ class MikrotikApi {
     // ٨ نوفمبر: علّة «الصفر» كانت في قارئنا (`!done` بعد `!trap` يُترك فتتأخّر الردود — MikrotikBinaryClient._query)،
     // فجدول التسجيل يصل الآن بصفوفه. SSH يبقى احتياطاً نادراً: مرّةً كلّ ١٠ دقائق للجهاز على الأكثر — جلسة SSH لكلّ قراءة
     // لنقطة وصولٍ بلا عملاء فعلاً تُطلق قواعد brute-force في RouterOS فتحظر عنوان المدير.
+    // ٩ نوفمبر (التحقيق R1c): ولراديو شغّالٍ فعلاً وحده (disabled=false و running=true) — راوترٌ بواجهة wlan معطّلة أو غير
+    // مستعملة كان يدفع جلسة SSH (حتى ٢٢ث) بلا طائل، ويقترب من قواعد brute-force.
+    final liveRadio = wirelessRows.any((w) =>
+        w['band'] != '60ghz' &&
+        (w['disabled'] ?? '').toLowerCase() != 'true' &&
+        (w['running'] ?? '').toLowerCase() == 'true');
     final sshAt = _sshClientsFallbackAt[ip];
     final sshAllowed = sshAt == null || DateTime.now().difference(sshAt) >= sshClientsFallbackEvery;
-    if (wirelessClients.isEmpty && failureMsg == null && hasRadio && ch.via == 'API' && sshAllowed) {
+    if (wirelessClients.isEmpty && failureMsg == null && liveRadio && ch.via == 'API' && sshAllowed) {
       _sshClientsFallbackAt[ip] = DateTime.now();
       if (kDebugMode) {
         debugPrint('🔁 [mikrotik] Binary API رجع 0 — جرّب SSH fallback');
       }
       try {
-        final sshClients = await _fetchClientsViaSsh(ip, user, pass);
-        if (sshClients.isNotEmpty) {
-          wirelessClients.addAll(sshClients);
+        final viaSsh = await MikrotikApi.sshClients(ip, user, pass);
+        if (viaSsh.isNotEmpty) {
+          wirelessClients.addAll(viaSsh);
           if (kDebugMode) {
             debugPrint(
-                '🟢 [mikrotik] SSH fallback → ${sshClients.length} clients');
+                '🟢 [mikrotik] SSH fallback → ${viaSsh.length} clients');
           }
         } else {
           if (kDebugMode) {
@@ -811,51 +839,55 @@ class MikrotikApi {
       }
     }
 
-    // hostname enrichment: DHCP lease + access-list + ARP
+    // hostname enrichment: DHCP lease + access-list + ARP — لأسماء العملاء اللاسلكيّين وعناوينهم وحدهم.
+    // ٩ نوفمبر (التحقيق R1a): كانت تُقرأ لكلّ جهاز ولو بلا عميلٍ لاسلكيّ (سويج، راوتر توزيع)؛ وعبر SSH كلّ جدولٍ سكربتٌ يطبع
+    // كلّ حقلٍ لكلّ صفّ (حتى ١٢ث للجدول، وقوائم وصول السكترات مئات الماكات). بلا عملاء ⇒ لا جدول؛ ومعهم ⇒ أعمدتها وحدها.
     final Map<String, ({String? hostname, String? ip})> dhcpMap = {};
-    try {
-      final leases = await ch.query(['/ip/dhcp-server/lease/print']);
-      for (final l in leases) {
-        final mac = (l['mac-address'] ?? '').toUpperCase();
-        if (mac.isEmpty) continue;
-        dhcpMap[mac] = (
-          hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
-          ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
-        );
-      }
-    } catch (_) {}
-    try {
-      final acl =
-          await ch.query(['/interface/wireless/access-list/print']);
-      for (final a in acl) {
-        final mac = (a['mac-address'] ?? '').toUpperCase();
-        final comment = _nonEmpty(a['comment']);
-        if (mac.isEmpty || comment == null) continue;
-        final existing = dhcpMap[mac];
-        dhcpMap[mac] = (
-          hostname: existing?.hostname ?? comment,
-          ip: existing?.ip,
-        );
-      }
-    } catch (_) {}
-    try {
-      final arp = await ch.query(['/ip/arp/print']);
-      for (final a in arp) {
-        final mac = (a['mac-address'] ?? '').toUpperCase();
-        final ip = _nonEmpty(a['address']);
-        final comment = _nonEmpty(a['comment']);
-        if (mac.isEmpty) continue;
-        final existing = dhcpMap[mac];
-        if (existing == null) {
-          dhcpMap[mac] = (hostname: comment, ip: ip);
-        } else {
+    if (wirelessClients.isNotEmpty) {
+      try {
+        final leases = await ch.query(
+            ['/ip/dhcp-server/lease/print', '=.proplist=mac-address,host-name,comment,active-address,address']);
+        for (final l in leases) {
+          final mac = (l['mac-address'] ?? '').toUpperCase();
+          if (mac.isEmpty) continue;
           dhcpMap[mac] = (
-            hostname: existing.hostname ?? comment,
-            ip: existing.ip ?? ip,
+            hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
+            ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
           );
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+      try {
+        final acl = await ch.query(['/interface/wireless/access-list/print', '=.proplist=mac-address,comment']);
+        for (final a in acl) {
+          final mac = (a['mac-address'] ?? '').toUpperCase();
+          final comment = _nonEmpty(a['comment']);
+          if (mac.isEmpty || comment == null) continue;
+          final existing = dhcpMap[mac];
+          dhcpMap[mac] = (
+            hostname: existing?.hostname ?? comment,
+            ip: existing?.ip,
+          );
+        }
+      } catch (_) {}
+      try {
+        final arp = await ch.query(['/ip/arp/print', '=.proplist=mac-address,address,comment']);
+        for (final a in arp) {
+          final mac = (a['mac-address'] ?? '').toUpperCase();
+          final ip = _nonEmpty(a['address']);
+          final comment = _nonEmpty(a['comment']);
+          if (mac.isEmpty) continue;
+          final existing = dhcpMap[mac];
+          if (existing == null) {
+            dhcpMap[mac] = (hostname: comment, ip: ip);
+          } else {
+            dhcpMap[mac] = (
+              hostname: existing.hostname ?? comment,
+              ip: existing.ip ?? ip,
+            );
+          }
+        }
+      } catch (_) {}
+    }
 
     // ═══ Tier 2 كامل — يُرجع النسخة النهائيّة ═══
     return tier1.copyWith(
