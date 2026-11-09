@@ -105,11 +105,14 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
   Future<void> _load({bool quiet = false}) async {
     if (quiet && (_sending || _busy != null)) return;
     final gen = _writeGen;
+    // كتابةٌ جاريةٌ لحظة بدء القراءة (السحب للتحديث أثناء الردّ أو «إغلاق»): الخادم قد يقرأ قبل حفظها ويصل ردّه بعد ردّها —
+    // فلقطتها أقدم منها وإن لم يتغيّر العدّاد بعدها
+    final writing = _sending || _busy != null;
     final r = await _api(() => TicketsApi.thread(widget.ticketId));
     if (!mounted) return;
-    // ردٌّ أو تغيير حالةٍ بدأ أثناء هذه القراءة: لقطتها قد تسبقه — الدوريّة تُسقَط (التالية تجلب الجديد)، واليدويّة تضمّ رسائلها
-    // بالمعرّف ولا تُرجع التذكرة لحالها القديمة (كانت تمحو الردّ المُرسَل أو تعيد المغلقة مفتوحة حتى القراءة التالية).
-    final stale = gen != _writeGen || _sending || _busy != null;
+    // ردٌّ أو تغيير حالةٍ بدأ أثناء هذه القراءة أو قبلها ولم ينتهِ: لقطتها قد تسبقه — الدوريّة تُسقَط (التالية تجلب الجديد)، واليدويّة
+    // تضمّ رسائلها بالمعرّف ولا تُرجع التذكرة لحالها القديمة (كانت تمحو الردّ المُرسَل أو تعيد المغلقة مفتوحة حتى القراءة التالية).
+    final stale = writing || gen != _writeGen || _sending || _busy != null;
     if (stale && quiet) return;
     final wasUnread = _ticket?.unread ?? true;
     setState(() {
