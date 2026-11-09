@@ -231,6 +231,9 @@ void main() {
       final r = remote(online: 400, sent: 120, weak: 3, lw: 400, lr: 120);
       expect(texts(r), contains('الضوء: قُرئ 120 من 400 — الباقي لم يقرأه الخادم'));
       expect(texts(r), contains('ضوء ضعيف: 3 — من 120 مشترك'));
+      // 300 متّصلة أرسلها كلّها (لا شيء قُطع) ⇒ «من 300 مشترك» لا «من أضعف 300»
+      final all = remote(online: 300, sent: 300, weak: 5, lw: 300, lr: 300);
+      expect(texts(all), ['ضوء ضعيف: 5 — من 300 مشترك']);
     });
   });
 

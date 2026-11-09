@@ -627,9 +627,11 @@ class DevicesCheck {
       // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
       // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
       final wanted = detail.onuLightsWanted;
-      // ملخّص الخادم يرسل الأضعف حتى [DeviceVitals.serverLightsMax] ممّا قرأه — قائمةٌ بلغته ما بعدها أقوى منها أو لم
-      // يُقرأ، لا «لم يقرأه الخادم» وقد قرأه (المراجعة الثالثة)
-      final cut = detail.onuLightsServer && detail.onuLights.length >= DeviceVitals.serverLightsMax;
+      // ملخّص الخادم يرسل الأضعف حتى [DeviceVitals.serverLightsMax] ممّا قرأه — قائمةٌ بلغته (والمتّصل أكثر منها) ما
+      // بعدها أقوى منها أو لم يُقرأ، لا «لم يقرأه الخادم» وقد قرأه (المراجعة الثالثة)
+      final cut = detail.onuLightsServer &&
+          detail.onuLights.length >= DeviceVitals.serverLightsMax &&
+          (wanted ?? 0) > detail.onuLights.length;
       if (wanted != null && wanted > 0) {
         final read = detail.onuLights.length;
         final answered = detail.onuLightsAnswered ?? read;
