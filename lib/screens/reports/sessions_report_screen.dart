@@ -193,6 +193,8 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     return ReportPermissionGate(
       permission: 'reports.sessions',
       title: 'reports.sessions'.tr(),
+      // سجلّ مشتركٍ بعينه (من نافذته): صلاحيّته في صفحة المشترك («كل الصفحات» للموظّف)؛ التقرير العامّ كما كان
+      companyKey: widget.initialUsername != null ? widget.companyKey : null,
       child: Scaffold(
         backgroundColor: AppColors.bg,
         appBar: deskPageBar(

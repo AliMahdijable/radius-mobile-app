@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../services/merged_mode.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -19,20 +20,28 @@ class ReportPermissionGate extends StatelessWidget {
     required this.permission,
     required this.title,
     required this.child,
+    this.companyKey,
   });
 
   final String permission;
   final String title;
   final Widget child;
 
+  /// صفحة ما يعرضه التقرير («كل الصفحات» للموظّف — مراجعة 179): كشف حساب مشترك صفحةٍ أخرى وسجلّ جلساته يُطلبان من صفحته
+  /// وبصلاحيّاته هناك ([MergedMode.can]) لا بصلاحيّات صفحته المفتوحة (`Perms.has`). null، والمالك، وخادمٌ بلا خرائط ⇒ Perms.has
+  /// كما كان حرفاً.
+  final String? companyKey;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
-    // نبني ValueListenable حتى لو الصلاحيات تغيّرت في-الجلسة نُعيد البناء.
-    return ValueListenableBuilder<int>(
-      valueListenable: PermissionsService.changes,
-      builder: (context, _, __) {
-        if (Perms.has(permission)) return child;
+    // نعيد البناء حين تتغيّر الصلاحيات في-الجلسة، أو خرائط الصفحات («كل الصفحات»).
+    return ListenableBuilder(
+      listenable: Listenable.merge([PermissionsService.changes, MergedMode.data]),
+      builder: (context, _) {
+        if (MergedMode.can(companyKey, permission)) return child;
+        // رفض صفحةٍ بخريطتها ⇒ يُسمّيها (صلاحيّته هناك غيرها هنا)
+        final page = MergedMode.pagePerm(companyKey, permission) == false ? MergedMode.companyOf(companyKey) : null;
         return Scaffold(
           backgroundColor: AppColors.bg,
           appBar: deskPageBar(
@@ -74,8 +83,9 @@ class ReportPermissionGate extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'reports.no_permission_hint'
-                          .tr(namedArgs: {'perm': permission}),
+                      page != null
+                          ? MergedMode.deniedText(page)
+                          : 'reports.no_permission_hint'.tr(namedArgs: {'perm': permission}),
                       textAlign: TextAlign.center,
                       style:
                           AppType.muted().copyWith(fontSize: 12.5, height: 1.6),
