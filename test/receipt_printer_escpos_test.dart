@@ -9,6 +9,20 @@ import 'package:rad_mysvcs/services/receipt_printer/receipt_printer_prefs.dart';
 ///   ٢. «GS v 0» شرائط: رأس ٨ بايت (m · xL xH · yL yH) ثمّ البيانات كما هي، البتّ الأعلى أوّل نقطة.
 ///   ٣. المهمّة: «ESC @» أوّلاً، والتغذية (والقصّ لورق ٨٠) آخراً.
 ///   ٤. ردود أسئلة الحالة: النمط الثابت وإلّا null (طابعةٌ صامتة لا تُفهم خطأً).
+///   ٥. الخطوط الرماديّة الرفيعة (فواصل الصفوف، خطّ الذيل، إطار الملاحظة — grey500) حبرٌ على الحراريّة، والمساحات
+///      الرماديّة والباهت جدّاً ورق، وحوافّ الحبر المنعَّمة كما كانت (مراجعة 179).
+
+/// صفحة RGBA بلون [grey] معتماً على البكسلات [px] (x,y) والباقي شفّاف.
+Uint8List _greyPx(int w, int h, Map<(int, int), int> px) {
+  final out = Uint8List(w * h * 4);
+  for (final MapEntry(key: (x, y), value: g) in px.entries) {
+    out.setAll((y * w + x) * 4, [g, g, g, 255]);
+  }
+  return out;
+}
+
+/// النقاط السوداء في الصفّ [y].
+List<int> _inkRow(MonoImage img, int y) => [for (var x = 0; x < img.width; x++) if (img.isBlack(x, y)) x];
 
 /// صفحة RGBA بحبرٍ أسود كامل على البكسلات [black] (x,y) والباقي شفّاف — كما يرسم أندرويد.
 Uint8List _rgba(int w, int h, Set<(int, int)> black, {int alpha = 255}) {
@@ -180,6 +194,108 @@ void main() {
       expect(EscPos.parsePaperStatus([0x03])!.paperLow, isTrue);
       expect(EscPos.parsePaperStatus([0x90]), isNull);
       expect(EscPos.parsePaperStatus(const []), isNull);
+    });
+  });
+  group('٥ الخطوط الرماديّة الرفيعة', () {
+    // ألوان الوصل: grey500 = ١٥٨ (الفواصل وخطّ الذيل وإطار الملاحظة)، grey400 = ١٨٩، grey300 = ٢٢٤.
+    test('فاصلٌ أفقيّ grey500 بسُمك نقطة ⇒ حبرٌ على طوله (كان يختفي: ١٥٨ > العتبة ١٥٠)', () {
+      final img = MonoImage.fromRgba(_greyPx(40, 5, {for (var x = 4; x < 36; x++) (x, 2): 158}), 40, 5, targetWidth: 40);
+      expect(_inkRow(img, 2), [for (var x = 4; x < 36; x++) x]);
+      expect(_inkRow(img, 1), isEmpty);
+      expect(_inkRow(img, 3), isEmpty);
+    });
+
+    test('خطٌّ رماديّ يغطّي نقطتين جزئيّاً (١٨٧ و٢٠٦) ⇒ النقطتان حبر', () {
+      final img = MonoImage.fromRgba(
+        _greyPx(30, 6, {for (var x = 0; x < 30; x++) ...{(x, 2): 187, (x, 3): 206}}),
+        30,
+        6,
+        targetWidth: 30,
+      );
+      expect(_inkRow(img, 2).length, 30);
+      expect(_inkRow(img, 3).length, 30);
+    });
+
+    test('منقّط (نقاط ٣×١ وفراغات ٣) ⇒ النقاط حبرٌ والفراغات ورق', () {
+      final dots = <(int, int), int>{};
+      for (var x0 = 0; x0 + 3 <= 36; x0 += 6) {
+        for (var x = x0; x < x0 + 3; x++) {
+          dots[(x, 1)] = 170;
+        }
+      }
+      final img = MonoImage.fromRgba(_greyPx(36, 3, dots), 36, 3, targetWidth: 36);
+      expect(_inkRow(img, 1), [for (final e in dots.keys) e.$1]..sort());
+    });
+
+    test('إطار الملاحظة: خطٌّ عموديّ grey500 بعرض نقطة ⇒ حبر', () {
+      final img = MonoImage.fromRgba(_greyPx(9, 20, {for (var y = 2; y < 18; y++) (4, y): 158}), 9, 20, targetWidth: 9);
+      for (var y = 2; y < 18; y++) {
+        expect(_inkRow(img, y), [4], reason: 'y=$y');
+      }
+    });
+
+    test('خطّ مصمّم الشبكة الأعرض (٢ نقطة PDF ≈ ٦ نقاط مع الحافّتين) ⇒ حبر؛ وما أعرض من ٧ ورق', () {
+      final thick = MonoImage.fromRgba(
+        _greyPx(30, 10, {for (var y = 2; y < 8; y++) for (var x = 0; x < 30; x++) (x, y): 170}),
+        30,
+        10,
+        targetWidth: 30,
+      );
+      for (var y = 2; y < 8; y++) {
+        expect(_inkRow(thick, y).length, 30, reason: 'y=$y');
+      }
+      final band = MonoImage.fromRgba(
+        _greyPx(30, 12, {for (var y = 2; y < 10; y++) for (var x = 0; x < 30; x++) (x, y): 170}),
+        30,
+        12,
+        targetWidth: 30,
+      );
+      expect(band.bytes.every((b) => b == 0), isTrue, reason: '٨ نقاط: مساحة');
+    });
+
+    test('مساحةٌ رماديّة واسعة (خلفيّة grey400) ⇒ ورقٌ كما كانت', () {
+      final img = MonoImage.fromRgba(
+        _greyPx(20, 20, {for (var y = 0; y < 20; y++) for (var x = 0; x < 20; x++) (x, y): 189}),
+        20,
+        20,
+        targetWidth: 20,
+      );
+      expect(img.bytes.every((b) => b == 0), isTrue);
+    });
+
+    test('الباهت جدّاً (grey300 = ٢٢٤) ⇒ ورقٌ كالخلفيّات', () {
+      final img = MonoImage.fromRgba(_greyPx(30, 3, {for (var x = 0; x < 30; x++) (x, 1): 224}), 30, 3, targetWidth: 30);
+      expect(img.bytes.every((b) => b == 0), isTrue);
+    });
+
+    test('حوافّ الحبر المنعَّمة (رماديٌّ يلمس الأسود) ⇒ كما كانت حرفاً: لا يزيد الحرف سُمكاً', () {
+      // مربّعٌ أسود ٤×٤ (نقطة عربيّة) تحيط به حافّةٌ منعَّمة ٢٠٠.
+      final px = <(int, int), int>{};
+      for (var y = 2; y <= 7; y++) {
+        for (var x = 2; x <= 7; x++) {
+          px[(x, y)] = (x >= 3 && x <= 6 && y >= 3 && y <= 6) ? 0 : 200;
+        }
+      }
+      final img = MonoImage.fromRgba(_greyPx(10, 10, px), 10, 10, targetWidth: 10);
+      for (var y = 0; y < 10; y++) {
+        expect(_inkRow(img, y), (y >= 3 && y <= 6) ? [3, 4, 5, 6] : isEmpty, reason: 'y=$y');
+      }
+    });
+
+    test('نقطةٌ رماديّة شاردة وحدها ⇒ ورق (لا يُخترع حبر)', () {
+      final img = MonoImage.fromRgba(_greyPx(9, 9, {(4, 4): 170}), 9, 9, targetWidth: 9);
+      expect(img.bytes.every((b) => b == 0), isTrue);
+    });
+
+    test('ما خارج نافذة الرأس لا يُحسب: الخطّ يُقصّ عند حافّة الورق المطبوعة', () {
+      final img = MonoImage.fromRgba(
+        _greyPx(60, 3, {for (var x = 0; x < 60; x++) (x, 1): 158}),
+        60,
+        3,
+        targetWidth: 40,
+        left: 10,
+      );
+      expect(_inkRow(img, 1), [for (var x = 0; x < 40; x++) x]);
     });
   });
 }

@@ -44,10 +44,12 @@ class _ReceiptPrinterSheetState extends State<ReceiptPrinterSheet> {
   PrinterDiscovery? _found;
   bool _searching = false;
   BuiltinInfo? _builtin;
-  bool _checkingBuiltin = false;
+  Future<BuiltinInfo?>? _builtinCheck;
   bool _builtinChecked = false;
   bool _testing = false;
   PrintResult? _last;
+
+  bool get _checkingBuiltin => _builtinCheck != null;
 
   @override
   void initState() {
@@ -55,16 +57,35 @@ class _ReceiptPrinterSheetState extends State<ReceiptPrinterSheet> {
     final mode = ReceiptPrinterPrefs.mode.value;
     // أندرويد: المقترنة تُقرأ فوراً (الإذن يُطلب الآن إن لم يُمنح)؛ الآيفون يبحث بطلبٍ صريح.
     if (mode == ReceiptPrinterMode.bluetooth && !ReceiptPrinterPrefs.isIos) unawaited(_discover());
-    if (mode == ReceiptPrinterMode.builtin) unawaited(_checkBuiltin());
+    // طابعة الجهاز تُفحص حين تُفتح الورقة (أندرويد): الهاتف العاديّ يرى خيارها معطّلاً بسببه قبل أن ينقره، والمختارة
+    // على جهازٍ بلا طابعةٍ مدمجة تعود «نافذة الطباعة». فحصٌ سريع بلا ربط حيث لا خدمة SUNMI.
+    if (ReceiptPrinterPrefs.builtinSupported) {
+      _builtinCheck = _printer.builtinInfo();
+      unawaited(_checkBuiltin());
+    }
   }
 
   Future<void> _setMode(ReceiptPrinterMode m) async {
     if (_testing) return;
+    if (m == ReceiptPrinterMode.builtin) return _pickBuiltin();
     await ReceiptPrinterPrefs.setMode(m);
     if (!mounted) return;
     setState(() => _last = null);
     if (m == ReceiptPrinterMode.bluetooth) await _discover();
-    if (m == ReceiptPrinterMode.builtin) await _checkBuiltin(adoptPaper: true);
+  }
+
+  /// «طابعة الجهاز المدمجة» تُحفظ بعد أن يقول الفحص إنّ في الجهاز طابعة — هاتفٌ بلا خدمتها لا يحفظها (خيارها
+  /// معطّلٌ بسببه)، فلا يصير كلّ وصلٍ «اطبع على طابعة الجهاز» يفشل.
+  Future<void> _pickBuiltin() async {
+    final info = await _checkBuiltin();
+    if (!mounted || _testing || ReceiptPrinterPrefs.builtinPresent.value == false) return;
+    await ReceiptPrinterPrefs.setMode(ReceiptPrinterMode.builtin);
+    if (!mounted) return;
+    setState(() => _last = null);
+    // ورق طابعة الجهاز كما تقوله هي — حين تُختار، لا كلّما فُتحت الورقة (اختيار المدير يبقى).
+    if (info != null && info.available && (info.paperMm == 58 || info.paperMm == 80)) {
+      await ReceiptPrinterPrefs.setPaper(info.paperMm == 80 ? ReceiptPaper.mm80 : ReceiptPaper.mm58);
+    }
   }
 
   Future<void> _discover() async {
@@ -78,19 +99,23 @@ class _ReceiptPrinterSheetState extends State<ReceiptPrinterSheet> {
     });
   }
 
-  Future<void> _checkBuiltin({bool adoptPaper = false}) async {
-    setState(() => _checkingBuiltin = true);
-    final info = await _printer.builtinInfo();
-    if (!mounted) return;
+  /// فحص طابعة الجهاز — فحصٌ واحدٌ في كلّ مرّة (نقرةٌ أثناء فحص الفتح تنتظره لا تبدأ غيره).
+  Future<BuiltinInfo?> _checkBuiltin() async {
+    var check = _builtinCheck;
+    if (check == null) {
+      check = _printer.builtinInfo();
+      setState(() {
+        _builtinCheck = check;
+      });
+    }
+    final info = await check;
+    if (!mounted) return info;
     setState(() {
+      if (identical(_builtinCheck, check)) _builtinCheck = null;
       _builtin = info;
-      _checkingBuiltin = false;
       _builtinChecked = true;
     });
-    // ورق طابعة الجهاز كما تقوله هي — حين تُختار، لا كلّما فُتحت الورقة (اختيار المدير يبقى).
-    if (adoptPaper && info != null && info.available && (info.paperMm == 58 || info.paperMm == 80)) {
-      await ReceiptPrinterPrefs.setPaper(info.paperMm == 80 ? ReceiptPaper.mm80 : ReceiptPaper.mm58);
-    }
+    return info;
   }
 
   void _pick(BtDevice d) {
@@ -189,14 +214,7 @@ class _ReceiptPrinterSheetState extends State<ReceiptPrinterSheet> {
                     ),
                     if (ReceiptPrinterPrefs.builtinSupported) ...[
                       const SizedBox(height: Sp.xs),
-                      _Tile(
-                        key: const ValueKey('receipt-mode-builtin'),
-                        icon: LucideIcons.tabletSmartphone,
-                        title: 'receipt_printer.mode_builtin'.tr(),
-                        subtitle: 'receipt_printer.mode_builtin_desc'.tr(),
-                        selected: mode == ReceiptPrinterMode.builtin,
-                        onTap: () => _setMode(ReceiptPrinterMode.builtin),
-                      ),
+                      _builtinTile(mode),
                     ],
                   ],
                 ),
@@ -236,6 +254,26 @@ class _ReceiptPrinterSheetState extends State<ReceiptPrinterSheet> {
           ),
         );
       },
+    );
+  }
+
+  /// «طابعة الجهاز المدمجة»: هاتفٌ بلا خدمة طابعةٍ مدمجة يراها **معطّلةً بسببها** (لا تُختار)؛ وأثناء الفحص
+  /// «جاري الفحص».
+  Widget _builtinTile(ReceiptPrinterMode mode) {
+    final absent = ReceiptPrinterPrefs.builtinPresent.value == false;
+    final selected = mode == ReceiptPrinterMode.builtin;
+    return _Tile(
+      key: const ValueKey('receipt-mode-builtin'),
+      icon: LucideIcons.tabletSmartphone,
+      title: 'receipt_printer.mode_builtin'.tr(),
+      subtitle: absent
+          ? 'receipt_printer.issue_builtin_missing'.tr()
+          : (_checkingBuiltin && !selected
+              ? 'receipt_printer.checking_builtin'.tr()
+              : 'receipt_printer.mode_builtin_desc'.tr()),
+      selected: selected && !absent,
+      enabled: !absent,
+      onTap: () => _setMode(ReceiptPrinterMode.builtin),
     );
   }
 

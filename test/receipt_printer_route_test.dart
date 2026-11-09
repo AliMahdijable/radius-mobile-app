@@ -121,6 +121,20 @@ void main() {
       expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
     });
 
+    test('طابعة الجهاز: قبل فحصها كما كانت (لا فحص عند الإقلاع)؛ فحصٌ قال «لا خدمة» ⇒ مطفأةٌ وتعود نافذة الطباعة وتُحفظ', () async {
+      await ReceiptPrinterPrefs.setMode(ReceiptPrinterMode.builtin);
+      expect(ReceiptPrinterPrefs.enabled, isTrue);
+      await ReceiptPrinterPrefs.setBuiltinPresent(true);
+      expect(ReceiptPrinterPrefs.enabled, isTrue);
+      await ReceiptPrinterPrefs.setBuiltinPresent(false);
+      expect(ReceiptPrinterPrefs.enabled, isFalse);
+      expect(ReceiptPrinterPrefs.choice, isNull);
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+      ReceiptPrinterPrefs.reset();
+      await ReceiptPrinterPrefs.load();
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system, reason: 'حُفظت');
+    });
+
     test('الحاسبة/الويب: لا يُقرأ ولا يُفعَّل ولو بقي محفوظاً', () async {
       FlutterSecureStorage.setMockInitialValues({
         'app.receipt_printer.mode': 'bluetooth',
@@ -165,6 +179,23 @@ void main() {
       expect(r.ack, PrintAck.sent);
       expect(backend.calls, isEmpty);
       expect(h.bridge.receiptWrites, isNotEmpty);
+    });
+
+    test('«اطبع تجربة» في مصمّم الوصل (receiptPrinter: false) ⇒ نافذة الطباعة كما كانت ولو اختيرت طابعة الوصولات', () async {
+      h.useBluetooth();
+      final r = await PrintOutput.send(_doc('activation-sample'), receiptPrinter: false);
+      expect(r.outcome, PrintOutcome.printed);
+      expect(backend.calls, ['layout']);
+      expect(h.bridge.calls, isEmpty);
+    });
+
+    test('المصمّم يطبع تجربته بنافذة الطباعة (receiptPrinter: false) — لا بطابعة الكاشير', () {
+      final src = File('lib/screens/print_templates/print_templates_screen.dart').readAsStringSync();
+      final from = src.indexOf('Future<void> _printSample()');
+      expect(from, isNonNegative);
+      final body = src.substring(from, src.indexOf('\n  }\n', from));
+      expect(body, contains('PrintOutput.send(pdf, receiptPrinter: false)'));
+      expect(RegExp(r'PrintOutput\.send\(').allMatches(body).length, 1);
     });
 
     test('التقارير (allowDirect: false) ⇒ نافذة الطباعة دائماً — لا تذهب لطابعة الكاشير', () async {

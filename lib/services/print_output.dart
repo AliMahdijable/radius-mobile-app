@@ -221,9 +221,10 @@ class PrintOutput {
   /// الطباعة. التقارير (A4 دائماً) تمرّر `allowDirect: false`: طابعة الكاشير ليست لها.
   ///
   /// الهاتف (٩ نوفمبر): «طابعة الوصولات» — بلوتوث أو طابعة الجهاز المدمجة — إن اختارها المدير من الإعدادات.
-  /// اختياريّة؛ الافتراضيّ نافذة الطباعة كما كان، والحاسبة لا تراها أبداً.
-  static Future<PrintResult> send(PrintDoc doc, {bool allowDirect = true}) async {
-    if (allowDirect && ReceiptPrinterPrefs.enabled) return ReceiptPrinter.instance.send(doc);
+  /// اختياريّة؛ الافتراضيّ نافذة الطباعة كما كان، والحاسبة لا تراها أبداً. [receiptPrinter] `false` = المسار
+  /// القديم حرفاً ولو كانت مختارة («اطبع تجربة» في مصمّم الوصل: يُجرَّب القالب — A4 أو الكاشير — في نافذة الطباعة).
+  static Future<PrintResult> send(PrintDoc doc, {bool allowDirect = true, bool receiptPrinter = true}) async {
+    if (allowDirect && receiptPrinter && ReceiptPrinterPrefs.enabled) return ReceiptPrinter.instance.send(doc);
     return _system(doc, allowDirect: allowDirect);
   }
 

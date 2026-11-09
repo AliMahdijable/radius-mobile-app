@@ -140,8 +140,12 @@ class ReceiptPrinterPrefs {
   static final ValueNotifier<SavedReceiptPrinter?> device = ValueNotifier<SavedReceiptPrinter?>(null);
   static final ValueNotifier<ReceiptPaper> paper = ValueNotifier<ReceiptPaper>(ReceiptPaper.mm58);
 
-  /// أيّ تغيير في الثلاثة.
-  static Listenable get changes => Listenable.merge([mode, device, paper]);
+  /// هل في **هذا** الجهاز خدمة طابعةٍ مدمجة؟ كما قالها آخر فحص (للجلسة، لا يُحفظ): null = لم يُفحص بعد، false =
+  /// لا (هاتفٌ عاديّ) ⇒ «طابعة الجهاز المدمجة» لا تُختار ولا تبقى مختارة. لا فحص عند الإقلاع: الإعدادات والطباعة.
+  static final ValueNotifier<bool?> builtinPresent = ValueNotifier<bool?>(null);
+
+  /// أيّ تغيير في الطريقة والطابعة والورق — ونتيجة فحص طابعة الجهاز.
+  static Listenable get changes => Listenable.merge([mode, device, paper, builtinPresent]);
 
   /// هل يذهب الوصل لطابعة الوصولات؟ الهاتف + طريقةٌ غير النافذة + طابعةٌ مختارة.
   static bool get enabled {
@@ -149,7 +153,7 @@ class ReceiptPrinterPrefs {
     return switch (mode.value) {
       ReceiptPrinterMode.system => false,
       ReceiptPrinterMode.bluetooth => device.value != null,
-      ReceiptPrinterMode.builtin => builtinSupported,
+      ReceiptPrinterMode.builtin => builtinSupported && builtinPresent.value != false,
     };
   }
 
@@ -202,6 +206,12 @@ class ReceiptPrinterPrefs {
     await _write(_kPaper, p.encode());
   }
 
+  /// نتيجة فحص طابعة الجهاز ([present] = في الجهاز خدمة طابعةٍ مدمجة). غيابها وهي مختارة ⇒ تعود «نافذة الطباعة» وتُحفظ.
+  static Future<void> setBuiltinPresent(bool present) async {
+    builtinPresent.value = present;
+    if (!present && mode.value == ReceiptPrinterMode.builtin) await setMode(ReceiptPrinterMode.system);
+  }
+
   /// تفضيلٌ لا يُحفظ لا يُسقط شيئاً — يبقى للجلسة.
   static Future<void> _write(String key, String? value) async {
     try {
@@ -218,5 +228,6 @@ class ReceiptPrinterPrefs {
     mode.value = ReceiptPrinterMode.system;
     device.value = null;
     paper.value = ReceiptPaper.mm58;
+    builtinPresent.value = null;
   }
 }

@@ -134,6 +134,16 @@ void main() {
       expect(r.issue, PrintIssue.disconnected);
       expect(r.uncertain, isFalse);
     });
+
+    test('ينقطع أثناء **الشريط الأوّل** ⇒ «غير مؤكَّد» (قد خرج جزءٌ منه) لا «لم يُطبع شيء» — مراجعة 179', () async {
+      h.useBluetooth();
+      // الكتابات: ١ سؤال الورق · ٢ ESC @ · ٣ الشريط الأوّل ← ينقطع أثناء كتابته
+      h.bridge.dropAtWrite = 3;
+      final r = await p().send(_doc('x'));
+      expect(r.issue, PrintIssue.disconnectedMidway);
+      expect(r.uncertain, isTrue);
+      expect(r.retry, isNotNull);
+    });
   });
 
   group('٤ الإذن والبلوتوث والطابعة', () {
@@ -153,6 +163,25 @@ void main() {
       h.bridge.state = const BtState(supported: false, enabled: false);
       expect((await p().send(_doc('b'))).issue, PrintIssue.btUnsupported);
       expect(h.bridge.connects, 0);
+    });
+
+    test('الآيفون: البلوتوث مرفوضٌ للتطبيق ⇒ «مرفوضٌ دائماً» (فتح الإعدادات) لا «حاول ثانيةً»؛ أندرويد كما كان', () async {
+      h.useBluetooth();
+      ReceiptPrinterPrefs.debugIos = true;
+      h.bridge.state = const BtState(supported: true, enabled: true, authorized: false);
+      expect((await p().send(_doc('a'))).issue, PrintIssue.permissionBlocked);
+      expect((await p().discover()).issue, PrintIssue.permissionBlocked);
+      // رُفض بين السؤال والاتّصال (الطبقة الأصليّة: permission)
+      h.bridge.state = const BtState(supported: true, enabled: true);
+      h.bridge.connectFailure = 'permission';
+      expect((await p().send(_doc('b'))).issue, PrintIssue.permissionBlocked);
+      expect(h.bridge.receiptWrites, isEmpty);
+      // أندرويد يسأل ثانيةً: «permission» كما كان
+      ReceiptPrinterPrefs.debugIos = false;
+      expect((await p().send(_doc('c'))).issue, PrintIssue.permission);
+      h.bridge.connectFailure = null;
+      h.bridge.state = const BtState(supported: true, enabled: true, authorized: false);
+      expect((await p().send(_doc('d'))).issue, PrintIssue.permission);
     });
 
     test('رموز الاتّصال ⇒ أسبابها (لا تردّ · بعيدة/مشغولة · غير مقترنة · بلا قناة BLE)', () async {
@@ -257,6 +286,28 @@ void main() {
       h.useBuiltin();
       final r = await p().send(_doc('x'));
       expect(r.issue, PrintIssue.builtinMissing);
+    });
+
+    test('هاتفٌ بلا طابعةٍ مدمجة أصلاً ⇒ بلا «حاول ثانيةً»، و«نافذة الطباعة» تعود للوصل التالي (لا تبقى مختارة)', () async {
+      h.useBuiltin();
+      // الوهميّة افتراضاً: available:false بلا شركة = لا خدمة طابعةٍ مدمجة في الجهاز
+      final r = await p().send(_doc('x'));
+      expect(r.issue, PrintIssue.builtinMissing);
+      expect(r.retry, isNull, reason: 'لن يتغيّر بإعادة');
+      expect(ReceiptPrinterPrefs.builtinPresent.value, isFalse);
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+      expect(ReceiptPrinterPrefs.enabled, isFalse);
+      expect(h.bridge.builtinJobs, isEmpty);
+    });
+
+    test('خدمة SUNMI موجودةٌ ولم تُربط بعد (الشركة معروفة) ⇒ «حاول ثانيةً» والطريقة تبقى', () async {
+      h.useBuiltin();
+      h.bridge.builtin = const BuiltinInfo(available: false, vendor: 'sunmi');
+      final r = await p().send(_doc('x'));
+      expect(r.issue, PrintIssue.builtinMissing);
+      expect(r.retry, isNotNull);
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.builtin);
+      expect(ReceiptPrinterPrefs.enabled, isTrue);
     });
 
     test('بلا ردٍّ في المهلة أو «لم تُكمل» ⇒ غير مؤكَّد؛ بلا معاملة ⇒ «أُرسل»؛ انقطاع الخدمة ⇒ غير مؤكَّد', () async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -23,6 +24,8 @@ import 'support/fake_receipt_printer.dart';
 ///   ٣. الإذن المرفوض والبلوتوث المطفأ ⇒ سببٌ مفهوم وزرّه.
 ///   ٤. طابعة الجهاز: «SUNMI … جاهزة · ورق ٨٠» وورقها يُعتمد؛ وبلاها سببٌ وتلميح InnerPrinter.
 ///   ٥. نتيجة طباعةٍ غير مؤكَّدة بعد التفعيل ⇒ ورقة «الطباعة غير مؤكَّدة» و«إعادة الطباعة» تطبع ثانيةً.
+///   (مراجعة 179) الآيفون: البلوتوث المرفوض ⇒ «فتح الإعدادات» بكلمات الآيفون؛ الهاتف العاديّ: «طابعة الجهاز» معطّلةٌ بسببها
+///   ولا تبقى مختارة؛ ورقة السبب: جوابها بنقرةٍ وحدها، والإعادة داخلها، وما بدأ منها يُنتظر ولو أُغلقت.
 
 class _DiskLoader extends AssetLoader {
   const _DiskLoader();
@@ -204,6 +207,46 @@ void main() {
     expect(h.bridge.calls, contains('settings'));
   });
 
+  testWidgets('٣ج الآيفون: البلوتوث مرفوضٌ للتطبيق ⇒ كلمات الآيفون و«فتح الإعدادات» يفتحها (لا «حاول ثانيةً» وحدها)', (t) async {
+    ReceiptPrinterPrefs.debugIos = true;
+    ReceiptPrinterPrefs.debugBuiltinSupported = false;
+    h.bridge.state = const BtState(supported: true, enabled: true, authorized: false);
+    await openSheet(t);
+    await tapKey(t, 'receipt-mode-bluetooth');
+    expect(find.byKey(const ValueKey('receipt-printer-issue')), findsOneWidget);
+    expect(find.textContaining('افتح الإعدادات ← التطبيق ← فعّل «البلوتوث»'), findsOneWidget);
+    expect(find.textContaining('الأجهزة المجاورة'), findsNothing);
+    await t.tap(find.text('فتح الإعدادات'));
+    await t.pumpAndSettle();
+    expect(h.permission.opened, 1);
+  });
+
+  testWidgets('٣د الآيفون بعد وصل: ورقة السبب «فتح الإعدادات» بنقرته وحدها — «إغلاق» لا يفتح شيئاً', (t) async {
+    ReceiptPrinterPrefs.debugIos = true;
+    final r = PrintResult.failed(
+      'bt: unauthorized',
+      printer: 'MPT-II',
+      issue: PrintIssue.permissionBlocked,
+      retry: () async => const PrintResult.cancelled(),
+    );
+    await pumpApp(
+      t,
+      (c) => Center(child: TextButton(onPressed: () => showPrintResult(c, r), child: const Text('done'))),
+    );
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('افتح الإعدادات ← التطبيق'), findsOneWidget);
+    await t.tap(find.text('إغلاق'));
+    await t.pumpAndSettle();
+    expect(h.permission.opened, 0);
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فتح الإعدادات'));
+    await t.pumpAndSettle();
+    expect(h.permission.opened, 1);
+    await t.pump(const Duration(seconds: 7));
+  });
+
   testWidgets('٣ب لا مقترنة ⇒ شرح الإقران (الرمز 0000/1234) وزرّ إعدادات البلوتوث', (t) async {
     h.bridge.paired = const [];
     await openSheet(t);
@@ -220,12 +263,37 @@ void main() {
     expect(find.text('«SUNMI T2» جاهزة · ورق 80 ملم'), findsOneWidget);
     expect(ReceiptPrinterPrefs.paper.value, ReceiptPaper.mm80);
     expect(ReceiptPrinterPrefs.enabled, isTrue);
-    h.bridge.builtin = const BuiltinInfo(available: false);
+    // خدمة SUNMI موجودةٌ ولم تُربط (الشركة معروفة): سببٌ وتلميح InnerPrinter، والطريقة تبقى.
+    h.bridge.builtin = const BuiltinInfo(available: false, vendor: 'sunmi');
     await t.ensureVisible(find.text('إعادة الفحص'));
     await t.pumpAndSettle();
     await t.tap(find.text('إعادة الفحص'));
     await t.pumpAndSettle();
     expect(find.textContaining('InnerPrinter'), findsOneWidget);
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.builtin);
+  });
+
+  testWidgets('٤ب هاتفٌ عاديّ (لا خدمة طابعةٍ مدمجة): «طابعة الجهاز» معطّلةٌ بسببها ولا تُختار', (t) async {
+    // الوهميّة افتراضاً: available:false بلا شركة
+    await openSheet(t);
+    expect(find.text('لم نجد طابعةً مدمجة مدعومة في هذا الجهاز (المدعوم الآن: SUNMI).'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('receipt-mode-builtin')));
+    await t.pumpAndSettle();
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+    expect(ReceiptPrinterPrefs.enabled, isFalse);
+    expect(find.text('طباعة تجريبيّة'), findsNothing);
+    expect(h.bridge.builtinJobs, isEmpty);
+  });
+
+  testWidgets('٤ج «طابعة الجهاز» محفوظةٌ على هاتفٍ بلا خدمتها ⇒ تعود «نافذة الطباعة» حين تُفتح الإعدادات', (t) async {
+    ReceiptPrinterPrefs.mode.value = ReceiptPrinterMode.builtin;
+    expect(ReceiptPrinterPrefs.enabled, isTrue, reason: 'قبل الفحص كما كانت');
+    await openSheet(t);
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+    expect(ReceiptPrinterPrefs.enabled, isFalse);
+    ReceiptPrinterPrefs.reset();
+    await ReceiptPrinterPrefs.load();
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system, reason: 'حُفظت');
   });
 
   testWidgets('٥ بعد التفعيل: «غير مؤكَّدة» ⇒ ورقةٌ بإعادة الطباعة تطبع ثانيةً', (t) async {
@@ -252,6 +320,99 @@ void main() {
     expect(retried, 1);
     expect(find.text('طُبع الوصل على «MPT-II» — أكّدت الطابعة'), findsOneWidget);
     // الإشعار وتشخيص الفشل (مهلته ٦ ث) ينقضيان
+    await t.pump(const Duration(seconds: 7));
+  });
+  testWidgets('٥ب إعادةٌ تفشل ثانيةً ⇒ الورقة نفسها بسببها الجديد و«أعدنا المحاولة»؛ ثمّ تُغلق بلا طباعةٍ أخرى', (t) async {
+    var retried = 0;
+    late PrintResult again;
+    again = PrintResult.failed(
+      'bt: connect',
+      printer: 'MPT-II',
+      issue: PrintIssue.connectFailed,
+      retry: () async {
+        retried++;
+        return again;
+      },
+    );
+    final r = PrintResult.failed(
+      'bt: io',
+      printer: 'MPT-II',
+      issue: PrintIssue.disconnectedMidway,
+      retry: () async {
+        retried++;
+        return again;
+      },
+    );
+    var finished = false;
+    await pumpApp(
+      t,
+      (c) => Center(
+        child: TextButton(
+          onPressed: () async {
+            await showPrintResult(c, r);
+            finished = true;
+          },
+          child: const Text('done'),
+        ),
+      ),
+    );
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('إعادة الطباعة'));
+    await t.pumpAndSettle();
+    expect(retried, 1);
+    expect(find.text('لم يُطبع الوصل'), findsOneWidget);
+    expect(find.textContaining('تعذّر الاتصال بالطابعة «MPT-II»'), findsOneWidget);
+    expect(find.byKey(const ValueKey('receipt-problem-again')), findsOneWidget);
+    expect(find.text('حاول مرّة ثانية'), findsOneWidget);
+    expect(finished, isFalse, reason: 'من فتحها ينتظر قرار الوكيل');
+    await t.tap(find.text('إغلاق'));
+    await t.pumpAndSettle();
+    expect(retried, 1);
+    expect(finished, isTrue);
+    await t.pump(const Duration(seconds: 7));
+  });
+
+  testWidgets('٥ج أُغلقت الورقة أثناء الإعادة ⇒ من فتحها ينتظرها ويقول نتيجتها (لا ضياع ولا إعادةٌ ثانية)', (t) async {
+    var retried = 0;
+    final gate = Completer<PrintResult>();
+    final r = PrintResult.failed(
+      'bt: io',
+      printer: 'MPT-II',
+      issue: PrintIssue.disconnectedMidway,
+      retry: () {
+        retried++;
+        return gate.future;
+      },
+    );
+    var finished = false;
+    await pumpApp(
+      t,
+      (c) => Center(
+        child: TextButton(
+          onPressed: () async {
+            await showPrintResult(c, r);
+            finished = true;
+          },
+          child: const Text('done'),
+        ),
+      ),
+    );
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('إعادة الطباعة'));
+    await t.pump();
+    expect(retried, 1);
+    // يُغلقها الوكيل والإعادة جارية
+    await t.tap(find.text('إغلاق'));
+    await t.pumpAndSettle();
+    expect(find.text('الطباعة غير مؤكَّدة'), findsNothing);
+    expect(finished, isFalse, reason: 'الإعادة الجارية تُنتظر');
+    gate.complete(const PrintResult.printed(printer: 'MPT-II', ack: PrintAck.confirmed));
+    await t.pumpAndSettle();
+    expect(finished, isTrue);
+    expect(find.text('طُبع الوصل على «MPT-II» — أكّدت الطابعة'), findsOneWidget);
+    expect(retried, 1);
     await t.pump(const Duration(seconds: 7));
   });
 }

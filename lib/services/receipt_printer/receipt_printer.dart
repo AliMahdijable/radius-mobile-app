@@ -130,7 +130,7 @@ class ReceiptPrinter {
     try {
       final st = await bridge.btState();
       if (!st.supported) return const PrinterDiscovery([], issue: PrintIssue.btUnsupported);
-      if (!st.authorized) return const PrinterDiscovery([], issue: PrintIssue.permission);
+      if (!st.authorized) return PrinterDiscovery(const [], issue: _here(PrintIssue.permission));
       if (!st.enabled) return const PrinterDiscovery([], issue: PrintIssue.btOff);
       final list = ReceiptPrinterPrefs.isIos ? await bridge.btScan(scanFor) : await bridge.btPaired();
       final named = [for (final d in list) if (d.id.isNotEmpty) d];
@@ -143,7 +143,7 @@ class ReceiptPrinter {
       });
       return PrinterDiscovery(named);
     } on PrinterFailure catch (f) {
-      return PrinterDiscovery(const [], issue: issueOf(f.code));
+      return PrinterDiscovery(const [], issue: _here(issueOf(f.code)));
     }
   }
 
@@ -161,10 +161,13 @@ class ReceiptPrinter {
     } catch (_) {}
   }
 
-  /// طابعة الجهاز المدمجة: موجودةٌ وجاهزة؟ (null على فشل القناة).
+  /// طابعة الجهاز المدمجة: موجودةٌ وجاهزة؟ (null على فشل القناة). جهازٌ بلا خدمة طابعةٍ مدمجة أصلاً (هاتفٌ عاديّ) ⇒
+  /// [ReceiptPrinterPrefs.builtinPresent] = false فلا تُختار ولا تبقى مختارة.
   Future<BuiltinInfo?> builtinInfo() async {
     try {
-      return await bridge.builtinInfo();
+      final info = await bridge.builtinInfo();
+      await ReceiptPrinterPrefs.setBuiltinPresent(!info.absent);
+      return info;
     } on PrinterFailure {
       return null;
     }
@@ -214,11 +217,11 @@ class ReceiptPrinter {
     try {
       final st = await bridge.btState();
       if (!st.supported) return fail(PrintIssue.btUnsupported, 'no bluetooth');
-      if (!st.authorized) return fail(PrintIssue.permission, 'unauthorized');
+      if (!st.authorized) return fail(_here(PrintIssue.permission), 'unauthorized');
       if (!st.enabled) return fail(PrintIssue.btOff, 'bluetooth off');
       await bridge.btConnect(t.device!.id, connectTimeout);
     } on PrinterFailure catch (f) {
-      return fail(issueOf(f.code), f);
+      return fail(_here(issueOf(f.code)), f);
     }
 
     var printedSome = false;
@@ -238,9 +241,10 @@ class ReceiptPrinter {
       final chunks = EscPos.job(img, bandRows: bluetoothBandRows, cut: t.paper == ReceiptPaper.mm80);
       for (var i = 0; i < chunks.length; i++) {
         _phase(ReceiptJobPhase.sending, name, quiet, i / chunks.length);
-        await bridge.btWrite(chunks[i]);
-        // بعد «ESC @» كلّ قطعةٍ قد تُطبع — الانقطاع بعدها «غير مؤكَّد».
+        // بعد «ESC @» كلّ قطعةٍ **بدأت** كتابتها قد يخرج منها شيء (أندرويد يكتب الشريط ٥١٢ بايتاً ٥١٢ بايتاً، والآيفون
+        // أجزاءً): انقطاعٌ أو مهلةٌ أثناءها «غير مؤكَّد» لا «لم يُطبع شيء» — ولو كانت الشريطَ الأوّل.
         if (i > 0) printedSome = true;
+        await bridge.btWrite(chunks[i]);
         // لا نسبق الطابعة كثيراً: بعضها بلا تحكّمٍ بالتدفّق يفيض ويخرج الوصل مشوّهاً.
         if (i > 0 && i < chunks.length - 1) await pause(bandPause(bluetoothBandRows));
       }
@@ -259,7 +263,7 @@ class ReceiptPrinter {
       return PrintResult.printed(printer: name, ack: PrintAck.sent);
     } on PrinterFailure catch (f) {
       if (printedSome) return fail(PrintIssue.disconnectedMidway, f);
-      return fail(f.code == 'io' ? PrintIssue.disconnected : issueOf(f.code), f);
+      return fail(f.code == 'io' ? PrintIssue.disconnected : _here(issueOf(f.code)), f);
     } finally {
       try {
         await bridge.btClose();
@@ -290,6 +294,12 @@ class ReceiptPrinter {
     } on PrinterFailure catch (f) {
       return fail(f.code == 'unsupported' ? PrintIssue.builtinMissing : PrintIssue.builtinFault, f);
     }
+    await ReceiptPrinterPrefs.setBuiltinPresent(!info.absent);
+    if (info.absent) {
+      // لا خدمة طابعةٍ مدمجة في الجهاز أصلاً (هاتفٌ عاديّ): «نافذة الطباعة» عادت للوصل التالي (لا تبقى طريقةً كلّ
+      // وصلٍ عليها يفشل)، ولا «حاول ثانيةً» لما لن يتغيّر.
+      return PrintResult.failed('builtin: no service', printer: name, issue: PrintIssue.builtinMissing);
+    }
     if (!info.available) return fail(PrintIssue.builtinMissing, 'no built-in printer');
     if (info.model.isNotEmpty) name = info.model;
     final issue = builtinIssue(info.status);
@@ -319,6 +329,11 @@ class ReceiptPrinter {
         505 => PrintIssue.builtinMissing,
         _ => PrintIssue.builtinFault,
       };
+
+  /// الآيفون يسأل عن البلوتوث مرّةً واحدة: رفضه هناك دائمٌ من أوّل مرّة ولا يُصلَح إلّا من إعدادات التطبيق — فلا
+  /// «حاول مرّة ثانية» تفشل كلّ مرّة، بل «فتح الإعدادات» ([PrintIssue.permissionBlocked]).
+  static PrintIssue _here(PrintIssue issue) =>
+      issue == PrintIssue.permission && ReceiptPrinterPrefs.isIos ? PrintIssue.permissionBlocked : issue;
 
   /// رمز الطبقة الأصليّة ⇒ السبب.
   @visibleForTesting

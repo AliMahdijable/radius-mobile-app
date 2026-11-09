@@ -98,6 +98,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool _submitting = false;
   String? _loadError;
 
+  /// قال الخادم «تفعّل» — والشيت يُغلق بعد الوصل والواتساب. من هذه اللحظة لا يُعاد التفعيل بأيّ طريق: الزرّ «تمّ» لا
+  /// يُنقر، و[_submit] يرجع (Enter على الحاسبة، أو نقرةٌ بعد إغلاق ورقة الطباعة فوقه). مراجعة 179: الوصل يُنتظر قبل
+  /// الإغلاق فكان الزرّ حيّاً تحته طوال الطباعة. الفشل والنتيجة غير المؤكّدة كما كانا.
+  bool _done = false;
+
+  /// وصل التفعيل يُطبع الآن (بعد النجاح) ⇒ «تمّ — جارٍ الطباعة…».
+  bool _printingReceipt = false;
+
   // §١٢ التفعيل بالكارت — كلّه من activation-data. وحين يغيب الحقل (خادمٌ
   // أقدم) يبقى سلوك اليوم حرفيّاً: رصيدٌ بلا خيار.
   ActivationMethods _methods = ActivationMethods.legacy;
@@ -514,6 +522,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// تسمية الزرّ — وسبب المنع عليه حين يُمنع الكارت (كشيت التمديد).
   String get _footerLabel {
     if (_cardOrder != null) return 'common.close'.tr();
+    if (_done) return _printingReceipt ? 'sheets.done_printing'.tr() : 'common.done'.tr();
     if (_submitting && _kitCard) return 'جارٍ إنشاء رابط الدفع…';
     if (_submitting) return 'sheets.renewing'.tr();
     if (_kitCard) return 'إنشاء رابط الدفع';
@@ -530,6 +539,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   bool get _canSubmit {
     if (_cardOrder != null) return true; // «إغلاق»
+    if (_done) return false;
     if (_loading || _submitting || _data == null) return false;
     if (_outcomeUnclear) return false;
     if (_fxMode) {
@@ -566,6 +576,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _closeCard();
       return;
     }
+    // تفعّل للتوّ ⇒ لا تفعيل ثانٍ (الزرّ «تمّ» معطّل؛ وهذا لما يصل غيره — Enter على الحاسبة).
+    if (_done) return;
     if (idx == null || _data == null || _cardBlocked || _outcomeUnclear) return;
     final paymentType = switch (_pay) {
       _PayType.cash => 'cash',
@@ -608,6 +620,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
+        _done = result.ok;
         if (SubscribersApi.activateUnclearCodes.contains(result.code)) {
           _outcomeUnclear = true;
         }
@@ -649,6 +662,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             isError: true, duration: const Duration(seconds: 8))));
       }
       if (_printReceiptChecked) {
+        setState(() => _printingReceipt = true);
         final printed = await ReceiptService.printActivation(
           sub: widget.sub,
           price: _elChargePrice,
@@ -659,7 +673,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               ? int.tryParse('${_elSelectedPkg?['id'] ?? ''}')
               : _profileId,
         );
-        if (mounted) showPrintResult(context, printed);
+        // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+        if (mounted) await showPrintResult(context, printed);
+        if (mounted) setState(() => _printingReceipt = false);
       }
       if (!mounted) return;
       if (manualMode && result.waPreview != null) {
@@ -691,6 +707,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (!mounted) return;
     setState(() {
       _submitting = false;
+      _done = result.ok;
       // رفضٌ معروف يُحدّث الشيت نفسه، فلا تتكرّر الضغطة على الرفض نفسه.
       if (useCard && result.code == CardsApi.codeNoCards) {
         _cards = _cards.withAvailable(0);
@@ -721,6 +738,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     );
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
+      setState(() => _printingReceipt = true);
       final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
       final printed = await ReceiptService.printActivation(
         sub: widget.sub,
@@ -730,7 +748,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         packageName: _profileName,
         packageId: _profileId,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
+      if (mounted) setState(() => _printingReceipt = false);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التفعيل.
@@ -1437,6 +1457,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// لا يُقال عنه «سُجّل عندنا»: اللوحة تبقى مفتوحةً بتنبيهها حتى يغلقها الوكيل بنفسه، والتنبيه يبقى بعد الإغلاق ([_closeCard]).
   /// وكذا دينٌ في شكّ (ربّما، تفعيلٌ آخر في سجلّنا، حالٌ لا يعرفها التطبيق — [_CardOrder.debtSure]): لوحته بتنبيهها، بلا «سُجّل عندنا».
   Future<void> _cardApplied() async {
+    setState(() => _done = true);
     SubscriberEvents.notifyChange();
     final unsure = !(_cardOrder?.debtSure ?? true);
     final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
@@ -1458,7 +1479,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         partialAmount: _partialAmount,
         packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
     }
     if (!mounted || unsure) return;
     Navigator.of(context).pop(true);
@@ -1660,6 +1682,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (!mounted) return;
     setState(() {
       _submitting = false;
+      _done = result.ok;
       if (SubscribersApi.activateUnclearCodes.contains(result.code)) _outcomeUnclear = true;
     });
     if (_outcomeUnclear) SubscriberEvents.notifyChange();
@@ -1721,6 +1744,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           isError: true, duration: const Duration(seconds: 12))));
     }
     if (_printReceiptChecked) {
+      setState(() => _printingReceipt = true);
       final printed = await ReceiptService.printActivation(
         sub: widget.sub,
         price: _elChargePrice,
@@ -1728,7 +1752,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         partialAmount: _kitCust ? null : _partialAmount,
         packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
+      if (mounted) setState(() => _printingReceipt = false);
     }
     if (!mounted) return;
     if (manualMode && result.waPreview != null) {

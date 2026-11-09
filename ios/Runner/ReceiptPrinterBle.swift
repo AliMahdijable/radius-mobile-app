@@ -60,6 +60,11 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
   private var connectTimer: Timer?
   private var pendingServices = 0
 
+  /// رقم الاتّصال: يزيد مع كلّ btConnect. انقطاعٌ يصل متأخّراً عن اتّصالٍ أُغلق (الطابعة نفسها، إعادة طباعةٍ بعد لحظة)
+  /// لا يمسّ الاتّصال الجديد: الانقطاع يخصّ الاتّصال الذي قال CoreBluetooth إنّه قام ([upLink]).
+  private var link = 0
+  private var upLink = -1
+
   private var writeQueue: [Data] = []
   private var writeResult: FlutterResult?
   private var writeType: CBCharacteristicWriteType = .withResponse
@@ -224,6 +229,7 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
         result(FlutterError(code: "not_found", message: "printer not known to this iPhone", details: nil))
         return
       }
+      self.link &+= 1
       self.peripheral = p
       p.delegate = self
       self.connectResult = result
@@ -246,17 +252,20 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
     guard peripheral == self.peripheral else { return }
+    upLink = link
     peripheral.discoverServices(nil)
   }
 
   func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-    guard peripheral == self.peripheral else { return }
+    // فشلُ اتّصالٍ لم يقم بعد — ما قام (upLink) ينقطع بـdidDisconnect لا بهذا.
+    guard peripheral == self.peripheral, upLink != link else { return }
     finishConnect(FlutterError(code: "connect_failed", message: error?.localizedDescription, details: nil))
     resetLink()
   }
 
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-    guard peripheral == self.peripheral else { return }
+    // انقطاعٌ لاتّصالٍ لم يقم بعد = تأكيد إغلاق اتّصالٍ سابقٍ بالطابعة نفسها وصل متأخّراً — ليس لهذا الاتّصال.
+    guard peripheral == self.peripheral, upLink == link else { return }
     let err = FlutterError(code: "io", message: error?.localizedDescription ?? "disconnected", details: nil)
     finishConnect(FlutterError(code: "connect_failed", message: err.message, details: nil))
     failWrite(err)
@@ -311,8 +320,10 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
       result(FlutterError(code: "busy", message: "write in progress", details: nil))
       return
     }
-    // بقدر ما يقبله الاتّصال، وبسقفٍ لطيف على ذاكرة الطابعات الصغيرة.
-    let size = max(20, min(p.maximumWriteValueLength(for: writeType), 180))
+    // بقدر الاتّصال (MTU − 3) لنوعي الكتابة، وبسقفٍ لطيف على ذاكرة الطابعات الصغيرة. ⚠️ لا «طول الكتابة بردّ»:
+    // يعطي ٥١٢ (كتابةً طويلة بأجزاء) فيصير كلّ جزءٍ «Prepare + Execute Write» — طابعاتٌ لا تعرفها تردّ خطأً ولا يُطبع شيء.
+    // جزءٌ بقدر الـMTU يذهب «Write Request» واحداً.
+    let size = max(20, min(p.maximumWriteValueLength(for: .withoutResponse), 180))
     var parts: [Data] = []
     var off = 0
     while off < data.count {
@@ -415,7 +426,14 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
 
   // MARK: - Close
 
+  /// يُغلق الاتّصال، ويُجيب الآن — مرّةً واحدة — كلَّ نداءٍ ينتظر ردّه منه: كتابةٌ لم تكتمل (مهلة دارت ٤٥ ث على طابعةٍ عالقة،
+  /// أو تطبيقٌ عُلّق أثناء الطباعة) كانت تبقى «جاريةً» فيُردّ كلّ وصلٍ بعدها بـ«busy» حتى يُطفأ البلوتوث؛ واتّصالٌ ينتظر
+  /// كان يُترك بلا ردّ حين يبدأ غيره.
   private func close() {
+    let closed = FlutterError(code: "io", message: "closed", details: nil)
+    finishConnect(closed)
+    failWrite(closed)
+    finishRead()
     if let p = peripheral, let c = central {
       if let n = notifyChar, p.state == .connected { p.setNotifyValue(false, for: n) }
       c.cancelPeripheralConnection(p)
@@ -426,6 +444,7 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
   private func resetLink() {
     connectTimer?.invalidate()
     connectTimer = nil
+    upLink = -1
     peripheral?.delegate = nil
     peripheral = nil
     writeChar = nil

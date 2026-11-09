@@ -73,6 +73,10 @@ class BuiltinInfo {
   final int paperMm;
   final String model;
 
+  /// لا خدمة طابعةٍ مدمجة في الجهاز أصلاً (هاتفٌ عاديّ): الطبقة الأصليّة لم تجد شركةً بمكتبتها ([vendor] فارغ). غير
+  /// «موجودةٌ ولم تُربط بعد» (الشركة معروفة) — تلك قد تجهز بعد لحظات.
+  bool get absent => !available && vendor.isEmpty;
+
   static BuiltinInfo fromMap(Map<Object?, Object?> m) => BuiltinInfo(
         available: m['available'] == true,
         vendor: '${m['vendor'] ?? ''}',
