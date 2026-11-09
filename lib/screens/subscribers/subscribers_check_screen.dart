@@ -658,25 +658,24 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   // ─────────────────── «كل الشركات»: الشركات ───────────────────
 
   /// سطرٌ لكلّ شركة كـ«الفحص الشامل»: طريقها (من شبكتك / عبر VPN الشركة / لماذا لم تُفحص) وكم قُرئ من متّصلي مشتركيها وكم
-  /// بمشكلة — والضغط يعرض مشتركيها وحدهم. ١٠ نوفمبر: غير المتّصل بلا قراءة خارج العدد (لا يُقرأ أصلاً — «قُرئ» لا يكتمل معه).
-  /// والتقرير المنسوخ بالأسطر نفسها (المراجعة F15).
+  /// بمشكلة — والضغط يعرض مشتركيها وحدهم. ١٠ نوفمبر: غير المتّصل خارج العدد (لا يُقرأ أصلاً — «قُرئ» لا يكتمل معه)،
+  /// و«قُرئ» من المتّصلين وحدهم — قراءةٌ سابقة لغير المتّصل لا تُعدّ متّصلاً (المراجعة R2: كان «قُرئ 3 من 3 متّصل»
+  /// والمتّصلون 2). والتقرير المنسوخ بالأسطر نفسها (المراجعة F15).
   List<_CompanyLine> _companyLines(List<Subscriber> all, SubsCheckReport full) {
     final total = <String, int>{};
+    final online = <String, int>{};
     for (final x in all) {
       final k = x.companyKey;
-      if (k != null) total[k] = (total[k] ?? 0) + 1;
-    }
-    final offline = <String, int>{};
-    for (final m in full.missingIn(SubsCheckCat.offline)) {
-      final k = m.sub.companyKey;
-      if (k != null) offline[k] = (offline[k] ?? 0) + 1;
+      if (k == null) continue;
+      total[k] = (total[k] ?? 0) + 1;
+      if (x.isOnline) online[k] = (online[k] ?? 0) + 1;
     }
     final read = <String, int>{};
     final viaVpn = <String, int>{};
     final bad = <String, int>{};
     for (final row in [...full.healthy, ...full.rows]) {
       final k = row.sub.companyKey;
-      if (k == null) continue;
+      if (k == null || !row.sub.isOnline) continue;
       read[k] = (read[k] ?? 0) + 1;
       if (row.reading?.vpn ?? false) viaVpn[k] = (viaVpn[k] ?? 0) + 1;
     }
@@ -689,7 +688,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         if ((total[c.key] ?? 0) > 0)
           _companyLine(c,
               total: total[c.key] ?? 0,
-              offline: offline[c.key] ?? 0,
+              online: online[c.key] ?? 0,
               read: read[c.key] ?? 0,
               viaVpn: viaVpn[c.key] ?? 0,
               bad: bad[c.key] ?? 0),
@@ -732,12 +731,12 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   }
 
   _CompanyLine _companyLine(MergedCompany c,
-      {required int total, required int offline, required int read, required int viaVpn, required int bad}) {
-    final counts = offline <= 0
+      {required int total, required int online, required int read, required int viaVpn, required int bad}) {
+    final counts = online >= total
         ? 'قُرئ ${formatIQD(read)} من ${formatIQD(total)}'
-        : total - offline > 0
-            ? 'قُرئ ${formatIQD(read)} من ${formatIQD(total - offline)} متّصل'
-            : '${formatIQD(offline)} غير متّصل الآن';
+        : online > 0
+            ? 'قُرئ ${formatIQD(read)} من ${formatIQD(online)} متّصل'
+            : '${formatIQD(total)} غير متّصل الآن';
     final job = VpnNow.subscribers;
     final local = _isLocal(c.key);
     final note = _companyNote(c.key);

@@ -685,4 +685,53 @@ void main() {
       await _done(t);
     });
   });
+
+  // ───────────── R2-sublogic-4: «قُرئ R من N متّصل» من المتّصلين وحدهم ─────────────
+
+  group('R2-sublogic-4 — سطر الشركة: غير المتّصل خارج «قُرئ» وإن قُرئ سابقاً', () {
+    testWidgets('متّصلان مقروءان + غير متّصلٍ بقراءةٍ سابقة + غير متّصلٍ بلا قراءة ⇒ «قُرئ 2 من 2 متّصل» لا «3 من 3»',
+        (t) async {
+      await visualSetUp(s1bSasOwner);
+      _mergedTwo();
+      final minuteAgo = DateTime.now().subtract(const Duration(minutes: 1));
+      final subs = [
+        _s('s.on1', ip: '1').withCompany(_kS),
+        _s('s.on2', ip: '2').withCompany(_kS),
+        _s('s.off.read', online: false, ip: '3').withCompany(_kS),
+        _s('s.off', online: false).withCompany(_kS),
+        _s('e.on').withCompany(_kE),
+        _s('e.off.read', online: false).withCompany(_kE),
+      ];
+      final peeks = {'s.on1': _read(minuteAgo), 's.on2': _read(minuteAgo), 's.off.read': _read(minuteAgo)};
+      SubscribersCheck.debugPeek = (s) => peeks[s.username];
+      final wave = ValueNotifier(SubsWave(endedAt: minuteAgo));
+      VpnNow.debugApplyCompany(_kE, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'e.on': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+        'e.off.read': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+      }));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 3), company: _kE);
+      VpnNow.subscribers.phase = VpnBarPhase.running; // الفتح لا يبدأ فحصاً (لا شبكة)
+      addTearDown(() {
+        SubscribersCheck.debugPeek = null;
+        wave.dispose();
+        VpnNow.subscribers.reset();
+        VpnNow.clearCompanyReadings();
+        MergedMode.reset();
+      });
+      await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+          home: (_) => SubscribersCheckScreen(
+              subscribers: () => subs, viaVpn: false, wave: wave, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+      await settle(t, seconds: 1);
+      VpnNow.subscribers.reset();
+      await settle(t, seconds: 1);
+      Finder line(String k, String text) =>
+          find.descendant(of: find.byKey(ValueKey('subs-check-company-$k')), matching: find.text(text));
+      const sLine = 'من شبكتك · منذ دقيقة · قُرئ 2 من 2 متّصل';
+      const eLine = 'عبر VPN الشركة · منذ 3 دقائق · قُرئ 1 من 1 متّصل';
+      expect(line(_kS, sLine), findsOneWidget, reason: 'المتّصلون 2 — s.off.read غير متّصل وإن قُرئ سابقاً');
+      expect(line(_kE, eLine), findsOneWidget);
+      expect(await _copy(t), contains('• سوبرنت — $sLine\n• ايرث لنك — $eLine'));
+      await _done(t);
+    });
+  });
 }
