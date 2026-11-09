@@ -1570,10 +1570,11 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
 
 // ── سويتش EdgeSwitch (علامة ubnt): REST كصفحته — المعالج · الذاكرة · المنافذ ───────────────────────────────
 
-/// سويتش EdgeSwitch: من طرازه أو اسمه كصفحة الجهاز (‏ES-8-150W · «EdgeSwitch 24»)، أو عنوانٌ قُرئ بـREST قبلاً.
+/// سويتش EdgeSwitch: من طرازه (‏ES-8-150W · «EdgeSwitch 24» — كاشف الطُرُز يكتبه)، أو عنوانٌ قُرئ بـREST قبلاً. الاسم
+/// وحده لا (سكتر «Tower-ES-1» راديو airOS) — اسمٌ بلا طراز يُكشف بـREST حين لا تقرؤه جلسة airOS.
 bool isEdgeSwitch(NetworkDevice d) {
   if (d.brand.toLowerCase() != 'ubnt') return false;
-  return _edgeSwitchName('${d.model ?? ''} ${d.name}') || _edgeSwitchHosts.contains(d.ip);
+  return _edgeSwitchName(d.model ?? '') || _edgeSwitchHosts.contains(d.ip);
 }
 
 bool _edgeSwitchName(String s) {

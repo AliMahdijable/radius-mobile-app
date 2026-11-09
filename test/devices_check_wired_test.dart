@@ -374,6 +374,17 @@ void main() {
           viaRest: snapshot);
       expect(good.state, isNot(CheckState.unread));
       expect(rest, 0, reason: 'المسار الشائع بلا طلبٍ زائد');
+      // واسمه يشبه رمز EdgeSwitch («Tower-ES-1» — سكتر الشرق) وطرازه راديو ⇒ airOS كما كان، لا REST
+      final named = NetworkDevice(
+          id: 87, adminId: '2', name: 'Tower-ES-1', type: 'sector', brand: 'ubnt', model: 'Rocket 5AC Prism',
+          ip: '10.0.0.87', port: 22, protocol: 'ssh', hasCredentials: true, lastStatus: 'online',
+          createdAt: DateTime(2026, 11, 1));
+      expect(isEdgeSwitch(named), isFalse);
+      final byName = await check(named,
+          viaSsh: () async => UbntStats.fromMcaStatus(const {'deviceName': 'Rocket', 'wlanMode': 'master',
+                'wlanEssid': 'E', 'wlanConnections': '0', 'cpuload': '5', 'uptime': '864000'}),
+          viaRest: snapshot);
+      expect([byName.role, rest, ssh], [CheckRole.sector, 0, 2]);
       final bad = dev(85, type: 'sector', brand: 'ubnt', protocol: 'ssh');
       Future<UbntStats> refused() async => throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
       final r = await check(bad, viaSsh: refused, viaRest: () => null);
