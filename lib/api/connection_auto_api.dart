@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'alerts_page.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 
@@ -241,7 +242,10 @@ class ConnAlertCase {
 }
 
 class ConnAlertLogEntry {
-  const ConnAlertLogEntry({required this.action, this.name, this.kinds = const [], this.dry = false, this.detail, this.at});
+  const ConnAlertLogEntry({required this.action, this.id, this.name, this.kinds = const [], this.dry = false, this.detail, this.at});
+
+  /// رقم السطر بالخادم (صفحات «تحميل المزيد» — ٩ نوفمبر)؛ null من خادمٍ أقدم.
+  final int? id;
   final String action;
   final String? name;
   final List<String> kinds;
@@ -474,12 +478,59 @@ class ConnectionAutoApi {
     load(force: true).ignore();
   }
 
-  /// [limit] صفّاً على الأكثر (الخادم ≤٥٠٠) — الشاشة تطلب صفحتها + ١ لتعرف أنّ هناك المزيد.
-  static Future<List<ConnAlertCase>> queue(String state, {int limit = 300}) async {
-    final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/queue', queryParameters: {'state': state, 'limit': limit});
-    final d = r.data?['data'];
-    if (d is! Map || d['items'] is! List) return const [];
-    return (d['items'] as List).whereType<Map>().map((m) => ConnAlertCase.fromJson(Map<String, dynamic>.from(m))).toList();
+  /// صفحةٌ من «تنبيهات المشتركين» بحالة [state] (٩ نوفمبر — المالك: «… خلّي بيها ١٠ قراءات وتحميل المزيد»): [size] بعد المؤشّر
+  /// [before] — الخادم الجديد يعيد الصفحة وhas_more وnext_before، والأولى بالعدد الحقيقيّ (total/sendable). الخادم الأقدم يتجاهل
+  /// page_size/before ويعيد «أوّل limit» ⇒ يُقصّ ما بعد [have] (صفحةٌ + ١ لتعرف المزيد — كما كان، بسقفه ٥٠٠). صفحةٌ بعد الأولى بلا
+  /// مؤشّر (ردٌّ أقدم) تبقى بالعدد عند الخادمين فلا تختلط الطريقتان. null = تعذّر.
+  static Future<AlertsPage<ConnAlertCase>?> queuePage(String state, {String? before, int have = 0, int size = pageSize}) =>
+      _page('/api/v2/connection-alerts/queue', {'state': state}, (m) => ConnAlertCase.fromJson(m), before: before, have: have, size: size);
+
+  /// صفحةٌ من «السجلّ» بالطريقة نفسها ([queuePage]) — كلّ سطرٍ برقمه من الخادم الجديد (سقف الأقدم ٢٠٠).
+  static Future<AlertsPage<ConnAlertLogEntry>?> logPage({String? before, int have = 0, int size = pageSize}) =>
+      _page('/api/v2/connection-alerts/log', const {}, _logEntry, before: before, have: have, size: size);
+
+  static Future<AlertsPage<T>?> _page<T>(String path, Map<String, Object> query, T Function(Map<String, dynamic> m) parse,
+      {required String? before, required int have, required int size}) async {
+    final paged = before != null || have == 0;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(path, queryParameters: {
+        ...query,
+        'limit': have + size + 1,
+        if (paged) 'page_size': size,
+        if (before != null) 'before': before,
+      });
+      final d = r.data?['data'];
+      if (r.data?['success'] != true || d is! Map) return null;
+      final raw = d['items'] is List
+          ? (d['items'] as List).whereType<Map>().map((m) => parse(Map<String, dynamic>.from(m))).toList()
+          : <T>[];
+      int? n(Object? v) => v is num ? v.toInt() : null;
+      if (paged && d.containsKey('has_more')) {
+        final next = d['next_before'];
+        return AlertsPage(raw,
+            hasMore: d['has_more'] == true, next: next is String && next.isNotEmpty ? next : null, total: n(d['total']), sendable: n(d['sendable']));
+      }
+      final rest = raw.skip(have).toList();
+      return AlertsPage(rest.take(size).toList(), hasMore: rest.length > size);
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 $path: $e');
+      return null;
+    }
+  }
+
+  static ConnAlertLogEntry _logEntry(Map<String, dynamic> m) {
+    final name = '${m['name'] ?? ''}'.trim();
+    final user = '${m['username'] ?? ''}'.trim();
+    final at = m['at_ms'] is num ? DateTime.fromMillisecondsSinceEpoch((m['at_ms'] as num).toInt()) : null;
+    return ConnAlertLogEntry(
+      id: m['id'] is num ? (m['id'] as num).toInt() : null,
+      action: '${m['action']}',
+      name: name.isNotEmpty ? name : (user.isNotEmpty ? user : null),
+      kinds: m['kinds'] is List ? (m['kinds'] as List).map((e) => '$e').toList() : const [],
+      dry: m['dry'] == true,
+      detail: m['detail']?.toString(),
+      at: at,
+    );
   }
 
   /// approve · skip · mute · unmute · requeue — أو «أرسل للكلّ» ([all])
@@ -498,22 +549,4 @@ class ConnectionAutoApi {
     }
   }
 
-  static Future<List<ConnAlertLogEntry>> log({int limit = 100}) async {
-    final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/log', queryParameters: {'limit': limit});
-    final d = r.data?['data'];
-    if (d is! Map || d['items'] is! List) return const [];
-    return (d['items'] as List).whereType<Map>().map((m) {
-      final name = '${m['name'] ?? ''}'.trim();
-      final user = '${m['username'] ?? ''}'.trim();
-      final at = m['at_ms'] is num ? DateTime.fromMillisecondsSinceEpoch((m['at_ms'] as num).toInt()) : null;
-      return ConnAlertLogEntry(
-        action: '${m['action']}',
-        name: name.isNotEmpty ? name : (user.isNotEmpty ? user : null),
-        kinds: m['kinds'] is List ? (m['kinds'] as List).map((e) => '$e').toList() : const [],
-        dry: m['dry'] == true,
-        detail: m['detail']?.toString(),
-        at: at,
-      );
-    }).toList();
-  }
 }

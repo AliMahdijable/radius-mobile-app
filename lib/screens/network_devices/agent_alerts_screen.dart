@@ -8,6 +8,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/alerts_pager.dart';
 import '../desktop/desk_widgets.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import 'device_alerts_screen.dart';
@@ -32,12 +33,20 @@ class AgentAlertsScreen extends StatefulWidget {
 class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   AgentAlertsStatus? _st;
   AgentVitalsStatus? _vit;
-  List<AgentAlertEvent> _log = const [];
   bool _loading = true;
   bool _failed = false;
-  bool _more = false;
-  bool _noOlder = false;
   String? _busy; // enabled | notify_up | v_enabled | v_volt
+
+  /// كلّ قائمةٍ هنا عشرةٌ أوّلاً و«تحميل المزيد» (٩ نوفمبر — المالك: «تنبيهات المشتركين والأجهزة — خلّي بيها ١٠ قراءات وتحميل
+  /// المزيد»): السجلّ صفحاتٌ من الخادم (كان ٥٠ دفعةً واحدة و«الأقدم»)، والطافية/المتذبذبة/القراءات الحسّاسة/الكهرباء من الحال نفسه.
+  final AlertsPager<AgentAlertEvent> _log = AlertsPager<AgentAlertEvent>(
+    fetch: ({String? before, required int have, required int size}) => AgentAlertsApi.logPage(before: before, size: size),
+    keyOf: (e) => e.id,
+  );
+  final _downMore = AlertsReveal();
+  final _quietMore = AlertsReveal();
+  final _vitalsMore = AlertsReveal();
+  final _powerMore = AlertsReveal();
 
   /// الكهرباء و«كيف تُراقَب» تنطويان (٦ نوفمبر — المالك: «قسم الكهرباء شوفه هذا يكون توكل»؛ ولا كرت يكبر بلا داعٍ).
   bool _powerOpen = false;
@@ -46,41 +55,35 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   @override
   void initState() {
     super.initState();
+    _log.addListener(_onLog);
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _log.removeListener(_onLog);
+    _log.dispose();
+    super.dispose();
+  }
+
+  void _onLog() {
+    if (mounted) setState(() {});
+  }
+
+  /// الحال، والسجلّ (العشرة الأحدث — أو بعمق ما عُرض بعد حفظٍ: [keepLog]) والقراءات الحسّاسة معاً.
+  Future<void> _load({bool keepLog = false}) async {
     final st = await AgentAlertsApi.status();
-    List<AgentAlertEvent>? log;
     AgentVitalsStatus? vit;
     if (st != null && st.available && st.canUse) {
-      log = await AgentAlertsApi.log();
-      vit = await AgentAlertsApi.vitalsStatus();
+      final r = await Future.wait<Object?>([_log.reload(keepDepth: keepLog), AgentAlertsApi.vitalsStatus()]);
+      vit = r[1] as AgentVitalsStatus?;
     }
     if (!mounted) return;
     setState(() {
       _st = st;
       _vit = vit;
       _failed = st == null;
-      if (log != null) {
-        _log = log;
-        _noOlder = log.length < 50;
-      }
       _loading = false;
-    });
-  }
-
-  Future<void> _older() async {
-    if (_log.isEmpty || _more) return;
-    setState(() => _more = true);
-    final more = await AgentAlertsApi.log(before: _log.last.id);
-    if (!mounted) return;
-    setState(() {
-      _more = false;
-      if (more != null) {
-        _log = [..._log, ...more];
-        _noOlder = more.length < 50;
-      }
     });
   }
 
@@ -90,7 +93,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     final r = await AgentAlertsApi.saveVitals(next);
     if (!mounted) return;
     if (!r.ok) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.message ?? 'تعذّر الحفظ')));
-    await _load();
+    await _load(keepLog: true);
     if (mounted) setState(() => _busy = null);
   }
 
@@ -99,9 +102,15 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     final r = await AgentAlertsApi.save(enabled: enabled, notifyUp: notifyUp);
     if (!mounted) return;
     if (!r.ok) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.message ?? 'تعذّر الحفظ')));
-    await _load();
+    await _load(keepLog: true);
     if (mounted) setState(() => _busy = null);
   }
+
+  /// «تحميل المزيد» لقائمةٍ من الحال (تكشف عشرةً أخرى).
+  Widget _revealMore(String key, AlertsReveal r) => Padding(
+        padding: const EdgeInsets.only(top: Sp.xs, bottom: Sp.xs),
+        child: AlertsMoreButton(key: ValueKey(key), onTap: () => setState(r.more)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -175,12 +184,14 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       if (st.down.isNotEmpty) ...[
         const SizedBox(height: Sp.lg),
         _section('طافية الآن'),
-        for (final d in st.down) _deviceRow(d, quiet: false),
+        for (final d in _downMore.take(st.down)) _deviceRow(d, quiet: false),
+        if (_downMore.hasMore(st.down)) _revealMore('aa-more-down', _downMore),
       ],
       if (st.quiet.isNotEmpty) ...[
         const SizedBox(height: Sp.lg),
         _section('تطفي وتشتغل — مسكوتٌ عنها ساعة'),
-        for (final d in st.quiet) _deviceRow(d, quiet: true),
+        for (final d in _quietMore.take(st.quiet)) _deviceRow(d, quiet: true),
+        if (_quietMore.hasMore(st.quiet)) _revealMore('aa-more-quiet', _quietMore),
       ],
       if (_vit != null && _vit!.available && _vit!.canUse) ...[
         const SizedBox(height: Sp.lg),
@@ -192,20 +203,20 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       _howCard(st),
       const SizedBox(height: Sp.lg),
       _section('السجلّ'),
-      if (_log.isEmpty)
+      if (_log.items.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Sp.md),
-          child: Text('لا شيء بعد — يظهر هنا كلّ ما طفى أو رجع', style: AppType.muted(color: AppColors.textMid)),
+          child: _log.failed
+              ? Text('تعذّر تحميل السجلّ — اسحب للأسفل لإعادة المحاولة', style: AppType.muted(color: AppColors.error))
+              : Text('لا شيء بعد — يظهر هنا كلّ ما طفى أو رجع', style: AppType.muted(color: AppColors.textMid)),
         )
       else ...[
-        for (final e in _log) _eventRow(e),
-        if (!_noOlder)
+        for (final e in _log.items) _eventRow(e),
+        if (_log.hasMore)
           Padding(
             padding: const EdgeInsets.only(top: Sp.sm),
-            child: TextButton(
-              onPressed: _more ? null : _older,
-              child: Text(_more ? 'يجلب…' : 'الأقدم'),
-            ),
+            child: AlertsMoreButton(
+                key: const ValueKey('aa-more-log'), busy: _log.loadingMore, failed: _log.moreFailed, onTap: _log.loadMore),
           ),
       ],
     ];
@@ -385,7 +396,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
             child: TextButton.icon(
               onPressed: () async {
                 await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
-                if (mounted) _load();
+                if (mounted) _load(keepLog: true);
               },
               icon: const Icon(LucideIcons.shieldPlus, size: 16),
               label: const Text('ربط VPN'),
@@ -525,8 +536,10 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
             ),
           ]),
         )
-      else
-        for (final a in v.alerts) _vitalRow(a),
+      else ...[
+        for (final a in _vitalsMore.take(v.alerts)) _vitalRow(a),
+        if (_vitalsMore.hasMore(v.alerts)) _revealMore('aa-more-vitals', _vitalsMore),
+      ],
       if (v.settings.enabled && (v.power.isNotEmpty || v.powerLearning > 0)) ...[
         const SizedBox(height: Sp.sm),
         _powerBox(v),
@@ -554,7 +567,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
           onTap: () => setState(() => _powerOpen = !_powerOpen),
         ),
         if (_powerOpen)
-        for (final p in v.power)
+        for (final p in _powerMore.take(v.power))
           Padding(
             padding: const EdgeInsets.only(top: Sp.xs),
             child: Row(children: [
@@ -571,6 +584,11 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
                 child: Text(vitalValueText('volt', p.alertBelow), style: AppType.microBold(color: AppColors.textHi)),
               ),
             ]),
+          ),
+        if (_powerOpen && _powerMore.hasMore(v.power))
+          Padding(
+            padding: const EdgeInsets.only(top: Sp.sm),
+            child: AlertsMoreButton(key: const ValueKey('aa-more-power'), onTap: () => setState(_powerMore.more)),
           ),
         if (_powerOpen && v.powerLearning > 0)
           Padding(
@@ -639,7 +657,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       barrierColor: AppColors.scrim,
       builder: (_) => VitalsLimitsSheet(initial: cur, power: _vit?.power ?? const []),
     );
-    if (saved == true && mounted) _load();
+    if (saved == true && mounted) _load(keepLog: true);
   }
 
   Widget _line(IconData icon, String text, {Color? color}) => Padding(
