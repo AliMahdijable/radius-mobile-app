@@ -163,7 +163,7 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
   // MARK: - Scan
 
   private func scan(timeoutMs: Int, _ result: @escaping FlutterResult) {
-    whenStateKnown {
+    whenStateKnown { [self] in
       let c = self.manager()
       guard c.state == .poweredOn else {
         result(self.stateError(c.state))
@@ -209,7 +209,7 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
   // MARK: - Connect
 
   private func connect(id: String, timeoutMs: Int, _ result: @escaping FlutterResult) {
-    whenStateKnown {
+    whenStateKnown { [self] in
       let c = self.manager()
       guard c.state == .poweredOn else {
         result(self.stateError(c.state))
