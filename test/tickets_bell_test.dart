@@ -22,6 +22,7 @@ import 'package:rad_mysvcs/screens/tickets/tickets_screen.dart';
 import 'package:rad_mysvcs/screens/top_actions.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
 import 'package:rad_mysvcs/services/inbox_service.dart';
+import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/services/notification_router.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
@@ -546,6 +547,56 @@ void main() {
       final f = openTicketPush(nav.currentState!, {'type': 'portal_ticket', 'ticket_id': '9', 'event': 'reply'});
       await t.pumpAndSettle();
       expect(server.calls('GET', '/api/v2/portal/tickets/9').map(keyOf).toList(), [null, null]);
+      nav.currentState!.pop();
+      await t.pumpAndSettle();
+      expect(await f, true);
+      expect(t.takeException(), isNull);
+      await simDrain(t);
+    });
+
+    testWidgets('«كل الشركات»: «الكلّ» وإشعارٌ بلا تذكرة ⇒ تذاكر المفتوحة التي يعرضها الجرس، لا مختارة الشريط', (t) async {
+      final prevToken = AccountApi.tokenSource;
+      AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+      addTearDown(() => AccountApi.tokenSource = prevToken);
+      const kOpen = 'c0000000000a1';
+      MergedMode.reset();
+      MergedMode.fetchRaw = () async => {
+            'routing': true,
+            'writes': true,
+            'companies': [
+              {'key': kOpen, 'code': 'speed', 'username': 'u0', 'name': 'سبيد', 'status': 'ok', 'admin_id': 'speed:7', 'ns': 'a', 'currency': 'IQD', 'color_index': 0},
+              {'key': _kOther, 'code': 'jt', 'username': 'u1', 'name': 'الجزيرة', 'status': 'ok', 'admin_id': 'jt:6836', 'ns': 'j', 'currency': 'IQD', 'color_index': 1},
+            ],
+          };
+      addTearDown(MergedMode.reset);
+      expect(await t.runAsync(MergedMode.enter), isTrue);
+      MergedMode.focus.value = _kOther;
+      final world = [_ticket(9, 'open', unread: true)];
+      _serve(server, world);
+      final nav = GlobalKey<NavigatorState>();
+      await pumpSim(t, _v, navigatorKey: nav, home: (_) => _section());
+      String? keyOf(RequestOptions r) => r.headers['x-company-key'] as String?;
+      expect(server.requests.where((r) => r.path.startsWith(_listPath)).map(keyOf).toSet(), {null}, reason: 'الجرس للمفتوحة');
+      final before = server.requests.length;
+      await t.tap(find.byKey(const ValueKey('tickets-inbox-all')));
+      await t.pumpAndSettle();
+      expect(find.byType(TicketsScreen), findsOneWidget);
+      expect(MergedMode.focus.value, kOpen, reason: 'الشريط على المفتوحة التي عرض الجرس تذاكرها');
+      final asked = server.requests.skip(before).where((r) => r.path.startsWith(_listPath)).toList();
+      expect(asked, isNotEmpty);
+      expect(asked.map(keyOf).toSet(), {null}, reason: 'قائمة المفتوحة لا الجزيرة');
+      expect(find.text('علي عباس'), findsOneWidget);
+      nav.currentState!.pop();
+      await t.pumpAndSettle();
+      // إشعار تذكرةٍ بلا رقمها ⇒ القائمة للمفتوحة كذلك
+      MergedMode.focus.value = _kOther;
+      await t.pumpAndSettle();
+      final before2 = server.requests.length;
+      final f = openTicketPush(nav.currentState!, {'type': 'portal_ticket', 'event': 'new'});
+      await t.pumpAndSettle();
+      expect(find.byType(TicketsScreen), findsOneWidget);
+      expect(MergedMode.focus.value, kOpen);
+      expect(server.requests.skip(before2).where((r) => r.path.startsWith(_listPath)).map(keyOf).toSet(), {null});
       nav.currentState!.pop();
       await t.pumpAndSettle();
       expect(await f, true);

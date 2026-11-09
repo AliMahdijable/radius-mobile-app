@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/company_route.dart';
 import '../../../api/expenses_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
@@ -19,19 +20,24 @@ import '../../../core/widgets/app_sheet.dart';
 ///   • التاريخ      — defaults to today, optional override
 ///   • ملاحظة       — optional free text
 /// Submit → POST /api/admin/expenses.
-Future<bool?> showAddExpenseSheet(BuildContext context) {
+///
+/// [openCompany] («كل الشركات»، ٩ نوفمبر): المدير اختار الشركة المفتوحة («في أيّ شركة؟» من الإضافة السريعة) ⇒ التسجيل لها صراحةً
+/// ([CompanyRoute.runOpen]) ولو كانت صرفيات شركةٍ أخرى مفتوحةً موجَّهة (الحاسبة) — كانت تُسجَّل في مال شركة الشريط. من داخل قسم
+/// الصرفيات نفسه: كما هو (لشركة القسم).
+Future<bool?> showAddExpenseSheet(BuildContext context, {bool openCompany = false}) {
   return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => const _AddExpenseSheet(),
+    builder: (_) => _AddExpenseSheet(openCompany: openCompany),
   );
 }
 
 class _AddExpenseSheet extends StatefulWidget {
-  const _AddExpenseSheet();
+  const _AddExpenseSheet({this.openCompany = false});
+  final bool openCompany;
 
   @override
   State<_AddExpenseSheet> createState() => _AddExpenseSheetState();
@@ -106,11 +112,12 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     setState(() => _submitting = true);
     String two(int n) => n.toString().padLeft(2, '0');
     final dateStr = '${_date.year}-${two(_date.month)}-${two(_date.day)}';
-    final result = await ExpensesApi.create(
-      amount: _amount,
-      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-      expenseDate: dateStr,
-    );
+    Future<({bool ok, String? message, int? id})> create() => ExpensesApi.create(
+          amount: _amount,
+          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+          expenseDate: dateStr,
+        );
+    final result = await (widget.openCompany ? CompanyRoute.runOpen(create) : create());
     if (!mounted) return;
     setState(() => _submitting = false);
     showSheetSnack(context,

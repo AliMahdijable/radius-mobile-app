@@ -327,11 +327,16 @@ class _MainShellState extends State<MainShell> {
       case NotificationDestination.subscribersExpired:
         _openSubscribers(SubscriberFilter.expired);
       case NotificationDestination.managers:
-        // المدراء ليسوا تبويباً بل داخل «قوائم أخرى» — فندفع شاشتهم.
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ManagersScreen.mergedPage()),
-        );
+        // المدراء ليسوا تبويباً بل داخل «قوائم أخرى» — فندفع شاشتهم، للشركة المفتوحة صاحبة الإشعار لا لمختارة الشريط.
+        unawaited(_openManagersForOpen());
     }
+  }
+
+  Future<void> _openManagersForOpen() async {
+    final nav = Navigator.of(context);
+    await MergedMode.focusOpenCompany();
+    if (!nav.mounted) return;
+    await nav.push(MaterialPageRoute(builder: (_) => ManagersScreen.mergedPage()));
   }
 
   @override
@@ -882,7 +887,11 @@ class _QuickAddSheet extends StatelessWidget {
                     await Navigator.of(rootContext).push(MaterialPageRoute<void>(builder: (_) => ExpensesScreen.mergedPage()));
                   },
                 );
-                if (open && rootContext.mounted) await showAddExpenseSheet(rootContext);
+                // المفتوحة ⇒ لها صراحةً (٩ نوفمبر — مانع 179): صرفيات شركةٍ أخرى موجَّهةٌ تحت (الحاسبة: قسمٌ مفتوح، أو ظاهرٌ الآن)
+                // كانت تأخذ التسجيل لمال شركة الشريط.
+                if (open && rootContext.mounted) {
+                  await showAddExpenseSheet(rootContext, openCompany: MergedMode.active.value);
+                }
               },
             ),
         ],
