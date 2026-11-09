@@ -9,15 +9,15 @@ import 'package:rad_mysvcs/services/phone_output.dart';
 ///   ١. كلّ خليّةٍ باتّجاه نصّها — العربيّ يُشكَّل ويُرتَّب مرّةً ويُرسم LTR (اتّجاه RTL في مكتبة pdf يضيّع المسافة بعد «ر»
 ///      و«د»: «عددالصفوف»، «غيرنقدي»)، والتاريخ واليوزر LTR كما هما.
 ///   ٢. «45000.0» ⇒ «45,000» بأعمدة المال، والهاتف لا يُمسّ.
-///   ٣. A4 أفقيّ من ستّة أعمدة — «admin@poox» و«تسديد دين» لا يُقطعان حرفاً حرفاً.
+///   ٣. A4 أفقيّ من ستّة أعمدة — «admin@x» و«تسديد دين» لا يُقطعان حرفاً حرفاً.
 ///   ٤. لا زرّ «صورة» في شريط التقرير — Excel وPDF وحدهما.
 void main() {
   test('١ اتّجاه الخليّة من نصّها', () {
     expect(ReportPdf.directionOf('تسديد دين'), pw.TextDirection.rtl);
-    expect(ReportPdf.directionOf('تسديد دين 45000 د.ع للمشترك a1@ze'), pw.TextDirection.rtl);
+    expect(ReportPdf.directionOf('تسديد دين 45000 د.ع للمشترك sub1@demo'), pw.TextDirection.rtl);
     expect(ReportPdf.directionOf('2026-11-05 22:47'), pw.TextDirection.ltr);
-    expect(ReportPdf.directionOf('a1@ze'), pw.TextDirection.ltr);
-    expect(ReportPdf.directionOf('admin@poox'), pw.TextDirection.ltr);
+    expect(ReportPdf.directionOf('sub1@demo'), pw.TextDirection.ltr);
+    expect(ReportPdf.directionOf('admin@x'), pw.TextDirection.ltr);
   });
 
   test('١ب العربيّ بترتيبه المرئيّ مشكَّلاً — المسافات كما هي', () {
@@ -58,8 +58,8 @@ void main() {
         subtitle: '2026-11-01 → 2026-11-08',
         columns: const ['اسم المشترك', 'اليوزر', 'المبلغ', 'التاريخ', 'الوصف', 'النوع', 'المنفذ'],
         rows: const [
-          ['أحمد', 'a1@ze', '45000.0', '2026-11-05 22:47', 'تسديد دين 45000 د.ع للمشترك a1@ze', 'تسديد دين', 'admin@poox'],
-          ['', '', '120000', '2026-11-02 03:00', 'مصروف: إيجار (تشرين الثاني 2026)', 'مصروف', 'admin@poox'],
+          ['أحمد', 'sub1@demo', '45000.0', '2026-11-05 22:47', 'تسديد دين 45000 د.ع للمشترك sub1@demo', 'تسديد دين', 'admin@x'],
+          ['', '', '120000', '2026-11-02 03:00', 'مصروف: إيجار (تشرين الثاني 2026)', 'مصروف', 'admin@x'],
         ],
         columnWeights: const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3],
       );

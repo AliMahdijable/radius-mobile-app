@@ -25,7 +25,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>لاختيار صورة تُرفقها برسالة جماعيّة إلى مشتركيك، أو صورة بطاقة المشترك حين تقدّم له طلب اشتراكٍ جديد. To pick a photo to attach to a broadcast message to your subscribers, or a subscriber's ID card photo when you submit a new subscription request for them.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>لحفظ صورة رمز QR الخاصّ بدخول المشترك في الصور عند طلبك. To save a subscriber's login QR code image to your photos when you ask.</string>
+	<string>لحفظ صورة الوصل أو رمز QR الخاصّ بالمشترك في الصور حين تختار ذلك. To save a receipt image or a subscriber's QR code to your photos when you choose to.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>تُستخدم الكاميرا فقط إن اخترت التقاط صورة لإرفاقها برسالة، أو لتصوير بطاقتَي المشترك حين تقدّم له طلب اشتراكٍ جديد. The camera is used only if you choose to take a photo to attach to a message, or to photograph a subscriber's ID cards when you submit a new subscription request for them.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -41,9 +41,9 @@
 	<key>NSContactsUsageDescription</key>
 	<string>لاختيار رقم هاتف مشترك من جهات الاتصال بدل كتابته. To pick a subscriber's phone number from your contacts instead of typing it.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>للبحث الصوتيّ فقط، مثل قول اسم المشترك للعثور عليه. Used only for voice search, e.g. saying a subscriber's name to find them.</string>
+	<string>للأوامر الصوتيّة، مثل قول اسم المشترك للبحث عنه أو فحصه أو فتح تجديده، ولا يُنفَّذ شيءٌ قبل تأكيدك. For voice commands, e.g. saying a subscriber's name to find, check or renew them; nothing runs before you confirm.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>يحوّل كلامك إلى نصّ للبحث الصوتيّ عن المشتركين. Turns your speech into text to search your subscribers.</string>
+	<string>يحوّل كلامك إلى نصّ للأوامر الصوتيّة: البحث عن المشترك أو فحصه أو فتح تجديده. Turns your speech into text for voice commands: finding, checking or renewing a subscriber.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>لتسجيل الدخول السريع بـFace ID بدل كتابة كلمة السرّ. To sign in quickly with Face ID instead of typing your password.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

@@ -22,7 +22,7 @@ import 'visual_perm/visual_perm_harness.dart';
 /// مقفلة — بعرضَي ٣٦٠ و٤١٢ فاتحاً وداكناً. بياناتٌ تجريبيّة وحدها. المخرجات: EMP_SHOTS أو /Users/mahdi/release_work/emp_merged_shots.
 String _outDir() {
   final env = Platform.environment['EMP_SHOTS'] ?? '';
-  return env.isNotEmpty ? env : '/Users/mahdi/release_work/emp_merged_shots';
+  return env.isNotEmpty ? env : visualOutDir(); // الافتراض build/visual_perm (مُتجاهَل بgit) — لا كتابة خارج المستودع
 }
 
 const _devices = [

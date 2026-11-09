@@ -31,8 +31,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <!-- مُعلَنٌ للاكتمال ولا يُطلب: التطبيق لا يبحث عن أجهزة (يطبع على المقترنة)، ولا يستنتج موقعاً منها. -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <!-- لا BLUETOOTH_SCAN: التطبيق لا يبحث عن أجهزة بأندرويد (يطبع على المقترنة) — أُزيل بمراجعة الإصدار (سياسة Play: الأذونات المستعملة وحدها). -->
     <!-- البلوتوث اختياريّ: إذناه وحدهما يجعلان Play يحجب التطبيق عن جهازٍ بلا بلوتوث (كما الموقع أعلاه). -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>
     <!-- 2026-07-13: كنّا نطلب READ_MEDIA_IMAGES + WRITE_EXTERNAL_STORAGE

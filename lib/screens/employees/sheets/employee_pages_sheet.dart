@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../api/auth_api.dart';
 import '../../../api/employees_api.dart';
+import '../../../core/platform/store_policy.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../services/employee_session.dart';
@@ -124,7 +125,7 @@ class _EmployeePagesSheetState extends State<EmployeePagesSheet> {
         HapticFeedback.heavyImpact();
         setState(() {
           _busy = null;
-          _error = f.message;
+          _error = StorePolicy.storeSafe(f.message); // كشاشة دخول الموظّف: لا عرض شراءٍ/ترقيةٍ على iOS (3.1.1)
         });
       case final LoginSuccess s:
         final login = p.loginUsername ??
