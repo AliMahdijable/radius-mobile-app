@@ -320,8 +320,10 @@ final class ReceiptPrinterBle: NSObject, CBCentralManagerDelegate, CBPeripheralD
       result(FlutterError(code: "busy", message: "write in progress", details: nil))
       return
     }
-    // بقدر ما يقبله الاتّصال، وبسقفٍ لطيف على ذاكرة الطابعات الصغيرة.
-    let size = max(20, min(p.maximumWriteValueLength(for: writeType), 180))
+    // بقدر الاتّصال (MTU − 3) لنوعي الكتابة، وبسقفٍ لطيف على ذاكرة الطابعات الصغيرة. ⚠️ لا «طول الكتابة بردّ»:
+    // يعطي ٥١٢ (كتابةً طويلة بأجزاء) فيصير كلّ جزءٍ «Prepare + Execute Write» — طابعاتٌ لا تعرفها تردّ خطأً ولا يُطبع شيء.
+    // جزءٌ بقدر الـMTU يذهب «Write Request» واحداً.
+    let size = max(20, min(p.maximumWriteValueLength(for: .withoutResponse), 180))
     var parts: [Data] = []
     var off = 0
     while off < data.count {
