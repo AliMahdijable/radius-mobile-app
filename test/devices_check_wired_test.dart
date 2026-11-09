@@ -1,0 +1,140 @@
+// «الفحص الشامل» — المراجعة الثالثة لإصدار 180 (devwired): الأجهزة السلكيّة والأولت.
+//   F3  روجي: جدول الجسر انتهت مهلته ⇒ لاسلكيّه مجهول لا «راوتر · سليم» (القارئ الحقيقيّ عبر ممرّ الـVPN، لا لقطةٌ محقونة)؛
+//       وإشارة 0 من صفّ الوصلة «لم تُقرأ» لا «0 dBm».
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/network_devices_api.dart';
+import 'package:rad_mysvcs/api/ruijie_api.dart';
+import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/core/net/device_net.dart';
+import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
+import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
+import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/fake_snmp_agent.dart';
+import 'support/snmp_wire.dart';
+
+NetworkDevice dev(int id, {String type = 'router', String brand = 'mikrotik', String protocol = 'api', String? model}) =>
+    NetworkDevice(
+      id: id,
+      adminId: '2',
+      name: 'جهاز $id',
+      type: type,
+      brand: brand,
+      model: model,
+      ip: '10.0.0.$id',
+      port: 8728,
+      protocol: protocol,
+      hasCredentials: true,
+      lastStatus: 'online',
+      createdAt: DateTime(2026, 11, 1),
+    );
+
+List<String> texts(DeviceCheckReport r) => [for (final f in r.findings) f.text];
+
+DeviceCheckReport judge(NetworkDevice d, ProbeResult p, {CheckMemo? prev}) =>
+    DevicesCheck.evaluate(d: d, alive: true, detail: p.detail, raw: p.raw, prev: prev);
+
+// ── روجي: وكيلٌ بسيط (الهويّة، المعالج والذاكرة، منفذ LAN) وجدولا الجسر إن طُلبا ──
+const _rjLink = '1.3.6.1.4.1.4881.1.1.10.2.195.2.3.1';
+const _rjPeer = '1.3.6.1.4.1.4881.1.1.10.2.195.2.2.1';
+const _rjRole = '1.3.6.1.4.1.4881.1.1.10.2.195.1.1.0';
+const _peerMac = '0.17.34.51.68.85';
+
+Map<String, Varbind> _ruijie({Map<String, Varbind> bridge = const {}}) => {
+      '1.3.6.1.2.1.1.1.0': snmpText('', 'Ruijie Reyee EST310'),
+      '1.3.6.1.2.1.1.3.0': snmpTicks('', 3 * 86400 * 100),
+      '1.3.6.1.2.1.1.5.0': snmpText('', 'EST310'),
+      '1.3.6.1.2.1.2.2.1.2.1': snmpText('', 'LAN1'),
+      '1.3.6.1.2.1.2.2.1.5.1': snmpGauge('', 1000000000),
+      '1.3.6.1.2.1.2.2.1.8.1': snmpInt('', 1),
+      '1.3.6.1.2.1.25.2.3.1.3.1': snmpText('', 'Physical memory'),
+      '1.3.6.1.2.1.25.2.3.1.5.1': snmpInt('', 1000),
+      '1.3.6.1.2.1.25.2.3.1.6.1': snmpInt('', 300),
+      '1.3.6.1.2.1.25.3.3.1.2.1': snmpInt('', 4),
+      '1.3.6.1.2.1.31.1.1.1.6.1': snmpGauge('', 123456),
+      '1.3.6.1.2.1.31.1.1.1.10.1': snmpGauge('', 654321),
+      ...bridge,
+      // ما بعد كلّ الشجرات (snmpEngineTime) — كجهازٍ حقيقيّ: المسح يخرج من شجرته لا يبلغ نهاية الـMIB
+      '1.3.6.1.6.3.10.2.1.3.0': snmpInt('', 1000),
+    };
+
+/// صفّ وصلةٍ واحد (والطرف المقابل) — [signal] كما يكتبه الجهاز.
+Map<String, Varbind> _bridgeRow({required int signal}) => {
+      '$_rjLink.3.$_peerMac': snmpText('', '5G'),
+      '$_rjLink.4.$_peerMac': snmpText('', 'BH-1'),
+      '$_rjLink.6.$_peerMac': snmpInt('', -95),
+      '$_rjLink.7.$_peerMac': snmpInt('', signal),
+      '$_rjLink.8.$_peerMac': snmpInt('', 3600),
+      '$_rjLink.9.$_peerMac': snmpInt('', 433),
+      '$_rjPeer.3.$_peerMac': snmpText('', '10.0.0.99'),
+      _rjRole: snmpText('', 'cpe'),
+    };
+
+void main() {
+  late VpnPipeTransport pipeBefore;
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    pipeBefore = VpnPipe.transport;
+  });
+  tearDown(() {
+    VpnPipe.transport = pipeBefore;
+    VpnPipe.used = false;
+    RuijieApi.debugFetch = null;
+    NetworkDevicesApi.invalidateCredentialsCache();
+  });
+
+  /// قراءة الفحص الشامل نفسها عبر ممرّ الـVPN (DeviceNet.vpn) والوكيل [pipe] — القارئ كلّه حقيقيّ.
+  Future<ProbeResult> readVia(SnmpWirePipe pipe, NetworkDevice d) {
+    VpnPipe.transport = pipe;
+    NetworkDevicesApi.debugSeedCredentials(d.id, {'community': 'public'}, DateTime.now());
+    return DeviceNet.vpn(() => DeviceVitals.fetch(d, detailed: true));
+  }
+
+  group('F3 روجي: جدول الجسر', () {
+    test('🚨 جسرٌ محفوظ «راوتر» ومسح جدول جسره انتهت مهلته ⇒ «وضعه اللاسلكيّ ومشتركوه ما انقرأوا» و«لم يُقرأ» لا «راوتر · سليم»',
+        () async {
+      final d = dev(48, brand: 'ruijie', protocol: 'snmp');
+      final pipe = SnmpWirePipe(FakeSnmpAgent(_ruijie(bridge: _bridgeRow(signal: -61))), lose: {_rjLink});
+      final p = await readVia(pipe, d);
+      expect(pipe.asked, contains(_rjLink), reason: 'القارئ سأل الجدول فعلاً');
+      expect((p.raw! as RuijieStats).linkRead, isFalse);
+      final r = judge(d, p);
+      expect(r.state, CheckState.unread);
+      expect(texts(r), contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+      expect(r.cpu, 4, reason: 'ما قُرئ يبقى');
+      // و«غير ذلك» (سجلٌّ «أخرى») كذلك — لا «سليم» بلا لاسلكيّه
+      final other = dev(50, type: 'other', brand: 'ruijie', protocol: 'snmp');
+      final r2 = judge(other, await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie()), lose: {_rjLink}), other));
+      expect(r2.state, CheckState.unread);
+    });
+
+    test('راوتر روجي يجيب المسح بلا جدول جسر (أو يرفضه بخطأ) ⇒ «راوتر · سليم» كما كان — لا «لم يُقرأ» لكلّ راوتر', () async {
+      final d = dev(51, brand: 'ruijie', protocol: 'snmp');
+      final none = await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie())), d);
+      expect((none.raw! as RuijieStats).linkRead, isTrue);
+      final r = judge(d, none);
+      expect([r.role, r.state], [CheckRole.router, CheckState.ok]);
+      final refused = await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie()), refuse: {_rjLink}), d);
+      expect((refused.raw! as RuijieStats).linkRead, isTrue, reason: 'ردّ الوكيل بخطأ = لا يدعم الجدول، ليس مهلة');
+      expect(judge(d, refused).state, CheckState.ok);
+    });
+
+    test('🚨 صفّ الوصلة بإشارة 0 ⇒ الإشارة «لم تُقرأ» لا «0 dBm» ولا «وصلة · سليم»؛ والإشارة الحقيقيّة تُقرأ', () async {
+      final d = dev(52, type: 'link', brand: 'ruijie', protocol: 'snmp');
+      final p = await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie(bridge: _bridgeRow(signal: 0)))), d);
+      expect(p.detail.glance.signal, isNull);
+      expect(p.vitals.where((v) => v.label == 'الإشارة'), isEmpty, reason: 'لا خانة «0 dBm»');
+      final r = judge(d, p);
+      expect(r.signal, isNull);
+      expect(r.state, CheckState.unread);
+      expect(texts(r), contains('إشارة الوصلة ما انقرت'));
+      final ok = await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie(bridge: _bridgeRow(signal: -61)))), d);
+      expect(ok.detail.glance.signal, -61);
+      expect(ok.detail.glance.snr, 34);
+      final r2 = judge(d, ok);
+      expect([r2.role, r2.state, r2.signal], [CheckRole.link, CheckState.ok, -61]);
+    });
+  });
+}

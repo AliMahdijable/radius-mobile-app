@@ -303,8 +303,11 @@ class RuijieApi {
     var linkRead = true;
     try {
       final linkCols = await _readRjTable(snmp, _oidRjLink);
-      if (linkCols.isNotEmpty) {
-        int? n(int c) => linkCols[c]?.asInt;
+      if (linkCols == null) linkRead = false;
+      if (linkCols != null && linkCols.isNotEmpty) {
+        // رقمٌ بوسمٍ عدديّ وحده (`asInt` يُعيد صفراً لغيره)؛ والإشارة والضجيج صفراً «لم تُقرأ» — 0 dBm ليست قراءة (كيوبيكويتي وميكروتك)
+        int? n(int c) => linkCols[c]?.isNumeric == true ? linkCols[c]!.asInt : null;
+        int? dbm(int c) => n(c) == 0 ? null : n(c);
         String? t(int c) {
           final v = linkCols[c]?.asString.trim();
           return (v == null || v.isEmpty) ? null : v;
@@ -313,8 +316,8 @@ class RuijieApi {
         link = RuijieWirelessLink(
           ssid: t(_linkSsid),
           band: t(_linkBand),
-          signalDbm: n(_linkSignal),
-          noiseDbm: n(_linkNoise),
+          signalDbm: dbm(_linkSignal),
+          noiseDbm: dbm(_linkNoise),
           activeSeconds: n(_linkActive),
           rxRateMbps: n(_linkRxRate),
           channel: n(_linkChannel),
@@ -326,7 +329,7 @@ class RuijieApi {
           flowB: n(_linkFlowB),
         );
 
-        final peerCols = await _readRjTable(snmp, _oidRjPeer);
+        final peerCols = await _readRjTable(snmp, _oidRjPeer) ?? const <int, Varbind>{};
         if (peerCols.isNotEmpty) {
           String? pt(int c) {
             final v = peerCols[c]?.asString.trim();
@@ -391,7 +394,10 @@ class RuijieApi {
   ///
   /// مفتاح الصفّ هنا **عنوان MAC** لا رقماً، فلا يصلح `_mapByLastIndex`
   /// الذي يقرأ أوّل جزءٍ بعد الأساس.
-  static Future<Map<int, Varbind>> _readRjTable(
+  ///
+  /// `null` = لم يُقرأ (مهلةٌ، أو ممرّ الـVPN/الشبكة انقطع) — الجدول مجهولٌ لا «ليس جسراً» (المراجعة الثالثة: كانت المهلة تُبلع
+  /// هنا فلا يصل `linkRead = false` أبداً، والجسر «راوتر · سليم»). ردّ الوكيل بخطأ ⇒ لا يدعمه ⇒ فارغ.
+  static Future<Map<int, Varbind>?> _readRjTable(
       SnmpV2c snmp, String base) async {
     final out = <int, Varbind>{};
     try {
@@ -401,7 +407,13 @@ class RuijieApi {
         final col = int.tryParse(rest.split('.').first);
         if (col != null) out.putIfAbsent(col, () => vb);
       }
-    } catch (_) {/* الجهاز لا يدعم الجدول — ليس جسراً */}
+    } on SnmpTimeoutException {
+      return null;
+    } on SnmpException {
+      /* الجهاز ردّ بخطأ — لا يدعم الجدول، ليس جسراً */
+    } catch (_) {
+      return null;
+    }
     return out;
   }
 
