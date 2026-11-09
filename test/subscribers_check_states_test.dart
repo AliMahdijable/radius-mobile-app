@@ -455,4 +455,95 @@ void main() {
       await _done(t);
     });
   });
+
+  // ───────────── R2-subui-1: «توقّف الفحص» يخصّ الفحص الذي رأته الشاشة ─────────────
+
+  group('R2-subui-1 — تركٌ قبل الفتح ليس فحص الشاشة: آخر فحصٍ اكتمل بعمره، والترك والشاشة مفتوحة يُقال', () {
+    Finder side() => find.byKey(const ValueKey('subs-check-progress-side'));
+    const why = 'توقّف الفحص — رجعت لشبكتك';
+
+    /// «وضع VPN» أعاد الفحص والحارس رأى شبكة الوكيل فأطفأه — و«الفحص العامّ» مغلق.
+    void stopRun(VpnNowJob job) {
+      VpnNow.mode.value = true;
+      job.phase = VpnBarPhase.running;
+      VpnNow.exitMode(auto: true);
+    }
+
+    Future<void> stopWhileOpen(WidgetTester t, VpnNowJob job) async {
+      VpnNow.mode.value = true;
+      job.phase = VpnBarPhase.running;
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      job.notifyListeners();
+      await settle(t, seconds: 1);
+      VpnNow.exitMode(auto: true);
+      await settle(t, seconds: 1);
+      expect(_barText(t), why, reason: 'تُرك والشاشة مفتوحة — يُقال كما كان');
+      await t.pump(const Duration(seconds: 9)); // سطر «رجعت لشبكتك» يختفي بعد ٨ ث
+    }
+
+    testWidgets('شركةٌ واحدة: قراءاتٌ قبل 6 دقائق ثمّ فحصٌ تُرك ⇒ الفتح بعدها «انتهى الفحص» بعمره لا «توقّف» بلا وقت',
+        (t) async {
+      await visualSetUp(s1bSasOwner);
+      final subs = [_s('a.u'), _s('b.u')];
+      final job = VpnNow.subscribers;
+      addTearDown(() {
+        job.reset();
+        VpnNow.reset();
+      });
+      VpnNow.debugApply(VpnNowKind.subscribers, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'a.u': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+        'b.u': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+      }));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 6));
+      stopRun(job);
+      expect(job.stopped, why);
+
+      // خارج شبكته ثانيةً فتح «الفحص العامّ» عبر الـVPN — قراءاته دون ١٠ دقائق فلا فحص جديد
+      await pumpVisual(t, _phone, home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: true));
+      await settle(t, seconds: 1);
+      expect(job.phase, VpnBarPhase.idle, reason: 'لا فحص جديد');
+      expect(_barText(t), 'انتهى الفحص — 2 مشترك');
+      expect(t.widget<Text>(side()).data, 'منذ 6 دقائق');
+      expect((await _copy(t)).split('\n')[1], 'انتهى الفحص — 2 مشترك · منذ 6 دقائق');
+
+      await stopWhileOpen(t, job);
+      await _done(t);
+    });
+
+    testWidgets('«كل الشركات» عبر الـVPN: الشيء نفسه', (t) async {
+      await visualSetUp(s1bSasOwner);
+      _mergedTwo();
+      final subs = [_s('s.a').withCompany(_kS), _s('e.a').withCompany(_kE)];
+      final job = VpnNow.subscribers;
+      addTearDown(() {
+        job.reset();
+        VpnNow.reset();
+        MergedMode.reset();
+      });
+      VpnNow.debugApplyCompany(_kS, const VpnNowResult(ok: true, message: 'تم', readings: {
+        's.a': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+      }));
+      VpnNow.debugApplyCompany(_kE, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'e.a': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+      }));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 6), company: _kS);
+      VpnNow.debugBackdateReadings(const Duration(minutes: 6), company: _kE);
+      job
+        ..queue = const [_kS, _kE]
+        ..current = _kE;
+      stopRun(job);
+      expect(job.stopped, why);
+
+      await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+          home: (_) => SubscribersCheckScreen(
+              subscribers: () => subs, viaVpn: true, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+      await settle(t, seconds: 1);
+      expect(job.phase, VpnBarPhase.idle, reason: 'لا فحص جديد');
+      expect(_barText(t), 'انتهى الفحص — 2 مشترك');
+      expect(t.widget<Text>(side()).data, 'منذ 6 دقائق');
+
+      await stopWhileOpen(t, job);
+      await _done(t);
+    });
+  });
 }

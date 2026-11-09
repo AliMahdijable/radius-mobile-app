@@ -97,6 +97,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   /// «كل الشركات»: شركةٌ مختارة من بطاقة «الشركات» ⇒ مشتركوها وحدهم (والضغط ثانيةً يعيد الكلّ).
   String? _company;
 
+  /// الفحوص المتروكة عند الفتح ([VpnNowJob.stops]) — «توقّف الفحص» لما تُرك والشاشة مفتوحة وحده (المراجعة R2).
+  late final int _stopsAtOpen;
+
   bool get _merged => (widget.companies ?? const []).isNotEmpty;
 
   /// الشركة المفتوحة تُقرأ من شبكتك (الموجة) ما لم يكن الفحص عبر الـVPN.
@@ -132,6 +135,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   @override
   void initState() {
     super.initState();
+    _stopsAtOpen = VpnNow.subscribers.stops;
     DeviceProbeBus.tick.addListener(_changed);
     VpnNow.subscribers.addListener(_changed);
     ConnectionAlertSettings.current.addListener(_changed);
@@ -224,16 +228,22 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       return SubscribersCheck.progress(
         subs: r.total,
         wave: _wave,
-        vpn: widget.vpnAllowed ? SubscribersCheck.vpnRunOf(job) : null,
+        vpn: widget.vpnAllowed ? _vpnRun(job) : null,
         merged: true,
         vpnCompany: name,
         at: at ?? (widget.viaVpn ? r.newest : asked()),
       );
     }
-    if (widget.viaVpn) {
-      return SubscribersCheck.progress(subs: r.total, vpn: SubscribersCheck.vpnRunOf(job), at: VpnNow.readingsAt);
-    }
+    if (widget.viaVpn) return SubscribersCheck.progress(subs: r.total, vpn: _vpnRun(job), at: VpnNow.readingsAt);
     return SubscribersCheck.progress(subs: r.total, wave: _wave ?? SubsWave.idle, at: _wave?.endedAt ?? asked());
+  }
+
+  /// فحص الخادم كما يقرؤه الشريط — و«توقّف الفحص» لفحصٍ تُرك والشاشة مفتوحة وحده: سببٌ باقٍ من فحصٍ تُرك قبل فتحها ليس
+  /// فحصها، فيُعرض آخر فحصٍ اكتمل بعمره (المراجعة R2: كان «توقّف الفحص — رجعت لشبكتك» بلا وقتٍ على فتحٍ جديد).
+  SubsVpnRun _vpnRun(VpnNowJob job) {
+    final v = SubscribersCheck.vpnRunOf(job);
+    if (v.stopped == null || job.stops != _stopsAtOpen) return v;
+    return (busy: v.busy, failed: v.failed, line: v.line, done: v.done, total: v.total, value: v.value, stopped: null);
   }
 
   /// مصدر الفحص — وعبر الـVPN عمر المعروض ما لم يقله الشريط (فحصٌ يُعاد أو تعذّر): قراءات الخادم تبقى ٣٠ دقيقة فلا

@@ -512,6 +512,24 @@ void main() {
         ..cancel(why: 'توقّف الفحص — رجعت لشبكتك');
       expect(j.stopped, isNull, reason: 'لا فحص جارٍ يُترك — آخر فحصٍ اكتمل');
     });
+
+    test('VpnNowJob.stops (المراجعة R2): يعدّ الجاري المتروك بسببه وحده ولا يُصفَّر — الشاشة تقارنه بما رأته',
+        () {
+      final j = VpnNowJob(VpnNowKind.subscribers);
+      expect(j.stops, 0);
+      j.cancel(why: 'توقّف الفحص — رجعت لشبكتك');
+      expect(j.stops, 0, reason: 'لا فحص جارٍ يُترك');
+      j
+        ..phase = VpnBarPhase.running
+        ..cancel(why: 'توقّف الفحص — رجعت لشبكتك');
+      expect(j.stops, 1);
+      j.reset();
+      expect([j.stopped, j.stops], [null, 1], reason: 'reset يمسح السبب لا العدّ');
+      j
+        ..phase = VpnBarPhase.running
+        ..cancel();
+      expect(j.stops, 1, reason: 'تركٌ بلا سبب لا يُعدّ');
+    });
   });
 
   group('١٠ نوفمبر — التقرير المنسوخ بالأقسام نفسها', () {
