@@ -13,6 +13,7 @@ import '../../../core/util/format.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/active_company.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/provider_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -70,6 +71,13 @@ Future<Set<String>?> showBulkActivateSheet(
   BuildContext context, {
   required List<Subscriber> subs,
 }) async {
+  // «كل الشركات»: التجديد الجماعيّ يقرأ بيانات التفعيل ويفعّل بلا شركةٍ لكلّ صفّ — للمفتوحة بأرقام صفوف غيرها (مانع التحقّق الثاني
+  // من 179) ⇒ لا يُفتح، والتحديد كما هو.
+  final merged = MergedOps.bulkRefusal(subs);
+  if (merged != null) {
+    showSheetSnack(context, merged, isError: true);
+    return null;
+  }
   final blocked = bulkActivateUnavailableReason();
   if (blocked != null) {
     // مقفلٌ بحكم الخادم: قد يكون أقدم من منح الصلاحيّة — يُسأل ثانيةً.

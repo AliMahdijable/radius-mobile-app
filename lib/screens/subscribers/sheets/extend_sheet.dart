@@ -261,7 +261,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           context: context,
           preview: result.waPreview!,
           opTitle: 'تأكيد التمديد',
-          sas4Idx: widget.sub.idx,
+          sub: widget.sub,
         );
         if (!mounted) return;
       } else {

@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../api/settlements_api.dart';
 import '../core/util/format.dart';
 import 'auth_storage.dart';
+import 'merged_mode.dart';
 import 'print_output.dart';
 import 'print_prefs.dart';
 
@@ -16,11 +17,14 @@ import 'print_prefs.dart';
 class SettlementPrint {
   SettlementPrint._();
 
-  static Future<PrintResult> printVoucher(SettlementRecord s) async {
+  /// [companyKey] («كل الشركات»، ٩ نوفمبر — التحقّق الثاني من 179): صندوق شركةٍ غير المفتوحة ⇒ اسمها ومديرها على السند (كفاتورة
+  /// البيع والوصل — [ReceiptService.identityFor])؛ بلاه الجلسة المفتوحة كما كانت. كان سند صندوق شركةٍ أخرى يُطبع باسم المفتوحة.
+  static Future<PrintResult> printVoucher(SettlementRecord s, {String? companyKey}) async {
     try {
       final format = PrintPrefs.pageFormat;
-      final company = await AuthStorage.readDisplayName();
-      final manager = await AuthStorage.readAdminUsername();
+      final merged = MergedMode.companyOf(companyKey);
+      final company = merged?.name ?? await AuthStorage.readDisplayName();
+      final manager = merged?.username ?? await AuthStorage.readAdminUsername();
       final doc = await _build(s, format, company: company, manager: manager);
       // الهاتف: «صورة» للمشاركة أو الطباعة (٨ نوفمبر)
       return PrintOutput.sendOrShare(

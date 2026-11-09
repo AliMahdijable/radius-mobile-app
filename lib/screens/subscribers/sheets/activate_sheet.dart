@@ -683,7 +683,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           context: context,
           preview: result.waPreview!,
           opTitle: 'تأكيد التفعيل',
-          sas4Idx: widget.sub.idx,
+          sub: widget.sub,
         );
         if (!mounted) return;
       }
@@ -717,18 +717,22 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         _outcomeUnclear = true;
       }
     });
+    // شارة الكارتات للجلسة المفتوحة وحدها: كارت شركةٍ أخرى («كل الشركات») من مخزونها هي لا ينقص عدد المفتوحة (التحقّق الثاني
+    // من 179) — مخزونها يُقرأ من قسمها.
+    final openStock = useCard && await MergedMode.isOpenKey(widget.sub.companyKey);
+    if (!mounted) return;
     if (_outcomeUnclear) {
       // ربّما تفعّل: القوائم تُحدَّث (يظهر الانتهاء الجديد إن نُفّذ)، وعدد
       // الكارتات لم يعد مضموناً فيُعاد طلبه بدل رسم رقمٍ قد يكون كاذباً.
       SubscriberEvents.notifyChange();
-      if (useCard) CardsState.invalidate();
+      if (openStock) CardsState.invalidate();
     }
     if (!result.ok) {
       showSheetSnack(context, _failureText(result.code, result.message),
           isError: true);
       return;
     }
-    if (useCard) CardsState.consumeOne();
+    if (openStock) CardsState.consumeOne();
     SubscriberEvents.notifyChange();
     showSheetSnack(
       context,
@@ -760,7 +764,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           context: context,
           preview: result.waPreview!,
           opTitle: 'تأكيد التفعيل',
-          sas4Idx: widget.sub.idx,
+          sub: widget.sub,
         );
         if (!mounted) return;
       } else {
@@ -1762,7 +1766,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         context: context,
         preview: result.waPreview!,
         opTitle: 'تأكيد التفعيل',
-        sas4Idx: widget.sub.idx,
+        sub: widget.sub,
       );
       if (!mounted) return;
     }

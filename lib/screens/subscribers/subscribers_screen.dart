@@ -1645,17 +1645,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   // ───────── selection ─────────
+  /// مفتاح الصفّ في التحديد: شركته ثمّ رقمه (٩ نوفمبر — التحقّق الثاني من 179) — الرقم وحده يجمع صفّين من شركتين.
+  static String _selKey(Subscriber s) => '${s.companyKey ?? ''}|${s.idx}';
+
   void _toggleSelect(Subscriber s) {
     final id = s.idx;
     if (id == null || _mergedOn) return;
+    final k = _selKey(s);
     HapticFeedback.selectionClick();
     final wasSelecting = _selectionMode;
     setState(() {
-      if (_selected.contains(id)) {
-        _selected.remove(id);
+      if (_selected.contains(k)) {
+        _selected.remove(k);
         if (_selected.isEmpty) _selectionMode = false;
       } else {
-        _selected.add(id);
+        _selected.add(k);
         _selectionMode = true;
       }
     });
@@ -1670,7 +1674,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final wasSelecting = _selectionMode;
     setState(() {
       _selectionMode = true;
-      _selected.add(id);
+      _selected.add(_selKey(s));
     });
     if (!wasSelecting) _warmBulkCapability();
   }
@@ -1696,18 +1700,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     });
   }
 
+  /// «تحديد الكلّ» (رأس جدول الحاسبة وشريط التحديد): كالنقر صفّاً صفّاً — في «كل الشركات» لا تحديد (مانع التحقّق الثاني من 179:
+  /// كان الرأس يتخطّى الحارس فتذهب العمليّات الجماعيّة للمفتوحة بأرقام صفوف شركاتٍ أخرى).
   void _selectAllOnPage(List<Subscriber> page) {
+    if (_mergedOn) return;
     setState(() {
       final selectable = page.where((s) => s.idx != null).toList();
-      final allOn = selectable.every((s) => _selected.contains(s.idx));
+      final allOn = selectable.every((s) => _selected.contains(_selKey(s)));
       if (allOn) {
         for (final s in selectable) {
-          _selected.remove(s.idx);
+          _selected.remove(_selKey(s));
         }
         if (_selected.isEmpty) _selectionMode = false;
       } else {
         for (final s in selectable) {
-          _selected.add(s.idx!);
+          _selected.add(_selKey(s));
         }
         if (_selected.isNotEmpty) _selectionMode = true;
       }
@@ -1856,9 +1863,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   Future<void> _openBulkDisconnect() async {
-    final online = _filteredSubscribersForBulk()
-        .where((s) => s.isOnline && s.idx != null)
-        .toList();
+    final rows = _bulkRowsOrRefuse(_filteredSubscribersForBulk());
+    if (rows == null) return;
+    final online = rows.where((s) => s.isOnline && s.idx != null).toList();
     if (online.isEmpty) return;
     final confirm = await showConfirmSheet(
       context,
@@ -1906,8 +1913,17 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   List<Subscriber> _filteredSubscribersForBulk() {
     if (_selected.isEmpty) return const [];
     return _all
-        .where((s) => s.idx != null && _selected.contains(s.idx!))
+        .where((s) => s.idx != null && _selected.contains(_selKey(s)))
         .toList();
+  }
+
+  /// صفوف العمليّة الجماعيّة — صفٌّ بمفتاح شركة («كل الشركات») ⇒ السبب ولا شيء ([MergedOps.bulkRefusal]): مساراتها للجلسة
+  /// المفتوحة وحدها، فلا تُرسل أرقام صفوف شركةٍ أخرى إليها.
+  List<Subscriber>? _bulkRowsOrRefuse(List<Subscriber> rows) {
+    final refused = MergedOps.bulkRefusal(rows);
+    if (refused == null) return rows;
+    showSheetSnack(context, refused, isError: true);
+    return null;
   }
 
   Future<void> _openBulkPayDebt() async {
@@ -1923,8 +1939,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   Future<void> _openBulkActivate() async {
-    final selected = _filteredSubscribersForBulk();
-    if (selected.isEmpty) return;
+    final selected = _bulkRowsOrRefuse(_filteredSubscribersForBulk());
+    if (selected == null || selected.isEmpty) return;
     final keep = await showBulkActivateSheet(context, subs: selected);
     if (!mounted) return;
     // لم تُفتح أصلاً (حكم الخادم بالمنع): التحديد كما هو.
@@ -1939,8 +1955,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     setState(() {
       _selected
         ..clear()
-        ..addAll(keep);
-      _selectionMode = true;
+        ..addAll(selected.where((s) => keep.contains(s.idx)).map(_selKey));
+      _selectionMode = _selected.isNotEmpty;
     });
   }
 
@@ -1949,7 +1965,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // need the flip — disabling an already-disabled row is a no-op
     // that wastes a network call AND inflates the failure count when
     // the backend rejects it. Delete affects the whole selection.
-    final selectedSubs = _filteredSubscribersForBulk();
+    final selectedSubs = _bulkRowsOrRefuse(_filteredSubscribersForBulk());
+    if (selectedSubs == null) return;
     final eligible = switch (action) {
       _BulkAction.disable => selectedSubs.where((s) => !s.isDisabled).toList(),
       _BulkAction.enable => selectedSubs.where((s) => s.isDisabled).toList(),
@@ -2378,8 +2395,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                       allSelected: page.any((s) => s.idx != null) &&
                                           page
                                               .where((s) => s.idx != null)
-                                              .every((s) => _selected.contains(s.idx)),
-                                      onSelectAll: () => _selectAllOnPage(page),
+                                              .every((s) => _selected.contains(_selKey(s))),
+                                      // «كل الشركات»: لا تحديد ولا خانة (العمليّات الجماعيّة للشركة وحدها)
+                                      onSelectAll: _mergedOn ? null : () => _selectAllOnPage(page),
                                     ),
                                   ),
                                 ),
@@ -2415,7 +2433,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   }
                                   final s = page[i];
                                   final isSelected = s.idx != null &&
-                                      _selected.contains(s.idx);
+                                      _selected.contains(_selKey(s));
                                   // الحاسبة: صفّ جدولٍ مضغوط بدل البطاقة — أضعاف الصفوف على الشاشة.
                                   if (_paneMode) {
                                     return SubscriberTableRow(
@@ -2432,7 +2450,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                                   : (_mergedTelegram[s.companyKey] ?? const <String>{}))
                                               .contains(s.idx.toString()),
                                       onTap: () => _openDetail(s),
-                                      onToggleSelect: () => _toggleSelect(s),
+                                      onToggleSelect: _mergedOn ? null : () => _toggleSelect(s),
                                       last: i == page.length - 1 && remaining <= 0,
                                     );
                                   }

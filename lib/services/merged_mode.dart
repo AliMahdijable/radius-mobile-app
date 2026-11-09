@@ -144,6 +144,15 @@ class MergedMode {
     focus.value = key;
   }
 
+  /// [key] للشركة المفتوحة (مفتاح صفّها في «كل الشركات»، أو null = صفٌّ بلا مفتاح = المفتوحة). مفتاحٌ لا يُعرف ⇒ لا.
+  static Future<bool> isOpenKey(String? key) async {
+    if (key == null) return true;
+    final c = companyOf(key);
+    if (c == null) return false;
+    final open = (await openAdminId())?.trim() ?? '';
+    return open.isNotEmpty && c.adminId == open;
+  }
+
   /// اسم المفتوحة لسطور «للمفتوحة وحدها» — الموظّف: اسم صفحته الحاليّة من ردّ صفحاته؛ null ⇒ يبقى ما كان يُعرض.
   static String? get currentPageName {
     final n = currentPage?.name.trim() ?? '';
@@ -232,6 +241,7 @@ class MergedMode {
     CompanyRoute.nameOf ??= (k) => companyOf(k)?.name;
     CompanyRoute.employeeWords ??= () => employeeSession;
     CompanyRoute.adminIdOf ??= (k) => companyOf(k)?.adminId;
+    CompanyRoute.mergedActive ??= () => active.value;
     final running = _inFlight;
     if (running != null) return running;
     final gen = _generation;
@@ -700,6 +710,16 @@ class MergedOps {
       : MergedMode.employeeSession
           ? 'هذا الإجراء يعمل من الصفحة وحدها — انتقل إليها من «صفحاتي»'
           : 'هذا الإجراء يعمل من الشركة وحدها — افتحها من «تبديل الشركة»';
+
+  /// العمليّات الجماعيّة (تسديد، تجديد، تعطيل، حذف، فصل) لا تُوجَّه لكلّ صفٍّ بشركته — مساراتها للجلسة المفتوحة وحدها (٩ نوفمبر —
+  /// التحقّق الثاني من 179، مانع: «تحديد الكلّ» برأس جدول الحاسبة كان يرسل أرقام صفوف شركاتٍ أخرى للمفتوحة). صفٌّ بمفتاح شركة
+  /// (صفوف «كل الشركات»، والمفتوحة منها) ⇒ السبب، ولا يُرسل شيء؛ null ⇒ الصفوف كلّها من الجلسة المفتوحة (الوضع العاديّ).
+  static String? bulkRefusal(Iterable<Subscriber> rows) {
+    if (!rows.any((s) => s.companyKey != null)) return null;
+    return MergedMode.employeeSession
+        ? 'العمليّات الجماعيّة لصفحةٍ واحدة — في «كل الصفحات» نفّذها لكلّ مشتركٍ من صفحته، أو انتقل للصفحة من «صفحاتي»'
+        : 'العمليّات الجماعيّة لشركةٍ واحدة — في «كل الشركات» نفّذها لكلّ مشتركٍ من صفحته، أو افتح الشركة من «تبديل الشركة»';
+  }
 
   /// «كل الصفحات» للموظّف: كتابةٌ على مشترك [s] مقفلةٌ قبل الإرسال — سببها ([MergedMode.writeLockFor]) أو null (مفتوحة؛
   /// والمالك دائماً null). الزرّ يبقى بمكانه مقفلاً بهذا السبب، والمعترض لا يرسلها ولو وصلت.

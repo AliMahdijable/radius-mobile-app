@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/managers_api.dart';
 import '../../api/packages_api.dart';
 import '../../api/subscribers_api.dart';
@@ -108,7 +109,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
     // الشاشة على تسعير أول مدير فرعي (مطلب 2026-06-12: 'تظهر فارغه
     // الا ابدل بين المدراء'). تسعير المدير الأب نفسه نادراً ما يكون
     // مضبوطاً — لذا نختار فرعي بدلاً من ترك كل الحقول صفر.
-    final mgrs = await ManagersApi.lite();
+    // مدراء المفتوحة صراحةً (قسمٌ «للمفتوحة وحدها»): لا يأخذ وجهة قسم مدراءٍ ظاهرٍ لشركةٍ أخرى ببادئاته
+    final mgrs = await CompanyRoute.runOpen(ManagersApi.lite);
     if (!mounted) return;
     setState(() => _managers = mgrs ?? const []);
     if ((mgrs ?? const []).isNotEmpty) {

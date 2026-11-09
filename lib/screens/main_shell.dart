@@ -335,9 +335,11 @@ class _MainShellState extends State<MainShell> {
   /// ملخّص الشركة المفتوحة («انتهت اليوم»/«قرب الانتهاء» — مراجعة 179): تبويب المشتركين يعرض مختارة الشريط، فشركةٌ غيرها مختارة
   /// ⇒ تُختار المفتوحة ليعرض قائمتها — **ولا شيء مفتوحٌ فوق الغلاف** (الشريط مشتركٌ بين الأقسام: لا يتبدّل تحت شيتٍ أو صفحةٍ
   /// مفتوحة؛ حينها التبويب كما كان).
+  ///
+  /// خارج «كل الشركات» كما كان حرفاً. ولا `ModalRoute.of` هنا: يجعل الغلاف تابعاً لحال صفحته فيُعاد بناؤه مع كلّ صفحةٍ تُفتح فوقه
+  /// أو تُغلق (التحقّق الثاني من 179) — الغلاف أوّل صفحات الـNavigator الجذر، فـ«لا شيء فوقه» = لا رجوع منه.
   Future<void> _openSubscribersForOpen(SubscriberFilter filter) async {
-    final route = ModalRoute.of(context);
-    if (MergedMode.active.value && (route == null || route.isCurrent)) {
+    if (MergedMode.active.value && !Navigator.of(context).canPop()) {
       await MergedMode.selectOpenForSubscribersTab();
       if (!mounted) return;
     }

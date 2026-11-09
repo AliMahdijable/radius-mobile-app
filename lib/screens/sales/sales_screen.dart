@@ -2070,7 +2070,8 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
       // «إصدار فاتورة» مفعَّلاً ⇒ تُطبع الآن (لا للبيع المكرَّر)؛ ونتيجتها على الصفحة الأمّ — النافذة تُغلق.
       if (PrintPrefs.saleInvoice.value && !r.duplicate) {
         final host = Navigator.of(context, rootNavigator: true).context;
-        unawaited(SalePrint.printReceipt(s).then((p) {
+        // بهويّة شركة البيع (تصميمها واسم محلّها و«أصدره») — كإعادة طبعها من قائمتها؛ null = المفتوحة (التحقّق الثاني من 179)
+        unawaited(SalePrint.printReceipt(s, companyKey: widget.companyKey).then((p) {
           if (host.mounted) showPrintResult(host, p);
         }));
       }

@@ -130,12 +130,16 @@ class _ManualWaModeBuilderState extends State<ManualWaModeBuilder> {
 /// Sheet مصغّرة تعرض معاينة الرسالة + chip للتبديل + زر إرسال.
 /// تُستعمل للأزرار المباشرة (تذكير دين/تحذير انتهاء/إرسال معلومات) بدل
 /// إطلاق الإرسال فوراً — الأدمن يشوف بالضبط ماذا سيرسل قبل التأكيد.
+///
+/// [autoBlockedReason] («كل الشركات»، ٩ نوفمبر — التحقّق الثاني من 179): الإرسال التلقائيّ يخرج من واتساب الشركة المفتوحة، فلمشترك
+/// شركةٍ أخرى لا يُعرض — «افتح واتسابي» وحده، وهذا السبب تحته.
 Future<ManualWaChoice?> showManualWaPreviewSheet(
   BuildContext context, {
   required String title,
   required String phone,
   required String messagePreview,
   Color accent = AppColors.channelWhatsApp,
+  String? autoBlockedReason,
 }) {
   return showAppSheet<ManualWaChoice>(
     context: context,
@@ -147,6 +151,7 @@ Future<ManualWaChoice?> showManualWaPreviewSheet(
       phone: phone,
       messagePreview: messagePreview,
       accent: accent,
+      autoBlockedReason: autoBlockedReason,
     ),
   );
 }
@@ -163,11 +168,15 @@ class _WaPreviewSheet extends StatefulWidget {
     required this.phone,
     required this.messagePreview,
     required this.accent,
+    this.autoBlockedReason,
   });
   final String title;
   final String phone;
   final String messagePreview;
   final Color accent;
+
+  /// لا «إرسال تلقائي» — يدويٌّ وحده بهذا السبب ([showManualWaPreviewSheet]).
+  final String? autoBlockedReason;
 
   @override
   State<_WaPreviewSheet> createState() => _WaPreviewSheetState();
@@ -295,55 +304,84 @@ class _WaPreviewSheetState extends State<_WaPreviewSheet> {
               // حارس الحظر — راجع [_RiskBanner].
               _RiskBanner(risk: _risk),
               ManualWaModeBuilder(
-                builder: (ctx, manualMode, setMode) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: ManualWaChip(
-                        mode: manualMode,
-                        onModeChanged: setMode,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 46,
-                      child: FilledButton.icon(
-                        onPressed: () => Navigator.of(ctx).pop(
-                          ManualWaChoice(
-                            confirmed: true,
-                            manualMode: manualMode,
+                // الإرسال التلقائيّ ممنوعٌ هنا ([autoBlockedReason]) ⇒ يدويٌّ وحده، والسبب مكان المبدِّل
+                builder: (ctx, chosenManual, setMode) {
+                  final blocked = widget.autoBlockedReason;
+                  final manualMode = blocked != null || chosenManual;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (blocked != null)
+                        Row(
+                          key: const ValueKey('wa-auto-blocked'),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Icon(LucideIcons.info, size: 14, color: AppColors.textMid),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                blocked,
+                                style: TextStyle(
+                                  fontFamily: AppType.family,
+                                  fontSize: 11.5,
+                                  height: 1.5,
+                                  color: AppColors.textMid,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ManualWaChip(
+                            mode: manualMode,
+                            onModeChanged: setMode,
                           ),
                         ),
-                        icon: Icon(
-                          manualMode
-                              ? LucideIcons.smartphone
-                              : LucideIcons.send,
-                          size: 15,
-                        ),
-                        label: Text(
-                          manualMode ? 'افتح واتسابي' : 'إرسال تلقائي',
-                          style: const TextStyle(
-                            fontFamily: AppType.family,
-                            fontSize: 13.5, height: 1.35,
-                            fontWeight: FontWeight.w700,
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.of(ctx).pop(
+                            ManualWaChoice(
+                              confirmed: true,
+                              manualMode: manualMode,
+                            ),
+                          ),
+                          icon: Icon(
+                            manualMode
+                                ? LucideIcons.smartphone
+                                : LucideIcons.send,
+                            size: 15,
+                          ),
+                          label: Text(
+                            manualMode ? 'افتح واتسابي' : 'إرسال تلقائي',
+                            style: const TextStyle(
+                              fontFamily: AppType.family,
+                              fontSize: 13.5, height: 1.35,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            // ⚠️ في درجة التأكيد يفقد الزرّ بريقه: يبقى
+                            // متاحاً (المنع يُسكت ٦٠٪ من النظام) لكنّه لا
+                            // يعود الخيار الذي تقع عليه الإصبع بلا تفكير.
+                            backgroundColor: _risk.tier == WaRiskTier.confirm
+                                ? AppColors.textMid
+                                : (manualMode ? AppColors.brandAccent : accent),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(R.md)),
                           ),
                         ),
-                        style: FilledButton.styleFrom(
-                          // ⚠️ في درجة التأكيد يفقد الزرّ بريقه: يبقى
-                          // متاحاً (المنع يُسكت ٦٠٪ من النظام) لكنّه لا
-                          // يعود الخيار الذي تقع عليه الإصبع بلا تفكير.
-                          backgroundColor: _risk.tier == WaRiskTier.confirm
-                              ? AppColors.textMid
-                              : (manualMode ? AppColors.brandAccent : accent),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(R.md)),
-                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  );
+                },
               ),
             ],
           ),

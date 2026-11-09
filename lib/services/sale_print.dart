@@ -17,10 +17,10 @@ import 'receipt_service.dart';
 class SalePrint {
   SalePrint._();
 
-  /// [companyKey] شركة البيع في «كل الشركات» (تصميمها واسمها هي)؛ بلاه الجلسة المفتوحة.
+  /// [companyKey] شركة البيع في «كل الشركات» (تصميمها واسمها هي)؛ بلاه الجلسة المفتوحة — صراحةً (لا قسمٌ ظاهرٌ لغيرها).
   static Future<PrintResult> printReceipt(Sale s, {String? companyKey}) async {
     try {
-      final settingsF = CompanyRoute.run(companyKey, ReceiptSettingsApi.fetch);
+      final settingsF = CompanyRoute.pin(companyKey, ReceiptSettingsApi.fetch);
       final id = await ReceiptService.identityFor(companyKey);
       final look = await settingsF ?? const ReceiptSettings();
       // «أصدره»: البائع إن كان موظّفاً (كما كان)، وإلّا الاسم الذي اختاره المدير لنفسه (٢ نوفمبر)

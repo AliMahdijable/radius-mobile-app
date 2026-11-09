@@ -139,7 +139,7 @@ class ReceiptService {
   /// «الطباعة التلقائيّة» في مصمّم الموقع لشركة المشترك: خانة «طباعة وصل بعد التأكيد» تأتي
   /// معلَّمةً (الموقع: `printChecked || isAutoPrintEnabled()`).
   static Future<bool> autoPrintFor(String? companyKey) async {
-    final s = await CompanyRoute.run(companyKey, ReceiptSettingsApi.fetch);
+    final s = await CompanyRoute.pin(companyKey, ReceiptSettingsApi.fetch);
     return s?.autoPrint ?? false;
   }
 
@@ -192,8 +192,9 @@ class ReceiptService {
       final merged = MergedMode.companyOf(key);
       final earthlink = merged != null ? merged.provider == MergedProvider.earthlink : _sessionIsEarthlink;
       final idx = sub.idx;
-      final namesF = CompanyRoute.run(key, PackageNamesApi.fetch);
-      final settings = await CompanyRoute.run(key, ReceiptSettingsApi.fetch);
+      // شركة المشترك صراحةً (CompanyRoute.pin): بلا مفتاح ⇒ المفتوحة — لا قسمٌ ظاهرٌ لغيرها، ولا كتابةٌ ضمنيّة على مشترك
+      final namesF = CompanyRoute.pin(key, PackageNamesApi.fetch);
+      final settings = await CompanyRoute.pin(key, ReceiptSettingsApi.fetch);
       final look = settings ?? const ReceiptSettings();
       final id = await _identity(merged);
       final name = sub.fullName.trim().isEmpty ? sub.username : sub.fullName.trim();
@@ -205,12 +206,12 @@ class ReceiptService {
       // فايبر اكس والشركات المُضافة بلا generate-link (رابطهما رمز QR البوّابة من نافذة المشترك) — كايرث لنك: بلا QR على الوصل.
       final noQr = earthlink || (merged == null && (ProviderService.isFiberx || ProviderService.isKit));
       final qrF = look.showQr && !noQr && idx != null && idx.isNotEmpty
-          ? CompanyRoute.run(key, () => SubscribersApi.receiptLink(idx))
+          ? CompanyRoute.pin(key, () => SubscribersApi.receiptLink(idx))
           : Future<String?>.value(null);
       final op = kind.archiveOp;
       final noF = op == null
           ? Future<int?>.value(null)
-          : CompanyRoute.run(
+          : CompanyRoute.pin(
               key,
               () => PrintedReceiptsApi.archive({
                     if (idx != null) 'subscriber_id': idx,

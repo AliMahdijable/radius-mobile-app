@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../api/company_route.dart';
 import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
 import '../core/widgets/sheet_scaffold.dart';
+import '../models/subscriber.dart';
 import '../widgets/manual_wa_chip.dart';
+import 'merged_mode.dart';
 import '../theme/typography.dart';
 
 /// 2026-08-26: يفتح واتساب المدير الشخصي مع رسالة جاهزة عبر deep-link
@@ -67,21 +70,31 @@ void _snack(BuildContext? ctx, String msg) {
 ///   - auto → WhatsAppApi.sendMessage (السيرفر يرسل)
 ///
 /// [opTitle] يظهر في header الـsheet ("تأكيد التسديد" / "تأكيد التفعيل" / ...)
-/// [sas4Idx] يمرَّر لـsendMessage حتى channelRouter يعرف يوجّه لـTG لو مربوط.
+/// [sub] المشترك: رقمه يمرَّر لـsendMessage حتى channelRouter يعرف يوجّه لـTG لو مربوط، وشركته تحكم «إرسال تلقائي» —
+/// الإرسال يخرج من واتساب الشركة المفتوحة وتلغرامها، فلمشترك شركةٍ أخرى في «كل الشركات» لا إرسال تلقائيّ (كان يُرسل رسالته
+/// من رقم المفتوحة، أو لمشتركها الذي بالرقم نفسه على تلغرام — التحقّق الثاني من 179): «افتح واتسابي» وحده وسببه.
 /// يُرجع true = المدير أرسل (بأيّ وضع). false = ألغى أو فشل.
 Future<bool> handleWaPreviewAfterOp({
   required BuildContext context,
   required WaPreview preview,
   required String opTitle,
-  String? sas4Idx,
+  required Subscriber sub,
 }) async {
+  final blocked = await autoWaBlockedFor(sub);
+  if (!context.mounted) return false;
   final choice = await showManualWaPreviewSheet(
     context,
     title: opTitle,
     phone: preview.phone,
     messagePreview: preview.message,
+    autoBlockedReason: blocked,
   );
   if (choice == null || !choice.confirmed) return false;
+  if (!choice.manualMode && blocked != null) {
+    // حارسٌ ثانٍ: لا يُرسل من واتساب المفتوحة لمشترك غيرها ولو وصل الاختيار تلقائيّاً
+    if (context.mounted) showSheetSnack(context, blocked, isError: true);
+    return false;
+  }
 
   if (choice.manualMode) {
     final ok = await openManualWa(
@@ -95,13 +108,13 @@ Future<bool> handleWaPreviewAfterOp({
     return ok;
   }
 
-  // auto — نرسل من السيرفر بعد اختيار المدير
-  final r = await WhatsAppApi.sendMessage(
-    to: preview.phone,
-    message: preview.message,
-    intent: preview.intent,
-    sas4Idx: sas4Idx,
-  );
+  // auto — نرسل من السيرفر بعد اختيار المدير (الجلسة المفتوحة صراحةً: صفّها وحده يصل هنا)
+  final r = await CompanyRoute.runOpen(() => WhatsAppApi.sendMessage(
+        to: preview.phone,
+        message: preview.message,
+        intent: preview.intent,
+        sas4Idx: sub.idx,
+      ));
   if (!r.ok && context.mounted) {
     showSheetSnack(
       context,
@@ -110,4 +123,16 @@ Future<bool> handleWaPreviewAfterOp({
     );
   }
   return r.ok;
+}
+
+/// «إرسال تلقائي» بعد عمليّةٍ على [sub] غير متاح؟ — السبب، أو null (متاح). يخرج من واتساب الشركة المفتوحة وتلغرامها، فلا يُرسل
+/// لمشترك شركةٍ أخرى من «كل الشركات» (مفتاح صفّها ليس المفتوحة — ولو خرج المدير من الوضع والشيت مفتوح، أو لم تُعرف شركته).
+Future<String?> autoWaBlockedFor(Subscriber sub) async {
+  final key = sub.companyKey;
+  if (key == null || await MergedMode.isOpenKey(key)) return null;
+  final name = MergedMode.companyOf(key)?.name ?? '';
+  final who = name.isEmpty ? '' : ' «$name»';
+  return MergedMode.employeeSession
+      ? 'الإرسال التلقائيّ يخرج من واتساب صفحتك الحاليّة — لمشترك$who افتح واتسابك، أو أرسله من صفحته'
+      : 'الإرسال التلقائيّ يخرج من واتساب الشركة المفتوحة — لمشترك$who افتح واتسابك، أو أرسله من شركته';
 }
