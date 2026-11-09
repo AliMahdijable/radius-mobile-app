@@ -43,6 +43,8 @@ import 'visual_perm/visual_perm_harness.dart';
 ///   ح. (كبير) رمز الوكيل وخطر الرقم في رسالة مشترك المفتوحة من قسمٍ ظاهرٍ لشركةٍ أخرى.
 ///   ط. (ثانويّ) ملخّص «انتهت اليوم» يفتح تبويب المشتركين على مختارة الشريط.
 ///   («رجع النت» من FiberWatch: fiber_monitor_test.)
+/// التحقّق الثاني (route2_verify.json — إثباتٌ أقوى، كلٌّ يفشل بإرجاع ما يحرسه): ب يفحص قراءة الشيت نفسه وحدّ التسوية المرسَل
+/// ومتوقّعها، وهـ يُكمل البيع (بلا مفتاح ولا قراءة للمشترك من ايرث لنك)، و«هـ (تكملة)» تبدّل الشريط وشيت بيع ايرث لنك مفتوح.
 const _kOpen = 'c0000000000a1';
 const _kEl = 'c0000000000e1';
 const _kJt = 'c0000000000b2';
@@ -175,6 +177,21 @@ class _Srv implements HttpClientAdapter {
       });
     }
     if (path == '/api/v2/sales/debt-status') return j({'success': true, 'data': []});
+    if (path == '/api/v2/sales' && m == 'POST') {
+      return j({
+        'success': true,
+        'data': {
+          'id': el ? 61 : 31, 'payment': 'debt', 'status': 'done', 'total': 45000, 'cost': 32000, 'profit': 13000,
+          'customer': {'kind': 'subscriber', 'idx': '88', 'username': 'ali.open', 'name': 'علي', 'phone': null},
+          'note': null, 'by': null, 'employee_id': null, 'created_at': '2026-11-09T04:05:00Z', 'voided_at': null,
+          'void_reason': null,
+          'lines': [
+            {'item_id': el ? 7 : 1, 'name': el ? 'ONU ايرث' : 'راوتر المفتوحة', 'unit': 'piece', 'qty': 1, 'unit_price': 45000,
+              'unit_cost': 32000, 'total': 45000, 'cost': 32000, 'profit': 13000},
+          ],
+        },
+      });
+    }
     // ── المشترك ──
     final sub = RegExp(r'^/api/v2/subscribers/(\d+)(/[a-z-]+)?$').firstMatch(path);
     if (sub != null && m == 'GET') {
@@ -298,9 +315,14 @@ void main() {
       await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => SettlementsScreen.mergedPage());
       await settleReal(t);
       expect(srv.asked, contains('GET /api/v2/settlements/current $_kEl'));
+      srv.asked.clear();
       await t.tap(find.text('settle.settle_now'.tr()));
       await settleReal(t);
       expect(find.byType(DesignSheet), findsOneWidget, reason: 'شيت التسوية مفتوح');
+      // معاينة الشيت نفسه الطازجة (ما يراه المدير هو ما يُسوّى) من صندوق ايرث لنك
+      expect(srv.asked.where((a) => a.startsWith('GET /api/v2/settlements/current')), ['GET /api/v2/settlements/current $_kEl'],
+          reason: 'معاينة الشيت: ${srv.asked}');
+      expect(find.textContaining('30,000'), findsWidgets, reason: 'المتوقّع في صندوق ايرث لنك');
       // تبدّل الشريط وهو مفتوح (أيّ مصدر: لمسٌ قبله، إشعار، رجوع موظّفٍ لصفحته…)
       MergedMode.focus.value = null;
       await settleReal(t);
@@ -310,6 +332,10 @@ void main() {
       expect(t.takeException(), isNull);
       expect(writes('/api/v2/settlements'), ['POST /api/v2/settlements $_kEl'],
           reason: 'تسوية ايرث لنك لا تذهب لصندوق المفتوحة: ${srv.asked}');
+      // وتُسوّى بما عوين: حدّ صندوق ايرث لنك ومتوقّعه — لا حدّ المفتوحة (3/300/30) ولا متوقّعها (125,000)
+      final body = srv.bodies['POST /api/v2/settlements $_kEl']! as Map;
+      expect(body['cut'], {'head_id': 7, 'activity_id': 700, 'expense_id': 70});
+      expect([body['expected_amount'], body['received_amount']], [30000, 30000]);
     } finally {
       await down(t);
     }
@@ -408,10 +434,50 @@ void main() {
       expect(srv.asked.where((a) => a.contains('/api/v2/sales')), ['GET /api/v2/sales/items -'],
           reason: 'موادّ المفتوحة لا ايرث لنك: ${srv.asked}');
       expect(find.byType(DesignSheet), findsOneWidget, reason: 'شيت البيع مفتوح');
-      Navigator.of(ctx).pop();
+      // البيع نفسه: مادّة المفتوحة على دين مشتركها (التأكيد بضغطتين) ⇒ بلا مفتاح، ولا قراءة للمشترك من ايرث لنك
+      await t.tap(find.text('sales.pick_item'.tr()).last);
       await settleReal(t);
-      await t.runAsync(() => f);
-      expect(srv.asked.where((a) => a.endsWith(' $_kEl') && !a.startsWith('GET ')), isEmpty, reason: '${srv.asked}');
+      await t.tap(find.textContaining('راوتر المفتوحة').last);
+      await settleReal(t);
+      await t.tap(find.textContaining('بيع على الدين').last);
+      await t.pump();
+      await t.tap(find.textContaining('تأكيد — دين').last);
+      await settleReal(t);
+      expect(await t.runAsync(() => f), isTrue, reason: 'البيع تمّ: ${srv.asked}');
+      expect(writes('/api/v2/sales'), ['POST /api/v2/sales -'], reason: 'بيع مشترك المفتوحة لها: ${srv.asked}');
+      final sold = srv.bodies['POST /api/v2/sales -']! as Map;
+      expect((sold['customer'] as Map)['idx'], '88');
+      expect(sold['payment'], 'debt');
+      // (قسم ايرث لنك تحتها يحدّث قائمته بعد البيع — قراءته هو)
+      expect(srv.asked.where((a) => a.endsWith(' $_kEl') && (!a.startsWith('GET ') || a.contains('/api/v2/subscribers'))), isEmpty,
+          reason: 'لا كتابة لايرث لنك ولا قراءةٌ لمشترك المفتوحة منها: ${srv.asked}');
+    } finally {
+      await down(t);
+    }
+  });
+
+  testWidgets('هـ (تكملة): «بيع جديد» من قسم ايرث لنك ثمّ تبدّل الشريط والشيت مفتوح ⇒ البيع لايرث لنك (شركة الشيت لحظة فتحه)',
+      (t) async {
+    await up(t);
+    try {
+      await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => const SalesScreen());
+      await settleReal(t);
+      await t.tap(find.byKey(const ValueKey('sales-co-$_kEl')));
+      await settleReal(t);
+      await t.tap(find.byType(FloatingActionButton));
+      await settleReal(t);
+      await t.tap(find.text('sales.pick_item'.tr()).last);
+      await settleReal(t);
+      await t.tap(find.textContaining('ONU ايرث').last);
+      await settleReal(t);
+      MergedMode.focus.value = null;
+      await settleReal(t);
+      srv.asked.clear();
+      await t.tap(find.textContaining('بيع نقداً').last);
+      await settleReal(t);
+      expect(writes('/api/v2/sales'), ['POST /api/v2/sales $_kEl'], reason: 'البيع لا يتبع الشريط بعد فتح شيته: ${srv.asked}');
+      expect(((srv.bodies['POST /api/v2/sales $_kEl']! as Map)['lines'] as List).single, containsPair('item_id', 7));
+      expect(t.takeException(), isNull);
     } finally {
       await down(t);
     }
