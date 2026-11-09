@@ -9,6 +9,9 @@
 //       ⇒ «جلسات PPP» مجهولة («—») لا رقمٌ ناقص يُعرض كأنّه العدد.
 //   F12 سويتش EdgeSwitch (علامة ubnt): يُقرأ بـREST كصفحته — بطرازه، أو بلا طرازٍ حين لا تقرؤه جلسة airOS؛ وفشل REST
 //       بسببه الصادق لا «مستخدمه بلا صلاحيّة قراءة».
+// الجولة الثانية:
+//   R2-1 ذاكرة EdgeSwitch بالجهاز (معرّفه وعنوانه ومنفذه) لا بالـIP وحده: سكترٌ خلف الـIP نفسه يُقرأ بـSSH كما
+//        كان، وراديو فاشلٌ عليه لا يحجب REST عن السويج؛ وتعديل المنفذ يُجرَّب فوراً.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/edgeswitch_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_snmp.dart';
@@ -363,7 +366,7 @@ void main() {
       expect(texts(r), ['يردّ، لكن صفحة السويتش ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ']);
     });
 
-    test('راديو airOS: قراءته الناجحة لا تلمس REST؛ وفشله بسببه هو (REST ليس EdgeSwitch) — مرّةً لكلّ عنوان', () async {
+    test('راديو airOS: قراءته الناجحة لا تلمس REST؛ وفشله بسببه هو (REST ليس EdgeSwitch) — مرّةً لكلّ جهاز', () async {
       final ok = dev(84, type: 'sector', brand: 'ubnt', protocol: 'ssh');
       final good = await check(ok,
           viaSsh: () async => UbntStats.fromMcaStatus(const {
@@ -408,6 +411,62 @@ void main() {
       expect(r.role, CheckRole.link);
       expect(texts(r), ['بطيء — ما كمّل جوابه بالوقت']);
       expect(isEdgeSwitch(wave), isFalse);
+    });
+
+    // ── R2-1: الذاكرة بالجهاز (معرّفه وعنوانه ومنفذه) لا بالـIP وحده ──
+    NetworkDevice ubnt(int id, {required String type, required String ip, int? apiPort}) => NetworkDevice(
+        id: id, adminId: '2', name: 'جهاز $id', type: type, brand: 'ubnt', ip: ip, port: 22, apiPort: apiPort,
+        protocol: 'ssh', hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+    Future<UbntStats> airOs() async => UbntStats.fromMcaStatus(const {'deviceName': 'Rocket', 'wlanMode': 'master',
+          'wlanEssid': 'E', 'wlanConnections': '0', 'cpuload': '5', 'uptime': '864000'});
+
+    test('🚨 R2-1 سويجٌ بلا طراز وسكترٌ خلف الـIP العامّ نفسه (توجيه منافذ): بعد أن يُتذكّر السويج يُقرأ السكتر بـSSH',
+        () async {
+      final sw = ubnt(90, type: 'switch', ip: '5.6.7.8', apiPort: 8443);
+      final sector = ubnt(91, type: 'sector', ip: '5.6.7.8', apiPort: 2201);
+      expect((await check(sw, viaSsh: sshOnSwitch, viaRest: snapshot)).state, isNot(CheckState.unread));
+      expect([isEdgeSwitch(sw), ssh, rest], [true, 0, 1], reason: 'السويج نفسه يُتذكّر');
+      expect(isEdgeSwitch(sector), isFalse, reason: 'جارُه على الـIP نفسه ليس سويجاً');
+      // REST على منفذ السكتر لا يجيب — لو سُئل لقيل «صفحة السويج ما فتحت» كذباً وجلسته تقرؤه
+      final r = await check(sector, viaSsh: airOs, viaRest: () => null);
+      expect(r.state, isNot(CheckState.unread));
+      expect(r.role, CheckRole.sector);
+      expect(texts(r).where((t) => t.contains('صفحة')), isEmpty);
+      expect([ssh, rest], [1, 1], reason: 'السكتر بجلسة airOS وحدها — لا REST');
+    });
+
+    test('🚨 R2-1 عنوانٌ خاصّ مكرّر بين شركتين والمنفذ نفسه ⇒ المعرّف يفرّقهما: سكتر الشركة الثانية لا يُقرأ «سويجاً»',
+        () async {
+      final swA = ubnt(92, type: 'switch', ip: '192.168.88.2');
+      final secB = ubnt(93, type: 'sector', ip: '192.168.88.2');
+      expect((await check(swA, viaSsh: sshOnSwitch, viaRest: snapshot)).state, isNot(CheckState.unread));
+      expect([isEdgeSwitch(swA), isEdgeSwitch(secB)], [true, false]);
+      final r = await check(secB, viaSsh: airOs, viaRest: () => null);
+      expect([r.state == CheckState.unread, r.role, ssh, rest], [false, CheckRole.sector, 1, 1]);
+    });
+
+    test('🚨 R2-1 راديو airOS فاشلٌ خلف الـIP نفسه لا يحجب REST عن سويجٍ بلا طراز ١٠ دقائق (بسبب الراديو القديم)',
+        () async {
+      final radio = ubnt(94, type: 'sector', ip: '5.6.7.9', apiPort: 2202);
+      Future<UbntStats> refused() async => throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
+      final bad = await check(radio, viaSsh: refused, viaRest: () => null);
+      expect(texts(bad), ['يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز']);
+      expect(rest, 1);
+      final sw = ubnt(95, type: 'switch', ip: '5.6.7.9', apiPort: 8443);
+      final r = await check(sw, viaSsh: sshOnSwitch, viaRest: snapshot);
+      expect(r.state, isNot(CheckState.unread));
+      expect(r.vitals.firstWhere((x) => x.k == 'المنافذ').v, '3/4');
+      expect(rest, 2, reason: 'السويج سُئل REST وقُرئ');
+    });
+
+    test('🚨 R2-1 سويجٌ بلا طراز ومنفذ صفحته خطأ: تعديل المنفذ يُجرَّب فوراً — لا ١٠ دقائق على السبب القديم', () async {
+      final wrong = ubnt(96, type: 'switch', ip: '10.9.9.9', apiPort: 22);
+      expect((await check(wrong, viaSsh: sshOnSwitch, viaRest: () => null)).state, CheckState.unread);
+      expect(rest, 1);
+      // عدّله من صفحة الجهاز: المنفذ 8443 (السجلّ نفسه، المعرّف نفسه)
+      final r = await check(wrong.copyWith(apiPort: 8443), viaSsh: sshOnSwitch, viaRest: snapshot);
+      expect(r.state, isNot(CheckState.unread));
+      expect(rest, 2);
     });
   });
 }
