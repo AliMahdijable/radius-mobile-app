@@ -21,6 +21,11 @@ import UserNotifications
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // «طابعة الوصولات» (٩ نوفمبر): طابعات الكاشير BLE — القناة نفسها التي يكلّمها أندرويد. مدير البلوتوث لا يُنشأ
+    // هنا: يُنشأ أوّل مرّةٍ يختار المدير «طابعة بلوتوث» (فسؤال الإذن حينها لا عند فتح التطبيق).
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ReceiptPrinterBle") {
+      ReceiptPrinterBle.register(with: registrar)
+    }
   }
 
   override func application(

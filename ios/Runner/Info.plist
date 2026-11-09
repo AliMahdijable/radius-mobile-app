@@ -46,6 +46,8 @@
 	<string>يحوّل كلامك إلى نصّ للبحث الصوتيّ عن المشتركين. Turns your speech into text to search your subscribers.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>لتسجيل الدخول السريع بـFace ID بدل كتابة كلمة السرّ. To sign in quickly with Face ID instead of typing your password.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>للاتصال بطابعة الوصولات عبر البلوتوث وطباعة وصل المشترك عليها، فقط حين تختار الطباعة بالبلوتوث. To connect to your Bluetooth receipt printer and print subscriber receipts on it, only when you choose Bluetooth printing.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>للوصول إلى أجهزة شبكتك المحلّيّة (الراوتر وأجهزة ONT) من قسم الأجهزة. To reach devices on your local network (routers, ONTs) from the Devices section.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

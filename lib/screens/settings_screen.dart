@@ -40,6 +40,8 @@ import '../core/platform/desktop_layout.dart';
 import '../core/platform/desk_ui_scale.dart';
 import '../core/platform/app_platform.dart';
 import 'print_templates/direct_printer_sheet.dart';
+import 'print_templates/receipt_printer_sheet.dart';
+import '../services/receipt_printer/receipt_printer_prefs.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
 class SettingsScreen extends StatefulWidget {
@@ -349,6 +351,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _openPrinterFormatPicker(context),
               ),
             ),
+            // «طابعة الوصولات» بالهاتف (٩ نوفمبر): نافذة الطباعة (الافتراضيّ، كما كانت) أو طابعة كاشير بلوتوث أو طابعة
+            // الجهاز المدمجة (SUNMI) — بعرض الورق ٥٨/٨٠ و«طباعة تجريبيّة». الحاسبة لا تراه: «الطباعة المباشرة» هناك.
+            if (ReceiptPrinterPrefs.supported) ...[
+              const SizedBox(height: Sp.xs),
+              AnimatedBuilder(
+                animation: ReceiptPrinterPrefs.changes,
+                builder: (_, __) => _Row(
+                  icon: Icons.bluetooth_outlined,
+                  label: 'settings.receipt_printer'.tr(),
+                  trailing: _receiptPrinterTrailing(),
+                  onTap: () => showReceiptPrinterSheet(context),
+                ),
+              ),
+            ],
             // «الطباعة المباشرة» (الحاسبة): طابعة الوصولات بلا نافذة طباعة — أندرويد لا يسمح بها.
             if (PrintPrefs.directSupported) ...[
               const SizedBox(height: Sp.xs),
@@ -613,6 +629,15 @@ void _openThemePicker(BuildContext ctx) {
     isScrollControlled: false,
     builder: (_) => const _ThemePickerSheet(),
   );
+}
+
+/// ما يظهر بجانب «طابعة الوصولات»: النافذة، أو اسم طابعة البلوتوث، أو طابعة الجهاز.
+String _receiptPrinterTrailing() {
+  final mode = ReceiptPrinterPrefs.mode.value;
+  if (!ReceiptPrinterPrefs.enabled) return 'receipt_printer.mode_system'.tr();
+  if (mode == ReceiptPrinterMode.builtin) return 'receipt_printer.mode_builtin_short'.tr();
+  final name = ReceiptPrinterPrefs.device.value?.name ?? '';
+  return name.length > 22 ? '${name.substring(0, 21)}…' : name;
 }
 
 void _openPrinterFormatPicker(BuildContext ctx) {

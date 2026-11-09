@@ -38,6 +38,7 @@ import 'services/desktop_account_auth.dart';
 import 'services/desktop_file_secure_storage.dart';
 import 'services/permissions_service.dart';
 import 'services/phone_output.dart';
+import 'core/widgets/print_feedback.dart' show ReceiptPrintFeedback;
 import 'services/print_prefs.dart';
 import 'services/provider_service.dart';
 import 'services/secure_storage_health.dart';
@@ -299,6 +300,8 @@ class _MyServicesAppState extends State<MyServicesApp>
     NotificationRouter.attach(_appNavigatorKey);
     // الوصل بالهاتف «صورة أو طباعة» (٨ نوفمبر): نافذة الاختيار من هنا — الوصل يُطبع من خدمةٍ بلا سياق
     PhoneOutput.navigatorKey = _appNavigatorKey;
+    // «طابعة الوصولات» (بلوتوث / طابعة الجهاز، ٩ نوفمبر): «جاري الطباعة على …» طوال الوصل.
+    ReceiptPrintFeedback.attach(_appNavigatorKey);
     FcmService.onNotificationTap = NotificationRouter.handle;
     // «طلبات التفعيل» (٤ نوفمبر): إشعار طلب تجديدٍ وصل (FCM بالواجهة أو تغذية الحاسبة — كلاهما يمرّ بالصندوق) ⇒ الجرس يعدّه فوراً.
     InboxService.changes.addListener(RenewRequestsState.onInboxChanged);

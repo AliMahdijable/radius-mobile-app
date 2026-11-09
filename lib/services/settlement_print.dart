@@ -30,6 +30,9 @@ class SettlementPrint {
           requested: format,
           // ويندوز: يُعاد رسمه على ورق الطابعة كالوصل ([PrintOutput.bytesFor]).
           refit: (paper) async => (await _build(s, format, company: company, manager: manager, paper: paper)).save(),
+          // طابعة الوصولات بالهاتف (٩ نوفمبر): لفّةً على ورقها — ولو كان اختيار الطباعة A4.
+          roll: (paper) async =>
+              (await _build(s, PdfPageFormat.roll80, company: company, manager: manager, paper: paper)).save(),
         ),
         title: s.isOpening ? 'سند فتح الحساب' : 'سند التسوية',
       );

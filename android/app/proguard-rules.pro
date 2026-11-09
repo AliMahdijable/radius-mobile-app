@@ -12,3 +12,6 @@
 
 ## Google Play Core (deferred components)
 -dontwarn com.google.android.play.core.**
+
+## SUNMI built-in printer (receipt printing, 9 Nov) — AIDL stubs of the official printer library
+-keep class com.sunmi.peripheral.printer.** { *; }

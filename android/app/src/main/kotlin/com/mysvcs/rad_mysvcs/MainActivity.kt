@@ -10,8 +10,14 @@ import io.flutter.plugin.common.MethodChannel
 // plugin can attach its BiometricPrompt fragment. Without this, the prompt
 // throws/rejects on Android even when fingerprint/face is enrolled.
 class MainActivity : FlutterFragmentActivity() {
+    // «طابعة الوصولات» (٩ نوفمبر): بلوتوث SPP + طابعة الجهاز (SUNMI) — lib/services/receipt_printer/.
+    private var receiptPrinter: ReceiptPrinterChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        receiptPrinter?.dispose()
+        receiptPrinter = ReceiptPrinterChannel(this, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -84,5 +90,11 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        receiptPrinter?.dispose()
+        receiptPrinter = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 }

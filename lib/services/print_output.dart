@@ -10,6 +10,11 @@ import 'package:printing/printing.dart';
 import '../core/platform/app_platform.dart';
 import 'phone_output.dart';
 import 'print_prefs.dart';
+import 'receipt_printer/print_issue.dart';
+import 'receipt_printer/receipt_printer.dart';
+import 'receipt_printer/receipt_printer_prefs.dart';
+
+export 'receipt_printer/print_issue.dart' show PrintAck, PrintIssue;
 
 /// يعيد بناء المستند على ورق الطابعة كما أرسله النظام قبل الطباعة (عرضه وحواشيه غير المطبوعة).
 typedef PrintRefit = Future<Uint8List> Function(PdfPageFormat printerPaper);
@@ -22,7 +27,7 @@ typedef PrintRefit = Future<Uint8List> Function(PdfPageFormat printerPaper);
 /// (اللفّة تأخذ طول محتواها) فلا يصل النظامَ طولٌ لا نهائيّ أبداً.
 @immutable
 class PrintDoc {
-  const PrintDoc(this.bytes, this.format, {required this.name, this.refit});
+  const PrintDoc(this.bytes, this.format, {required this.name, this.refit, this.roll});
 
   final Uint8List bytes;
   final PdfPageFormat format;
@@ -31,17 +36,22 @@ class PrintDoc {
   /// إعادة البناء على ورق الطابعة ([PrintOutput.bytesFor]) — null = يُطبع كما بُني.
   final PrintRefit? refit;
 
+  /// الوصل نفسه **لفّةً** على ورقٍ بعرض طابعة الوصولات (بلوتوث / طابعة الجهاز، ٩ نوفمبر) مهما كان اختيار A4 —
+  /// الحواشي غير المطبوعة في الورق المُمرَّر. null = يُصغَّر المستند كما بُني لعرض الطابعة.
+  final PrintRefit? roll;
+
   /// يحفظ [doc] ويقرأ مقاس صفحته الأولى كما بُنيت.
   static Future<PrintDoc> of(
     pw.Document doc, {
     required String name,
     required PdfPageFormat requested,
     PrintRefit? refit,
+    PrintRefit? roll,
   }) async {
     final bytes = await doc.save();
     final pages = doc.document.pdfPageList.pages;
     final built = pages.isEmpty ? requested : pages.first.pageFormat;
-    return PrintDoc(bytes, finite(built, requested), name: name, refit: refit);
+    return PrintDoc(bytes, finite(built, requested), name: name, refit: refit, roll: roll);
   }
 
   /// [f] بلا بُعدٍ لا نهائيّ (ولا هوامش: الصفحة مرسومةٌ سلفاً).
@@ -86,20 +96,45 @@ enum PrintOutcome { printed, shared, cancelled, failed }
 
 @immutable
 class PrintResult {
-  const PrintResult._(this.outcome, {this.printer, this.error, this.images = 0});
+  const PrintResult._(
+    this.outcome, {
+    this.printer,
+    this.error,
+    this.images = 0,
+    this.ack = PrintAck.none,
+    this.issue,
+    this.retry,
+  });
 
-  /// [printer] = اسم الطابعة إن أُرسل إليها مباشرةً (بلا نافذة).
-  const PrintResult.printed({String? printer}) : this._(PrintOutcome.printed, printer: printer);
+  /// [printer] = اسم الطابعة إن أُرسل إليها مباشرةً (بلا نافذة). [ack] ما تعرفه طابعة الوصولات عن الوصل.
+  const PrintResult.printed({String? printer, PrintAck ack = PrintAck.none})
+      : this._(PrintOutcome.printed, printer: printer, ack: ack);
   /// شوركت صوراً بالهاتف ([PhoneOutput]) — [images] عددها.
   const PrintResult.shared({int images = 1}) : this._(PrintOutcome.shared, images: images);
   const PrintResult.cancelled() : this._(PrintOutcome.cancelled);
-  const PrintResult.failed(String error) : this._(PrintOutcome.failed, error: error);
+
+  /// [issue] سبب فشل طابعة الوصولات (يُعرض بكلماتٍ مفهومة) و[retry] إعادتها يدويّاً — كلاهما null لغيرها.
+  const PrintResult.failed(String error, {String? printer, PrintIssue? issue, Future<PrintResult> Function()? retry})
+      : this._(PrintOutcome.failed, error: error, printer: printer, issue: issue, retry: retry);
 
   final PrintOutcome outcome;
   final String? printer;
   final String? error;
 
   final int images;
+
+  /// طابعة الوصولات: أُرسل / تأكّدت الطباعة / مكرّر — [PrintAck.none] لغيرها.
+  final PrintAck ack;
+
+  /// طابعة الوصولات: لماذا لم يخرج الوصل.
+  final PrintIssue? issue;
+
+  /// طابعة الوصولات: «إعادة الطباعة» — للوصل نفسه بلا منع التكرار.
+  final Future<PrintResult> Function()? retry;
+
+  /// قد يكون خرج جزءٌ من الوصل — «غير مؤكَّد».
+  bool get uncertain => issue?.uncertain ?? false;
+
   bool get ok => outcome == PrintOutcome.printed || outcome == PrintOutcome.shared;
 }
 
@@ -184,7 +219,16 @@ class PrintOutput {
 
   /// يرسل [doc] إلى «الطابعة المباشرة» المحفوظة (الحاسبة، [allowDirect]) بلا نافذة، وإلّا نافذة
   /// الطباعة. التقارير (A4 دائماً) تمرّر `allowDirect: false`: طابعة الكاشير ليست لها.
+  ///
+  /// الهاتف (٩ نوفمبر): «طابعة الوصولات» — بلوتوث أو طابعة الجهاز المدمجة — إن اختارها المدير من الإعدادات.
+  /// اختياريّة؛ الافتراضيّ نافذة الطباعة كما كان، والحاسبة لا تراها أبداً.
   static Future<PrintResult> send(PrintDoc doc, {bool allowDirect = true}) async {
+    if (allowDirect && ReceiptPrinterPrefs.enabled) return ReceiptPrinter.instance.send(doc);
+    return _system(doc, allowDirect: allowDirect);
+  }
+
+  /// نافذة الطباعة (أو الطابعة المباشرة على الحاسبة) — المسار القديم حرفاً.
+  static Future<PrintResult> _system(PrintDoc doc, {required bool allowDirect}) async {
     if (allowDirect) {
       final target = await directTarget();
       if (target != null) {
@@ -211,7 +255,9 @@ class PrintOutput {
     if (PhoneOutput.active) {
       final ctx = PhoneOutput.navigatorKey?.currentContext;
       if (ctx != null && ctx.mounted) {
-        final choice = await PhoneOutput.choose(ctx, title: title);
+        // طابعة الوصولات المختارة (بلوتوث / الجهاز) خيارٌ أوّل فوق الخيارين — وبلاها النافذة كما كانت حرفاً.
+        final printer = allowDirect ? ReceiptPrinterPrefs.choice : null;
+        final choice = await PhoneOutput.choose(ctx, title: title, printer: printer);
         if (choice == null) return const PrintResult.cancelled();
         if (choice == OutputChoice.image) {
           return PhoneOutput.sharePdf(
@@ -221,6 +267,9 @@ class PrintOutput {
             text: title,
           );
         }
+        if (choice == OutputChoice.receiptPrinter) return ReceiptPrinter.instance.send(doc);
+        // «طباعة أو PDF»: نافذة الطباعة كما كانت — ولو كانت طابعة الوصولات مختارة.
+        return _system(doc, allowDirect: allowDirect);
       }
     }
     return send(doc, allowDirect: allowDirect);

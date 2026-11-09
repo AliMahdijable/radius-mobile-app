@@ -102,9 +102,12 @@ class ReceiptService {
   }
 
   /// معاينة «قوالب الطباعة»: وصلٌ تجريبيّ بتصميم الحساب، كما يخرج بعد التفعيل.
-  static Future<PrintResult> printSample(ReceiptSettings? settings) async {
+  static Future<PrintResult> printSample(ReceiptSettings? settings) async => _print(await sampleDoc(settings));
+
+  /// الوصل التجريبيّ نفسه — «طباعة تجريبيّة» في «طابعة الوصولات» تطبعه بلا نافذة الاختيار.
+  static Future<ReceiptDoc> sampleDoc(ReceiptSettings? settings) async {
     final id = await _identity(null);
-    final doc = ReceiptDoc(
+    return ReceiptDoc(
       kind: ReceiptKind.activation,
       issuedAt: DateTime.now(),
       look: settings ?? const ReceiptSettings(),
@@ -121,7 +124,6 @@ class ReceiptService {
       newBalance: 0,
       issuer: issuerOf(settings, id.issuer),
     );
-    return _print(doc);
   }
 
   /// «أصدره»: الاسم الذي اختاره المدير لمن يطبع (إعدادات الوصل) إن وُجد، وإلّا [fallback] كما كان.

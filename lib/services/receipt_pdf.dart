@@ -230,6 +230,10 @@ class ReceiptPdf {
         refit: paper != null
             ? null
             : (printer) async => (await build(d, a4: a4, theme: th, paper: printer, compress: compress)).bytes,
+        // طابعة الوصولات بالهاتف (٩ نوفمبر): الوصل نفسه لفّةً على ورقها — ولو كان اختيار الطباعة A4.
+        roll: paper != null
+            ? null
+            : (printer) async => (await build(d, a4: false, theme: th, paper: printer, compress: compress)).bytes,
       );
     }
 

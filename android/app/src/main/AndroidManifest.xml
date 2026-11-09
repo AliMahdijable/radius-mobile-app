@@ -25,6 +25,16 @@
          level — Android still requires the permission declaration
          here to surface the contacts dialog. -->
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <!-- ٩ نوفمبر — «طابعة الوصولات» عبر البلوتوث (طابعات الكاشير الحراريّة المقترنة بالهاتف).
+         أندرويد ١١ وأقدم: إذنان يُمنحان بالتثبيت. أندرويد ١٢+: «الأجهزة المجاورة» (BLUETOOTH_CONNECT) يُطلب
+         لحظة اختيار طابعة البلوتوث أو الطباعة عليها — لا عند فتح التطبيق. لا بحث ولا موقع: نطبع على المقترنة وحدها. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- مُعلَنٌ للاكتمال ولا يُطلب: التطبيق لا يبحث عن أجهزة (يطبع على المقترنة)، ولا يستنتج موقعاً منها. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <!-- البلوتوث اختياريّ: إذناه وحدهما يجعلان Play يحجب التطبيق عن جهازٍ بلا بلوتوث (كما الموقع أعلاه). -->
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>
     <!-- 2026-07-13: كنّا نطلب READ_MEDIA_IMAGES + WRITE_EXTERNAL_STORAGE
          لصور QR لكن Google Play يطلب نموذج "أذونات الصور والفيديوهات".
          الحلّ الأنظف: نُزيلهما ونعتمد على Share sheet فقط (يشتغل بلا
@@ -137,5 +147,7 @@
             <action android:name="android.intent.action.PICK"/>
             <data android:mimeType="vnd.android.cursor.dir/phone_v2"/>
         </intent>
+        <!-- ٩ نوفمبر — «طابعة الجهاز» SUNMI: أندرويد ١١+ لا يُري التطبيقَ خدمةَ طابعتها (فلا تُربط) بلا هذا. -->
+        <package android:name="woyou.aidlservice.jiuiv5"/>
     </queries>
 </manifest>

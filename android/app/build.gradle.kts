@@ -103,6 +103,9 @@ kotlin {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // ٩ نوفمبر — «طابعة الجهاز» المدمجة في أجهزة الكاشير SUNMI: مكتبتها الرسميّة (ربط خدمة الطابعة بـAIDL، ٣٦ ك.ب).
+    // تُربط حين يُطلب وحدها — ReceiptPrinterChannel.kt.
+    implementation("com.sunmi:printerlibrary:1.0.24")
 }
 
 flutter {
