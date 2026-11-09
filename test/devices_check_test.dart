@@ -791,21 +791,91 @@ void main() {
       run.dispose();
     });
 
-    test('أقدم من ٥ د أو قراءةٌ بلا أرقام لا تُستعمل؛ وعبر الـVPN ما قرأه الخادم «من فحص الخادم»', () async {
+    test('أقدم من ٥ د أو قراءةٌ بلا أرقام لا تُستعمل؛ وعبر الـVPN ما قرأه الخادم «من فحص الخادم» بلحظة خادمه', () async {
       final r = DevicesCheckRunner([dev(12)], viaVpn: true);
       expect(r.lastReadingFor(dev(12)), isNull);
       DeviceStatsCache.instance.putVitals(12, const [], const DeviceDetail());
       expect(r.lastReadingFor(dev(12)), isNull, reason: 'لا رقم فيها');
+      final serverAt = DateTime.now().subtract(const Duration(minutes: 1));
       VpnNow.debugApply(
           VpnNowKind.devices,
-          const VpnNowResult(ok: true, message: 'تم', devices: [
-            VpnDeviceResult(id: 12, alive: true, vitals: {'kind': 'ros', 'cpu': 17, 'up': 3600})
+          VpnNowResult(ok: true, message: 'تم', atMs: serverAt.millisecondsSinceEpoch, devices: const [
+            VpnDeviceResult(id: 12, alive: true, vitals: {'kind': 'ros', 'cpu': 17, 'up': 3600}),
+            VpnDeviceResult(id: 13, alive: true, vitals: {'kind': 'olt', 'online': 90, 'total': 100}),
           ]));
       final last = r.lastReadingFor(dev(12))!;
       expect(last.from, 'آخر قراءة من فحص الخادم');
       expect(last.detail.glance.cpu, 17);
+      expect(last.at,
+          DateTime.fromMillisecondsSinceEpoch(serverAt.millisecondsSinceEpoch).subtract(DevicesCheckRunner.serverVitalsReuse),
+          reason: 'بلحظة الخادم ناقص نافذة إعادة استعماله — الأقدم المحتمل، لا لحظة وصولها');
+      expect(r.lastReadingFor(dev(13)), isNull, reason: 'ملخّص الأولت قد يبلغ ٣٠ د بلا لحظته');
+      // فحص خادمٍ انتهى قبل ٣ د ⇒ قراءته قد تكون ٥٫٥ د ⇒ لا
+      VpnNow.debugApply(
+          VpnNowKind.devices,
+          VpnNowResult(ok: true, message: 'تم', atMs: DateTime.now().subtract(const Duration(minutes: 3)).millisecondsSinceEpoch, devices: const [
+            VpnDeviceResult(id: 12, alive: true, vitals: {'kind': 'ros', 'cpu': 17, 'up': 3600}),
+          ]));
+      expect(r.lastReadingFor(dev(12)), isNull);
+      // خادمٌ يعطي لحظة القراءة نفسها (v_at_ms) ⇒ بها، وللأولت أيضاً
+      final own = DateTime.now().subtract(const Duration(minutes: 2));
+      VpnNow.debugApply(
+          VpnNowKind.devices,
+          VpnNowResult.fromJson({
+            'ok': true,
+            'message': 'تم',
+            'at_ms': DateTime.now().millisecondsSinceEpoch,
+            'devices': [
+              {'id': 13, 'alive': true, 'v': {'kind': 'olt', 'online': 90, 'total': 100}, 'v_at_ms': own.millisecondsSinceEpoch},
+            ],
+          }));
+      expect(r.lastReadingFor(dev(13))!.at, DateTime.fromMillisecondsSinceEpoch(own.millisecondsSinceEpoch));
       expect(DevicesCheck.ago(DateTime(2026, 11, 9, 10), DateTime(2026, 11, 9, 10, 4)), 'قبل 4 د');
       r.dispose();
+    });
+
+    test('حدود آخر قراءة: المعروضة بعمر ٦ د لا؛ الخفيفة الخام بعمرها؛ والكاملة التي جدّدت لحظتَها قراءةٌ خفيفة لا', () {
+      final r = DevicesCheckRunner([dev(14)], viaVpn: false);
+      final real = DeviceStatsCache.clock;
+      addTearDown(() => DeviceStatsCache.clock = real);
+      final t0 = DateTime.now();
+      DeviceStatsCache.clock = () => t0.subtract(const Duration(minutes: 6));
+      DeviceStatsCache.instance.putVitals(14, const [], const DeviceDetail(glance: DeviceGlance(cpu: 9)));
+      DeviceStatsCache.clock = real;
+      expect(r.lastReadingFor(dev(14)), isNull, reason: 'أقدم من ٥ د');
+      // الخفيفة الخام (التسخين) قبل ٣ د ⇒ تُستعمل بعمرها
+      const light = MikrotikStats(
+          cpuLoad: 12, memUsedPercent: 30, memTotalBytes: 64, memFreeBytes: 40, uptime: '1d', version: '7.15',
+          boardName: 'CCR1009', architectureName: 'tile', cpuCount: 9, cpuFrequencyMhz: 1200,
+          interfaces: [MikrotikInterface(name: 'ether1', type: 'ether', running: true, disabled: false)],
+          pppActiveCount: 0, clientsRead: false);
+      DeviceStatsCache.clock = () => t0.subtract(const Duration(minutes: 3));
+      DeviceStatsCache.instance.putRaw(15, light, detailed: false);
+      DeviceStatsCache.clock = real;
+      final l = r.lastReadingFor(dev(15))!;
+      expect(l.detail.glance.cpu, 12);
+      expect(t0.difference(l.at).inMinutes, 3);
+      // كاملةٌ قبل ٩٠ث (طازجةٌ للبذر) ثمّ خفيفةٌ الآن: تجدّد لحظتها ولا تغيّر أرقامها ⇒ لا تُقدَّم «قبل لحظات»
+      DeviceStatsCache.clock = () => t0.subtract(const Duration(seconds: 90));
+      DeviceStatsCache.instance.putRaw(16, light, detailed: true);
+      DeviceStatsCache.clock = real;
+      DeviceStatsCache.instance.putRaw(16, light, detailed: false);
+      expect(r.lastReadingFor(dev(16)), isNull);
+      r.dispose();
+    });
+
+    test('سكترٌ من آخر قراءةٍ بجدولٍ مقروءٍ فارغ ⇒ لا «ما عليه أحد الآن» (قراءةٌ سابقة لا تقول «الآن»)', () {
+      final now = DateTime(2026, 11, 9, 12);
+      final r = DevicesCheck.evaluate(
+          d: dev(17, type: 'sector'),
+          alive: true,
+          detail: detail(glance: const DeviceGlance(isAp: true, peersKnown: true, cpu: 4)),
+          limits: lim,
+          prev: const CheckMemo(peers: 7),
+          staleAt: now.subtract(const Duration(minutes: 2)),
+          now: now);
+      expect(texts(r).where((t) => t.contains('ما عليه أحد')), isEmpty);
+      expect(texts(r), contains('قائمة مشتركيه ما انقرت'));
     });
   });
 

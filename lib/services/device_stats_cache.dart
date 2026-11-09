@@ -35,6 +35,10 @@ class DeviceStatsCache {
 
   final Map<int, _Entry> _byId = {};
 
+  /// الساعة — تُستبدل في الاختبار (أعمار «آخر قراءة» وحدودها).
+  @visibleForTesting
+  static DateTime Function() clock = DateTime.now;
+
   /// كلّ قراءةٍ معروضة جديدة تُكتب لجهاز (الجدار/البرج) — المستمع يعرف أيّ جهاز فيعيد رسمه من المخزن بلا جلسةٍ ثانية
   /// (المالك ٢٨ أكتوبر: «تاكد منها تتحدث مع تزامن تحديث الاجهزه… شفت جهاز يكول عليه ٥ متصلين ويعرض ٣»).
   final ValueNotifier<({int id, int seq})> updated = ValueNotifier((id: 0, seq: 0));
@@ -60,16 +64,16 @@ class DeviceStatsCache {
     // فنُبقي الحمولة الغنيّة ونُقرّ بأنّ الجهاز رُئي الآن: البذرة تبقى
     // كاملة، وعمرُها يقول الحقيقة.
     if (e.detailed && !detailed && e.raw != null && _fresh(e.rawAt)) {
-      e.rawAt = DateTime.now();
+      e.rawAt = clock();
       return;
     }
     e.raw = raw;
-    e.rawAt = DateTime.now();
+    e.rawAt = clock();
     e.detailed = detailed;
   }
 
   static bool _fresh(DateTime? at) =>
-      at != null && DateTime.now().difference(at) <= seedTtl;
+      at != null && clock().difference(at) <= seedTtl;
 
   /// هل الحمولة المحفوظة تحمل التفاصيل (منافذ · عملاء)؟
   bool isDetailed(int deviceId) {
@@ -91,7 +95,7 @@ class DeviceStatsCache {
   T? seedFor<T>(int deviceId) {
     final e = _byId[deviceId];
     if (e == null || e.raw == null || e.rawAt == null) return null;
-    if (DateTime.now().difference(e.rawAt!) > seedTtl) return null;
+    if (clock().difference(e.rawAt!) > seedTtl) return null;
     final r = e.raw;
     return r is T ? r : null;
   }
@@ -101,14 +105,14 @@ class DeviceStatsCache {
   ({Object raw, DateTime at, bool detailed})? rawOf(int deviceId, Duration maxAge) {
     final e = _byId[deviceId];
     if (e == null || e.raw == null || e.rawAt == null) return null;
-    if (DateTime.now().difference(e.rawAt!) > maxAge) return null;
+    if (clock().difference(e.rawAt!) > maxAge) return null;
     return (raw: e.raw!, at: e.rawAt!, detailed: e.detailed);
   }
 
   /// عمر الحمولة المحفوظة — لعرض «آخر قراءة قبل…».
   Duration? ageOf(int deviceId) {
     final at = _byId[deviceId]?.rawAt;
-    return at == null ? null : DateTime.now().difference(at);
+    return at == null ? null : clock().difference(at);
   }
 
   /// يحفظ القراءة المعروضة — لتُعاد البطاقة بلا جلسة.
@@ -120,7 +124,7 @@ class DeviceStatsCache {
     final e = _byId.putIfAbsent(deviceId, _Entry.new);
     e.vitals = vitals;
     e.detail = detail;
-    e.vitalsAt = DateTime.now();
+    e.vitalsAt = clock();
     updated.value = (id: deviceId, seq: ++_seq);
   }
 
@@ -131,7 +135,7 @@ class DeviceStatsCache {
   ) {
     final e = _byId[deviceId];
     if (e == null || e.vitals == null || e.vitalsAt == null) return null;
-    if (DateTime.now().difference(e.vitalsAt!) > maxAge) return null;
+    if (clock().difference(e.vitalsAt!) > maxAge) return null;
     return (vitals: e.vitals!, detail: e.detail, at: e.vitalsAt!);
   }
 
@@ -140,7 +144,7 @@ class DeviceStatsCache {
     if (counters.isEmpty) return;
     final e = _byId.putIfAbsent(deviceId, _Entry.new);
     e.counters = counters;
-    e.countersAt = DateTime.now();
+    e.countersAt = clock();
   }
 
   ({Map<String, ({int rx, int tx})> counters, DateTime at})? sampleOf(

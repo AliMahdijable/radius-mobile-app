@@ -485,15 +485,24 @@ class DevicesCheckRunner extends ChangeNotifier {
       if (p != null && _hasNumbers(p.detail)) return (detail: p.detail, raw: r, at: raw.at, from: 'آخر قراءة');
     }
     if (viaVpn) {
-      final at = VpnNow.devicesAt;
-      final v = VpnNow.deviceFor(d.id)?.vitals;
-      if (v != null && at != null && DateTime.now().difference(at) <= maxAge) {
+      // لحظة قراءة الخادم (المراجعة — لا لحظة وصولها للتطبيق): من الجهاز إن أعطاها، وإلّا نهاية فحصه (`at_ms`) ناقص نافذة إعادة
+      // استعماله للقراءات — الأقدم المحتمل، فلا تُقدَّم أحدث ممّا هي. وملخّص الأولت قد يبلغ ٣٠ د بلا لحظته ⇒ لا يُستعمل.
+      final r = VpnNow.deviceFor(d.id);
+      final v = r?.vitals;
+      final own = r?.readAtMs;
+      final at = own != null ? DateTime.fromMillisecondsSinceEpoch(own) : VpnNow.devicesServerAt?.subtract(serverVitalsReuse);
+      final olt = '${v?['kind'] ?? ''}' == 'olt';
+      if (v != null && at != null && (own != null || !olt) && DateTime.now().difference(at) <= maxAge) {
         final det = DeviceVitals.fromVpn(v, at: at).detail;
         if (det != null && _hasNumbers(det)) return (detail: det, raw: null, at: at, from: 'آخر قراءة من فحص الخادم');
       }
     }
     return null;
   }
+
+  /// كم تُعاد قراءةٌ لجهازٍ بفحص الخادم قبل أن تُقرأ من جديد (`VITALS_EVERY_MS` بـserver/connVpn/sweeper.js) — قراءةٌ في نتيجة فحصٍ
+  /// قد تكون أقدم منه بهذا القدر.
+  static const serverVitalsReuse = Duration(seconds: 150);
 
   @visibleForTesting
   ({DeviceDetail detail, Object? raw, DateTime at, String from})? lastReadingFor(NetworkDevice d) => _lastReading(d);

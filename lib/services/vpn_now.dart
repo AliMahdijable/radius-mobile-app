@@ -667,8 +667,12 @@ class VpnNow {
 
   static VpnDeviceResult? deviceFor(int id) => _fresh(_devAt) ? _devices[id] : null;
 
-  /// متى آخر فحصٍ للأجهزة عبر الـVPN (null: لا فحص حديث) — عمر «من فحص الخادم» بالفحص الشامل (٩ نوفمبر).
+  /// متى آخر فحصٍ للأجهزة عبر الـVPN (null: لا فحص حديث) — لحظة وصوله للتطبيق.
   static DateTime? get devicesAt => _fresh(_devAt) ? _devAt : null;
+
+  /// لحظة انتهاء ذلك الفحص **بساعة الخادم** (`at_ms`) — عمر «من فحص الخادم» بالفحص الشامل يُحسب منها لا من وصوله (المراجعة).
+  static DateTime? get devicesServerAt => _fresh(_devAt) ? _devServerAt : null;
+  static DateTime? _devServerAt;
 
   /// قراءات المشتركين من آخر فحصٍ عبر الـVPN (باليوزر صغيراً) — فارغة إن قدمت (٣٠ د).
   static Map<String, VpnSubReading> get readings => _fresh(_readAt) ? Map.unmodifiable(_readings) : const {};
@@ -682,6 +686,7 @@ class VpnNow {
         ..clear()
         ..addEntries(r.devices.map((d) => MapEntry(d.id, d)));
       _devAt = DateTime.now();
+      _devServerAt = r.atMs == null ? null : DateTime.fromMillisecondsSinceEpoch(r.atMs!);
     } else {
       _readings
         ..clear()
@@ -766,6 +771,7 @@ class VpnNow {
     _devices.clear();
     _readAt = null;
     _devAt = null;
+    _devServerAt = null;
     _companyReadings.clear();
     _companyReadAt.clear();
     _companyLimits.clear();
