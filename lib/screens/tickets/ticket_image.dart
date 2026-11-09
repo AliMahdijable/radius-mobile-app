@@ -235,7 +235,7 @@ class _TicketImageThumbState extends State<TicketImageThumb> {
     final key = ValueKey('ticket-img-${widget.messageId}');
     final ratio = widget.image.aspect;
     if (_expired) {
-      return _note(key, LucideIcons.imageOff, 'حُذفت الصورة بعد ٣٠ يوماً من انتهاء التذكرة');
+      return _note(key, LucideIcons.imageOff, 'حُذفت الصورة — التذاكر وصورها تُحذف بعد ٣ أشهر من فتحها');
     }
     final b = _bytes;
     if (b == null) {

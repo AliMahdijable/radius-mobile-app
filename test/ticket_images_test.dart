@@ -245,7 +245,7 @@ void main() {
       await pumpSim(t, _v, home: (_) => const TicketThreadScreen(ticketId: 9));
       await t.pumpAndSettle();
       expect(find.text('هذي الصورة'), findsOneWidget, reason: 'النصّ تحت الصورة');
-      expect(find.text('حُذفت الصورة بعد ٣٠ يوماً من انتهاء التذكرة'), findsOneWidget);
+      expect(find.text('حُذفت الصورة — التذاكر وصورها تُحذف بعد ٣ أشهر من فتحها'), findsOneWidget);
       expect(server.calls('GET', '/api/v2/portal/tickets/9/messages/2/image'), isEmpty, reason: 'المحذوفة لا تُطلب');
       expect(find.text('تعذّر تحميل الصورة — اضغط للإعادة'), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('ticket-img-3')));

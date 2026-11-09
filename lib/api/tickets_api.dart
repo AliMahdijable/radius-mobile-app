@@ -144,7 +144,7 @@ class Ticket {
   }
 }
 
-/// صورة رسالة (٩ نوفمبر): تُجلب بمسارها الموثَّق ([TicketsApi.imageBytes]) — لا رابط عامّ. available=false بعد حذفها (٣٠ يوماً
+/// صورة رسالة (٩ نوفمبر): تُجلب بمسارها الموثَّق ([TicketsApi.imageBytes]) — لا رابط عامّ. available=false بعد حذفها (٣ أشهر من فتح التذكرة
 /// بعد انتهاء التذكرة).
 class TicketImage {
   const TicketImage({required this.available, this.mime, this.width, this.height, this.bytes});
