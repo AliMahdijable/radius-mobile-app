@@ -153,6 +153,25 @@ class MergedMode {
     return open.isNotEmpty && c.adminId == open;
   }
 
+  /// مفتاح الشركة المفتوحة بين الصالحة (null: لا تُعرف بينها، أو خارج الوضع) — لشارةٍ تسمّي صفّاً بلا مفتاح.
+  static Future<String?> openKey() async {
+    if (!active.value) return null;
+    final open = (await openAdminId())?.trim() ?? '';
+    if (open.isEmpty) return null;
+    for (final c in usable) {
+      if (c.adminId == open) return c.key;
+    }
+    return null;
+  }
+
+  /// اسم شركة صفٍّ لسطرٍ يسمّيها في «كل الشركات» (رأس صفحة المشترك وشيتات ماله، كشف حسابه — التحقّق الثالث من 179): بمفتاحه ⇒
+  /// شركته؛ بلا مفتاح ⇒ المفتوحة (صفحة الموظّف الحاليّة، أو اسم الجلسة). null خارج الوضع: الشاشات كما كانت حرفاً.
+  static String? rowCompanyName(String? key) {
+    if (!active.value) return null;
+    final n = (key != null ? companyOf(key)?.name : (currentPageName ?? ActiveCompany.current?.label))?.trim() ?? '';
+    return n.isEmpty ? null : n;
+  }
+
   /// اسم المفتوحة لسطور «للمفتوحة وحدها» — الموظّف: اسم صفحته الحاليّة من ردّ صفحاته؛ null ⇒ يبقى ما كان يُعرض.
   static String? get currentPageName {
     final n = currentPage?.name.trim() ?? '';
@@ -721,6 +740,17 @@ class MergedOps {
         : 'العمليّات الجماعيّة لشركةٍ واحدة — في «كل الشركات» نفّذها لكلّ مشتركٍ من صفحته، أو افتح الشركة من «تبديل الشركة»';
   }
 
+  /// سطر رأس شيت مال المشترك (تسديد، دين، رصيد، تفعيل، تمديد، خصم، سعر): اسمه، وفي «كل الشركات» شركته معه (بلا مفتاح ⇒
+  /// المفتوحة) — المال يُكتب لشركةٍ يراها المدير قبل التأكيد (التحقّق الثالث من 179). خارج الوضع: الاسم وحده كما كان.
+  static String sheetSubtitle(Subscriber s) => withCompany(s.fullName, s.companyKey);
+
+  /// [text] ومعه اسم شركة الصفّ [key] في «كل الشركات» ([MergedMode.rowCompanyName]) — وخارجه [text] كما هو.
+  static String withCompany(String text, String? key) {
+    final co = MergedMode.rowCompanyName(key);
+    if (co == null) return text;
+    return text.trim().isEmpty ? '«$co»' : '$text · «$co»';
+  }
+
   /// «كل الصفحات» للموظّف: كتابةٌ على مشترك [s] مقفلةٌ قبل الإرسال — سببها ([MergedMode.writeLockFor]) أو null (مفتوحة؛
   /// والمالك دائماً null). الزرّ يبقى بمكانه مقفلاً بهذا السبب، والمعترض لا يرسلها ولو وصلت.
   static String? writeLock(Subscriber s) => MergedMode.writeLockFor(s.companyKey);
@@ -736,10 +766,21 @@ class MergedOps {
   }
 
   /// الصفّ نفسه من قائمة شركته الطازجة (بعد عمليّة) — null إن تعذّر.
+  ///
+  /// الحساب الكبير (٥٠٠٠+، ٩ نوفمبر — التحقّق الثالث من 179): لا قائمة كاملة له ([MergedCompanyList.bigTotal]) ⇒ صفّه وحده من ساس
+  /// شركته بيوزره ([BigSubscribersApi.findOne] موجَّهاً، كالبحث السريع وكصفحة الكبير في الوضع العاديّ). كانت صفحة مشتركه لا تتحدّث
+  /// بعد تسديدٍ أو دين فيبقى الدين القديم وزرّ «تسديد» يدعو لدفعةٍ ثانية.
   static Future<Subscriber?> refetch(Subscriber s) async {
     final c = MergedMode.companyOf(s.companyKey);
     if (c == null) return null;
     final l = await MergedSubscribers.fetchCompany(c, fresh: true);
+    if (l.rows == null && l.bigTotal != null) {
+      final one = await CompanyRoute.run(c.key, () => BigSubscribersApi.findOne(idx: s.idx, username: s.username));
+      if (one == null) return null;
+      final sessions = MergedSubscribers.sessionsOf(c.key);
+      final row = one.withCompany(c.key);
+      return sessions == null ? row : MergedSubscribers.withSession(row, sessions);
+    }
     for (final r in l.rows ?? const <Subscriber>[]) {
       if (s.idx != null && r.idx == s.idx) return r;
     }

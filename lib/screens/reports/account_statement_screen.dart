@@ -9,7 +9,9 @@ import '../../api/reports_api.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/typography.dart';
+import '../../widgets/company_tag.dart';
 import 'widgets/action_labels.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
@@ -25,12 +27,18 @@ class AccountStatementScreen extends StatefulWidget {
   const AccountStatementScreen({
     super.key,
     required this.username,
+    required this.companyKey,
     this.displayName,
     this.phone,
   });
   final String username;
   final String? displayName;
   final String? phone;
+
+  /// شركة المشترك («كل الشركات»، ٩ نوفمبر — التحقّق الثالث من 179): مفتاح صفّه ⇒ الكشف من شركته (كـ«سجل الحركات» وتقرير
+  /// الجلسات)، وبلاه في الوضع ⇒ المفتوحة صراحةً؛ خارج الوضع كما كان. كان يُطلب من الشركة المفتوحة فيُعرض ويُصدَّر كشفُها (فارغاً،
+  /// أو حركات مشتركٍ لها بالاسم نفسه) تحت اسم مشترك الشركة الأخرى. مطلوبٌ في كلّ نداء — لا كشف بلا قرار شركة.
+  final String? companyKey;
 
   @override
   State<AccountStatementScreen> createState() => _AccountStatementScreenState();
@@ -57,11 +65,14 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       _loading = true;
       _error = null;
     });
-    final r = await ReportsApi.accountStatement(
-      username: widget.username,
-      from: _range.from,
-      to: _range.to,
-      actionTypes: _filters.actionTypes,
+    final r = await MergedOps.pinned(
+      widget.companyKey,
+      () => ReportsApi.accountStatement(
+        username: widget.username,
+        from: _range.from,
+        to: _range.to,
+        actionTypes: _filters.actionTypes,
+      ),
     );
     if (!mounted) return;
     setState(() {
@@ -70,6 +81,12 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _visibleCount = kReportPageStep;
     });
+  }
+
+  /// اسم شركة الكشف لعنوان التصدير في «كل الشركات» (« — شركة») — فارغٌ خارجه.
+  String _companySuffix() {
+    final name = MergedMode.rowCompanyName(widget.companyKey);
+    return name == null ? '' : ' — $name';
   }
 
   List<List<String>> _exportRows(List<StatementRow> rows) {
@@ -128,6 +145,8 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                // «كل الشركات»: شركة الكشف (بلا مفتاح ⇒ المفتوحة)
+                RowCompanyTag(companyKey: widget.companyKey, fontSize: 11),
               ],
             ),
             iconTheme: IconThemeData(color: AppColors.textHi),
@@ -186,7 +205,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                       ),
                       ReportExportBar(
                         title:
-                            '${'reports.account_statement'.tr()} — ${widget.displayName ?? widget.username}',
+                            '${'reports.account_statement'.tr()} — ${widget.displayName ?? widget.username}${_companySuffix()}',
                         subtitle:
                             '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                         fileNameBase:

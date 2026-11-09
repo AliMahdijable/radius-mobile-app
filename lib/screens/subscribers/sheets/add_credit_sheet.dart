@@ -186,7 +186,8 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.coins,
         title: 'إضافة رصيد',
-        subtitle: widget.sub.fullName,
+        // «كل الشركات»: شركته مع اسمه — المال يُكتب لشركةٍ يراها قبل التأكيد
+        subtitle: MergedOps.sheetSubtitle(widget.sub),
         tint: AppColors.successFill,
         tintBg: AppColors.successSoftBg,
         onClose: () => Navigator.of(context).pop(),

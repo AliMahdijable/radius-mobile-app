@@ -55,6 +55,7 @@ import 'widgets/subscriber_actions.dart';
 import 'widgets/kit_fiber_card.dart';
 import 'widgets/private_note_card.dart';
 import 'connection_alert_flow.dart';
+import '../../widgets/company_tag.dart';
 import '../../widgets/merged_section.dart';
 import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
@@ -342,6 +343,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             // مطلب 2026-06-12: AppBar نظيف بالاسم العربي (مطابق screenshot v1)
             _SimpleAppBar(
               title: 'subscribers.detail_title'.tr(),
+              companyKey: sub.companyKey,
               onClose: () => Navigator.of(context).pop(),
               onCopyAll: _copyAll,
               onPrint: _printReceipt,
@@ -720,6 +722,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => AccountStatementScreen(
             username: sub.username,
+            // كشفه من شركته («كل الشركات» — التحقّق الثالث من 179)
+            companyKey: sub.companyKey,
             displayName: sub.fullName.trim().isEmpty ? null : sub.fullName.trim(),
             phone: sub.phone,
           ),
@@ -1386,6 +1390,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       MaterialPageRoute(
                         builder: (_) => AccountStatementScreen(
                           username: sub.username,
+                          // كشفه من شركته («كل الشركات» — التحقّق الثالث من 179)
+                          companyKey: sub.companyKey,
                           // firstname/lastname غير قابلين للـnull في الموديل —
                           // نمرّر null فقط حين يكونان فارغين معاً.
                           displayName: sub.fullName.trim().isEmpty
@@ -1932,12 +1938,16 @@ class _SunkenTile extends StatelessWidget {
 class _SimpleAppBar extends StatelessWidget {
   const _SimpleAppBar({
     required this.title,
+    required this.companyKey,
     required this.onClose,
     required this.onCopyAll,
     required this.onPrint,
     this.printing = false,
   });
   final String title;
+
+  /// «كل الشركات»: شركة المشترك تحت العنوان (بلا مفتاح ⇒ المفتوحة) — ما يُنفَّذ هنا لها (التحقّق الثالث من 179).
+  final String? companyKey;
   final VoidCallback onClose;
   final VoidCallback onCopyAll;
 
@@ -1958,11 +1968,17 @@ class _SimpleAppBar extends StatelessWidget {
           const SizedBox(width: H.iconBtn + Sp.sm),
           Expanded(
             child: Center(
-              child: Text(
-                title,
-                style: AppType.cardTitle(color: AppColors.textBody),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: AppType.cardTitle(color: AppColors.textBody),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  RowCompanyTag(companyKey: companyKey, fontSize: 11),
+                ],
               ),
             ),
           ),

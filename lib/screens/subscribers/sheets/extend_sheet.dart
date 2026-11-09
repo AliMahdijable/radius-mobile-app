@@ -283,7 +283,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.calendarPlus,
         title: 'sheets.extend_subscriber'.tr(),
-        subtitle: widget.sub.fullName,
+        // «كل الشركات»: شركته مع اسمه — المال يُكتب لشركةٍ يراها قبل التأكيد
+        subtitle: MergedOps.sheetSubtitle(widget.sub),
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(

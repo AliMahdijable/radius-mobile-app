@@ -423,8 +423,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       if (ok) {
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
+        // كبقيّة مداخل الغلاف: هو أوّل صفحات الجذر وحده — كانت «شركاتي» تبقى تحته (فتح البصمة منها) فيعود إليها الرجوع، ويرى
+        // ملخّص «انتهت اليوم» صفحةً تحته فلا يختار المفتوحة في الشريط (التحقّق الثالث من 179).
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const MainShell()),
+          (_) => false,
         );
       }
     } catch (_) {
