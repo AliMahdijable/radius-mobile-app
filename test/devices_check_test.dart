@@ -1047,6 +1047,102 @@ void main() {
       expect(DevicesCheck.reportText(rs, viaVpn: false).split('\n').first, isNot(contains('لم يكتمل')));
     });
   });
+
+  group('المراجعة — القراءة المتأخّرة لا تُسقط، و«أعد قراءة غير المقروء» لا يفتح جلسةً ثانية', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 200), hard: const Duration(milliseconds: 500));
+    });
+    tearDown(() {
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+    const ok = ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 3, uptimeSec: 86400)), counters: {});
+
+    test('🚨 جهازٌ بلغ السقف وقراءته جارية ⇒ «أعد قراءة غير المقروء» ينتظرها (لا جلسة ثانية)، ووصولها يحلّ محلّه', () async {
+      final calls = <int, int>{};
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) {
+        calls[d.id] = (calls[d.id] ?? 0) + 1;
+        return late.future;
+      };
+      final run = DevicesCheckRunner([dev(41)], viaVpn: false);
+      await run.run();
+      expect(run.unreadCount, 1);
+      final again = run.rerunUnread();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      late.complete(ok);
+      await again;
+      expect(calls[41], 1, reason: 'الجلسة نفسها — لا ثانيةٌ على الجهاز البطيء');
+      expect(run.reports[41]!.state, CheckState.ok);
+      expect(run.reports[41]!.cpu, 3);
+      run.dispose();
+    });
+
+    test('🚨 بعد «أعد قراءة غير المقروء» لجهازٍ آخر: قراءة الجهاز المسقوف تصل وتحلّ محلّ سطره (لا تُسقطها الجولة الجديدة)', () async {
+      // القارئ الحقيقيّ للاثنين: 42 راوترٌ بلا راديو طبقته الثانية معلّقة، و43 يرفض الاتّصال أوّلاً
+      for (final id in [42, 43]) {
+        NetworkDevicesApi.debugSeedCredentials(id, {'user': 'admin', 'pass': 'x'}, DateTime.now());
+      }
+      final gate = Completer<void>();
+      var refuse43 = true;
+      final realProbe = MikrotikApi.portProbe;
+      addTearDown(() => MikrotikApi.portProbe = realProbe);
+      MikrotikApi.portProbe = (ip, port) async => false;
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => ip.endsWith('.43')
+          ? (refuse43 ? _RefusedCh() : _SlowRegTable(radio: false))
+          : _SlowRegTable(holdWireless: gate, radio: false);
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+        NetworkDevicesApi.invalidateCredentialsCache();
+        MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => throw UnimplementedError(route);
+        MikrotikApi.resetRoutesForTest();
+      });
+      DevicesCheckRunner.debugFetch = null;
+      final run = DevicesCheckRunner([dev(42), dev(43)], viaVpn: false);
+      await run.run();
+      final capped = run.reports[42]!;
+      expect(capped.state, CheckState.ok, reason: 'راوترٌ بلا راديو: طبقته الأولى تكفي — ليس «لم يُقرأ» فلا يُعاد');
+      expect(texts(capped).first, startsWith('قراءةٌ جزئيّة — بطيء — لم تكتمل قراءته خلال'));
+      expect(run.unreadCount, 1, reason: '43 وحده');
+      refuse43 = false;
+      MikrotikApi.resetRoutesForTest();
+      await run.rerunUnread();
+      expect(run.reports[43]!.state, CheckState.ok);
+      gate.complete();
+      for (var i = 0; i < 50 && identical(run.reports[42], capped); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(identical(run.reports[42], capped), isFalse, reason: 'وصلت كاملةً فحلّت محلّه');
+      expect(texts(run.reports[42]!).where((t) => t.startsWith('قراءةٌ جزئيّة')), isEmpty);
+      run.dispose();
+    });
+
+    test('ما عُرض من آخر قراءةٍ يُعدّ ويُعاد بـ«أعد قراءة غير المقروء»', () async {
+      DeviceStatsCache.instance.putVitals(44, const [], const DeviceDetail(glance: DeviceGlance(cpu: 8, uptimeSec: 86400)));
+      var fail = true;
+      DevicesCheckRunner.debugFetch =
+          (d) => fail ? Future<ProbeResult>.error(const SocketException('Connection refused')) : Future.value(ok);
+      final run = DevicesCheckRunner([dev(44)], viaVpn: false);
+      await run.run();
+      expect(run.reports[44]!.staleAt, isNotNull);
+      expect(run.reports[44]!.state, CheckState.ok);
+      expect(run.unreadCount, 1, reason: 'قراءته الجديدة لم تكتمل');
+      fail = false;
+      await run.rerunUnread();
+      expect(run.reports[44]!.staleAt, isNull);
+      expect(run.unreadCount, 0);
+      run.dispose();
+    });
+  });
 }
 
 /// خادمٌ يردّ بالرموز بالترتيب (٢٠٠ = بيانات الدخول).
@@ -1071,7 +1167,10 @@ class _CredsReplies implements HttpClientAdapter {
 
 /// RouterOS يجيب الطبقة الأولى فوراً وجدول التسجيل بعد ثانيتين (سكتر بطيء عبر SSH).
 class _SlowRegTable implements RouterOsChannel {
-  _SlowRegTable({this.holdWireless, this.holdRegTable});
+  _SlowRegTable({this.holdWireless, this.holdRegTable, this.radio = true});
+
+  /// بلا راديو (CCR): لا واجهة wlan، وأمر اللاسلكيّ «no such command» (بعد بوّابته).
+  final bool radio;
 
   /// أمر اللاسلكيّ / جدول التسجيل ينتظر حتى يُفتح البوّاب (الاختبار يفتحه بعد السقف) — لا ثوانٍ حقيقيّة.
   final Completer<void>? holdWireless;
@@ -1090,10 +1189,11 @@ class _SlowRegTable implements RouterOsChannel {
       case '/interface/print':
         return [
           {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
-          {'name': 'wlan1', 'type': 'wlan', 'running': 'true', 'disabled': 'false'},
+          if (radio) {'name': 'wlan1', 'type': 'wlan', 'running': 'true', 'disabled': 'false'},
         ];
       case '/interface/wireless/print':
         await holdWireless?.future;
+        if (!radio) throw MikrotikException('no such command prefix');
         return [
           {'name': 'wlan1', 'mode': 'ap-bridge', 'band': '5ghz-a/n', 'disabled': 'false', 'running': 'true'}
         ];
@@ -1107,6 +1207,18 @@ class _SlowRegTable implements RouterOsChannel {
     throw MikrotikException('no such command');
   }
 
+  @override
+  Future<void> close() async {}
+}
+
+/// قناةٌ يرفض جهازها الاتّصال (المنفذ مقفول).
+class _RefusedCh implements RouterOsChannel {
+  @override
+  String get via => 'API';
+  @override
+  Future<void> open() async => throw const SocketException('Connection refused');
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async => const [];
   @override
   Future<void> close() async {}
 }

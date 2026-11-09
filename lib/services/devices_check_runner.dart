@@ -155,15 +155,19 @@ class DevicesCheckRunner extends ChangeNotifier {
 
   Future<void> run() => _runFor(devices);
 
-  /// «أعد قراءة غير المقروء» (٩ نوفمبر): ما لم يُقرأ وحده — والباقي يبقى بتقريره، بلا فحصٍ كامل من جديد.
+  /// «أعد قراءة غير المقروء» (٩ نوفمبر): ما لم يُقرأ وحده — والباقي يبقى بتقريره، بلا فحصٍ كامل من جديد. ويشمل ما عُرض من آخر
+  /// قراءة (قراءته الجديدة لم تكتمل — المراجعة).
   Future<void> rerunUnread() {
-    final again = [for (final d in devices) if (reports[d.id]?.state == CheckState.unread) d];
+    final again = [for (final d in devices) if (_needsRead(reports[d.id])) d];
     if (again.isEmpty) return Future<void>.value();
     return _runFor(again);
   }
 
-  /// كم جهازاً «لم يُقرأ» (بلا المؤقّت الجاري).
-  int get unreadCount => reports.values.where((r) => r.state == CheckState.unread && !r.pending).length;
+  static bool _needsRead(DeviceCheckReport? r) =>
+      r != null && !r.pending && (r.state == CheckState.unread || r.staleAt != null);
+
+  /// كم جهازاً لم يُقرأ هذه المرّة («لم يُقرأ» أو من آخر قراءة) — بلا المؤقّت الجاري.
+  int get unreadCount => reports.values.where(_needsRead).length;
 
   Future<void> _runFor(List<NetworkDevice> list) async {
     if (running) return;
@@ -217,8 +221,15 @@ class DevicesCheckRunner extends ChangeNotifier {
     }
   }
 
+  /// أُغلق الفحص — لا كتابة بعده (القراءة المتأخّرة تُقبل ما دام الفاحص قائماً، ولو بدأ «أعد قراءة غير المقروء» بعدها).
+  bool _disposed = false;
+
+  /// قراءةٌ جارية لكلّ جهاز — «أعد قراءة غير المقروء» وفحصٌ تالٍ ينتظرانها بدل جلسةٍ ثانية على الجهاز البطيء نفسه (المراجعة).
+  final _inflight = <int, _Read>{};
+
   @override
   void dispose() {
+    _disposed = true;
     _gen++;
     for (final t in _timers) {
       t.cancel();
@@ -320,17 +331,27 @@ class DevicesCheckRunner extends ChangeNotifier {
     }
     final t = timesFor(piped: piped);
     final sw = Stopwatch()..start();
-    // ميكروتك: الطبقة الأولى (الموارد والصحّة والمنافذ) حين تصل — إن تأخّر الباقي يُحكم بها وعملاؤه «لم تُقرأ»
-    ProbeResult? partial;
-    // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة الأولى) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
-    final read = debugFetch?.call(d) ??
-        DeviceVitals.fetch(d,
-            detailed: true,
-            withOnuLights: true,
-            lightsUntil: DateTime.now().add(t.soft - const Duration(seconds: 5)),
-            isCancelled: () => !live(),
-            onPartial: (p) => partial = p);
-    final outcome = read.then<Object>((p) => p, onError: (Object e) => _Failed(e));
+    // قراءةٌ جارية لهذا الجهاز (تجاوزت سقف فحصٍ سابق) ⇒ تُنتظر هي — لا جلسةٌ ثانية على الجهاز البطيء (المراجعة)
+    var rd = _inflight[d.id];
+    if (rd == null) {
+      final fresh = rd = _Read();
+      // ميكروتك: الطبقة الأولى (الموارد والصحّة والمنافذ) حين تصل — إن تأخّر الباقي يُحكم بها وعملاؤه «لم تُقرأ».
+      // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة الأولى) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
+      final read = debugFetch?.call(d) ??
+          DeviceVitals.fetch(d,
+              detailed: true,
+              withOnuLights: true,
+              lightsUntil: DateTime.now().add(t.soft - const Duration(seconds: 5)),
+              isCancelled: () => _disposed,
+              onPartial: (p) => fresh.partial = p);
+      fresh.outcome = read.then<Object>((p) => p, onError: (Object e) => _Failed(e));
+      _inflight[d.id] = fresh;
+      unawaited(fresh.outcome.whenComplete(() {
+        if (identical(_inflight[d.id], fresh)) _inflight.remove(d.id);
+      }));
+    }
+    final outcome = rd.outcome;
+    final reading = rd;
 
     DeviceCheckReport full(ProbeResult p) => DevicesCheck.evaluate(
           d: d,
@@ -348,7 +369,7 @@ class DevicesCheckRunner extends ChangeNotifier {
     // ما يُعرض حين لم تكتمل القراءة: الطبقة الأولى إن وصلت (حيويّاته ومنافذه — مقروءةٌ الآن)، وإلّا آخر قراءةٍ ≤ ٥ د بعمرها
     // (ما لم يكن السبب رفضاً يُصلَح بالإعداد)، وإلّا «لم يُقرأ» بسببه
     DeviceCheckReport short(String reason, {bool pending = false}) {
-      final p = partial;
+      final p = reading.partial;
       final last = p == null && lastReadingHelps(reason) ? _lastReading(d) : null;
       if (last != null) {
         return DevicesCheck.evaluate(
@@ -417,8 +438,10 @@ class DevicesCheckRunner extends ChangeNotifier {
     // ٣) السقف: «بطيء» بثوانيه — وما يصل بعده يُحفظ ويحلّ محلّه ما دام الفحص نفسه قائماً (لا يُرمى)
     final capped = short('بطيء — لم تكتمل قراءته خلال ${t.hard.inSeconds}ث');
     _final(d, capped, gen);
+    // الهويّة وحدها تحرس (لا رقم الجولة): فحصٌ كامل جديد يمسح التقارير، وتقريرٌ أحدث يحلّ محلّه — و«أعد قراءة غير المقروء» لأجهزةٍ
+    // أخرى لا يُسقط ما وصل لهذا (المراجعة)
     unawaited(outcome.then((late) {
-      if (late is! ProbeResult || !live() || !identical(reports[d.id], capped)) return;
+      if (late is! ProbeResult || _disposed || !identical(reports[d.id], capped)) return;
       final r = full(late);
       reports[d.id] = r;
       if (r.memo != null) unawaited(DevicesCheckMemoStore.save({d.id: r.memo!}));
@@ -581,4 +604,10 @@ class _Failed {
 class _Slow {
   const _Slow._();
   static const instance = _Slow._();
+}
+
+/// قراءة جهازٍ جارية: نتيجتها (أو فشلها) وطبقتها الأولى إن وصلت.
+class _Read {
+  late Future<Object> outcome;
+  ProbeResult? partial;
 }
