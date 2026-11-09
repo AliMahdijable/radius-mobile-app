@@ -140,6 +140,9 @@ enum SubsMissWhy {
   /// عبر الـVPN: الخادم وصله ولا يجيب.
   dead,
 
+  /// عبر الـVPN: يردّ (البنك) ولم تُقرأ مقاييسه — رمز جهازه، أو واجهته مقفولة (السطر في [SubsMissing] note). ٩ نوفمبر: كان «سليم».
+  unmeasured,
+
   /// «كل الشركات»: شركته لم تُفحص عبر الـVPN (بلا طريق، أو تعذّر) — السبب في [SubsMissing] note.
   company,
 
@@ -328,6 +331,11 @@ class SubscribersCheck {
         ));
         continue;
       }
+      // ٩ نوفمبر: يردّ بلا مقاييس (البنك وحده) ⇒ «لم يُقرأ» بسببه — لا «سليم» (خادمٌ قديم أو جديد سواء)
+      if (!r.measured) {
+        missing.add(_unmeasured(s, r));
+        continue;
+      }
       final probs = fromVpn(r, limits(s.companyKey));
       final row = SubsCheckRow(s, probs, reading: SubsReading.ofVpn(r, when(s.companyKey)));
       (probs.isEmpty ? healthy : rows).add(row);
@@ -360,8 +368,8 @@ class SubscribersCheck {
       final v = vpnLook(s);
       final vAt = v == null ? null : when(s.companyKey);
       final t = limits(s.companyKey);
-      // الأحدث يغلب: قراءة الـVPN إن لم تكن قراءة الهاتف أو كانت أقدم منها
-      final useVpn = v != null && !v.dead && (local == null || (vAt != null && vAt.isAfter(p!.at)));
+      // الأحدث يغلب: قراءة الـVPN إن لم تكن قراءة الهاتف أو كانت أقدم منها — وبمقاييس (البنك وحده لا يغلب قراءةً حقيقيّة)
+      final useVpn = v != null && !v.dead && v.measured && (local == null || (vAt != null && vAt.isAfter(p!.at)));
       if (useVpn) {
         final probs = fromVpn(v, t);
         (probs.isEmpty ? healthy : rows).add(SubsCheckRow(s, probs, reading: SubsReading.ofVpn(v, vAt)));
@@ -374,10 +382,15 @@ class SubscribersCheck {
             .add(SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: local));
         continue;
       }
+      // يردّ عبر الـVPN بلا مقاييس ولا قراءة هاتف ⇒ «لم يُقرأ» بسببه
+      if (v != null && !v.dead && p?.snap == null) {
+        missing.add(_unmeasured(s, v));
+        continue;
+      }
       final note = companyNote?.call(s.companyKey);
       missing.add((
         sub: s,
-        why: v != null
+        why: v != null && v.dead
             ? SubsMissWhy.dead
             : note != null
                 ? SubsMissWhy.company
@@ -389,6 +402,18 @@ class SubscribersCheck {
     }
     return _report(subs.length, rows, healthy, missing, limits, oldest: oldest);
   }
+
+  /// قراءة VPN بلا مقاييس ⇒ سطر «لم يُقرأ»: البنك وحده ⇒ «يردّ» بسببه إن أعطاه الخادم؛ وجهازٌ قُرئ بلا أرقام ⇒ «بلا قياسات».
+  static SubsMissing _unmeasured(Subscriber s, VpnSubReading r) => r.src == 'ping'
+      ? (sub: s, why: SubsMissWhy.unmeasured, note: unmeasuredLabel(r))
+      : (sub: s, why: SubsMissWhy.noMetrics, note: null);
+
+  /// «يردّ، ما انقرت مقاييسه» — وبسببه من خادمٍ يعطيه (`err`).
+  static String unmeasuredLabel(VpnSubReading r) => switch (r.err) {
+        'login_failed' => 'يردّ، ما انفتح برمزه المحفوظ',
+        'no_web' => 'يردّ، واجهة إدارته ما تفتح',
+        _ => 'يردّ، ما انقرت مقاييسه',
+      };
 
   /// قراءة الخادم ⇒ المشاكل بحدود المدير — كـ[ConnectionAlerts.detect] حرفاً (الصفر ليس قراءة).
   static List<SubsCheckProblem> fromVpn(VpnSubReading r, ConnectionAlertThresholds t) {

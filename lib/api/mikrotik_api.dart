@@ -578,6 +578,8 @@ class MikrotikApi {
       wirelessClients: const [],
       bridgePorts: bridgePorts,
       via: ch.via,
+      // الطبقة الأولى بلا جدول التسجيل — فراغ العملاء هنا «لم يُقرأ بعد» لا «لا أحد».
+      clientsRead: false,
     );
 
     // ⚡ يُطلق callback الآن — UI يعرض CPU/RAM/interfaces فوراً
@@ -600,10 +602,21 @@ class MikrotikApi {
     final List<Map<String, String>> wirelessRows = [];
     final List<Map<String, String>> wirelessClients = [];
     final w60gLinks = <MikrotikW60gLink>[];
+    // ٩ نوفمبر — «ما عليه أحد الآن — كانوا N» الكاذبة: قائمة العملاء الفارغة «لا أحد» فقط حين قُرئ جدولها فعلاً. أمرٌ لا حزمة له
+    // على الجهاز («no such command») ليس فشلاً؛ والمهلة وانقطاع الاتّصال وسواهما ⇒ لا نعرف ([MikrotikStats.clientsRead]).
+    var clientsRead = true;
+    bool absent(Object e) {
+      final m = e.toString();
+      return m.contains('no such command') || m.contains('no such item');
+    }
+
     try {
       final rows = await ch.query(['/interface/wireless/print']);
       wirelessRows.addAll(rows);
-    } catch (_) {/* عادي على CCR + LHG 60G */}
+    } catch (e) {
+      // عادي على CCR + LHG 60G (لا حزمة) — وغيره (مهلة، انقطاع) يجعل الراديو نفسه مجهولاً
+      if (!absent(e)) clientsRead = false;
+    }
     try {
       final rows = await ch.query(['/interface/w60g/print']);
       // sanitize: نطابق بنية wireless (ssid/mode/frequency)
@@ -621,7 +634,10 @@ class MikrotikApi {
           'running': w['running'] ?? 'false',
         });
       }
-    } catch (_) {/* عادي على الأجهزة الي لا تدعم 60GHz */}
+    } catch (e) {
+      // عادي على الأجهزة الي لا تدعم 60GHz
+      if (!absent(e)) clientsRead = false;
+    }
     try {
       final rows = await ch.query(['/interface/wifi/print']);
       for (final w in rows) {
@@ -638,7 +654,10 @@ class MikrotikApi {
           'running': w['running'] ?? 'false',
         });
       }
-    } catch (_) {/* عادي على RouterOS 6 */}
+    } catch (e) {
+      // عادي على RouterOS 6
+      if (!absent(e)) clientsRead = false;
+    }
     // 60 GHz — ٢٧ أكتوبر (المالك: «اصدارات اجهزه لنكات مال ٦ جي هم ماكو بالمايكروتيك»): إشارة الوصلة وسرعتها
     // ومسافتها في `/interface/w60g/monitor` وحده. جدول `/interface/w60g/station` واجهاتٌ بماك الطرف الآخر بلا
     // إشارةٍ ولا سرعة — كان يُعرض عملاءً بـ«0 dBm» — فصار عدّاً للمحطّات فقط، ولا يدخل جدول العملاء.
@@ -705,6 +724,9 @@ class MikrotikApi {
             if (!m2.contains('no such command') &&
                 !m2.contains('no such item')) {
               failureMsg = m2.length > 80 ? m2.substring(0, 80) : m2;
+            } else {
+              // راديو بلا أيٍّ من الجدولين — لا نعرف عملاءه (لا «لا أحد»)
+              clientsRead = false;
             }
           }
         } else {
@@ -712,6 +734,7 @@ class MikrotikApi {
         }
       }
     }
+    if (failureMsg != null) clientsRead = false;
     // ⚠️ الصيغة متعدّدة الكلمات حُذفت ٢٠٢٦-٠٩-٠٢.
     //
     // قاعدة المستخدم: «خلّ ميكروتك ثابت API، والأولويّة له، وUBNT
@@ -772,7 +795,9 @@ class MikrotikApi {
           debugPrint(
               '🟢 [mikrotik] caps-man reg-table → ${regs.length} clients');
         }
-      } catch (_) {}
+      } catch (e) {
+        if (!absent(e)) clientsRead = false;
+      }
     }
     if (wirelessClients.isEmpty && hasRadio && kDebugMode) {
       if (failureMsg == 'timeout') {
@@ -834,6 +859,7 @@ class MikrotikApi {
 
     // ═══ Tier 2 كامل — يُرجع النسخة النهائيّة ═══
     return tier1.copyWith(
+      clientsRead: clientsRead,
       wirelessInterfaces:
           wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
       w60gLinks: w60gLinks,
@@ -1126,6 +1152,13 @@ class MikrotikStats {
   /// أو في الوضع الخفيف (vitalsOnly) حيث لا تُعرض المنافذ.
   final Map<String, List<String>> bridgePorts;
 
+  /// جدول العملاء اللاسلكيّين قُرئ فعلاً — فراغ [wirelessClients] «لا أحد الآن» صادقة، لا مهلةٌ أو خطأٌ أسقطه.
+  ///
+  /// ٩ نوفمبر (المالك: «مرات اكو اجهزه… بقسم فحص الاجهزه يكول لم يقرا»، والتحقيق): جدول التسجيل انتهت مهلته (١٢ث) فوصلت القائمة
+  /// فارغةً كأنّها قُرئت ⇒ «ما عليه أحد الآن — كانوا N» كاذبة. الطبقة الأولى/القراءة الخفيفة false دائماً، والقرّاء يضعونها
+  /// صراحةً؛ والمبنيّ يدويّاً (اختبار، لقطة) قراءةٌ كاملة.
+  final bool clientsRead;
+
   const MikrotikStats({
     required this.cpuLoad,
     required this.memUsedPercent,
@@ -1153,6 +1186,7 @@ class MikrotikStats {
     this.via = 'API',
     this.cpuKnown = true,
     this.memKnown = true,
+    this.clientsRead = true,
   });
 
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
@@ -1192,6 +1226,7 @@ class MikrotikStats {
     List<MikrotikWireless>? wirelessInterfaces,
     List<MikrotikWirelessClient>? wirelessClients,
     List<MikrotikW60gLink>? w60gLinks,
+    bool? clientsRead,
   }) =>
       MikrotikStats(
         cpuLoad: cpuLoad,
@@ -1220,6 +1255,7 @@ class MikrotikStats {
         via: via,
         cpuKnown: cpuKnown,
         memKnown: memKnown,
+        clientsRead: clientsRead ?? this.clientsRead,
       );
   int get downInterfacesCount =>
       interfaces.where((i) => !i.running && !i.disabled).length;

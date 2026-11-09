@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -126,6 +127,56 @@ class _Canned implements RouterOsChannel {
   @override
   Future<void> close() async {}
 }
+
+/// قناةٌ بصفوفٍ أو خطأٍ لكلّ أمر — جدولٌ انتهت مهلته، أو اتّصالٌ انكسر وسط القراءة؛ الأمر الغائب «no such command» كالجهاز.
+class _Scripted implements RouterOsChannel {
+  _Scripted(this.replies, {this.name = 'API'});
+  final Map<String, Object> replies;
+  final String name;
+  final asked = <String>[];
+  @override
+  String get via => name;
+  @override
+  Future<void> open() async {}
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async {
+    asked.add(words.first);
+    final r = replies[words.first];
+    if (r == null) throw MikrotikBinaryException('no such command prefix');
+    if (r is Exception) throw r;
+    return [for (final m in r as List) Map<String, String>.from(m as Map)];
+  }
+
+  @override
+  Future<void> close() async {}
+}
+
+/// سكتر بيس بوكس (ap-bridge) بجدول تسجيله — [reg] صفوفه أو خطؤه، و[wireless] كذلك.
+Map<String, Object> _sector({Object? reg, Object? wireless}) => {
+      '/system/resource/print': [
+        {'board-name': 'BaseBox 5', 'version': '6.49.19 (long-term)', 'cpu-load': '9', 'total-memory': '67108864', 'free-memory': '40000000', 'uptime': '3w2d'}
+      ],
+      '/interface/print': [
+        {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+        {'name': 'wlan1', 'type': 'wlan', 'running': 'true', 'disabled': 'false'},
+      ],
+      '/system/health/print': const <Map<String, String>>[],
+      '/ppp/active/print': const <Map<String, String>>[],
+      '/interface/ethernet/monitor': [
+        {'name': 'ether1', 'rate': '1Gbps'}
+      ],
+      '/interface/wireless/print': wireless ??
+          [
+            {'name': 'wlan1', 'mode': 'ap-bridge', 'ssid': 'S1', 'band': '5ghz-a/n', 'frequency': '5535', 'disabled': 'false', 'running': 'true'}
+          ],
+      '/interface/wireless/registration-table/print': reg ??
+          [
+            {'mac-address': 'AA:BB:CC:00:00:01', 'interface': 'wlan1', 'signal-strength': '-61'}
+          ],
+      '/ip/dhcp-server/lease/print': const <Map<String, String>>[],
+      '/interface/wireless/access-list/print': const <Map<String, String>>[],
+      '/ip/arp/print': const <Map<String, String>>[],
+    };
 
 void main() {
   tearDown(() {
@@ -462,6 +513,50 @@ void main() {
       final two = SshRouterOsChannel.parseMonitor('name: ether1\nrate: 1Gbps\nfull-duplex: yes\nname: ether2\nrate: 100Mbps\n');
       expect(two.map((e) => e['rate']), ['1Gbps', '100Mbps']);
       expect(two.first['full-duplex'], 'true');
+    });
+  });
+
+  group('٩ نوفمبر — جدول العملاء قُرئ فعلاً؟ (لا «ما عليه أحد الآن — كانوا N» من مهلة)', () {
+    Future<MikrotikStats> read(Map<String, Object> replies, {String via = 'API', bool vitalsOnly = false}) {
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _Scripted(replies, name: via);
+      return MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'}, vitalsOnly: vitalsOnly);
+    }
+
+    test('جدولٌ مقروء بعملائه ⇒ مقروء؛ وفارغٌ مقروء ⇒ مقروء («لا أحد» صادقة)', () async {
+      final s = await read(_sector());
+      expect(s.wirelessClients, hasLength(1));
+      expect(s.clientsRead, isTrue);
+      // عبر الويب: لا جلسة SSH احتياطيّة لجدولٍ فارغ (للـAPI وحده)
+      final empty = await read(_sector(reg: const <Map<String, String>>[]), via: 'الويب');
+      expect(empty.wirelessClients, isEmpty);
+      expect(empty.clientsRead, isTrue);
+    });
+
+    test('🚨 جدول التسجيل انتهت مهلته ⇒ غير مقروء (لا قائمة فارغة كأنّها قُرئت)', () async {
+      final s = await read(_sector(reg: TimeoutException('reg-table', const Duration(seconds: 12))));
+      expect(s.wirelessClients, isEmpty);
+      expect(s.clientsRead, isFalse);
+      expect(s.cpuLoad, 9, reason: 'الطبقة الأولى تبقى');
+    });
+
+    test('اتّصالٌ انكسر قبل جدول التسجيل (أمر اللاسلكيّ) ⇒ غير مقروء', () async {
+      final s = await read(_sector(wireless: MikrotikBinaryException('انقطع ترتيب الردود (انتهت مهلة القراءة (timeout))')));
+      expect(s.wirelessInterfaces, isEmpty);
+      expect(s.clientsRead, isFalse);
+    });
+
+    test('بلا لاسلكيّ أصلاً (CCR: الأوامر لا حزمة لها) ⇒ مقروء — لا عملاء لاسلكيّين صادقة', () async {
+      final r = _sector()
+        ..remove('/interface/wireless/print')
+        ..remove('/interface/wireless/registration-table/print');
+      final s = await read(r);
+      expect(s.wirelessInterfaces, isEmpty);
+      expect(s.clientsRead, isTrue);
+    });
+
+    test('القراءة الخفيفة لا تدّعي قراءة العملاء', () async {
+      final s = await read(_sector(), vitalsOnly: true);
+      expect(s.clientsRead, isFalse);
     });
   });
 }

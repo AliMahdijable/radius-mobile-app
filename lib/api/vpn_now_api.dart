@@ -14,8 +14,12 @@ extension VpnNowKindX on VpnNowKind {
 
 /// قراءة مشتركٍ واحد عبر الـVPN — من جهازه (cpe)، أو سكتره، أو أولته، أو البنك وحده (ping)، أو لا يستجيب (dead).
 class VpnSubReading {
-  const VpnSubReading({required this.src, this.sig, this.ccq, this.lan, this.ms, this.rx, this.temp, this.state});
+  const VpnSubReading({required this.src, this.sig, this.ccq, this.lan, this.ms, this.rx, this.temp, this.state, this.err});
   final String src;
+
+  /// لماذا لم تُقرأ مقاييسه (من خادمٍ يعطيه، مع `ping`): `login_failed` ما انفتح بالرمز المحفوظ · `no_web` واجهة إدارته لا تُفتح.
+  /// خادمٌ أقدم بلا الحقل ⇒ null.
+  final String? err;
 
   /// أين صار بـ«تنبيهات المشتركين» بعد هذا الفحص (٦ نوفمبر — المالك: «الوكيل يدوخ ميعرف شنو ال ٦ هاي»): watching · pending ·
   /// queued · sent · skipped · muted · other — للمشترك بمشكلة وحده، ومن خادمٍ يعطيه.
@@ -28,6 +32,15 @@ class VpnSubReading {
   final double? temp;
 
   bool get dead => src == 'dead';
+
+  /// مقاييس فعليّة (إشارة، CCQ، كيبل، ضوء، حرارة) — كـ`SubsReading.ofVpn` (الصفر ليس قراءة). البنك وحده (`ping`) يردّ ولم يُقرأ:
+  /// ٩ نوفمبر — ضغطةٌ واحدة عبر نفق الشركة: يردّ 156، قُرئ 0، رُفض دخول 153 — وكلّهم ظهروا «سليم».
+  bool get measured =>
+      (sig != null && sig! < 0) ||
+      (ccq != null && ccq! > 0) ||
+      (lan ?? '').trim().isNotEmpty ||
+      (rx != null && rx! < 0) ||
+      temp != null;
 
   static int? _i(Object? v) => v is num ? v.round() : int.tryParse('${v ?? ''}');
   static double? _d(Object? v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}');
@@ -45,6 +58,7 @@ class VpnSubReading {
       rx: _d(j['rx']),
       temp: _d(j['t']),
       state: j['st'] == null || '${j['st']}'.isEmpty ? null : '${j['st']}',
+      err: j['err'] == null || '${j['err']}'.trim().isEmpty ? null : '${j['err']}'.trim(),
     );
   }
 }

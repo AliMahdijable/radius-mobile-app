@@ -456,7 +456,9 @@ class DevicesCheck {
     var subs = <CheckSub>[];
     var subsKnown = false;
     if (role == CheckRole.sector) {
-      subsKnown = detail.peers.isNotEmpty || g.peersKnown || !viaVpn;
+      // ٩ نوفمبر: الفراغ «ما عليه أحد» حين قُرئ جدوله فعلاً وحده — لا لأنّ الفحص من شبكتك: جدول تسجيلٍ انتهت مهلته كان يُعدّ
+      // فارغاً فيقول «ما عليه أحد الآن — كانوا N».
+      subsKnown = detail.peers.isNotEmpty || g.peersKnown;
       subs = [
         for (final p in detail.peers)
           CheckSub(
@@ -490,6 +492,9 @@ class DevicesCheck {
         f.add(was >= 3
             ? CheckFinding(CheckLevel.warn, 'ما عليه أحد الآن — كانوا $was بالفحص السابق')
             : const CheckFinding(CheckLevel.info, 'ما عليه أحد الآن'));
+      } else if (!subsKnown) {
+        // لا رقم ولا «لا أحد»: يُقال إنّها لم تُقرأ (والعدد السابق يبقى للمقارنة التالية)
+        f.add(const CheckFinding(CheckLevel.info, 'قائمة مشتركيه ما انقرت'));
       }
     }
 
@@ -588,7 +593,10 @@ class DevicesCheck {
       }
     }
 
-    final state = f.any((x) => x.level != CheckLevel.info) ? CheckState.warn : CheckState.ok;
+    // «سليم» للسكتر حكمٌ عليه وعلى مشتركيه — قائمتهم لم تُقرأ ⇒ «لم يُقرأ» بحيويّاته وسطرها، لا «سليم» (٩ نوفمبر)
+    final state = f.any((x) => x.level != CheckLevel.info)
+        ? CheckState.warn
+        : (role == CheckRole.sector && !subsKnown ? CheckState.unread : CheckState.ok);
     return DeviceCheckReport(
       device: d,
       role: role,

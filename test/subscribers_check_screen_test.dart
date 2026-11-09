@@ -175,4 +175,35 @@ void main() {
     await t.pumpWidget(const SizedBox());
     await visualTearDown();
   });
+  testWidgets('٩ نوفمبر: يردّ عبر الـVPN بلا مقاييس ⇒ «لم يُقرأ» بسببه لا «سليم» — على ٣٢٠ بلا فيضان، فاتحاً وداكناً', (t) async {
+    for (final dark in [false, true]) {
+      await visualSetUp(s1bSasOwner);
+      final subs = [_s('ok.u', 'سليم'), _s('ping.u', 'بنك وحده باسمٍ طويلٍ جدّاً للتجربة'), _s('auth.u', 'رمزه غلط')];
+      VpnNow.debugApply(VpnNowKind.subscribers, VpnNowResult(ok: true, message: 'تم', atMs: DateTime.now().millisecondsSinceEpoch, readings: {
+        'ok.u': const VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+        'ping.u': const VpnSubReading(src: 'ping', ms: 14),
+        'auth.u': const VpnSubReading(src: 'ping', ms: 9, err: 'login_failed'),
+      }));
+      await pumpVisual(t, VisualDevice('', const Size(320, 700), 3, dark: dark),
+          home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: true));
+      await settle(t, seconds: 1);
+      Finder inSeg(String seg, String text) =>
+          find.descendant(of: find.byKey(ValueKey('subs-check-seg-$seg')), matching: find.text(text));
+      expect(inSeg('healthy', '1'), findsOneWidget, reason: 'المقروء بمقاييسه وحده');
+      expect(inSeg('missing', '2'), findsOneWidget);
+      expect(find.text('قُرئ 1 من 3'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('subs-check-seg-missing')));
+      await settle(t, seconds: 1);
+      expect(
+          find.descendant(of: find.byKey(const ValueKey('subs-check-miss-|ping.u')), matching: find.text('يردّ، ما انقرت مقاييسه')),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('subs-check-miss-|auth.u')), matching: find.text('يردّ، ما انفتح برمزه المحفوظ')),
+          findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      await visualTearDown();
+    }
+  });
 }
