@@ -546,4 +546,58 @@ void main() {
       await _done(t);
     });
   });
+
+  // ───────────── R2-subui-2: شركةٌ طريقها VPN ولم تُفحص عبره ─────────────
+
+  group('R2-subui-2 — «كل الشركات»: سؤال الهاتف ليس فحص شركةٍ طريقها VPN', () {
+    for (final withNote in [true, false]) {
+      testWidgets('ايرث لنك ${withNote ? 'تحتاج VPN' : 'لم تُفحص بعد عبر VPN'} والهاتف سأل أجهزتها قبل دقيقة بلا ردّ ⇒ '
+          'لا «انتهى الفحص»', (t) async {
+        await visualSetUp(s1bSasOwner);
+        _mergedTwo();
+        final minuteAgo = DateTime.now().subtract(const Duration(minutes: 1));
+        final subs = [
+          _s('s.ok', ip: '1').withCompany(_kS),
+          _s('e.one', ip: '5').withCompany(_kE),
+          _s('e.two', ip: '6').withCompany(_kE),
+        ];
+        // الموجة سألت كلّ الصفوف — أجهزة ايرث لنك لا يصلها موبايلك
+        SubscribersCheck.debugPeek =
+            (s) => s.username == 's.ok' ? _read(minuteAgo) : (snap: null, stale: false, at: minuteAgo);
+        final wave = ValueNotifier(SubsWave(endedAt: minuteAgo));
+        if (withNote) VpnNow.debugNote(_kE, '«ايرث لنك» تحتاج VPN');
+        VpnNow.subscribers.phase = VpnBarPhase.running; // الفتح لا يبدأ فحصاً (لا شبكة)
+        addTearDown(() {
+          SubscribersCheck.debugPeek = null;
+          VpnNow.debugNote(_kE, null);
+          wave.dispose();
+          VpnNow.subscribers.reset();
+          VpnNow.clearCompanyReadings();
+          MergedMode.reset();
+        });
+        await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+            home: (_) => SubscribersCheckScreen(
+                subscribers: () => subs, viaVpn: false, wave: wave, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+        await settle(t, seconds: 1);
+        VpnNow.subscribers.reset();
+        await settle(t, seconds: 1);
+        Finder side() => find.byKey(const ValueKey('subs-check-progress-side'));
+
+        await t.tap(find.byKey(const ValueKey('subs-check-company-$_kE')));
+        await settle(t, seconds: 1);
+        final bar = withNote ? '«ايرث لنك» تحتاج VPN' : 'لم يُفحص بعد';
+        expect(_barText(t), bar, reason: 'سطرها في بطاقة الشركات بلا وقت — ومشتركوها «لم يُفحص»');
+        expect(side(), findsNothing, reason: 'لا وقت فحصٍ لها');
+        expect(find.byKey(const ValueKey('subs-check-progress-bar')), findsNothing, reason: 'لا شريط ممتلئ أخضر');
+        expect((await _copy(t)).split('\n')[1], bar);
+
+        // المفتوحة من شبكتك: «انتهى الفحص» بوقت موجتها كما كان
+        await t.tap(find.byKey(const ValueKey('subs-check-company-$_kS')));
+        await settle(t, seconds: 1);
+        expect(_barText(t), 'انتهى الفحص — 1 مشترك');
+        expect(t.widget<Text>(side()).data, 'منذ دقيقة');
+        await _done(t);
+      });
+    }
+  });
 }

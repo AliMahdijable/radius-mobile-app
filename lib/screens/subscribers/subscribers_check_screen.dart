@@ -217,18 +217,28 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     if (_merged) {
       final cur = job.current;
       final name = cur == null ? null : widget.companies!.where((c) => c.key == cur).firstOrNull?.name;
+      final vpn = widget.vpnAllowed ? _vpnRun(job) : null;
+      // شركةٌ مختارة: وقت سطرها في بطاقة «الشركات» — لا وقت أحدث الطرق على قراءاتها الأقدم (المراجعة F15)
+      final picked = _company == null ? null : lines?.where((l) => l.co.key == _company).firstOrNull;
+      if (picked != null && !_isLocal(picked.co.key) && picked.at == null) {
+        // ...وطريقها VPN شركتها وسطرها بلا وقت (لم تُفحص عبره أو تعذّر): سؤال الهاتف ليس فحصها — لا «انتهى الفحص» بوقته
+        // (المراجعة R2): سببها كسطرها، أو «لم يُفحص بعد»
+        final p = SubscribersCheck.progress(subs: r.total, wave: _wave, vpn: vpn, merged: true, vpnCompany: name);
+        if (p.running) return p;
+        final note = _companyNote(picked.co.key);
+        if (note != null) return SubsCheckProgress(SubsRunState.failed, note);
+        return p.state == SubsRunState.stopped ? p : const SubsCheckProgress(SubsRunState.idle, 'لم يُفحص بعد');
+      }
       DateTime? at = _wave?.endedAt;
       for (final c in _vpnCompanies) {
         final t = VpnNow.readingsAtFor(c.key);
         if (t != null && (at == null || t.isAfter(at))) at = t;
       }
-      // شركةٌ مختارة: وقت سطرها في بطاقة «الشركات» — لا وقت أحدث الطرق على قراءاتها الأقدم (المراجعة F15)
-      final picked = _company == null ? null : lines?.where((l) => l.co.key == _company).firstOrNull;
       if (picked != null) at = picked.at;
       return SubscribersCheck.progress(
         subs: r.total,
         wave: _wave,
-        vpn: widget.vpnAllowed ? _vpnRun(job) : null,
+        vpn: vpn,
         merged: true,
         vpnCompany: name,
         at: at ?? (widget.viaVpn ? r.newest : asked()),
