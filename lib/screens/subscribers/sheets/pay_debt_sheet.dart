@@ -290,7 +290,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.banknote,
         title: 'تسديد دين',
-        subtitle: widget.sub.fullName,
+        // «كل الشركات»: شركته مع اسمه — المال يُكتب لشركةٍ يراها قبل التأكيد
+        subtitle: MergedOps.sheetSubtitle(widget.sub),
         tint: AppColors.brandAccent,
         onClose: () => Navigator.of(context).pop(),
       ),

@@ -37,3 +37,44 @@ class CompanyTag extends StatelessWidget {
     );
   }
 }
+
+/// شركة صفّ مشتركٍ في «كل الشركات» (رأس صفحته، كشف حسابه — التحقّق الثالث من 179): بمفتاحه ⇒ شارة شركته؛ بلا مفتاح ⇒ الشركة
+/// المفتوحة (تُعرف بين الصالحة بمعرّف مديرها، وإلّا لا شيء). لا شيء خارج الوضع — الشاشات كما كانت حرفاً.
+class RowCompanyTag extends StatefulWidget {
+  const RowCompanyTag({super.key, required this.companyKey, this.fontSize = 11.5});
+
+  final String? companyKey;
+  final double fontSize;
+
+  @override
+  State<RowCompanyTag> createState() => _RowCompanyTagState();
+}
+
+class _RowCompanyTagState extends State<RowCompanyTag> {
+  String? _openKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(RowCompanyTag old) {
+    super.didUpdateWidget(old);
+    if (old.companyKey != widget.companyKey) _resolve();
+  }
+
+  Future<void> _resolve() async {
+    if (widget.companyKey != null || !MergedMode.active.value) return;
+    final k = await MergedMode.openKey();
+    if (mounted && k != _openKey) setState(() => _openKey = k);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!MergedMode.active.value) return const SizedBox.shrink();
+    final key = widget.companyKey ?? _openKey;
+    return key == null ? const SizedBox.shrink() : CompanyTag(companyKey: key, fontSize: widget.fontSize);
+  }
+}

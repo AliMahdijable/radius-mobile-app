@@ -196,7 +196,8 @@ class _SubscriberPriceSheetState extends State<_SubscriberPriceSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.banknote,
         title: 'sp.sheet_title'.tr(),
-        subtitle: widget.name,
+        // «كل الشركات»: شركته مع اسمه (بلا مفتاح ⇒ المفتوحة)
+        subtitle: MergedOps.withCompany(widget.name, widget.companyKey),
         tint: AppColors.brandAccent,
         onClose: () => Navigator.of(context).pop(),
       ),

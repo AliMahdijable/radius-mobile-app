@@ -151,8 +151,14 @@ class ReceiptService {
   /// اسم المحلّ الاحتياطيّ (بلا اسمٍ في المصمّم) و«أصدره».
   ///
   /// جلسة الموظّف: اسم العرض اسمه هو لا اسم الشركة — فالترويسة يوزر المدير، و«أصدره» الموظّف.
+  /// «كل الشركات»: اسم شركة الصفّ ([merged]) و«أصدره» مديرها؛ و«كل الصفحات» للموظّف: اسم الصفحة و«أصدره» هو (اسم عرضه) كالوضع
+  /// العاديّ — لا يوزر مدير الصفحة (التحقّق الثالث من 179: كان الوصل ينسب عمليّة الموظّف لمديره).
   static Future<({String shop, String? issuer})> _identity(MergedCompany? merged) async {
-    if (merged != null) return (shop: merged.name, issuer: merged.username);
+    if (merged != null) {
+      if (!MergedMode.employeeSession) return (shop: merged.name, issuer: merged.username);
+      final display = (await AuthStorage.readDisplayName())?.trim() ?? '';
+      return (shop: merged.name, issuer: display.isEmpty ? null : display);
+    }
     final employee = await AuthStorage.isEmployee();
     final display = (await AuthStorage.readDisplayName())?.trim() ?? '';
     final user = (await AuthStorage.readAdminUsername())?.trim() ?? '';

@@ -741,5 +741,70 @@ void main() {
             reason: '$f: العمليّة الجماعيّة بلا حارس «كل الشركات»');
       }
     });
+
+    test('كشف الحساب لا يُفتح بلا قرار شركة: كلّ `AccountStatementScreen(` يمرّر companyKey (التحقّق الثالث من 179)', () {
+      final sites = <String>[];
+      final bad = <String>[];
+      for (final e in lib.entries) {
+        if (e.key == 'lib/screens/reports/account_statement_screen.dart') continue; // تعريفه
+        final code = e.value.code;
+        for (final m in RegExp(r'\bAccountStatementScreen\s*\(').allMatches(code)) {
+          final open = m.end - 1;
+          final at = '${e.key}:${_lineOf(code, m.start)}';
+          sites.add(at);
+          if (!RegExp(r'\bcompanyKey\s*:').hasMatch(code.substring(open, _close(code, open)))) bad.add(at);
+        }
+      }
+      expect(sites, isNotEmpty, reason: 'الفحص لم يجد مواضع (تغيّرت الصيغة؟)');
+      expect(bad, isEmpty, reason: 'كشفٌ بلا شركته يُطلب من الشركة المفتوحة ويُصدَّر تحت اسم مشترك غيرها — مرّر sub.companyKey');
+    });
+
+    test('الغلاف (MainShell) أوّل صفحات الجذر وحده: كلّ مدخلٍ إليه يزيل ما تحته — ملخّص «انتهت اليوم» يقيس «لا شيء فوقه» بذلك', () {
+      final nav = RegExp(r'\.\s*(pushAndRemoveUntil|pushReplacement|push)\s*(?:<[^()]*?>)?\s*\(');
+      final removeAll = RegExp(r'\(\s*\w+\s*\)\s*=>\s*false');
+      // قيمةٌ تُبنى خارج نداء التنقّل — مراجَعةٌ بطريقة دخولها
+      const values = {
+        'lib/screens/splash_screen.dart': 'next ⇒ pushReplacement من أوّل صفحات الجذر (البداية) فيحلّ محلّها',
+        'lib/screens/account/company_open_flow.dart': 'shellBuilder ⇒ pushAndRemoveUntil((_) => false)',
+      };
+      final bad = <String>[];
+      final seenValues = <String>{};
+      for (final e in lib.entries) {
+        if (e.key == 'lib/screens/main_shell.dart') continue;
+        final code = e.value.code;
+        for (final m in RegExp(r'\bMainShell\s*\(').allMatches(code)) {
+          final at = '${e.key}:${_lineOf(code, m.start)}';
+          // أعمق نداء تنقّلٍ يحويه
+          RegExpMatch? inner;
+          for (final n in nav.allMatches(code)) {
+            final open = n.end - 1;
+            if (open >= m.start) break;
+            if (_close(code, open) > m.start) inner = n;
+          }
+          if (inner == null) {
+            if (values.containsKey(e.key)) {
+              seenValues.add(e.key);
+            } else {
+              bad.add('$at: يُبنى خارج نداء تنقّل — راجعه وأضفه بطريقة دخوله');
+            }
+            continue;
+          }
+          final open = inner.end - 1;
+          final args = code.substring(open, _close(code, open));
+          if (inner.group(1) != 'pushAndRemoveUntil' || !removeAll.hasMatch(args)) {
+            bad.add('$at: ${inner.group(1)} يُبقي ما تحت الغلاف');
+          }
+        }
+      }
+      expect(bad, isEmpty, reason: 'مدخلٌ يُبقي صفحةً تحت الغلاف ⇒ الرجوع يعود إليها، و«لا شيء فوقه» يُقرأ خطأً');
+      expect(seenValues, values.keys.toSet(), reason: 'موضعٌ مراجَعٌ زال — احذفه من القائمة');
+      // shellBuilder يُدخل بإزالة ما تحته
+      final flow = lib['lib/screens/account/company_open_flow.dart']!.code;
+      final use = flow.indexOf('shellBuilder()');
+      expect(use, greaterThan(0));
+      final pr = RegExp(r'\.\s*pushAndRemoveUntil\s*\(').allMatches(flow).where((n) => n.end - 1 < use && _close(flow, n.end - 1) > use);
+      expect(pr, isNotEmpty, reason: 'shellBuilder يُدخل بـpushAndRemoveUntil');
+      expect(removeAll.hasMatch(flow.substring(pr.last.end - 1, _close(flow, pr.last.end - 1))), isTrue);
+    });
   });
 }

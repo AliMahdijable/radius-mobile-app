@@ -220,7 +220,8 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.tag,
         title: 'خصم سريع',
-        subtitle: widget.sub.fullName,
+        // «كل الشركات»: شركته مع اسمه — المال يُكتب لشركةٍ يراها قبل التأكيد
+        subtitle: MergedOps.sheetSubtitle(widget.sub),
         tint: AppColors.brandAccent,
         onClose: () => Navigator.of(context).pop(),
       ),

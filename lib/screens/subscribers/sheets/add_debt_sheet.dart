@@ -196,7 +196,8 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.creditCard,
         title: 'إضافة دين',
-        subtitle: widget.sub.fullName,
+        // «كل الشركات»: شركته مع اسمه — المال يُكتب لشركةٍ يراها قبل التأكيد
+        subtitle: MergedOps.sheetSubtitle(widget.sub),
         tint: AppColors.warningFill,
         tintBg: AppColors.warningSoftBg,
         onClose: () => Navigator.of(context).pop(),

@@ -818,7 +818,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.refreshCw,
         title: 'dashboard.renew_sub'.tr(),
-        subtitle: widget.sub.fullName,
+        // «كل الشركات»: شركته مع اسمه — المال يُكتب لشركةٍ يراها قبل التأكيد
+        subtitle: MergedOps.sheetSubtitle(widget.sub),
         onClose: _cardOrder != null ? _closeCard : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
