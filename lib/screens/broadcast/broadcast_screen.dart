@@ -1320,7 +1320,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               decoration: InputDecoration(
                 hintText: hint,
                 hintStyle: AppType.input(color: AppColors.textPlaceholder),
-                suffixText: 'د.ع',
+                suffixText: ' د.ع',
                 suffixStyle: AppType.micro(color: AppColors.textMid),
                 filled: true,
                 fillColor: AppColors.surface,
@@ -1452,9 +1452,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           const SizedBox(height: Sp.md),
           Text('مبلغ الدين', style: AppType.labelBold(color: AppColors.textBody)),
           const SizedBox(height: Sp.sm),
+          // بلا فاصل «إلى» بين الصندوقين: التلميحان «من»/«إلى» يكفيان، والعرض كلّه للرقم (٣٢٠ لا يلتصق «د.ع» به)
           Row(children: [
             amountBox(_dfMinCtrl, 'من', true),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: Sp.sm), child: Text('إلى', style: AppType.micro(color: AppColors.textMid))),
+            const SizedBox(width: Sp.sm),
             amountBox(_dfMaxCtrl, 'إلى', false),
           ]),
           const SizedBox(height: Sp.sm),
@@ -1495,9 +1496,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                                 TextSpan(text: '${pv.audience}', style: AppType.statValue(color: AppColors.warningOnSoft)),
                                 TextSpan(text: ' مديناً يطابقون', style: AppType.body(color: AppColors.textMid)),
                               ])),
-                              if (pv.legacy > 0 || pv.unknownAge > 0)
+                              if (pv.count != pv.audience || pv.legacy > 0 || pv.unknownAge > 0)
                                 Text(
                                   [
+                                    if (pv.count != pv.audience) 'سيصل ${pv.count}',
                                     if (pv.legacy > 0) '${pv.legacy} دين قديم',
                                     if (pv.unknownAge > 0) '${pv.unknownAge} بلا عمر معروف (لم يُشملوا)',
                                   ].join(' · '),

@@ -176,6 +176,7 @@ void main() {
       expect(find.text('3', findRichText: true), findsWidgets);
       expect(find.textContaining('1 دين قديم'), findsOneWidget);
       expect(find.textContaining('1 بلا عمر معروف'), findsOneWidget);
+      expect(find.textContaining('سيصل'), findsNothing, reason: 'كلّ من يطابق يصله');
       // الإرسال: معاينةٌ للطلب نفسه ⇒ ورقة التأكيد بالأسماء و«دين قديم» ⇒ الإرسال بالبصمة
       await t.tap(find.byKey(const ValueKey('broadcast-send')));
       await settle(t, seconds: 2);
@@ -223,6 +224,7 @@ void main() {
       await settle(t);
       await t.tap(find.byKey(const ValueKey('df-age-30')));
       await settle(t, seconds: 2);
+      expect(find.textContaining('سيصل 2'), findsOneWidget, reason: '3 يطابقون و2 يصلهم — الفرق ظاهرٌ قبل الإرسال');
       await t.tap(find.byKey(const ValueKey('broadcast-send')));
       await settle(t, seconds: 2);
       expect(t.takeException(), isNull, reason: 'لا تحذير ListTile داخل الصندوق الملوّن');
