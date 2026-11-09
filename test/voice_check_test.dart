@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
@@ -292,6 +294,10 @@ void main() {
       // «كل الشركات»: مشترك شركةٍ غير المفتوحة طريقها VPN شركتها — فشل الهاتف معه ليس «ما ردّ من شبكتك»
       final b = _co('c0000000000b1', 'ايرث لنك');
       SubscriberVoiceCheck.debugIsOpen = (c) async => c.key != b.key;
+      // فحص شركته عبر الـVPN اكتمل بلا قراءةٍ له — قراءاتها بمكانها لا بقراءات المفتوحة (المراجعة: «لم يُقرأ عبر VPN»
+      // لفحصٍ مكتملٍ لشركته وحده)
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.debugApplyCompany(
+          b.key, const VpnNowResult(ok: true, message: 'تم', readings: {'other': VpnSubReading(src: 'dead')}));
       final o = SubscriberVoiceCheck(_sub('o', company: b.key), company: b);
       await o.run();
       expect([o.cat, o.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُقرأ عبر VPN']);
@@ -312,6 +318,168 @@ void main() {
       final f = SubscriberVoiceCheck(_sub('f'));
       await f.run();
       expect([f.cat, f.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — الـVPN ما اتّصل الآن — حاول بعد قليل']);
+    });
+  });
+  // ───────────── المراجعة ١٠ نوفمبر (إصدار 180): فحص الـVPN لم يكتمل، وعمر قراءته ─────────────
+  // الجواب بكلمات «الفحص العامّ» وقسمه في اللحظة نفسها: الفحص لم يبلغه ⇒ «لم يُفحص بعد» لا «جهازه ما ردّ»؛ ولا يبدأ
+  // فحصاً لم يطلبه أحد بعد ظهور الجواب؛ وقراءة الـVPN القديمة (حتى ٣٠ د) بعمرها لا كأنّها الآن.
+  group('المراجعة ١٠ نوفمبر — فحص الـVPN لم يكتمل وعمر قراءته', () {
+    const kE = 'c0000000000e1';
+    const kX = 'c0000000000f1';
+    setUp(() {
+      ConnectionAlertSettings.current.value = const ConnectionAlertThresholds(signalDbm: -70, ccqPct: 60);
+      VpnNow.reset();
+    });
+    tearDown(() {
+      SubscriberVoiceCheck.debugProbe = null;
+      SubscriberVoiceCheck.debugVpnRun = null;
+      SubscriberVoiceCheck.debugLocalAllowed = null;
+      SubscriberVoiceCheck.debugVpnAllowed = null;
+      SubscriberVoiceCheck.debugIsOpen = null;
+      VpnNow.reset();
+      ConnectionAlertSettings.current.value = const ConnectionAlertThresholds();
+    });
+
+    /// الفحص الجاري يمضي لما بعد شركته أو ينتهي — ويُبلغ مستمعيه.
+    void finish(VpnNowJob job) {
+      job
+        ..phase = VpnBarPhase.done
+        ..queue = const []
+        ..current = null;
+      job.clear();
+    }
+
+    test(
+        '«كل الشركات»: فحص شركته عبر الـVPN بالدور حين انتهت المهلة ⇒ «لم يُفحص بعد — بانتظار الفحص» لا «جهازه ما '
+        'ردّ»، كصفّه في «الفحص العامّ» — ثمّ يتحدّث وحده حين يكتمل', () async {
+      final a = _co('c0000000000a1', 'سوبرنت');
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      SubscriberVoiceCheck.debugIsOpen = (_) async => true; // المفتوحة: الهاتف على شبكتها وما ردّ جهازه
+      SubscriberVoiceCheck.debugProbe = (_) async => null;
+      // «الفحص العامّ» يفحص شركاته عبر الـVPN والمفتوحة آخرها (تكملة الفايبر) — والمهلة انتهت وشركته بالدور
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kE, a.key]
+        ..current = kE;
+      final c = SubscriberVoiceCheck(_sub('w', company: a.key), company: a);
+      var told = 0;
+      c.addListener(() => told++);
+      await c.run();
+      expect([c.cat, c.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص بعد — بانتظار الفحص']);
+      expect(c.spoken, isNot(contains('ما ردّ')), reason: 'كان «جهازه ما ردّ — من شبكتك» والفحص لم يبلغه');
+      // «الفحص العامّ» في اللحظة نفسها: القسم والسبب نفسهما
+      final m = SubscribersCheck.mixed([c.sub], (_) => c.limits,
+          peek: (_) => (snap: null, stale: false, at: DateTime.now()), localFailsFor: (k) => k == a.key).missing.single;
+      expect([SubscribersCheck.catOf(m.why), SubscribersCheck.missText(m, running: true)], [c.cat, c.note]);
+
+      // دور شركته يكتمل بقراءةٍ له ⇒ الجواب منها (بلا فحصٍ جديد)
+      final before = told;
+      VpnNow.debugApplyCompany(a.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {'w': VpnSubReading(src: 'olt', rx: -21.5, temp: 41)}));
+      finish(VpnNow.subscribers);
+      expect(told, greaterThan(before), reason: 'الجواب يتحدّث وحده');
+      expect([c.row?.reading?.vpn, c.deviceLine], [true, 'الضوء سليمة']);
+      c.dispose();
+    });
+
+    test('الهاتف لم يسأل جهازه («وضع VPN» عند البدء) ⇒ لا «ما ردّ من شبكتك» ولو رجع لشبكته أثناء انتظار الـVPN',
+        () async {
+      var onNet = false;
+      var probes = 0;
+      SubscriberVoiceCheck.debugLocalAllowed = () => onNet;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      SubscriberVoiceCheck.debugProbe = (_) async {
+        probes++;
+        return null;
+      };
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async {
+        VpnNow.debugApply(VpnNowKind.subscribers,
+            const VpnNowResult(ok: true, message: 'تم', readings: {'other': VpnSubReading(src: 'dead')}));
+        onNet = true; // الحارس أطفأ «وضع VPN» والفحص جارٍ
+      };
+      final c = SubscriberVoiceCheck(_sub('m'));
+      await c.run();
+      expect(probes, 0);
+      expect([c.cat, c.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُقرأ عبر VPN'],
+          reason: 'فحص الخادم اكتمل ولم يسأل جهازه، والهاتف لم يسأله');
+    });
+
+    test('الفحص أُلغي قبل أن يكتمل لشركته («وضع VPN» انطفأ) ⇒ «لم يُفحص عبر VPN بعد» لا «لم يُقرأ عبر VPN»', () async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async {
+        VpnNow.subscribers
+          ..phase = VpnBarPhase.running
+          ..queue = [b.key]
+          ..current = b.key;
+        VpnNow.subscribers.cancel(); // exitMode
+      };
+      final c = SubscriberVoiceCheck(_sub('x', company: b.key), company: b);
+      await c.run();
+      expect([c.cat, c.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُفحص عبر VPN بعد']);
+    });
+
+    testWidgets('المهلة وفحصٌ جارٍ لغير شركته ⇒ «لم يُفحص» بسببه، ولا يبدأ فحصاً بعد ظهور الجواب', (t) async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kX]
+        ..current = kX;
+      final c = SubscriberVoiceCheck(_sub('y', company: b.key), company: b);
+      final run = c.run();
+      await t.pump(SubscriberVoiceCheck.vpnTimeout + const Duration(seconds: 1));
+      await run;
+      expect([c.cat, c.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُفحص عبر VPN بعد']);
+      finish(job);
+      await t.pump();
+      expect(job.busy, isFalse, reason: 'كان يبدأ فحص «ايرث لنك» بعد ظهور الجواب ولم يطلبه أحد');
+      c.dispose();
+    });
+
+    testWidgets('أُغلق الجواب وهو ينتظر فحصاً جارياً ⇒ لا يبدأ فحصاً بعده', (t) async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kX]
+        ..current = kX;
+      final c = SubscriberVoiceCheck(_sub('y', company: b.key), company: b);
+      unawaited(c.run());
+      await t.pump(const Duration(seconds: 5));
+      expect(c.phase, VoiceCheckPhase.vpn);
+      c.dispose();
+      await t.pump();
+      finish(job);
+      await t.pump(const Duration(seconds: 1));
+      expect(job.busy, isFalse);
+    });
+
+    testWidgets('«كل الشركات»: شركته فُحصت في الفحص الجاري نفسه ⇒ الجواب فوراً من نتيجته، بلا انتظار الباقي ولا فحصٍ',
+        (t) async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      VpnNow.debugApplyCompany(
+          b.key, const VpnNowResult(ok: true, message: 'تم', readings: {'other': VpnSubReading(src: 'dead')}));
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [b.key, kX]
+        ..current = kX;
+      final c = SubscriberVoiceCheck(_sub('z', company: b.key), company: b);
+      final run = c.run();
+      await t.pump(const Duration(milliseconds: 50));
+      expect(c.phase, VoiceCheckPhase.done, reason: 'لا ينتظر الشركات بعد شركته');
+      await run;
+      expect([c.cat, c.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُقرأ عبر VPN']);
+      finish(job);
+      await t.pump();
+      expect(job.busy, isFalse, reason: 'لا فحصٌ ثانٍ لشركةٍ فُحصت للتوّ');
+      c.dispose();
     });
   });
 }
