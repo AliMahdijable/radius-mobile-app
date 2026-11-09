@@ -10,7 +10,8 @@ import '../theme/typography.dart';
 import 'list_kit.dart';
 
 /// لوحة «تحديد المدينين» — مشتركةٌ بين «التبليغات» و«إرسال عام» تلغرام (٩ نوفمبر). عمر **أقدم دينٍ لم يُسدَّد** و/أو مبلغ الدين،
-/// اختياريّان، والنتيجة من الخادم تحتهما (هو وحده يحسب العمر). الحقول (الأيّام والمبلغان) هنا؛ الفلتر نفسه عند الشاشة (onChanged).
+/// اختياريّان، والنتيجة من الخادم تحتهما (هو وحده يحسب العمر). الحقول (الأيّام والمبلغان) هنا؛ الفلتر نفسه عند الشاشة (onChanged)،
+/// والحقول تُملأ منه كلّما بُنيت اللوحة من جديد أو غيّرته الشاشة — فما يُرى هو ما يُطبَّق.
 /// «نحسب…» للحساب الكبير بنصّ الخادم (pendingText). المفاتيح كما كانت في التبليغات: debt-filter-panel · df-age-N · df-age-custom ·
 /// df-min · df-max · debt-filter-result.
 class DebtFilterPanel extends StatefulWidget {
@@ -52,7 +53,7 @@ class _DebtFilterPanelState extends State<DebtFilterPanel> {
   bool _customAge = false;
 
   /// آخر ما أُرسل للشاشة — نقرتان قبل إعادة البناء تبنيان على الأحدث لا على القديم.
-  late DebtFilter _cur = widget.value;
+  late DebtFilter _cur;
 
   static const _ranges = <(String, int?, int?)>[
     ('حتى 25 ألف', null, 25000),
@@ -62,15 +63,29 @@ class _DebtFilterPanelState extends State<DebtFilterPanel> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _cur = widget.value;
+    _fill(widget.value);
+  }
+
+  /// الحقول من الفلتر المطبَّق [f] — ما يُرى هو ما يُطبَّق (مراجعة 3.0.18): اللوحة تُبنى من جديد والفلتر باقٍ عند الشاشة (تبديل الفئة
+  /// والعودة، السحب للتحديث، تمريرٌ أخرجها من القائمة الكسولة)، فكانت «من»/«إلى» تظهر فارغةً والعدّ والإرسال بمبلغها.
+  void _fill(DebtFilter f) {
+    _minCtrl.text = f.minAmount == null ? '' : AmountShorthand.format(f.minAmount!);
+    _maxCtrl.text = f.maxAmount == null ? '' : AmountShorthand.format(f.maxAmount!);
+    final d = f.minAgeDays;
+    _customAge = d != null && !widget.cap.presets.contains(d);
+    _ageCtrl.text = _customAge ? '$d' : '';
+  }
+
+  @override
   void didUpdateWidget(covariant DebtFilterPanel old) {
     super.didUpdateWidget(old);
-    _cur = widget.value;
-    // مُسح الفلتر من الشاشة نفسها ⇒ الحقول فارغة
-    if (!widget.value.active && old.value.active) {
-      _ageCtrl.clear();
-      _minCtrl.clear();
-      _maxCtrl.clear();
-      _customAge = false;
+    // غيّرته الشاشة لا اللوحة (مسحٌ مثلاً) ⇒ الحقول منه؛ وما أرسلته اللوحة نفسها يعود كما هو فلا يُمسّ ما يكتبه المدير
+    if (widget.value != _cur) {
+      _cur = widget.value;
+      _fill(widget.value);
     }
   }
 
@@ -214,7 +229,11 @@ class _DebtFilterPanelState extends State<DebtFilterPanel> {
                 label: 'مدّة أخرى',
                 tone: ListTone.warning,
                 active: _customAge,
-                onTap: () => setState(() => _customAge = true),
+                // الصندوق يبدأ بالعمر المطبَّق الآن (شريحةٌ أو ما كُتب قبلها) — لا فارغاً والفلتر بعمرٍ آخر
+                onTap: () => setState(() {
+                  _customAge = true;
+                  _ageCtrl.text = _df.minAgeDays?.toString() ?? '';
+                }),
               ),
             ]),
             if (_customAge) ...[

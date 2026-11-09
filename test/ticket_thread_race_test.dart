@@ -63,23 +63,38 @@ class _Thread {
     });
     s.reply('GET', '/api/v2/portal/tickets/summary', 200, {'success': true, 'available': true, 'can_view': true, 'can_reply': true});
     s.on('POST', '/api/v2/portal/tickets/9/reply', (req) {
-      final m = _msg(20, 'manager', (req.data as Map)['body'] as String);
-      messages = [...messages, m];
-      current = _ticket('answered');
-      return SimReply(200, {'success': true, 'ticket': current, 'message': m});
+      SimReply commit() {
+        final m = _msg(20, 'manager', (req.data as Map)['body'] as String);
+        messages = [...messages, m];
+        current = _ticket('answered');
+        return SimReply(200, {'success': true, 'ticket': current, 'message': m});
+      }
+
+      final w = writeGate;
+      writeGate = null;
+      return w == null ? commit() : w.future.then((_) => commit());
     });
     s.on('POST', '/api/v2/portal/tickets/9/status', (req) {
-      final st = (req.data as Map)['status'] as String;
-      final e = _event(30, st);
-      messages = [...messages, e];
-      current = _ticket(st);
-      return SimReply(200, {'success': true, 'ticket': current, 'message': e});
+      SimReply commit() {
+        final st = (req.data as Map)['status'] as String;
+        final e = _event(30, st);
+        messages = [...messages, e];
+        current = _ticket(st);
+        return SimReply(200, {'success': true, 'ticket': current, 'message': e});
+      }
+
+      final w = writeGate;
+      writeGate = null;
+      return w == null ? commit() : w.future.then((_) => commit());
     });
   }
 
   Map<String, dynamic> current = _ticket('open');
   List<Map<String, dynamic>> messages = [_msg(1, 'subscriber', 'النت مقطوع من الصبح')];
   Completer<void>? gate;
+
+  /// يُمسك الكتابة التالية (ردّاً أو حالة) **قبل** حفظها — قراءةٌ تُطلب أثناءها ترى ما قبلها.
+  Completer<void>? writeGate;
 }
 
 void main() {
@@ -168,6 +183,67 @@ void main() {
     expect(find.text('النت مقطوع من الصبح'), findsOneWidget, reason: 'رسائل القراءة الأولى تظهر');
     expect(find.text('وصلنا طلبك'), findsOneWidget, reason: 'والردّ معها لا يُمحى');
     expect(status('تمّ الردّ'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await simDrain(t);
+  });
+
+  /// السحب للتحديث بدأ والكتابة جارية (مراجعة 3.0.18 الثانية): الخادم يقرأ قبل حفظها ويصل ردّه بعد ردّها — والعدّاد لم يتغيّر بعد
+  /// بدء القراءة، فكانت لقطتها تُطبَّق كاملةً.
+  Future<Completer<void>> pullDuring(WidgetTester t, _Thread srv) async {
+    final read = srv.gate = Completer<void>();
+    final before = server.calls('GET', '/api/v2/portal/tickets/9').length;
+    unawaited(t.state<RefreshIndicatorState>(find.byType(RefreshIndicator)).show());
+    for (var i = 0; i < 6; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(server.calls('GET', '/api/v2/portal/tickets/9'), hasLength(before + 1), reason: 'السحب قرأ والكتابة جارية');
+    return read;
+  }
+
+  testWidgets('سحبٌ للتحديث بدأ أثناء الردّ ووصل بعده: الردّ يبقى وحال «تمّ الردّ» لا ترجع «بانتظارك»', (t) async {
+    final srv = _Thread(server);
+    await pumpSim(t, _v, home: (_) => const TicketThreadScreen(ticketId: 9));
+    expect(status('بانتظارك'), findsOneWidget);
+    await t.enterText(composer, 'تمّ إصلاح الخطّ');
+    final write = srv.writeGate = Completer<void>();
+    await t.tap(find.byKey(const ValueKey('ticket-send')));
+    await t.pump();
+    final read = await pullDuring(t, srv);
+    // الردّ يُحفظ ويصل أوّلاً
+    write.complete();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.text('تمّ إصلاح الخطّ'), findsOneWidget);
+    expect(status('تمّ الردّ'), findsOneWidget);
+    // ثمّ لقطة السحب (قبل الحفظ)
+    read.complete();
+    await t.pumpAndSettle();
+    expect(find.text('تمّ إصلاح الخطّ'), findsOneWidget, reason: 'الردّ المُرسَل لا يختفي');
+    expect(find.text('النت مقطوع من الصبح'), findsOneWidget);
+    expect(status('تمّ الردّ'), findsOneWidget, reason: 'الحال من ردّ الكتابة لا من اللقطة الأقدم');
+    expect(status('بانتظارك'), findsNothing);
+    expect(t.takeException(), isNull);
+    await simDrain(t);
+  });
+
+  testWidgets('سحبٌ للتحديث بدأ أثناء «إغلاق» ووصل بعده: تبقى مغلقةً بلا حقل ردّ', (t) async {
+    final srv = _Thread(server);
+    await pumpSim(t, _v, home: (_) => const TicketThreadScreen(ticketId: 9));
+    final write = srv.writeGate = Completer<void>();
+    await t.tap(find.byKey(const ValueKey('ticket-action-closed')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('أغلق'));
+    await t.pump(const Duration(milliseconds: 600));
+    final read = await pullDuring(t, srv);
+    write.complete();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(composer, findsNothing);
+    read.complete();
+    await t.pumpAndSettle();
+    expect(composer, findsNothing, reason: 'المغلقة لا تعود مفتوحةً بلقطةٍ أقدم');
+    expect(find.text('التذكرة مغلقة — أعد فتحها للردّ'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ticket-action-reopen')), findsOneWidget);
     expect(t.takeException(), isNull);
     await simDrain(t);
   });

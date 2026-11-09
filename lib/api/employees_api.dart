@@ -410,6 +410,26 @@ class ElEmployeePerms {
   /// خارج الأدوار الجاهزة: الدور لا يلمسها ([presets] · `_applyElPreset`) ولا تُحسب في مطابقته ([matching]) — تُمنح فرادى.
   static const roleFreeKeys = <String>{...checkKeys, ...vpnKeys, ...alertKeys};
 
+  /// ما يُجري عمليّةً من [roleFreeKeys] (لا فحصاً ولا عرضاً ولا إشعاراً) بالاسم الذي يُقال للمالك: «ربط VPN»، وقسم «تنبيهات المشتركين»
+  /// بموافقته وإرساله. الدور لا يلمسها، فإن بقيت ممنوحةً سمّاها سطر الدور ([captionFor]).
+  static const roleFreeOperations = <String, String>{
+    'conn_vpn.link': 'ربط VPN',
+    'conn_alerts.use': 'تنبيهات المشتركين (الموافقة والإرسال)',
+  };
+
+  /// سطر الوصف تحت الأدوار للدور المطابق [p] (مراجعة 3.0.18): «عرض فقط» بلا أيّ عمليّة — إلّا ما منحه المالك فرادى من
+  /// [roleFreeOperations] وبقي (الدور لا يلمسه، 00b20601) فيُسمّى؛ كان يُقال «بلا أيّ عمليّة» والموظّف يربط VPN ويوافق ويرسل التنبيهات.
+  /// [catalogKeys] كـ[matching]: ما لا يعرضه الكتالوج لا يُذكر.
+  static String captionFor(ElPermPreset p, Map<String, bool> perms, {Iterable<String>? catalogKeys}) {
+    if (p.id != 'view') return p.description;
+    final shown = offered(catalogKeys);
+    final kept = [
+      for (final e in roleFreeOperations.entries)
+        if (shown.contains(e.key) && perms[e.key] == true) e.value,
+    ];
+    return kept.isEmpty ? p.description : '${p.description} — عدا ما منحته فرادى: ${kept.join(' · ')}';
+  }
+
   /// جلسة المشروع الوطنيّ (شركةٌ مُضافة أبو مشتركها الزون — watani).
   static bool get isNationalSession => ProviderService.isKit && ProviderService.parentIsZone;
 

@@ -261,11 +261,21 @@ int ticketsBadgeCount(TicketCounts c, {int outside = 0, TicketsBadgeRule rule = 
 /// غير المقروءة خارج «بانتظارك» (لعدّ كلّ ما ينتظر مرّةً واحدة مع «بانتظارك» من الملخّص).
 @immutable
 class TicketsBell {
-  const TicketsBell({this.items = const [], this.outside = 0});
+  const TicketsBell({this.items = const [], this.outside = 0, this.known = const {}});
   final List<Ticket> items;
   final int outside;
 
+  /// كلّ تذكرةٍ قرأها الجرس ⇒ غير مقروءة؟ — «بانتظارك» كلّها (حتى حدّ الصفحة) وغير المقروءة خارجها: ما يعدّه رقمه بمعرّفاته، فلا
+  /// يُعدّ إشعارها في الصندوق مرّةً ثانية ([TicketsState.inboxDuplicates]).
+  final Map<int, bool> known;
+
   static const empty = TicketsBell();
+
+  /// تذكرة [id] معدودةٌ في رقم الجرس بالقاعدة [rule]: «بانتظارك» أو غير مقروءةٍ خارجها — أو غير المقروءة وحدها بالوجه الآخر.
+  bool isCounted(int id, TicketsBadgeRule rule) => switch (rule) {
+        TicketsBadgeRule.waiting => known.containsKey(id),
+        TicketsBadgeRule.unread => known[id] == true,
+      };
 
   /// كلّ ما ينتظرك — التذاكر المختلفة غير المقروءة أو «بانتظارك» ([c] الملخّص الأحدث).
   int waitingOf(TicketCounts c) => math.max(c.open + outside, items.length);
@@ -507,6 +517,18 @@ class TicketsState {
   /// قائمة الجرس تعذّرت والملخّص وصل: تُعاد بعد التبريد مع أوّل سؤالٍ تالٍ ولو لم تنتهِ المهلة — ولا تحبس الملخّص نفسه.
   static DateTime? _bellFailedAt;
   static Future<void>? _inflight;
+
+  /// ملخّص القراءة الجارية وصل (أو انتهت) — ما ينتظره نقر الإشعار حين لا يُعرف الحال ([ensureForPush])، لا قوائم الجرس بعده.
+  static Future<void>? _inflightSummary;
+
+  /// قراءةٌ مُجبَرة طُلبت والجارية بدأت قبلها — تجري بعدها مرّةً واحدة لكلّ من طلبها أثناءها ([ensureFresh]).
+  static Future<void>? _queued;
+
+  /// متى سُئل الملخّص المنشور — ما وصل الصندوقَ قبله من إشعارات التذاكر حالُه في الأرقام ([inboxDuplicates]).
+  static DateTime? _countsAsOf;
+
+  /// الشركة التي يعرض الحال تذاكرها (المفتوحة، كما في بيانات دفعها `company_admin_id`).
+  static String? _adminId;
   static String? _lastInboxId;
 
   static const ttl = Duration(minutes: 2);
@@ -531,9 +553,54 @@ class TicketsState {
   /// كلّ ما ينتظرك (ما يعرضه القسم كلّه) — لسطر «و N غيرها…» أيّاً كانت القاعدة.
   static int get bellWaiting => inBell ? bell.value.waitingOf(gate.value!.counts ?? const TicketCounts()) : 0;
 
+  /// إشعارات تذاكر غير مقروءة في الصندوق يعدّها [bellBadge] أصلاً — تُطرح من رقم الجرس (`TopActions`) فتُعدّ كلّ تذكرةٍ مرّةً واحدة
+  /// (مراجعة 3.0.18: تذكرةٌ جديدة والتطبيق مفتوح كانت ٢ — إشعارها غير المقروء والتذكرة — وثلاث رسائل منها ٤؛ والحاسبة تضيف كلّ
+  /// إشعارٍ غير مقروء). المعدود: إشعارٌ لتذكرةٍ معدودةٍ الآن، أو وصل قبل آخر سؤالٍ للأرقام فحالها فيها (تنتظرك ⇒ معدودة، عولجت ⇒ لا
+  /// تنتظرك). وما سواه يُعدّ كأيّ إشعار: تذكرةٌ جديدة لم تُقرأ أرقامها بعد (حتى تُقرأ — فلا يتأخّر الرقم ولا يتضاعف)، أو لشركةٍ
+  /// أخرى («إشعارات كلّ شركاتي» — الجرس لتذاكر المفتوحة وحدها)، أو والقسم ليس في جرسه.
+  static int get inboxDuplicates {
+    if (!inBell) return 0;
+    final b = bell.value;
+    final asOf = _countsAsOf;
+    var n = 0;
+    for (final x in InboxService.all) {
+      if (x.isRead || x.data['type'] != 'portal_ticket') continue;
+      final company = (x.data['company_admin_id'] ?? '').trim();
+      if (company.isNotEmpty && company != _adminId) continue;
+      final id = int.tryParse(x.data['ticket_id'] ?? '');
+      if ((id != null && b.isCounted(id, badgeRule)) || (asOf != null && !x.receivedAt.isAfter(asOf))) n++;
+    }
+    return n;
+  }
+
+  /// نقر إشعار تذكرة (FCM أو اللافتة أو الصندوق — `openTicketPush`): المحادثة تُفتح فوراً والجرس يُقرأ في الخلفيّة (مراجعة 3.0.18 — كان
+  /// النقر ينتظر الملخّص ثمّ قائمتي الجرس واحدةً بعد أخرى قبل أن يُفتح شيء). الحال معروفٌ والقسم مفتوحٌ له (والعرض عندنا) ⇒ لا
+  /// انتظار: المحادثة نفسها تقرأ الجرس بعد قراءتها (قراءةٌ مُجبَرة تأتي بعد الجارية — [ensureFresh])، وصلاحيّةٌ سُحبت للتوّ يردّها
+  /// خادمها (٤٠٣ ⇒ «غير متاحة»). وإلّا (لم يُعرف بعد، أو مقفل/غير متاح) ⇒ الملخّص وحده يقرّر — يُنشر حين يصل، وقائمتا الجرس تكملان
+  /// بعده في الخلفيّة.
+  static Future<void> ensureForPush() {
+    if (on && Perms.has('tickets.view')) return Future<void>.value();
+    if (_inflight == null) unawaited(ensureFresh(force: true));
+    return _inflightSummary ?? Future<void>.value();
+  }
+
   static Future<void> ensureFresh({bool force = false}) {
     final running = _inflight;
-    if (running != null) return running;
+    if (running != null) {
+      if (!force) return running;
+      // مُجبَرة (إشعارٌ وصل، محادثةٌ قُرئت، رجوعٌ من تذكرة…) والجارية بدأت قبلها: لقطتها قد تسبق ما تغيّر — كانت تُعاد هي فيبقى الجرس
+      // يعدّ تذكرةً قُرئت للتوّ أو يفوته جديدٌ وصل أثناءها. قراءةٌ واحدةٌ بعدها لكلّ من طلب أثناءها.
+      final queued = _queued;
+      if (queued != null) return queued;
+      final epoch = _epoch;
+      late final Future<void> next;
+      next = running.then<void>((_) {}, onError: (Object _) {}).then((_) {
+        if (identical(_queued, next)) _queued = null;
+        return epoch == _epoch ? ensureFresh(force: true) : Future<void>.value();
+      });
+      _queued = next;
+      return next;
+    }
     final now = DateTime.now();
     if (!force) {
       final at = _fetchedAt;
@@ -544,15 +611,28 @@ class TicketsState {
     final failed = _failedAt;
     if (failed != null && now.difference(failed) < _cooldown) return Future<void>.value();
     final epoch = _epoch;
+    final summary = Completer<void>();
     late final Future<void> run;
-    run = CompanyRoute.runOpen(() => _fetch(epoch)).whenComplete(() {
-      if (identical(_inflight, run)) _inflight = null;
+    run = CompanyRoute.runOpen(() => _fetch(epoch, summary)).whenComplete(() {
+      if (!summary.isCompleted) summary.complete();
+      if (identical(_inflight, run)) {
+        _inflight = null;
+        _inflightSummary = null;
+      }
     });
     _inflight = run;
+    _inflightSummary = summary.future;
     return run;
   }
 
-  static Future<void> _fetch(int epoch) async {
+  static Future<void> _fetch(int epoch, Completer<void> summary) async {
+    final asked = DateTime.now();
+    String? adminId;
+    try {
+      adminId = (await AuthStorage.readAdminId())?.trim();
+    } catch (_) {
+      adminId = null;
+    }
     final a = await TicketsApi.summary();
     if (epoch != _epoch) return;
     if (a == null) {
@@ -560,8 +640,19 @@ class TicketsState {
       return;
     }
     // الجرس: لمن يرى القسم وحده، وبلا نداءٍ ثانٍ حين لا شيء ينتظر
+    final wanted = _bellFor(a);
+    // لم يكن من التذاكر شيءٌ في الجرس (الحال مجهول، أو مقفل، أو مطفأ): الملخّص يُنشر حين يصل — نقر الإشعار ينتظره وحده لا قائمتي
+    // الجرس ([ensureForPush]). وإلّا يُنشر مع الجرس معاً، فلا يُرى رقمٌ نصفه جديدٌ ونصفه قديم.
+    if (wanted && !_bellFor(gate.value)) {
+      _fetchedAt = DateTime.now();
+      _failedAt = null;
+      _countsAsOf = asked;
+      _adminId = adminId;
+      gate.value = a;
+    }
+    if (!summary.isCompleted) summary.complete();
     TicketsBell? b = TicketsBell.empty;
-    if (_bellFor(a)) {
+    if (wanted) {
       b = await _readBell(a.counts ?? const TicketCounts());
       if (epoch != _epoch) return;
     }
@@ -574,6 +665,8 @@ class TicketsState {
       _bellFailedAt = null;
       bell.value = b;
     }
+    _countsAsOf = asked;
+    _adminId = adminId;
     gate.value = a;
   }
 
@@ -602,7 +695,11 @@ class TicketsState {
       if (outside < 0) outside = extra.length;
     }
     final all = sortBellFirst([...extra, ...open]);
-    return TicketsBell(items: List<Ticket>.unmodifiable(all.take(bellMax)), outside: outside);
+    return TicketsBell(
+      items: List<Ticket>.unmodifiable(all.take(bellMax)),
+      outside: outside,
+      known: Map<int, bool>.unmodifiable({for (final t in open) t.id: t.unread, for (final t in extra) t.id: true}),
+    );
   }
 
   /// العودة للتطبيق: إشعارٌ وصل والتطبيق بالخلفيّة لم يمرّ هنا — يُقرأ ثانيةً (بمهلةٍ قصيرة لا كلّ رجوع).
@@ -636,18 +733,26 @@ class TicketsState {
     _failedAt = null;
     _bellFailedAt = null;
     _inflight = null;
+    _inflightSummary = null;
+    _queued = null;
+    _countsAsOf = null;
+    _adminId = null;
     bell.value = TicketsBell.empty;
     gate.value = null;
     TicketsApi._images.clear();
   }
 
   @visibleForTesting
-  static void debugSet(TicketsAccess? a, {TicketsBell bell = TicketsBell.empty}) {
+  static void debugSet(TicketsAccess? a, {TicketsBell bell = TicketsBell.empty, String? adminId}) {
     _epoch++;
     _inflight = null;
+    _inflightSummary = null;
+    _queued = null;
     _failedAt = null;
     _bellFailedAt = null;
     _fetchedAt = a == null ? null : DateTime.now();
+    _countsAsOf = _fetchedAt;
+    _adminId = adminId;
     TicketsState.bell.value = bell;
     gate.value = a;
   }

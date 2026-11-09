@@ -174,7 +174,7 @@ class TicketTile extends StatelessWidget {
 Future<bool> openTicketPush(NavigatorState nav, Map<String, String> data) async {
   if (data['type'] != 'portal_ticket') return false;
   final id = int.tryParse(data['ticket_id'] ?? '');
-  await TicketsState.ensureFresh(force: true);
+  await TicketsState.ensureForPush();
   if (!nav.mounted) return true;
   if (id != null && TicketsState.on) {
     await nav.push(MaterialPageRoute(builder: (_) => TicketThreadScreen(ticketId: id, openCompany: true)));
