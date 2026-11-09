@@ -1,4 +1,6 @@
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +22,10 @@ import 'broadcast_campaigns_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
+import '../../widgets/list_kit.dart';
+import '../../core/util/amount_input.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/widgets/design_sheet.dart';
 
 /// شاشة "التبليغات" (Broadcast) — نقل حرفي من client-v2/Notifications.tsx.
 /// يسمح للمدير بإرسال رسائل واتساب جماعيّة للمشتركين حسب فلتر (كل/مدينون/
@@ -119,6 +125,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   /// 'telegram' = يفلتر المربوطين بتلغرام فقط (الباقي يُتخطى).
   String _forceChannel = 'auto';
 
+  // ─── «تحديد المدينين» (٩ نوفمبر — المالك: «تحديد نطاقة جلب اليوزرية حسب اقدم مده دين وسقف من والى الدين … اما المده او
+  // المبلغ او الاثنين») ─────────────────────────────────────────────────────────────────────────────────────────────
+  // العمر = عمر **أقدم دينٍ لم يُسدَّد** (قراره بمثاله: ٣٥ ألفاً منذ ٩٠ يوماً + ٣٥ ألفاً قبل يومين ⇒ ٩٠ يوماً) — يحسبه الخادم وحده من
+  // دفتر حركات الدين، فالقائمة هنا لا تُرشَّح محلّيّاً بالعمر: المعاينة (dryRun) تقول من يطابق، والإرسال يحمل بصمتها.
+  /// ما يدعمه الخادم لهذا الحساب — null ⇒ لا لوحة (خادمٌ أقدم، أو بلا صلاحيّة، أو حسابٌ كبير).
+  DebtFilterCapability? _dfCap;
+  DebtFilter _df = DebtFilter.none;
+  bool _dfCustomAge = false;
+  final TextEditingController _dfAgeCtrl = TextEditingController();
+  final TextEditingController _dfMinCtrl = TextEditingController();
+  final TextEditingController _dfMaxCtrl = TextEditingController();
+  BroadcastPreview? _dfPreview;
+  String? _dfPreviewError;
+  bool _dfPreviewBusy = false;
+  int _dfSeq = 0;
+  Timer? _dfDebounce;
+
   /// «كل الشركات» (٨ نوفمبر): شركةٌ غير المفتوحة — للعرض وحده (حملاتها وحالة رسائلها)؛ لا قائمة مشتركين تُقرأ هنا (كانت
   /// تُقرأ قائمة المفتوحة فتُعرض أعدادها وأسماؤها تحت شركةٍ أخرى) ولا إرسال — من صفحتها.
   bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/whatsapp/broadcast') != null;
@@ -132,6 +155,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     }
     _load();
     _loadScope();
+    _loadDebtCap();
+  }
+
+  Future<void> _loadDebtCap() async {
+    final c = await BroadcastApi.debtFilterCapability();
+    if (!mounted) return;
+    setState(() => _dfCap = c);
   }
 
   Future<void> _loadScope() async {
@@ -142,6 +172,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   @override
   void dispose() {
+    _dfDebounce?.cancel();
+    _dfAgeCtrl.dispose();
+    _dfMinCtrl.dispose();
+    _dfMaxCtrl.dispose();
     _bigSearch.dispose();
     _msg.dispose();
     _search.dispose();
@@ -235,6 +269,54 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ? _candidates
           : _candidates.where((s) => _selected.contains(s.username)).toList();
 
+  /// التحديد مفعّلٌ الآن (فئة المدينين، حسابٌ غير كبير، خادمٌ يدعمه، وحدٌّ واحدٌ على الأقلّ).
+  bool get _debtFilterOn => _filter == _Filter.debtors && !_big && _dfCap != null && _df.active;
+
+  /// فلتر المدير الفرعيّ لا يعرفه الخادم: معه تُرسَل أسماء الفئة بعد الفلتر صراحةً (كان «عام» يرسل للفئة كلّها مهما اختير المدير).
+  List<String>? get _managerScopedUsernames =>
+      _managerFilter.isEmpty || _big ? null : _candidates.map((s) => s.username).toList();
+
+  /// المختارون من قائمة المعاينة (بالتحديد) — الظاهرون فيها وحدهم.
+  List<String> get _pickedFromPreview {
+    final rows = {for (final r in _dfPreview?.rows ?? const <BroadcastPreviewRow>[]) r.username};
+    return _selected.where(rows.contains).toList();
+  }
+
+  void _setDebtFilter(DebtFilter f) {
+    setState(() {
+      _df = f;
+      _selected.clear();
+      _dfPreview = null;
+      _dfPreviewError = null;
+    });
+    _schedulePreview();
+  }
+
+  void _schedulePreview() {
+    _dfDebounce?.cancel();
+    final seq = ++_dfSeq;
+    if (!_debtFilterOn || _df.problem() != null) {
+      setState(() => _dfPreviewBusy = false);
+      return;
+    }
+    setState(() => _dfPreviewBusy = true);
+    _dfDebounce = Timer(const Duration(milliseconds: 600), () => _runPreview(seq));
+  }
+
+  Future<void> _runPreview(int seq) async {
+    final r = await BroadcastApi.preview(
+      intent: MessageIntent.debtors,
+      debtFilter: _df,
+      targetUsernames: _managerScopedUsernames,
+    );
+    if (!mounted || seq != _dfSeq) return;
+    setState(() {
+      _dfPreviewBusy = false;
+      _dfPreview = r.preview;
+      _dfPreviewError = r.preview == null ? (r.message ?? 'تعذّرت المعاينة') : null;
+    });
+  }
+
   Map<_Filter, int> get _counts {
     // الكبير: أعداد الفئات من الساس (كلّ المشتركين، لا من لهم رقم) — والدين -1 «—» حين لا يُعرف
     if (_big) {
@@ -288,7 +370,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       !_sending &&
       // الفحص لحظةٌ واحدة، لكنّ نقرةً ثانيةً فيها تفتح حوارين.
       !_checkingRisk &&
-      (_bigAll || _targets.isNotEmpty) &&
+      (_debtFilterOn
+          ? _df.problem() == null &&
+              (_scope == _Scope.specific ? _pickedFromPreview.isNotEmpty : (_dfPreview?.count ?? 0) > 0)
+          : (_bigAll || _targets.isNotEmpty)) &&
       // مع وجود صورة، الرسالة النصّية اختياريّة (تصبح caption).
       (_messageOptional ||
           _msg.text.trim().isNotEmpty ||
@@ -303,6 +388,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _selected.clear();
       _bigPicked.clear();
     });
+    if (f == _Filter.debtors && _df.active) _schedulePreview();
   }
 
   void _toggleSelect(String username) {
@@ -362,6 +448,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   Future<void> _send() async {
     if (_bigAll) return _sendBigAll();
+    if (_debtFilterOn) return _sendFiltered();
     final targets = _targets;
     if (targets.isEmpty) return;
 
@@ -386,7 +473,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     final r = await BroadcastApi.broadcast(
       intent: _intent,
       message: _msg.text.trim(),
-      targetUsernames: _scope == _Scope.specific
+      // «عام» مع فلتر مديرٍ فرعيّ: أسماء الفئة بعد الفلتر صراحةً — الخادم لا يعرف الفلتر، وبلاها يرسل للفئة كلّها (وحوار التأكيد قال غيرها)
+      targetUsernames: _scope == _Scope.specific || _managerFilter.isNotEmpty
           ? targets.map((t) => t.username).toList()
           : null,
       imageBytes: _imageBytes,
@@ -415,6 +503,81 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       });
     } else {
       _snack(r.message ?? 'فشل الإرسال', isError: true);
+    }
+  }
+
+  /// الإرسال بالتحديد: معاينةٌ للطلب نفسه (الكلّ أو المختارون) ⇒ ورقة تأكيدٍ بالعدد والقائمة ⇒ الإرسال ببصمتها. تغيّرت القائمة بين
+  /// الاثنين ⇒ الخادم يرفض (409) فتُعاد المعاينة — لا يُرسَل لغير ما رآه المدير.
+  Future<void> _sendFiltered() async {
+    final specific = _scope == _Scope.specific;
+    final picked = specific ? _pickedFromPreview : null;
+    if (specific && (picked == null || picked.isEmpty)) return;
+    setState(() => _checkingRisk = true);
+    final pv = await BroadcastApi.preview(
+      intent: MessageIntent.debtors,
+      debtFilter: _df,
+      targetUsernames: specific ? picked : _managerScopedUsernames,
+    );
+    if (!mounted) return;
+    setState(() => _checkingRisk = false);
+    final preview = pv.preview;
+    if (preview == null) {
+      _snack(pv.message ?? 'تعذّرت المعاينة — لم يُرسَل شيء', isError: true);
+      return;
+    }
+    if (preview.count == 0 && preview.excludedHighRisk == 0) {
+      _snack('لا أحد يطابق التحديد الآن', isError: true);
+      return;
+    }
+    final include = await showAppSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _FilteredConfirmSheet(
+        preview: preview,
+        summary: _df.describe(),
+        channel: _forceChannel,
+        includeHighRisk: _includeHighRisk,
+      ),
+    );
+    if (include == null || !mounted) return;
+    setState(() => _sending = true);
+    final r = await BroadcastApi.broadcast(
+      intent: MessageIntent.debtors,
+      message: _msg.text.trim(),
+      targetUsernames: specific ? picked : _managerScopedUsernames,
+      debtFilter: _df,
+      audienceKey: preview.audienceKey,
+      audienceCount: preview.audience,
+      imageBytes: _imageBytes,
+      imageMime: 'image/jpeg',
+      imageFilename: _imageName ?? 'broadcast.jpg',
+      forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
+      includeHighRisk: include,
+    );
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (r.ok) {
+      final ex = r.excludedHighRisk ?? 0;
+      _snack(
+        r.message ??
+            (ex > 0
+                ? 'أُدرجت ${r.queued ?? 0} رسالة — واستُبعد $ex لخطر الحظر'
+                : 'تم إرسال ${r.queued ?? preview.count} رسالة إلى الطابور'),
+        isError: false,
+      );
+      setState(() {
+        _msg.clear();
+        _selected.clear();
+        _imageBytes = null;
+        _imageName = null;
+      });
+      _schedulePreview();
+    } else {
+      _snack(r.message ?? 'فشل الإرسال', isError: true);
+      if (r.code == 'BROADCAST_AUDIENCE_CHANGED') _schedulePreview();
     }
   }
 
@@ -759,6 +922,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       padding: const EdgeInsets.fromLTRB(
                           Sp.lg, Sp.md, Sp.lg, Sp.huge),
                       children: [
+                        _toolsRow(),
+                        const SizedBox(height: Sp.md),
                         if (_big) ...[
                           _bigNotice(),
                           const SizedBox(height: Sp.md),
@@ -962,40 +1127,84 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     );
   }
 
+  /// أدوات ما بعد الإرسال (الهاتف): ثلاث بطاقاتٍ بأسمائها أعلى الشاشة — كانت أيقوناتٍ بلا كلمات في شريط الإرسال.
+  Widget _toolsRow() {
+    Widget tile(IconData icon, String label, ListTone tone, VoidCallback? onTap, {bool busy = false, Key? key}) => Expanded(
+          child: Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.lg),
+            child: InkWell(
+              key: key,
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(R.lg),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 64),
+                padding: const EdgeInsets.symmetric(horizontal: Sp.xs, vertical: Sp.sm),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.lg),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    busy
+                        ? const SizedBox(width: 30, height: 30, child: Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2)))
+                        : ListIconBox(icon: icon, tone: tone, size: 30),
+                    const SizedBox(height: Sp.xs),
+                    Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.labelBold(color: AppColors.textBody)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+    return Row(children: [
+      tile(LucideIcons.history, 'حالة الإرسال', ListTone.info, _openLogs, key: const ValueKey('broadcast-tool-logs')),
+      const SizedBox(width: Sp.sm),
+      tile(LucideIcons.listChecks, 'الحملات', ListTone.brand, _openCampaigns, key: const ValueKey('broadcast-tool-campaigns')),
+      const SizedBox(width: Sp.sm),
+      tile(LucideIcons.rotateCw, 'إعادة الفاشلة', ListTone.warning, _retrying ? null : _retryFailed,
+          busy: _retrying, key: const ValueKey('broadcast-tool-retry')),
+    ]);
+  }
+
   Widget _buildFilterCard() {
     final counts = _counts;
     return _sectionCard(
       icon: LucideIcons.users,
-      title: 'الفئة',
+      title: 'لمن ترسل؟',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           GridView(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              // الحاسبة: ارتفاعٌ ثابت — النسبة تضخّم البطاقة مع عرض العمود.
-              childAspectRatio: 2.6,
-              mainAxisExtent: DesktopScope.of(context) ? 76 : null,
+              // ارتفاعٌ ثابت (لا نسبة): البطاقة لا تتضخّم مع عرض العمود في الحاسبة.
+              mainAxisExtent: 64,
             ),
             shrinkWrap: true,
+            // بلا حشوة MediaQuery (يرثها GridView داخل القائمة فيُلحق فراغاً تحت البطاقات)
+            padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _filterChip(_Filter.all, 'كل المشتركين', LucideIcons.users,
-                  counts[_Filter.all] ?? 0, AppColors.brand),
-              _filterChip(_Filter.debtors, 'المدينون', LucideIcons.wallet,
-                  counts[_Filter.debtors] ?? 0, AppColors.error),
-              _filterChip(_Filter.expired, 'منتهي الصلاحية', LucideIcons.clock,
-                  counts[_Filter.expired] ?? 0, AppColors.error),
-              _filterChip(
-                  _Filter.expiring,
-                  'قرب الانتهاء (3 أيام)',
-                  LucideIcons.triangleAlert,
-                  counts[_Filter.expiring] ?? 0,
-                  AppColors.warning),
+              _filterChip(_Filter.all, 'كل المشتركين', LucideIcons.users, counts[_Filter.all] ?? 0, ListTone.brand),
+              _filterChip(_Filter.debtors, 'المدينون', LucideIcons.wallet, counts[_Filter.debtors] ?? 0, ListTone.warning),
+              _filterChip(_Filter.expired, 'منتهي الصلاحية', LucideIcons.clock, counts[_Filter.expired] ?? 0, ListTone.danger),
+              _filterChip(_Filter.expiring, 'قرب الانتهاء (3 أيام)', LucideIcons.triangleAlert, counts[_Filter.expiring] ?? 0,
+                  ListTone.info),
             ],
           ),
-          if (_candidates.isEmpty) ...[
+          if (_filter == _Filter.debtors && _big) ...[
+            const SizedBox(height: Sp.sm),
+            _note(LucideIcons.funnel, 'تحديد المدينين بعمر الدين ومبلغه غير متاحٍ للحسابات الكبيرة — أرسل للمدينين كلّهم أو اختر بالبحث.'),
+          ],
+          if (_filter == _Filter.debtors && !_big && _dfCap != null) ...[
+            const SizedBox(height: Sp.md),
+            _debtFilterPanel(),
+          ],
+          if (_candidates.isEmpty && !_debtFilterOn) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1005,14 +1214,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(LucideIcons.triangleAlert,
-                      size: 12, color: AppColors.warning),
+                  Icon(LucideIcons.triangleAlert, size: 12, color: AppColors.warning),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'لا يوجد مشتركون يطابقون الفئة (يحتاجون أرقام هواتف صالحة)',
-                      style: AppType.muted()
-                          .copyWith(fontSize: 10.5, color: AppColors.warning),
+                      maxLines: 2,
+                      style: AppType.muted().copyWith(fontSize: 10.5, color: AppColors.warning),
                     ),
                   ),
                 ],
@@ -1024,52 +1232,283 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     );
   }
 
-  Widget _filterChip(
-      _Filter f, String label, IconData icon, int count, Color color) {
+  Widget _note(IconData icon, String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.sm)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 14, color: AppColors.textMid),
+            const SizedBox(width: 6),
+            Expanded(child: Text(text, maxLines: 3, style: AppType.micro(color: AppColors.textMid).copyWith(height: 1.5))),
+          ],
+        ),
+      );
+
+  Widget _filterChip(_Filter f, String label, IconData icon, int count, ListTone tone) {
     final active = _filter == f;
     return Material(
-      color: active ? color.withValues(alpha: 0.1) : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.sm),
-      clipBehavior: Clip.antiAlias,
+      color: active ? tone.soft : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
         onTap: () => _selectFilter(f),
+        borderRadius: BorderRadius.circular(R.md),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: active ? color.withValues(alpha: 0.4) : AppColors.border,
-              width: active ? 1.4 : 1,
-            ),
-            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: active ? tone.softBorder : AppColors.border, width: active ? BW.selected : BW.normal),
+            borderRadius: BorderRadius.circular(R.md),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(icon,
-                      size: 14, color: active ? color : AppColors.textMid),
-                  Text(
-                    count < 0 ? '—' : count.toString(),
-                    style:
-                        AppType.title(color: active ? color : AppColors.textHi)
-                            .copyWith(fontSize: 13),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: AppType.muted().copyWith(
-                    fontSize: 10.5, color: active ? color : AppColors.textMid),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              ListIconBox(icon: icon, tone: tone, size: 32),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      count < 0 ? '—' : count.toString(),
+                      maxLines: 1,
+                      style: AppType.statValue(color: active ? tone.fg : AppColors.textHi).copyWith(fontSize: 16),
+                    ),
+                    Text(
+                      label,
+                      style: AppType.micro(color: active ? tone.fg : AppColors.textMid),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// لوحة «تحديد المدينين»: عمر أقدم دينٍ لم يُسدَّد و/أو مبلغ الدين — اختياريّان، والنتيجة من الخادم تحتهما.
+  Widget _debtFilterPanel() {
+    final cap = _dfCap!;
+    final problem = _df.problem(maxAgeDays: cap.maxAgeDays);
+    final ageIsPreset = _df.minAgeDays != null && cap.presets.contains(_df.minAgeDays) && !_dfCustomAge;
+    void setAmount(TextEditingController c, bool min) {
+      final v = AmountShorthand.parse(c.text);
+      _setDebtFilter(min
+          ? _df.copyWith(minAmount: () => v > 0 || c.text.trim().isNotEmpty ? v : null)
+          : _df.copyWith(maxAmount: () => v > 0 ? v : null));
+    }
+
+    Widget amountBox(TextEditingController c, String hint, bool min) => Expanded(
+          child: SizedBox(
+            height: H.search,
+            child: TextField(
+              key: ValueKey(min ? 'df-min' : 'df-max'),
+              controller: c,
+              keyboardType: TextInputType.number,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.end,
+              onChanged: (_) {
+                final v = AmountShorthand.parse(c.text);
+                final f = AmountShorthand.format(v);
+                if (f != c.text) c.value = TextEditingValue(text: f, selection: TextSelection.collapsed(offset: f.length));
+                setAmount(c, min);
+              },
+              style: AppType.input(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: AppType.input(color: AppColors.textPlaceholder),
+                suffixText: ' د.ع',
+                suffixStyle: AppType.micro(color: AppColors.textMid),
+                filled: true,
+                fillColor: AppColors.surface,
+                contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.warning)),
+              ),
+            ),
+          ),
+        );
+
+    void setRange(int? min, int? max) {
+      _dfMinCtrl.text = min == null ? '' : AmountShorthand.format(min);
+      _dfMaxCtrl.text = max == null ? '' : AmountShorthand.format(max);
+      _setDebtFilter(_df.copyWith(minAmount: () => min, maxAmount: () => max));
+    }
+
+    const ranges = <(String, int?, int?)>[
+      ('حتى 25 ألف', null, 25000),
+      ('25 إلى 50 ألف', 25000, 50000),
+      ('50 إلى 100 ألف', 50000, 100000),
+      ('100 ألف فأكثر', 100000, null),
+    ];
+    final pv = _dfPreview;
+    return Container(
+      key: const ValueKey('debt-filter-panel'),
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.warningSoftBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            const ListIconBox(icon: LucideIcons.funnel, tone: ListTone.warning, size: 30),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('تحديد المدينين (اختياري)', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.cardTitle(color: AppColors.textHi)),
+                Text('بعمر الدين، أو بمبلغه، أو بالاثنين', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
+              ]),
+            ),
+            if (_df.active)
+              TextButton(
+                onPressed: () {
+                  _dfAgeCtrl.clear();
+                  _dfMinCtrl.clear();
+                  _dfMaxCtrl.clear();
+                  _dfCustomAge = false;
+                  _setDebtFilter(DebtFilter.none);
+                },
+                child: Text('مسح', style: AppType.labelBold(color: AppColors.brand)),
+              ),
+          ]),
+          const SizedBox(height: Sp.md),
+          Text.rich(
+            TextSpan(children: [
+              TextSpan(text: 'عمر الدين ', style: AppType.labelBold(color: AppColors.textBody)),
+              TextSpan(text: '(أقدم دين لم يُسدَّد)', style: AppType.micro(color: AppColors.textMid)),
+            ]),
+          ),
+          const SizedBox(height: Sp.sm),
+          if (cap.age) ...[
+            Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
+              ListFilterChip(
+                label: 'أيّ عمر',
+                tone: ListTone.warning,
+                active: _df.minAgeDays == null && !_dfCustomAge,
+                onTap: () {
+                  setState(() => _dfCustomAge = false);
+                  _setDebtFilter(_df.copyWith(minAgeDays: () => null));
+                },
+              ),
+              for (final d in cap.presets)
+                ListFilterChip(
+                  key: ValueKey('df-age-$d'),
+                  label: arDaysCount(d),
+                  tone: ListTone.warning,
+                  active: ageIsPreset && _df.minAgeDays == d,
+                  onTap: () {
+                    setState(() => _dfCustomAge = false);
+                    _setDebtFilter(_df.copyWith(minAgeDays: () => d));
+                  },
+                ),
+              ListFilterChip(
+                label: 'مدّة أخرى',
+                tone: ListTone.warning,
+                active: _dfCustomAge,
+                onTap: () => setState(() => _dfCustomAge = true),
+              ),
+            ]),
+            if (_dfCustomAge) ...[
+              const SizedBox(height: Sp.sm),
+              Row(children: [
+                SizedBox(
+                  width: 96,
+                  height: H.search,
+                  child: TextField(
+                    key: const ValueKey('df-age-custom'),
+                    controller: _dfAgeCtrl,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                    onChanged: (t) => _setDebtFilter(_df.copyWith(minAgeDays: () => int.tryParse(t))),
+                    style: AppType.input(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(
+                      hintText: '45',
+                      filled: true,
+                      fillColor: AppColors.surface,
+                      contentPadding: EdgeInsets.zero,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Sp.sm),
+                Text('يوماً فأكثر', style: AppType.body(color: AppColors.textMid)),
+              ]),
+            ] else if (_df.minAgeDays != null) ...[
+              const SizedBox(height: Sp.xs),
+              Text('من عمر أقدم دينٍ لم يسدّده ${arDaysCount(_df.minAgeDays!)} فأكثر، ومن عليه «دين قديم»',
+                  style: AppType.micro(color: AppColors.textMid)),
+            ],
+          ] else
+            _note(LucideIcons.info, cap.ageNote ?? 'عمر الدين غير متاحٍ لهذه الشركة — حدّد بالمبلغ'),
+          const SizedBox(height: Sp.md),
+          Text('مبلغ الدين', style: AppType.labelBold(color: AppColors.textBody)),
+          const SizedBox(height: Sp.sm),
+          // بلا فاصل «إلى» بين الصندوقين: التلميحان «من»/«إلى» يكفيان، والعرض كلّه للرقم (٣٢٠ لا يلتصق «د.ع» به)
+          Row(children: [
+            amountBox(_dfMinCtrl, 'من', true),
+            const SizedBox(width: Sp.sm),
+            amountBox(_dfMaxCtrl, 'إلى', false),
+          ]),
+          const SizedBox(height: Sp.sm),
+          Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
+            for (final r in ranges)
+              ListFilterChip(
+                label: r.$1,
+                tone: ListTone.warning,
+                active: _df.minAmount == r.$2 && _df.maxAmount == r.$3,
+                onTap: () => setRange(r.$2, r.$3),
+              ),
+          ]),
+          if (_df.active) ...[
+            const SizedBox(height: Sp.md),
+            Container(
+              key: const ValueKey('debt-filter-result'),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(R.md),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: problem != null
+                  ? Text(problem, style: AppType.labelBold(color: AppColors.error))
+                  : _dfPreviewError != null
+                      ? Row(children: [
+                          Expanded(child: Text(_dfPreviewError!, maxLines: 3, style: AppType.micro(color: AppColors.error))),
+                          TextButton(onPressed: _schedulePreview, child: Text('إعادة', style: AppType.labelBold(color: AppColors.brand))),
+                        ])
+                      : _dfPreviewBusy || pv == null
+                          ? Row(children: [
+                              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                              const SizedBox(width: Sp.sm),
+                              Text('يحسب من يطابق…', style: AppType.micro(color: AppColors.textMid)),
+                            ])
+                          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text.rich(TextSpan(children: [
+                                TextSpan(text: '${pv.audience}', style: AppType.statValue(color: AppColors.warningOnSoft)),
+                                TextSpan(text: ' مديناً يطابقون', style: AppType.body(color: AppColors.textMid)),
+                              ])),
+                              if (pv.count != pv.audience || pv.legacy > 0 || pv.unknownAge > 0)
+                                Text(
+                                  [
+                                    if (pv.count != pv.audience) 'سيصل ${pv.count}',
+                                    if (pv.legacy > 0) '${pv.legacy} دين قديم',
+                                    if (pv.unknownAge > 0) '${pv.unknownAge} بلا عمر معروف (لم يُشملوا)',
+                                  ].join(' · '),
+                                  style: AppType.micro(color: AppColors.textMid),
+                                ),
+                            ]),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1182,89 +1621,34 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   Widget _buildScopeCard() {
+    final allLabel = _big
+        ? 'الفئة كلّها'
+        : _debtFilterOn
+            ? (_dfPreview == null ? 'الكلّ' : 'الكلّ (${_dfPreview!.audience})')
+            : 'الكلّ (${_candidates.length})';
     return _sectionCard(
       icon: LucideIcons.layers,
       title: 'نطاق الإرسال',
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: _scopeChip(
-              _Scope.all,
-              icon: LucideIcons.layers,
-              title: 'عام',
-              subtitle: _big ? 'كلّ الفئة — يُجهَّز في الخلفيّة' : 'للكل (${_candidates.length})',
-            ),
+          SheetSegmented(
+            labels: [allLabel, _selected.isEmpty ? 'أختار بنفسي' : 'أختار بنفسي (${_selected.length})'],
+            icons: const [LucideIcons.layers, LucideIcons.userCheck],
+            selectedIndex: _scope == _Scope.all ? 0 : 1,
+            onSelect: (i) => setState(() => _scope = i == 0 ? _Scope.all : _Scope.specific),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _scopeChip(
-              _Scope.specific,
-              icon: LucideIcons.userCheck,
-              title: 'محدّد',
-              subtitle: _selected.isEmpty
-                  ? 'اختر يدوياً'
-                  : '${_selected.length} مختار',
-            ),
-          ),
+          if (_big && _scope == _Scope.all) ...[
+            const SizedBox(height: 6),
+            Text('الفئة كلّها — يجهّزها الخادم في الخلفيّة', style: AppType.micro(color: AppColors.textMid)),
+          ],
         ],
       ),
     );
   }
 
-  Widget _scopeChip(_Scope s,
-      {required IconData icon,
-      required String title,
-      required String subtitle,
-      bool enabled = true}) {
-    final active = _scope == s;
-    return Material(
-      color: active ? AppColors.brandSoftBg : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.sm),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: enabled ? () => setState(() => _scope = s) : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: active ? AppColors.brandSoftBorder : AppColors.border,
-              width: active ? 1.4 : 1,
-            ),
-            borderRadius: BorderRadius.circular(R.sm),
-          ),
-          child: Row(
-            children: [
-              Icon(icon,
-                  size: 14,
-                  color: active ? AppColors.brand : AppColors.textMid),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: AppType.title(color: AppColors.textHi)
-                          .copyWith(fontSize: 12.5),
-                    ),
-                    Text(
-                      subtitle,
-                      style: AppType.muted().copyWith(fontSize: 10.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSelectionCard() {
+    if (_debtFilterOn) return _buildFilteredSelectionCard();
     final visible = _visibleCandidates;
     final allSelected = visible.isNotEmpty &&
         visible.every((s) => _selected.contains(s.username));
@@ -1348,6 +1732,72 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   separatorBuilder: (_, __) =>
                       Divider(height: 1, color: AppColors.border),
                   itemBuilder: (_, i) => _candidateTile(visible[i]),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// الاختيار بالتحديد: من قائمة المعاينة نفسها (الخادم حسب عمر أقدم دينٍ لم يُسدَّد) — الاسم والدين والعمر أو «دين قديم».
+  Widget _buildFilteredSelectionCard() {
+    final q = _search.text.trim().toLowerCase();
+    final rows = (_dfPreview?.rows ?? const <BroadcastPreviewRow>[])
+        .where((r) => q.isEmpty || r.username.toLowerCase().contains(q) || (r.name ?? '').toLowerCase().contains(q))
+        .toList();
+    final allSelected = rows.isNotEmpty && rows.every((r) => _selected.contains(r.username));
+    return _sectionCard(
+      icon: LucideIcons.userCheck,
+      title: 'اختيار المدينين (${_pickedFromPreview.length}/${_dfPreview?.audience ?? 0})',
+      trailing: TextButton(
+        onPressed: rows.isEmpty
+            ? null
+            : () => setState(() {
+                  if (allSelected) {
+                    for (final r in rows) {
+                      _selected.remove(r.username);
+                    }
+                  } else {
+                    for (final r in rows) {
+                      _selected.add(r.username);
+                    }
+                  }
+                }),
+        child: Text(allSelected ? 'إلغاء الكل' : 'تحديد الكل', style: AppType.button(color: AppColors.brand).copyWith(fontSize: 11)),
+      ),
+      child: Column(
+        children: [
+          ListSearchField(controller: _search, hint: 'ابحث بالاسم أو اليوزر', onChanged: (_) => setState(() {})),
+          const SizedBox(height: 8),
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(_dfPreviewBusy ? 'يحسب من يطابق…' : 'لا أحد يطابق', style: AppType.muted().copyWith(fontSize: 12.5)),
+            )
+          else
+            Container(
+              constraints: const BoxConstraints(maxHeight: 360),
+              decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(R.md)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(R.md),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: rows.length,
+                  separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.border),
+                  itemBuilder: (_, i) {
+                    final r = rows[i];
+                    return ListSubscriberRow(
+                      key: ValueKey('df-row-${r.username}'),
+                      title: r.name ?? r.username,
+                      subtitle: r.name == null ? '' : r.username,
+                      subtitleLtr: true,
+                      selectable: true,
+                      selected: _selected.contains(r.username),
+                      onTap: () => _toggleSelect(r.username),
+                      trailing: _previewDebtCell(r),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1603,6 +2053,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   Widget _buildActionBar() {
+    final desk = DesktopScope.of(context);
+    final count = _bigAll
+        ? '${(_counts[_filter] ?? -1) < 0 ? '—' : _counts[_filter]} مشترك'
+        : _debtFilterOn
+            ? (_scope == _Scope.all
+                ? (_dfPreviewBusy || _dfPreview == null ? '… مشترك' : '${_dfPreview!.count} مشترك')
+                : '${_pickedFromPreview.length} مشترك')
+            : '${_targets.length} مشترك';
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 10, Sp.lg, 10),
       decoration: BoxDecoration(
@@ -1620,58 +2078,48 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _scope == _Scope.all ? 'إرسال للكل' : 'إرسال للمحدّدين',
+                    _debtFilterOn ? 'المدينون — بالتحديد' : (_scope == _Scope.all ? 'إرسال للكل' : 'إرسال للمحدّدين'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppType.muted().copyWith(fontSize: 10.5),
                   ),
                   Text(
-                    _bigAll
-                        ? '${(_counts[_filter] ?? -1) < 0 ? '—' : _counts[_filter]} مشترك'
-                        : '${_targets.length} مشترك',
-                    style: AppType.title(color: AppColors.brand)
-                        .copyWith(fontSize: 14),
+                    count,
+                    maxLines: 1,
+                    style: AppType.title(color: AppColors.brand).copyWith(fontSize: 14),
                   ),
                 ],
               ),
             ),
-            // الحملات: إيقاف/استئناف/حذف ما أُرسل من بثٍّ يمشي على مدى وقت
-            IconButton(
-              tooltip: 'حملات التبليغ',
-              icon: Icon(LucideIcons.listChecks, size: 18, color: AppColors.brand),
-              onPressed: _openCampaigns,
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.brandSoftBg,
+            // الحاسبة: الأدوات بجانب الإرسال كما كانت (الهاتف: بطاقاتٌ بأسمائها أعلى الشاشة)
+            if (desk) ...[
+              IconButton(
+                tooltip: 'حملات التبليغ',
+                icon: Icon(LucideIcons.listChecks, size: 18, color: AppColors.brand),
+                onPressed: _openCampaigns,
+                style: IconButton.styleFrom(backgroundColor: AppColors.brandSoftBg),
               ),
-            ),
-            const SizedBox(width: 6),
-            // logs
-            IconButton(
-              tooltip: 'حالة الإرسال',
-              icon: Icon(LucideIcons.history, size: 18, color: AppColors.brand),
-              onPressed: _openLogs,
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.brandSoftBg,
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'حالة الإرسال',
+                icon: Icon(LucideIcons.history, size: 18, color: AppColors.brand),
+                onPressed: _openLogs,
+                style: IconButton.styleFrom(backgroundColor: AppColors.brandSoftBg),
               ),
-            ),
-            const SizedBox(width: 6),
-            // retry failed
-            IconButton(
-              tooltip: 'إعادة الفاشلة',
-              icon: _retrying
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(LucideIcons.rotateCw,
-                      size: 18, color: AppColors.warning),
-              onPressed: _retrying ? null : _retryFailed,
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.warningSoftBg,
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'إعادة الفاشلة',
+                icon: _retrying
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(LucideIcons.rotateCw, size: 18, color: AppColors.warning),
+                onPressed: _retrying ? null : _retryFailed,
+                style: IconButton.styleFrom(backgroundColor: AppColors.warningSoftBg),
               ),
-            ),
-            const SizedBox(width: 6),
+              const SizedBox(width: 6),
+            ],
             // send
             ElevatedButton.icon(
+              key: const ValueKey('broadcast-send'),
               onPressed: _canSend ? _send : null,
               icon: (_sending || _checkingRisk)
                   ? const SizedBox(
@@ -1682,22 +2130,21 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         valueColor: AlwaysStoppedAnimation(AppColors.onBrand),
                       ),
                     )
-                  : const Icon(LucideIcons.send, size: 14),
+                  : const Icon(LucideIcons.send, size: 16),
               label: Text(
                 _checkingRisk
                     ? 'يفحص الأرقام...'
                     : (_sending ? 'جاري الإرسال...' : 'إرسال'),
                 style: AppType.button(color: AppColors.onBrand)
-                    .copyWith(fontSize: 13),
+                    .copyWith(fontSize: 14),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brand,
                 foregroundColor: AppColors.onBrand,
                 disabledBackgroundColor: AppColors.brandSoftBorder,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(R.sm)),
+                minimumSize: const Size(0, 46),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
               ),
             ),
           ],
@@ -1705,6 +2152,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       ),
     );
   }
+
+  /// الدين وعمر أقدم دينٍ لم يُسدَّد («دين قديم» = أقدم من سجلّاتنا).
+  Widget _previewDebtCell(BroadcastPreviewRow r) => ListAmountCell(
+        amount: AmountShorthand.format(r.debt.round()).isEmpty ? '0' : AmountShorthand.format(r.debt.round()),
+        amountColor: AppColors.warningOnSoft,
+        badge: r.legacy ? 'دين قديم' : (r.days == null ? null : (r.days == 0 ? 'اليوم' : arDaysCount(r.days!))),
+        badgeTone: r.legacy ? ListTone.info : ((r.days ?? 0) > 30 ? ListTone.danger : ListTone.warning),
+      );
 
   Widget _sectionCard({
     required IconData icon,
@@ -1739,6 +2194,148 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           const SizedBox(height: 10),
           child,
         ],
+      ),
+    );
+  }
+}
+
+/// ورقة تأكيد الإرسال بالتحديد — من معاينة الطلب نفسه: كم سيصلهم، ومن هم (الاسم والدين والعمر أو «دين قديم»)، وما استُبعد ولماذا.
+/// تُرجع includeHighRisk (true/false) عند التأكيد، وnull عند الرجوع.
+class _FilteredConfirmSheet extends StatefulWidget {
+  const _FilteredConfirmSheet({required this.preview, required this.summary, required this.channel, required this.includeHighRisk});
+  final BroadcastPreview preview;
+  final String summary;
+  final String channel;
+  final bool includeHighRisk;
+
+  @override
+  State<_FilteredConfirmSheet> createState() => _FilteredConfirmSheetState();
+}
+
+class _FilteredConfirmSheetState extends State<_FilteredConfirmSheet> {
+  late bool _include = widget.includeHighRisk;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final pv = widget.preview;
+    final willSend = pv.count + (_include ? pv.excludedHighRisk : 0);
+    final notes = <String>[
+      if (pv.legacy > 0) '${pv.legacy} عليهم «دين قديم» (أقدم من سجلّاتنا) — مشمولون بأيّ عمر',
+      if (pv.unknownAge > 0)
+        pv.ageUnsupported ? 'عمر الدين غير معروف لهذه الشركة — ${pv.unknownAge} لم يُشملوا' : '${pv.unknownAge} بلا عمر دينٍ معروف — لم يُشملوا',
+      if (pv.deduped > 0) '${pv.deduped} يتشاركون رقماً — رسالةٌ واحدة لكلّ رقم',
+      if (pv.missing > 0) '${pv.missing} من المختارين لم يعودوا في القائمة',
+      if (pv.partial) 'تعذّر جلب كلّ المشتركين — من لم يُجلب لا يصله',
+      if (widget.channel == 'telegram') 'تلغرام وحده: يصل لمن ربط حسابه من هؤلاء',
+    ];
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.send,
+        title: 'تأكيد الإرسال',
+        subtitle: 'المدينون — بالتحديد',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // الجملة كاملةً هنا (سطر الرأس واحدٌ يقطعها)
+          Text(widget.summary, style: AppType.body(color: AppColors.textBody)),
+          const SizedBox(height: Sp.sm),
+          Container(
+            padding: const EdgeInsets.all(Sp.md),
+            decoration: BoxDecoration(
+              color: AppColors.brandSoftBg,
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.brandSoftBorder),
+            ),
+            child: Row(children: [
+              const ListIconBox(icon: LucideIcons.send, tone: ListTone.brand, size: 40),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('$willSend', style: AppType.statValue(color: AppColors.brand).copyWith(fontSize: 24)),
+                  Text('سيصلهم التبليغ', maxLines: 1, style: AppType.micro(color: AppColors.textMid)),
+                ]),
+              ),
+            ]),
+          ),
+          if (pv.excludedHighRisk > 0) ...[
+            const SizedBox(height: Sp.sm),
+            Container(
+              padding: const EdgeInsets.all(Sp.sm),
+              decoration: BoxDecoration(
+                color: AppColors.dangerSoftBg,
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(color: AppColors.dangerSoftBorder),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('منهم ${pv.excludedHighRisk} تجاهلوا رسائل كثيرة بلا ردّ — يُستبعدون افتراضيّاً حمايةً لرقمك.',
+                    style: AppType.subtitle(color: AppColors.error)),
+                // Material شفّافةٌ خاصّة: الصندوق الملوّن فوقها كان يخفي تموّج اللمس (تحذير ListTile في وضع التطوير)
+                Material(
+                  type: MaterialType.transparency,
+                  child: SwitchListTile(
+                    key: const ValueKey('df-include-risk'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    value: _include,
+                    activeThumbColor: AppColors.error,
+                    onChanged: (v) => setState(() => _include = v),
+                    title: Text('أرسل لهم أيضاً', style: AppType.subtitle(color: AppColors.textHi)),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: Sp.sm),
+            for (final n in notes)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(padding: const EdgeInsets.only(top: 6), child: Icon(LucideIcons.dot, size: 12, color: AppColors.textMid)),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(n, maxLines: 3, style: AppType.micro(color: AppColors.textMid).copyWith(height: 1.5))),
+                ]),
+              ),
+          ],
+          const SizedBox(height: Sp.sm),
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(R.md)),
+            child: Column(children: [
+              for (var i = 0; i < pv.rows.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: AppColors.border),
+                ListSubscriberRow(
+                  title: pv.rows[i].name ?? pv.rows[i].username,
+                  subtitle: pv.rows[i].name == null ? '' : pv.rows[i].username,
+                  subtitleLtr: true,
+                  selectable: false,
+                  selected: false,
+                  trailing: ListAmountCell(
+                    amount: AmountShorthand.format(pv.rows[i].debt.round()).isEmpty ? '0' : AmountShorthand.format(pv.rows[i].debt.round()),
+                    amountColor: AppColors.warningOnSoft,
+                    badge: pv.rows[i].legacy
+                        ? 'دين قديم'
+                        : (pv.rows[i].days == null ? null : (pv.rows[i].days == 0 ? 'اليوم' : arDaysCount(pv.rows[i].days!))),
+                    badgeTone: pv.rows[i].legacy ? ListTone.info : ((pv.rows[i].days ?? 0) > 30 ? ListTone.danger : ListTone.warning),
+                  ),
+                ),
+              ],
+            ]),
+          ),
+          if (pv.truncated) ...[
+            const SizedBox(height: Sp.xs),
+            Text('تُعرض أوّل ${pv.rows.length} — والإرسال للجميع (${pv.audience})',
+                textAlign: TextAlign.center, style: AppType.micro(color: AppColors.textMid)),
+          ],
+        ],
+      ),
+      footer: SheetFooterBar(
+        label: 'إرسال إلى $willSend',
+        icon: LucideIcons.send,
+        enabled: willSend > 0,
+        onPressed: () => Navigator.of(context).pop(_include),
       ),
     );
   }

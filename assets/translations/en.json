@@ -1322,7 +1322,12 @@
     "col_sale": "Sale price",
     "pick_from_table": "Pick subscribers from the table",
     "selected_n": "{} selected",
-    "fixed_count_label": "subscribers with a fixed price"
+    "fixed_count_label": "subscribers with a fixed price",
+    "sheet_bulk_title": "Fixed price for {} subscribers",
+    "sheet_bulk_sub": "Replaces the package price and discount until the package changes",
+    "bar_set": "Fixed price",
+    "bar_remove": "Remove",
+    "preview_sale": "They will pay {} IQD on every renewal"
   },
   "exp": {
     "pick_range": "Pick a range",

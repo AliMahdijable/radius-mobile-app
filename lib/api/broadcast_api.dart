@@ -157,11 +157,15 @@ class BroadcastApi {
   /// [imageBytes] اختياريّة — صورة تُرسل كمرفق (caption = نص الرسالة).
   /// يجب أن تكون ≤ [maxImageBytes] بعد الضغط، وإلا نرمي [ArgumentError]
   /// قبل الشبكة (توفيراً للـbandwidth). Backend عنده نفس السقف كحارس ثانٍ.
-  static Future<({bool ok, int? queued, int? excludedHighRisk, String? message})>
+  static Future<({bool ok, int? queued, int? excludedHighRisk, String? message, String? code})>
       broadcast({
     required MessageIntent intent,
     required String message,
     List<String>? targetUsernames,
+    // «تحديد المدينين» (٩ نوفمبر): يُرسَل مع بصمة معاينته وحدها — الخادم يرفض الفلتر بلا بصمة (422) أو إن تغيّرت القائمة (409).
+    DebtFilter? debtFilter,
+    String? audienceKey,
+    int? audienceCount,
     Uint8List? imageBytes,
     String? imageMime,
     String? imageFilename,
@@ -181,6 +185,11 @@ class BroadcastApi {
       if (targetUsernames != null && targetUsernames.isNotEmpty) {
         body['targetUsernames'] = targetUsernames;
       }
+      if (debtFilter != null && debtFilter.active) {
+        body['debtFilter'] = debtFilter.toJson();
+        if (audienceKey != null) body['audienceKey'] = audienceKey;
+        if (audienceCount != null) body['audienceCount'] = audienceCount;
+      }
       if (forceChannel == 'whatsapp' || forceChannel == 'telegram') {
         body['forceChannel'] = forceChannel;
       }
@@ -192,6 +201,7 @@ class BroadcastApi {
             excludedHighRisk: null,
             message:
                 'الصورة أكبر من الحدّ (${(maxImageBytes / 1024).round()}KB).',
+            code: null,
           );
         }
         body['imageBase64'] = base64Encode(imageBytes);
@@ -209,6 +219,7 @@ class BroadcastApi {
           queued: null,
           excludedHighRisk: null,
           message: data['message']?.toString() ?? 'فشل الإرسال',
+          code: data['code']?.toString(),
         );
       }
       // ⚠️ الخادم يضع العدّادات في `summary` — والقراءة من الجذر وحده
@@ -220,22 +231,74 @@ class BroadcastApi {
       final queued = sum['queued'] ??
           data['queued'] ?? data['totalQueued'] ?? data['count'];
       final excluded = sum['excludedHighRisk'];
+      // «تحديد المدينين»: من لم يُعرف عمر دينه لم يُشمل — الخادم يقوله في نصّه، فيُعرض كما هو بدل الصمت
+      final df = sum['debtFilter'] is Map ? (sum['debtFilter'] as Map) : null;
+      final unknownAge = df == null ? 0 : _toInt(df['unknownAge']);
       return (
         ok: true,
         queued: queued == null ? null : _toInt(queued),
         excludedHighRisk: excluded == null ? null : _toInt(excluded),
         // الحساب الكبير «عام»: الخادم بدأ التجهيز في الخلفيّة (pending) — رسالته تُعرض كما هي، والنتيجة بإشعار
-        message: data['pending'] == true ? data['message']?.toString() : null,
+        message: data['pending'] == true || unknownAge > 0 ? data['message']?.toString() : null,
+        code: null,
       );
     } on DioException catch (e) {
       _log('broadcast', e);
-      final m = e.response?.data is Map
-          ? (e.response!.data as Map)['message']?.toString()
-          : null;
-      return (ok: false, queued: null, excludedHighRisk: null, message: m ?? 'خطأ في الشبكة');
+      final d = e.response?.data is Map ? (e.response!.data as Map) : null;
+      return (
+        ok: false,
+        queued: null,
+        excludedHighRisk: null,
+        message: d?['message']?.toString() ?? 'خطأ في الشبكة',
+        code: d?['code']?.toString(),
+      );
     } catch (e) {
       _log('broadcast', e);
-      return (ok: false, queued: null, excludedHighRisk: null, message: e.toString());
+      return (ok: false, queued: null, excludedHighRisk: null, message: e.toString(), code: null);
+    }
+  }
+
+  /// GET /api/whatsapp/broadcast/debt-filter — ما يدعمه الخادم من «تحديد المدينين» لهذا الحساب. null ⇒ لا لوحة (خادمٌ أقدم أو
+  /// بلا صلاحيّة أو تعذّر): الشاشة كما كانت.
+  static Future<DebtFilterCapability?> debtFilterCapability() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/whatsapp/broadcast/debt-filter');
+      final d = r.data?['debtFilter'];
+      if (r.statusCode != 200 || d is! Map) return null;
+      return DebtFilterCapability.fromJson(Map<String, dynamic>.from(d));
+    } catch (e) {
+      _log('debtFilterCapability', e);
+      return null;
+    }
+  }
+
+  /// POST /api/whatsapp/broadcast {dryRun:true} — من يطابق الطلب نفسه (بالتحديد والمختارين) بلا إرسال: العدد والقائمة والبصمة.
+  static Future<({BroadcastPreview? preview, String? message, String? code})> preview({
+    required MessageIntent intent,
+    DebtFilter? debtFilter,
+    List<String>? targetUsernames,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'type': intent.apiValue,
+        'message': '',
+        'dryRun': true,
+        if (debtFilter != null && debtFilter.active) 'debtFilter': debtFilter.toJson(),
+        if (targetUsernames != null && targetUsernames.isNotEmpty) 'targetUsernames': targetUsernames,
+      };
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/whatsapp/broadcast', data: body);
+      final data = r.data ?? const {};
+      if (r.statusCode != 200 || data['success'] == false || data['dryRun'] != true) {
+        return (preview: null, message: data['message']?.toString() ?? 'تعذّرت المعاينة — لم يُرسَل شيء', code: data['code']?.toString());
+      }
+      return (preview: BroadcastPreview.fromJson(data), message: null, code: null);
+    } on DioException catch (e) {
+      _log('preview', e);
+      final d = e.response?.data is Map ? (e.response!.data as Map) : null;
+      return (preview: null, message: d?['message']?.toString() ?? 'خطأ في الشبكة', code: d?['code']?.toString());
+    } catch (e) {
+      _log('preview', e);
+      return (preview: null, message: 'تعذّرت المعاينة', code: null);
     }
   }
 
@@ -483,6 +546,182 @@ class BroadcastCampaign {
       paused: j['paused'] == true || j['paused'] == 1,
       telegram: _int(j['telegram']),
       createdAt: DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal(),
+    );
+  }
+}
+
+/// «تحديد المدينين» في التبليغات (المالك ٩ نوفمبر: «تحديد نطاقة جلب اليوزرية حسب اقدم مده دين وسقف من والى الدين … اما المده او
+/// المبلغ او الاثنين»). العمر = عمر **أقدم دينٍ لم يُسدَّد** (قراره بمثاله: ٣٥ ألفاً منذ ٩٠ يوماً + ٣٥ ألفاً قبل يومين ⇒ ٩٠ يوماً) —
+/// يحسبه الخادم وحده من دفتر حركات الدين؛ التطبيق يرسل الحدود ويعرض ما يردّه.
+@immutable
+class DebtFilter {
+  const DebtFilter({this.minAgeDays, this.minAmount, this.maxAmount});
+  final int? minAgeDays;
+  final int? minAmount;
+  final int? maxAmount;
+
+  static const none = DebtFilter();
+
+  bool get active => minAgeDays != null || minAmount != null || maxAmount != null;
+
+  DebtFilter copyWith({int? Function()? minAgeDays, int? Function()? minAmount, int? Function()? maxAmount}) => DebtFilter(
+        minAgeDays: minAgeDays != null ? minAgeDays() : this.minAgeDays,
+        minAmount: minAmount != null ? minAmount() : this.minAmount,
+        maxAmount: maxAmount != null ? maxAmount() : this.maxAmount,
+      );
+
+  /// جسم الطلب: أرقامٌ وحدها، والغائب لا يُرسَل.
+  Map<String, int> toJson() => {
+        if (minAgeDays != null) 'minAgeDays': minAgeDays!,
+        if (minAmount != null) 'minAmount': minAmount!,
+        if (maxAmount != null) 'maxAmount': maxAmount!,
+      };
+
+  /// خطأٌ يُرى قبل الإرسال (الخادم يردّه 422 أيضاً) — null حين سليم.
+  String? problem({int maxAgeDays = 3650}) {
+    final d = minAgeDays;
+    if (d != null && (d < 1 || d > maxAgeDays)) return 'عمر الدين بين 1 و$maxAgeDays يوماً';
+    if (maxAmount != null && maxAmount! <= 0) return 'الحدّ الأعلى أكبر من صفر';
+    if (minAmount != null && maxAmount != null && minAmount! > maxAmount!) return 'الحدّ الأدنى أكبر من الأعلى';
+    return null;
+  }
+
+  /// الجملة التي يقرؤها الوكيل: «أقدم دين 30 يوماً فأكثر · من 50,000 إلى 100,000 د.ع».
+  String describe() {
+    final parts = <String>[];
+    if (minAgeDays != null) parts.add('أقدم دين ${arDaysCount(minAgeDays!)} فأكثر');
+    String f(int v) => _thousands(v);
+    if (minAmount != null && maxAmount != null) {
+      parts.add('من ${f(minAmount!)} إلى ${f(maxAmount!)} د.ع');
+    } else if (minAmount != null) {
+      parts.add('${f(minAmount!)} د.ع فأكثر');
+    } else if (maxAmount != null) {
+      parts.add('حتى ${f(maxAmount!)} د.ع');
+    }
+    return parts.join(' · ');
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DebtFilter && other.minAgeDays == minAgeDays && other.minAmount == minAmount && other.maxAmount == maxAmount;
+
+  @override
+  int get hashCode => Object.hash(minAgeDays, minAmount, maxAmount);
+}
+
+/// «يوم» · «يومين» · «5 أيام» · «30 يوماً» — كالويب والخادم.
+String arDaysCount(int n) {
+  if (n == 1) return 'يوم';
+  if (n == 2) return 'يومين';
+  final r = n % 100;
+  if (r >= 3 && r <= 10) return '$n أيام';
+  if (r <= 2) return '$n يوم';
+  return '$n يوماً';
+}
+
+String _thousands(num v) {
+  final s = v.round().toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+    buf.write(s[i]);
+  }
+  return buf.toString();
+}
+
+/// ما يدعمه الخادم لهذا الحساب: المبلغ دائماً، والعمر حيث لديونه دفتر (وإلّا سببه بكلماتٍ يفهمها الوكيل).
+@immutable
+class DebtFilterCapability {
+  const DebtFilterCapability({required this.age, required this.presets, this.ageNote, this.maxAgeDays = 3650});
+  final bool age;
+  final String? ageNote;
+  final List<int> presets;
+  final int maxAgeDays;
+
+  static DebtFilterCapability? fromJson(Map<String, dynamic> j) {
+    if (j['amount'] != true || j['presets'] is! List) return null;
+    return DebtFilterCapability(
+      age: j['age'] == true,
+      ageNote: j['ageNote']?.toString(),
+      presets: [for (final p in j['presets'] as List) if (_toInt(p) > 0) _toInt(p)],
+      maxAgeDays: _toInt(j['maxAgeDays']) > 0 ? _toInt(j['maxAgeDays']) : 3650,
+    );
+  }
+}
+
+@immutable
+class BroadcastPreviewRow {
+  const BroadcastPreviewRow({required this.username, this.name, required this.debt, this.days, this.legacy = false});
+  final String username;
+  final String? name;
+  final num debt;
+
+  /// عمر أقدم دينٍ لم يُسدَّد بالأيّام — null لـ«دين قديم» أو المجهول.
+  final int? days;
+
+  /// «دين قديم»: جزءٌ من دينه أقدم من سجلّاتنا (استيراد/ترحيل/إضافةٌ من لوحة الساس) — أقدم من أيّ مدّة.
+  final bool legacy;
+}
+
+/// ردّ المعاينة: من يطابق (المشمولون قبل الدمج وحارس الحظر) وكم سيصل، وبصمة القائمة التي يحملها الإرسال.
+@immutable
+class BroadcastPreview {
+  const BroadcastPreview({
+    required this.count,
+    required this.audience,
+    required this.excludedHighRisk,
+    required this.deduped,
+    required this.rows,
+    required this.truncated,
+    required this.audienceKey,
+    this.missing = 0,
+    this.partial = false,
+    this.unknownAge = 0,
+    this.legacy = 0,
+    this.ageUnsupported = false,
+  });
+  final int count;
+  final int audience;
+  final int excludedHighRisk;
+  final int deduped;
+  final List<BroadcastPreviewRow> rows;
+  final bool truncated;
+  final String audienceKey;
+  final int missing;
+  final bool partial;
+  final int unknownAge;
+  final int legacy;
+  final bool ageUnsupported;
+
+  static BroadcastPreview fromJson(Map<String, dynamic> j) {
+    final df = j['debtFilter'] is Map ? Map<String, dynamic>.from(j['debtFilter'] as Map) : const <String, dynamic>{};
+    final rows = <BroadcastPreviewRow>[];
+    if (j['rows'] is List) {
+      for (final r in j['rows'] as List) {
+        if (r is! Map) continue;
+        final name = r['name']?.toString().trim();
+        rows.add(BroadcastPreviewRow(
+          username: (r['username'] ?? '').toString(),
+          name: name == null || name.isEmpty ? null : name,
+          debt: r['debt'] is num ? r['debt'] as num : num.tryParse('${r['debt']}') ?? 0,
+          days: r['days'] is num ? (r['days'] as num).toInt() : null,
+          legacy: r['legacy'] == true,
+        ));
+      }
+    }
+    return BroadcastPreview(
+      count: _toInt(j['count']),
+      audience: _toInt(j['audience']),
+      excludedHighRisk: _toInt(j['excludedHighRisk']),
+      deduped: _toInt(j['deduped']),
+      rows: rows,
+      truncated: j['truncated'] == true,
+      audienceKey: (j['audienceKey'] ?? '').toString(),
+      missing: _toInt(j['missing']),
+      partial: j['partial'] == true,
+      unknownAge: _toInt(df['unknownAge']),
+      legacy: _toInt(df['legacy']),
+      ageUnsupported: df['ageUnsupported'] == true,
     );
   }
 }

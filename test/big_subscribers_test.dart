@@ -523,10 +523,11 @@ void main() {
       await pumpVisual(t, phone, home: (_) => const BroadcastScreen());
       await settle(t, seconds: 3);
       expect(find.textContaining('حسابك كبير'), findsOneWidget);
-      expect(find.text('كلّ الفئة — يُجهَّز في الخلفيّة'), findsOneWidget);
       expect(srv.pageQueries.any((m) => m['tab'] == 'all'), isTrue, reason: '«محدّد» افتراضيّاً: بحث الساس');
-      await t.tap(find.text('عام'));
+      // التصميم الجديد (٩ نوفمبر): «عام» صار «الفئة كلّها» في شريطٍ مقسّم، وسطرٌ تحته يقول إنّ الخادم يجهّزها في الخلفيّة
+      await t.tap(find.text('الفئة كلّها'));
       await settle(t);
+      expect(find.text('الفئة كلّها — يجهّزها الخادم في الخلفيّة'), findsOneWidget);
       expect(find.text('89177 مشترك'), findsOneWidget, reason: 'العدد من ملخّص الساس لا من القائمة');
       await t.enterText(find.byType(TextField).last, 'تبليغ تجربة');
       await settle(t);
@@ -613,7 +614,8 @@ void main() {
       await pumpVisual(t, phone, home: (_) => const DiscountsScreen());
       await settle(t, seconds: 3);
       expect(find.textContaining('100 من 89177'), findsOneWidget, reason: 'المعروض من مجموع الساس');
-      final grid = find.byType(GridView);
+      // التصميم الجديد (٩ نوفمبر): صفٌّ لكلّ مشترك في قائمةٍ واحدة (لا شبكة كرتات)
+      final grid = find.byKey(const ValueKey('discounts-list'));
       for (var i = 0; i < 12 && !srv.pageQueries.any((m) => '${m['page']}' == '2'); i++) {
         await t.drag(grid, const Offset(0, -1500));
         await t.pump(const Duration(milliseconds: 300));
@@ -631,7 +633,7 @@ void main() {
       await pumpVisual(t, phone, home: (_) => const SubscriberPricesScreen());
       await settle(t, seconds: 3);
       expect(find.textContaining('100 من 89177'), findsOneWidget);
-      final grid = find.byType(GridView);
+      final grid = find.byKey(const ValueKey('prices-list'));
       for (var i = 0; i < 12 && !srv.pageQueries.any((m) => '${m['page']}' == '2'); i++) {
         await t.drag(grid, const Offset(0, -1500));
         await t.pump(const Duration(milliseconds: 300));

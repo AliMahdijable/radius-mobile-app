@@ -7,7 +7,6 @@ import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
-import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -21,6 +20,7 @@ import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_bulk_picker.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../widgets/merged_section.dart';
+import '../../widgets/list_kit.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -283,15 +283,100 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
       ),
       body: MergedSectionBody(child: DesktopScope.of(context)
           ? _desktopBody(filtered, accent)
-          : SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Padding(
+          : _phoneBody(filtered, accent)),
+      // الهاتف (٩ نوفمبر — التصميم الجديد): شريط التحديد حين يُحدَّد أحد — العدد ومسحٌ و«إلغاء السعر» و«سعر ثابت» يفتح ورقة المبلغ.
+      // (زرّ النظام نفسه في الورقة — كان `FilledButton` بنصٍّ أبيض صراحةً فصار أبيضَ على رماديّ حين يتعطّل.)
+      bottomNavigationBar: !_canManage || DesktopScope.of(context) || _selected.isEmpty
+          ? null
+          : ListSelectionBar(
+              count: _selected.length,
+              onClear: () => setState(_selected.clear),
+              actions: [
+                ListBarButton(
+                  key: const ValueKey('prices-remove'),
+                  label: 'sp.bar_remove'.tr(),
+                  icon: LucideIcons.trash2,
+                  tone: ListTone.danger,
+                  filled: false,
+                  onPressed: _selectedWithPrice == 0 || _submitting ? null : _removeSelected,
+                ),
+                ListBarButton(
+                  key: const ValueKey('prices-apply'),
+                  label: _submitting ? 'sp.applying'.tr() : 'sp.bar_set'.tr(),
+                  icon: LucideIcons.banknote,
+                  busy: _submitting,
+                  onPressed: _openApplySheet,
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// ورقة السعر ثمّ التطبيق — المنطق نفسه (_apply) بالسعر المختار.
+  Future<void> _openApplySheet() async {
+    if (_selected.isEmpty || _submitting) return;
+    final n = _selected.length;
+    final v = await showListAmountSheet(
+      context,
+      title: 'sp.sheet_bulk_title'.tr(args: ['$n']),
+      subtitle: 'sp.sheet_bulk_sub'.tr(),
+      icon: LucideIcons.banknote,
+      fieldLabel: 'sp.fixed_price'.tr(),
+      confirmLabel: 'sp.apply_n'.tr(args: ['{amount}', '$n']),
+      quickSets: const [25000, 30000, 35000, 45000, 50000],
+      previewOf: (a) => 'sp.preview_sale'.tr(args: [formatIQD(a)]),
+    );
+    if (v == null || v <= 0 || !mounted) return;
+    _amount = v;
+    await _apply();
+  }
+
+  /// الهاتف (٩ نوفمبر — المالك: «القائمة الوحيده تصميمها بالهاتف مزعج ورديئ»): بطاقتا «سعرٌ ثابت» و«يحتاج تسعير»، ثمّ «الأسعار
+  /// الحاليّة»، ثمّ البحث وشرائح «الكلّ · بسعرٍ ثابت · بلا سعر»، ثمّ صفٌّ لكلّ مشترك يُلمس للتحديد — بدل شبكة الكرتات الصغيرة.
+  Widget _phoneBody(List<Subscriber> filtered, Color accent) {
+    final rows = switch (_deskFilter) {
+      1 => filtered.where((s) => _prices.containsKey(s.idx)).toList(),
+      2 => filtered.where((s) => !_prices.containsKey(s.idx)).toList(),
+      _ => filtered,
+    };
+    final reprice = _all.where((s) => s.needsRepricing).length;
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: accent,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onGridScroll,
+        child: CustomScrollView(
+          key: const ValueKey('prices-list'),
+          slivers: [
+            SliverPadding(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-              child: Column(
-                children: [
-                  _hero(accent),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  Row(children: [
+                    Expanded(
+                      child: ListKpiTile(
+                        icon: LucideIcons.banknote,
+                        tone: ListTone.success,
+                        label: 'sp.fixed_count_label'.tr(),
+                        value: '${_prices.length}',
+                        active: _deskFilter == 1,
+                        onTap: () => setState(() => _deskFilter = _deskFilter == 1 ? 0 : 1),
+                      ),
+                    ),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: ListKpiTile(
+                        icon: LucideIcons.triangleAlert,
+                        tone: ListTone.warning,
+                        label: 'sp.needs_repricing_short'.tr(),
+                        value: _big ? '—' : '$reprice',
+                      ),
+                    ),
+                  ]),
+                  if (_loadFailed) ...[
+                    const SizedBox(height: Sp.sm),
+                    Text('sp.load_failed'.tr(), style: AppType.micro(color: AppColors.error)),
+                  ],
                   const SizedBox(height: Sp.sm),
                   _ActionCard(
                     icon: LucideIcons.list,
@@ -300,89 +385,89 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                     color: accent,
                     onTap: _prices.isEmpty ? null : _openExisting,
                   ),
-                  if (_canManage) ...[
-                    const SizedBox(height: Sp.md),
-                    _amountField(),
-                  ],
-                  const SizedBox(height: Sp.sm),
-                  _searchField(),
-                  const SizedBox(height: 8),
-                  _selectionBar(accent, filtered.length),
-                ],
+                  const SizedBox(height: Sp.xs),
+                ]),
               ),
             ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : filtered.isEmpty
-                      ? _emptyState()
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          color: accent,
-                          child: NotificationListener<ScrollNotification>(
-                          onNotification: _onGridScroll,
-                          child: GridView.builder(
-                            padding:
-                                const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
-                            gridDelegate: DesktopScope.of(context)
-                                // الحاسبة: خلايا بعرضٍ أقصى وارتفاعٍ ثابت — لا بطاقاتٌ طويلة فارغة.
-                                ? const SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: 280,
-                                    mainAxisExtent: 96,
-                                    crossAxisSpacing: Sp.sm,
-                                    mainAxisSpacing: Sp.sm,
-                                  )
-                                : const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              childAspectRatio: 1.7,
-                              crossAxisSpacing: 6,
-                              mainAxisSpacing: 6,
-                            ),
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final s = filtered[i];
-                              return _SubscriberCard(
-                                sub: s,
-                                selected: _selected.contains(s.idx),
-                                accent: accent,
-                                fixedPrice: _prices[s.idx]?.price,
-                                onTap: _canManage ? () => _toggle(s.idx!) : null,
-                              );
-                            },
+            // البحث والشرائح والعدّ مثبّتةٌ أعلى القائمة أثناء التمرير (الطويلة خاصّةً)
+            PinnedHeaderSliver(
+              child: ColoredBox(
+                color: AppColors.bg,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListSearchField(controller: _searchCtrl, hint: 'sp.search'.tr()),
+                      const SizedBox(height: Sp.sm),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: [
+                          ListFilterChip(label: 'sp.filter_all'.tr(), active: _deskFilter == 0, onTap: () => setState(() => _deskFilter = 0)),
+                          const SizedBox(width: Sp.x6),
+                          ListFilterChip(
+                            label: 'sp.filter_fixed'.tr(),
+                            icon: LucideIcons.banknote,
+                            tone: ListTone.success,
+                            count: _prices.length,
+                            active: _deskFilter == 1,
+                            onTap: () => setState(() => _deskFilter = 1),
                           ),
-                          ),
-                        ),
-            ),
-          ],
-        ),
-      )),
-      // 🐛 كان `FilledButton` بنصٍّ لونه أبيض صراحةً — فغلب لون المعطّل
-      // وصار أبيضَ على رماديّ فاتح لا يُقرأ. الآن زرّ النظام نفسه.
-      bottomNavigationBar: !_canManage || DesktopScope.of(context)
-          ? null
-          : ColoredBox(
-              color: AppColors.surface,
-              child: SafeArea(
-                top: false,
-                child: deskFooter(
-                  context,
-                  SheetFooterBar(
-                    label: _submitting
-                        ? 'sp.applying'.tr()
-                        : (_amount > 0 && _selected.isNotEmpty
-                            ? 'sp.apply_n'.tr(args: [
-                                formatIQD(_amount),
-                                '${_selected.length}',
-                              ])
-                            : 'sp.apply'.tr()),
-                    icon: LucideIcons.banknote,
-                    busy: _submitting,
-                    enabled: _amount > 0 && _selected.isNotEmpty,
-                    onPressed: _apply,
+                          const SizedBox(width: Sp.x6),
+                          ListFilterChip(label: 'sp.filter_none'.tr(), active: _deskFilter == 2, onTap: () => setState(() => _deskFilter = 2)),
+                        ]),
+                      ),
+                      const SizedBox(height: Sp.sm),
+                      _selectionBar(accent, filtered.length),
+                    ],
                   ),
                 ),
               ),
             ),
+            if (_loading)
+              const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
+            else if (rows.isEmpty)
+              SliverToBoxAdapter(child: _emptyState())
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                sliver: DecoratedSliver(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(R.lg),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  sliver: SliverList.separated(
+                    itemCount: rows.length,
+                    separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: AppColors.divider),
+                    itemBuilder: (_, i) {
+                      final s = rows[i];
+                      final fixed = _prices[s.idx]?.price;
+                      final hasName = s.fullName.trim().isNotEmpty && s.fullName != s.username;
+                      final sale = s.currentSalePrice;
+                      final sub = [if (hasName) s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · ');
+                      return ListSubscriberRow(
+                        key: ValueKey('price-row-${s.idx}'),
+                        title: hasName ? s.fullName : s.username,
+                        subtitle: sub,
+                        selectable: _canManage,
+                        selected: _selected.contains(s.idx),
+                        onTap: _canManage && s.idx != null ? () => _toggle(s.idx!) : null,
+                        trailing: ListAmountCell(
+                          amount: sale == null ? '—' : formatIQD(sale),
+                          badge: s.needsRepricing ? 'sp.needs_repricing_short'.tr() : (fixed != null ? 'sp.op_fixed_price'.tr() : null),
+                          badgeTone: s.needsRepricing ? ListTone.warning : ListTone.success,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: Sp.huge)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -548,56 +633,6 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     );
   }
 
-  Widget _hero(Color accent) {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [accent.withValues(alpha: 0.18), accent.withValues(alpha: 0.05)],
-          begin: AlignmentDirectional.topStart,
-          end: AlignmentDirectional.bottomEnd,
-        ),
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(R.md),
-            ),
-            child: Icon(LucideIcons.banknote, color: accent, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'sp.active_count'.tr(args: ['${_prices.length}']),
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 17, letterSpacing: -0.3),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  _loadFailed ? 'sp.load_failed'.tr() : 'sp.hero_hint'.tr(),
-                  style: AppType.muted(
-                          color: _loadFailed ? AppColors.error : AppColors.textMid)
-                      .copyWith(fontSize: 11),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// حقلٌ مدمج كحقل شاشة الخصومات. (كان `AmountTextField` — حقل الشيتات
   /// بخطّه الكبير — فظهر التلميح ضخماً في رأس الشاشة.)
   Widget _amountField() {
@@ -630,36 +665,6 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     );
   }
 
-  Widget _searchField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-      child: Row(
-        children: [
-          Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              style: AppType.input(color: AppColors.textHi),
-              decoration: InputDecoration(
-                hintText: 'sp.search'.tr(),
-                hintStyle: AppType.input(color: AppColors.textLow),
-                border: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _selectionBar(Color accent, int filteredCount) {
     return Row(
       children: [
@@ -682,13 +687,6 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
             label: 'sp.clear'.tr(),
             onTap: _selected.isEmpty ? null : () => setState(_selected.clear),
             color: AppColors.textMid,
-          ),
-          const SizedBox(width: 6),
-          _miniBtn(
-            icon: LucideIcons.trash2,
-            label: 'sp.remove_price'.tr(),
-            onTap: _selectedWithPrice == 0 || _submitting ? null : _removeSelected,
-            color: AppColors.error,
           ),
         ],
         const SizedBox(width: 6),
@@ -840,115 +838,6 @@ class _ActionCard extends StatelessWidget {
               ),
               Icon(LucideIcons.chevronLeft,
                   size: 16, color: disabled ? AppColors.textLow : AppColors.textMid),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SubscriberCard extends StatelessWidget {
-  const _SubscriberCard({
-    required this.sub,
-    required this.selected,
-    required this.accent,
-    required this.fixedPrice,
-    required this.onTap,
-  });
-
-  final Subscriber sub;
-  final bool selected;
-  final Color accent;
-  final num? fixedPrice;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final hasName =
-        sub.fullName.trim().isNotEmpty && sub.fullName != sub.username;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected ? accent.withValues(alpha: 0.10) : AppColors.surface,
-            // تجانس مع بطاقات المشتركين: نفس الحافّة والراديوس مع إبقاء الكثافة.
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(
-              color: selected ? accent : AppColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    selected ? LucideIcons.squareCheck : LucideIcons.square,
-                    size: 11,
-                    color: selected ? accent : AppColors.textLow,
-                  ),
-                  const SizedBox(width: 3),
-                  Expanded(
-                    child: Text(
-                      hasName ? sub.fullName : sub.username,
-                      style: AppType.label(color: AppColors.textHi)
-                          .copyWith(fontSize: 10.5, fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              if (hasName)
-                Text(
-                  sub.username,
-                  style: AppType.muted().copyWith(fontSize: 9.5),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              Row(
-                children: [
-                  Expanded(
-                    // الباقة + «سعر البيع الحالي» (ما يدفعه المشترك فعلاً):
-                    // للثابت هو الثابت، ولغيره سعر الباقة ناقص خصمه.
-                    child: Text(
-                      [
-                        if ((sub.profileName ?? '').isNotEmpty) sub.profileName!,
-                        if (sub.currentSalePrice != null)
-                          formatIQD(sub.currentSalePrice!),
-                      ].join(' · '),
-                      style: AppType.label(color: AppColors.success)
-                          .copyWith(fontSize: 9.5, fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (sub.needsRepricing)
-                    Icon(LucideIcons.triangleAlert,
-                        size: 11, color: AppColors.warning)
-                  else if (fixedPrice != null)
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandSoftBg,
-                        borderRadius: BorderRadius.circular(R.sm),
-                      ),
-                      child: Text(
-                        formatIQD(fixedPrice!),
-                        style: AppType.daysWordBold(color: accent),
-                      ),
-                    ),
-                ],
-              ),
             ],
           ),
         ),
