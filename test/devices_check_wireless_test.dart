@@ -2,19 +2,24 @@
 // من قراءةٍ لم تكتمل، ولا «لم يُقرأ» لما قُرئ.
 //   F1  سكتر ميموزا PtMP: مسح محطّاته انتهت مهلته ⇒ «قائمة مشتركيه ما انقرت» لا «سكتر · سليم» + «ما عليه أحد الآن».
 //   F10 طرف وصلة ميموزا PtP المرسل (نقطة وصول) مسجّلٌ «وصلة» يقرأ إشارته ⇒ يُحكم بها لا «الوصلة بلا طرفٍ ثانٍ».
+//   F19 وصلة RouterOS وضعها لم يُقرأ (الخادم بلا ap، حزمة wifi) بطرفٍ واحد ⇒ إشارة صفّه لا «إشارة الوصلة ما انقرت».
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/mimosa_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
+import 'package:rad_mysvcs/api/routeros_channel.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/merged_devices_check.dart';
 
 import 'support/fake_snmp_agent.dart';
 
@@ -36,6 +41,67 @@ List<String> texts(DeviceCheckReport r) => [for (final f in r.findings) f.text];
 
 DeviceCheckReport judge(NetworkDevice d, ProbeResult p, {CheckMemo? prev}) =>
     DevicesCheck.evaluate(d: d, alive: true, detail: p.detail, raw: p.raw, prev: prev);
+
+/// شركةٌ أخرى في «كل الشركات»: قراءة الخادم [v] كما تصل (summarizeDevices).
+DeviceCheckReport remote(NetworkDevice d, Map<String, dynamic> v, {CheckMemo? prev}) =>
+    MergedDevicesCheckRunner.remoteReport(
+        d, VpnDeviceResult(id: d.id, alive: true, vitals: v), const CheckLimits(), prev, const {});
+
+/// قراءة الخادم لجهاز RouterOS (prober.readRouterOsVitals): منفذ إيثر واحد شغّال، و[extra] فوقها.
+Map<String, dynamic> ros(Map<String, dynamic> extra) => {
+      'kind': 'ros',
+      'cpu': 9,
+      'mem': 40,
+      'up': 864000,
+      'ports': {'up': 1, 'total': 1},
+      'pl': [
+        {'n': 'ether1', 'r': true}
+      ],
+      ...extra,
+    };
+
+/// جهاز RouterOS بالـAPI بردودٍ مكتوبة — الأمر الغائب «no such command» (حزمةٌ غير مثبّتة)، والقيمة Exception تُرمى.
+class RosReplies implements RouterOsChannel {
+  RosReplies(this.replies);
+  final Map<String, Object> replies;
+  @override
+  String get via => 'API';
+  @override
+  Future<void> open() async {}
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async {
+    final r = replies[words.first];
+    if (r == null) throw MikrotikException('no such command prefix');
+    if (r is Exception) throw r;
+    return (r as List).cast<Map<String, String>>();
+  }
+
+  @override
+  Future<void> close() async {}
+}
+
+const rosResource = {
+  '/system/resource/print': [
+    {
+      'board-name': 'hAP ax2',
+      'version': '7.16.1',
+      'cpu-load': '4',
+      'total-memory': '67108864',
+      'free-memory': '40000000',
+      'uptime': '3w',
+    }
+  ],
+  '/system/health/print': <Map<String, String>>[],
+  '/ppp/active/print': <Map<String, String>>[],
+};
+
+/// قراءة مايكروتك مفصّلة بالـAPI من [replies] ⇒ حكم الفحص.
+Future<DeviceCheckReport> judgeRos(NetworkDevice d, Map<String, Object> replies, {CheckMemo? prev}) async {
+  MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => RosReplies({...rosResource, ...replies});
+  final s = await MikrotikApi.fetchStatsFor(ip: d.ip, protocol: 'api', creds: const {'user': 'admin', 'pass': 'x'});
+  final p = DeviceVitals.mikrotikResult(d, s, null, detailed: true);
+  return DevicesCheck.evaluate(d: d, alive: true, detail: p.detail, raw: p.raw, prev: prev);
+}
 
 // ── ميموزا: جدولا المحطّات الرسميّان (MIMOSA-NETWORKS-PTMP-MIB = mimosaWireless.9) والبديل القديم ──
 const _bfive = '1.3.6.1.4.1.43356.2.1.2';
@@ -210,6 +276,8 @@ void main() {
     VpnPipe.transport = savedPipe;
     MimosaApi.debugFetch = null;
     MimosaApi.debugClients = null;
+    MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => throw UnimplementedError(route);
+    MikrotikApi.resetRoutesForTest();
     NetworkDevicesApi.invalidateCredentialsCache();
   });
 
@@ -293,6 +361,56 @@ void main() {
       final none = link(const DeviceGlance(isAp: true, peersKnown: true, uptimeSec: 864000));
       expect(none.state, CheckState.warn);
       expect(texts(none), ['الوصلة بلا طرفٍ ثانٍ']);
+    });
+  });
+
+  group('F19 وصلة RouterOS وضعها لم يُقرأ بطرفٍ واحد: إشارة صفّه مقروءة', () {
+    test('🚨 «كل الشركات»: الخادم بلا ap (حزمة wifi) وصفّ طرفها الوحيد −63 ⇒ «وصلة · سليم» بها، و−85 ⇒ «ضعيفة»', () {
+      final d = dev(31, type: 'link', brand: 'mikrotik', protocol: 'api');
+      Map<String, dynamic> v(Map<String, dynamic> peer) =>
+          ros({'ap': null, 'radio': true, 'reg_ok': true, 'sig': null, 'peers': [peer]});
+      final r = remote(d, v({'n': 'TWR-AP', 's': -63, 'm': 'aa:bb:cc:00:00:01'}));
+      expect(r.role, CheckRole.link);
+      expect(texts(r), isNot(contains('إشارة الوصلة ما انقرت')));
+      expect(r.state, CheckState.ok);
+      expect(r.signal, -63);
+      expect(r.remoteSignal, isNull, reason: 'ما يستقبله هذا الجهاز «الإشارة» لا «الطرف الثاني»');
+      final weak = remote(d, v({'n': 'TWR-AP', 's': -85}));
+      expect(texts(weak), ['إشارة الوصلة -85 dBm — ضعيفة']);
+      // وكيف يستقبلنا الطرف الثاني (tx) إن قاله الجدول ⇒ «الطرف الثاني» ويُحكم بالأضعف
+      final far = remote(d, v({'n': 'TWR-AP', 's': -63, 'ts': -84}));
+      expect([far.signal, far.remoteSignal], [-63, -84]);
+      expect(texts(far), ['إشارة الوصلة -84 dBm — ضعيفة (عند الطرف الثاني)']);
+    });
+
+    test('🚨 محطّة حزمة wifi (قائمتها بلا running) «وصلة» وجدولها صفٌّ واحد −61 ⇒ «وصلة · سليم» لا «لم يُقرأ»',
+        () async {
+      final r = await judgeRos(dev(32, type: 'link', brand: 'mikrotik', protocol: 'api'), {
+        '/interface/print': [
+          {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+          {'name': 'wifi1', 'type': 'wifi', 'running': 'true', 'disabled': 'false'},
+        ],
+        '/interface/wifi/print': [
+          {'name': 'wifi1', 'configuration': 'BH', 'mode': 'station'}
+        ],
+        '/interface/wifi/registration-table/print': [
+          {'mac-address': 'AA:BB:CC:00:00:02', 'signal': '-61', 'interface': 'wifi1'},
+        ],
+      });
+      expect(r.role, CheckRole.link);
+      expect(r.state, CheckState.ok);
+      expect(r.signal, -61);
+    });
+
+    test('بلا صفٍّ أو بإشارةٍ غير مقروءة (0) ⇒ «إشارة الوصلة ما انقرت» كما هي — لا «0 dBm»', () {
+      final d = dev(33, type: 'link', brand: 'mikrotik', protocol: 'api');
+      final none = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': const []}));
+      expect(texts(none), ['إشارة الوصلة ما انقرت']);
+      final zero = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': [
+        {'n': 'TWR-AP', 's': 0}
+      ]}));
+      expect(zero.signal, isNull);
+      expect(texts(zero), ['إشارة الوصلة ما انقرت']);
     });
   });
 }
