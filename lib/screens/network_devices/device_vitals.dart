@@ -404,6 +404,10 @@ class DeviceVitals {
   @visibleForTesting
   static void resetLightsCursorForTest() => _lightsFrom.clear();
 
+  /// ملخّص أولت الخادم يرسل الأضعف من ضوء ما قرأه حتى هذا العدد (`rememberOltSummary` بـserver/connVpn/sweeper.js) —
+  /// قائمةٌ بلغته قد تكون مقطوعة: ما بعدها أقوى منها أو لم يُقرأ، لا يُعرف أيّهما (المراجعة الثالثة).
+  static const serverLightsMax = 300;
+
   /// وكيل SNMP لقراءة ضوء الأولت — يُستبدل في الاختبار.
   @visibleForTesting
   static SnmpV2c Function(String host, int port, String community) snmpFor =

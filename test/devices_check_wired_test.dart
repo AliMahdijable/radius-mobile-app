@@ -1,8 +1,10 @@
 // «الفحص الشامل» — المراجعة الثالثة لإصدار 180 (devwired): الأجهزة السلكيّة والأولت.
-//   F3  روجي: جدول الجسر انتهت مهلته ⇒ لاسلكيّه مجهول لا «راوتر · سليم» (القارئ الحقيقيّ عبر ممرّ الـVPN، لا لقطةٌ محقونة)؛
-//       وإشارة 0 من صفّ الوصلة «لم تُقرأ» لا «0 dBm».
-//   F17 أولتٌ لم يُقرأ له منفذ PON واحد (لا شيء، أو منافذ الصعود وحدها) ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» لا «أولت · سليم» ولا
-//       «ONU 0/0».
+//   F3  روجي: جدول الجسر انتهت مهلته ⇒ لاسلكيّه مجهول لا «راوتر · سليم» (القارئ الحقيقيّ عبر ممرّ الـVPN، لا لقطة
+//       محقونة)؛ وإشارة 0 من صفّ الوصلة «لم تُقرأ» لا «0 dBm».
+//   F17 أولتٌ لم يُقرأ له منفذ PON واحد (لا شيء، أو منافذ الصعود وحدها) ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» لا
+//       «أولت · سليم» ولا «ONU 0/0».
+//   F18 «كل الشركات»: الخادم يقرأ ضوء الأولت كلّه ويرسل الأضعف ≤300 ⇒ «أضعف 300 من N — الباقي أقوى منها أو لم يقرأه
+//       الخادم» لا «الباقي لم يقرأه الخادم»، والضعيف «300+» حين تكون القائمة المقطوعة كلّها ضعيفة.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/ruijie_api.dart';
@@ -18,7 +20,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_snmp_agent.dart';
 import 'support/snmp_wire.dart';
 
-NetworkDevice dev(int id, {String type = 'router', String brand = 'mikrotik', String protocol = 'api', String? model}) =>
+NetworkDevice dev(int id,
+        {String type = 'router', String brand = 'mikrotik', String protocol = 'api', String? model}) =>
     NetworkDevice(
       id: id,
       adminId: '2',
@@ -96,7 +99,7 @@ void main() {
   }
 
   group('F3 روجي: جدول الجسر', () {
-    test('🚨 جسرٌ محفوظ «راوتر» ومسح جدول جسره انتهت مهلته ⇒ «وضعه اللاسلكيّ ومشتركوه ما انقرأوا» و«لم يُقرأ» لا «راوتر · سليم»',
+    test('🚨 جسرٌ محفوظ «راوتر» ومسح جدول جسره انتهت مهلته ⇒ «وضعه اللاسلكيّ ومشتركوه ما انقرأوا» لا «راوتر · سليم»',
         () async {
       final d = dev(48, brand: 'ruijie', protocol: 'snmp');
       final pipe = SnmpWirePipe(FakeSnmpAgent(_ruijie(bridge: _bridgeRow(signal: -61))), lose: {_rjLink});
@@ -113,7 +116,8 @@ void main() {
       expect(r2.state, CheckState.unread);
     });
 
-    test('راوتر روجي يجيب المسح بلا جدول جسر (أو يرفضه بخطأ) ⇒ «راوتر · سليم» كما كان — لا «لم يُقرأ» لكلّ راوتر', () async {
+    test('راوتر روجي يجيب المسح بلا جدول جسر (أو يرفضه بخطأ) ⇒ «راوتر · سليم» كما كان — لا «لم يُقرأ» لكلّ راوتر',
+        () async {
       final d = dev(51, brand: 'ruijie', protocol: 'snmp');
       final none = await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie())), d);
       expect((none.raw! as RuijieStats).linkRead, isTrue);
@@ -145,8 +149,10 @@ void main() {
     final olt = dev(60, type: 'other', brand: 'vsol', protocol: 'snmp', model: 'V1600D8');
     const ge1 = VsolUplink(index: 1, name: 'GE1', up: true, speedMbps: 1000, rxBytes: 0, txBytes: 0);
 
-    test('🚨 قراءةٌ بمنافذ الصعود وحدها ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» بلا «ONU 0/0»؛ وبلا شيءٍ (الهويّة وحدها) كذلك', () {
-      final r = judge(olt, oltProbeResult(const VsolOltStats(sysName: 'OLT', uptime: Duration(days: 9), uplinks: [ge1])));
+    test('🚨 منافذ الصعود وحدها ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» بلا «ONU 0/0»؛ وبلا شيءٍ (الهويّة وحدها) كذلك',
+        () {
+      const up = VsolOltStats(sysName: 'OLT', uptime: Duration(days: 9), uplinks: [ge1]);
+      final r = judge(olt, oltProbeResult(up));
       expect(r.role, CheckRole.olt);
       expect(r.state, CheckState.unread);
       expect(texts(r), contains('منافذ PON ما انقرت'));
@@ -177,6 +183,44 @@ void main() {
       expect(full.state, CheckState.ok);
       expect(texts(full), isNot(contains('منافذ PON ما انقرت')));
       expect(texts(counted), isNot(contains('منافذ PON ما انقرت')));
+    });
+  });
+
+  group('F18 ضوء أولت الخادم: الأضعف ≤300 ممّا قرأه', () {
+    final olt = dev(70, type: 'other', brand: 'vsol', protocol: 'snmp', model: 'V1600D8');
+    DeviceCheckReport remote({required int online, required int sent, int weak = 0, int? lw, int? lr}) =>
+        DevicesCheck.evaluate(
+            d: olt,
+            alive: true,
+            detail: DeviceVitals.fromVpn({
+              'kind': 'olt',
+              'total': online + 80,
+              'online': online,
+              'pons': [
+                {'label': 'PON1', 'up': true, 'online': online, 'total': online + 80}
+              ],
+              'onus': [
+                for (var i = 0; i < sent; i++) {'n': 'ONU $i', 'k': 'PON1:$i', 'rx': i < weak ? -29.5 : -20.0}
+              ],
+              if (lw != null) 'lw': lw,
+              if (lr != null) 'lr': lr,
+            }).detail);
+
+    test('🚨 520 متّصلة قرأها الخادم كلّها وأرسل أضعف 300 (lw 520، lr 300) ⇒ «أضعف 300 من 520» لا «لم يقرأه الخادم»',
+        () {
+      final r = remote(online: 520, sent: 300, weak: 37, lw: 520, lr: 300);
+      expect(texts(r), contains('الضوء: أضعف 300 من 520 — الباقي أقوى منها أو لم يقرأه الخادم'));
+      expect(texts(r).where((t) => t.contains('قُرئ 300')), isEmpty);
+      expect(texts(r), contains('ضوء ضعيف: 37 — من أضعف 300'), reason: 'الضعيف كلّه فيها ما دام فيها غير ضعيف');
+      // القائمة المقطوعة كلّها ضعيفة ⇒ قد يكون غيرها: «300+» لا «300»
+      final all = remote(online: 520, sent: 300, weak: 300, lw: 520, lr: 300);
+      expect(texts(all), contains('ضوء ضعيف: 300+ — من أضعف 300'));
+    });
+
+    test('قائمةٌ دون الحدّ (لا قطع) ⇒ كما كانت: «قُرئ n من N — الباقي لم يقرأه الخادم» و«من n مشترك»', () {
+      final r = remote(online: 400, sent: 120, weak: 3, lw: 400, lr: 120);
+      expect(texts(r), contains('الضوء: قُرئ 120 من 400 — الباقي لم يقرأه الخادم'));
+      expect(texts(r), contains('ضوء ضعيف: 3 — من 120 مشترك'));
     });
   });
 }

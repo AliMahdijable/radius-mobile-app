@@ -132,8 +132,9 @@ class SnmpWireRequest {
   }
 }
 
-/// ممرّ الـVPN ([VpnPipe.transport]) يصل وكيلاً في الذاكرة: القارئ يمرّ بعميل [SnmpV2c] الحقيقيّ (walk وتحويل المهلة) لا ببديلٍ
-/// يتجاوزه. [lose]: شجراتٌ لا يجيب طلبها (الممرّ ٥٠٤ ⇒ مهلة)، و[refuse]: شجراتٌ يردّ عليها الوكيل بخطأ (genErr — لا يدعمها).
+/// ممرّ الـVPN ([VpnPipe.transport]) يصل وكيلاً في الذاكرة: القارئ يمرّ بعميل [SnmpV2c] الحقيقيّ (walk وتحويل المهلة)
+/// لا ببديلٍ يتجاوزه. [lose]: شجراتٌ لا يجيب طلبها (الممرّ ٥٠٤ ⇒ مهلة)، و[refuse]: شجراتٌ يردّ عليها الوكيل بخطأ
+/// (genErr — لا يدعمها).
 class SnmpWirePipe implements VpnPipeTransport {
   SnmpWirePipe(this.agent, {this.lose = const {}, this.refuse = const {}});
 

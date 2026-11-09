@@ -626,6 +626,9 @@ class DevicesCheck {
       // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
       // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
       final wanted = detail.onuLightsWanted;
+      // ملخّص الخادم يرسل الأضعف حتى [DeviceVitals.serverLightsMax] ممّا قرأه — قائمةٌ بلغته ما بعدها أقوى منها أو لم
+      // يُقرأ، لا «لم يقرأه الخادم» وقد قرأه (المراجعة الثالثة)
+      final cut = detail.onuLightsServer && detail.onuLights.length >= DeviceVitals.serverLightsMax;
       if (wanted != null && wanted > 0) {
         final read = detail.onuLights.length;
         final answered = detail.onuLightsAnswered ?? read;
@@ -637,7 +640,9 @@ class DevicesCheck {
               CheckLevel.info,
               read == 0
                   ? (srv ? 'ضوء المشتركين لم يقرأه الخادم' : 'ضوء المشتركين ما انقرأ هالمرّة')
-                  : 'الضوء: قُرئ $read من $wanted — ${srv ? 'الباقي لم يقرأه الخادم' : 'الباقي ما لحق'}'));
+                  : cut
+                      ? 'الضوء: أضعف $read من $wanted — الباقي أقوى منها أو لم يقرأه الخادم'
+                      : 'الضوء: قُرئ $read من $wanted — ${srv ? 'الباقي لم يقرأه الخادم' : 'الباقي ما لحق'}'));
         }
         if (answered > read) f.add(CheckFinding(CheckLevel.info, 'بلا قراءة ضوء: ${answered - read}'));
       }
@@ -655,7 +660,12 @@ class DevicesCheck {
             ),
         ]..sort((a, b) => a.light!.compareTo(b.light!));
         final w = subs.where((x) => x.weak).length;
-        if (w > 0) f.add(CheckFinding(CheckLevel.warn, 'ضوء ضعيف: $w — من ${subs.length} مشترك'));
+        // المقطوعة: الضعيف كلّه فيها ما دام فيها غير ضعيف؛ وكلّها ضعيفة ⇒ قد يكون غيرها («300+»)
+        if (w > 0) {
+          final n = cut && w == subs.length ? '$w+' : '$w';
+          f.add(CheckFinding(CheckLevel.warn,
+              cut ? 'ضوء ضعيف: $n — من أضعف ${subs.length}' : 'ضوء ضعيف: $w — من ${subs.length} مشترك'));
+        }
       }
     }
 
