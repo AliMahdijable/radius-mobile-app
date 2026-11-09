@@ -18,6 +18,11 @@ class MikrotikSnmp {
   @visibleForTesting
   static Future<MikrotikStats> Function()? debugFetch;
 
+  /// عميل SNMP للجهاز — الاختبار يضع وكيلاً في الذاكرة يُسقط مسحاً بعينه (المراجعة الثانية: جدول واجهاتٍ ضاع).
+  @visibleForTesting
+  static SnmpV2c Function(String host, int port, String community, Duration timeout) snmpFor =
+      (host, port, community, timeout) => SnmpV2c(host: host, port: port, community: community, timeout: timeout);
+
   static const sysDescr = '1.3.6.1.2.1.1.1.0';
   static const firmwareVersion = '1.3.6.1.4.1.14988.1.1.7.4.0';
   static const sysUpTime = '1.3.6.1.2.1.1.3.0';
@@ -81,7 +86,7 @@ class MikrotikSnmp {
       onPartialReady?.call(s);
       return s;
     }
-    final snmp = SnmpV2c(host: host, port: port, community: community, timeout: timeout);
+    final snmp = snmpFor(host, port, community, timeout);
     final all = <String, Varbind>{};
     void put(Iterable<Varbind> vbs) {
       for (final v in vbs) {
@@ -126,14 +131,22 @@ class MikrotikSnmp {
       try {
         put(await _pairedColumns(snmp, ifColumns));
         paired = true;
+        _pairedFails.remove('$host:$port');
       } catch (_) {
-        // وكيلٌ لا يقبل الأعمدة المتوازية — يُحفظ فلا تُدفع مهلته في كلّ نبضة.
-        _noPairedBulk.add('$host:$port');
+        // وكيلٌ لا يقبل الأعمدة المتوازية — يُحفظ فلا تُدفع مهلته في كلّ نبضة. مرّتين متتاليتين لا مرّةً: ممرّ الـVPN يردّ ٥٠٤
+        // عابراً، وكان واحدٌ منها يحوّل الجهاز لمسوحٍ منفردة طول عمر التطبيق (المراجعة الثانية)
+        final k = '$host:$port';
+        final n = (_pairedFails[k] ?? 0) + 1;
+        _pairedFails[k] = n;
+        if (n >= 2) _noPairedBulk.add(k);
       }
     }
+    // جدول الواجهات: الاسم والنوع والحال والتفعيل — ضاع أحدها ⇒ لا منافذ تُبنى ([MikrotikStats.portsRead])، لا «سليم» بلا منافذ
+    // ولا «0/N» من حالٍ لم يُقرأ (المراجعة الثانية)
+    var portsRead = true;
     if (!paired) {
       for (final c in ifColumns) {
-        await walk(c);
+        if (!await walk(c) && ifCritical.contains(c)) portsRead = false;
       }
     }
     // ٩ نوفمبر: جدولٌ لاسلكيّ انتهت مهلته ⇒ عملاؤه مجهولون لا «لا أحد» ([MikrotikStats.clientsRead]).
@@ -143,14 +156,26 @@ class MikrotikSnmp {
         if (!await walk(t)) clientsRead = false;
       }
     }
-    return build(all, vitalsOnly: vitalsOnly, clientsRead: clientsRead);
+    return build(all, vitalsOnly: vitalsOnly, clientsRead: clientsRead, portsRead: portsRead);
   }
+
+  /// أعمدة الواجهات التي لا تُبنى المنافذ بدونها (الاسم، النوع، الحال، التفعيل) — العدّادات والسرعة والـMTU تكميل.
+  static const ifCritical = {ifName, ifType, ifOper, ifAdmin};
 
   /// وكلاء لا يقبلون GETBULK بأكثر من عمود (عنوان:منفذ) — يُقرأ منهم عموداً عموداً.
   static final Set<String> _noPairedBulk = {};
 
+  /// إخفاقات الأعمدة المتوازية المتتالية لكلّ وكيل — الثاني يحفظه في [_noPairedBulk].
+  static final Map<String, int> _pairedFails = {};
+
   @visibleForTesting
-  static void resetForTest() => _noPairedBulk.clear();
+  static void resetForTest() {
+    _noPairedBulk.clear();
+    _pairedFails.clear();
+  }
+
+  @visibleForTesting
+  static bool singleColumnFor(String host, int port) => _noPairedBulk.contains('$host:$port');
 
   /// أعمدةٌ متوازية بطلبٍ واحد لكلّ دفعة صفوف — راوتر PPPoE فيه مئات الواجهات، وثمانية مسوحٍ منفصلة تعني مئة طلب.
   static Future<List<Varbind>> _pairedColumns(SnmpV2c snmp, List<String> columns,
@@ -180,7 +205,7 @@ class MikrotikSnmp {
   /// المجموعة المقروءة (OID ← قيمة) ← إحصاءات. مكشوفة للاختبار بقيمٍ ثابتة. [clientsRead]: جداول اللاسلكيّ قُرئت كلّها (لا مهلة).
   @visibleForTesting
   static MikrotikStats build(Map<String, Varbind> all,
-      {bool vitalsOnly = false, bool withInterfaces = true, bool clientsRead = true}) {
+      {bool vitalsOnly = false, bool withInterfaces = true, bool clientsRead = true, bool portsRead = true}) {
     int? i(String oid) => all[oid]?.isNumeric == true ? all[oid]!.asInt : null;
     String? s(String oid) {
       final v = all[oid];
@@ -271,7 +296,9 @@ class MikrotikSnmp {
     final speeds = _column(all, ifHighSpeed);
     final interfaces = <MikrotikInterface>[];
     var ppp = 0;
-    if (withInterfaces) {
+    // الطبقة الأولى بلا واجهات، أو مسحٌ ضاع منها ⇒ لا منافذ ولا حال راديو من عمودٍ ناقص (المراجعة الثانية)
+    final ifsRead = withInterfaces && portsRead;
+    if (ifsRead) {
       for (final idx in names.keys) {
         final name = names[idx]!;
         final t = types[idx]?.asInt;
@@ -326,6 +353,7 @@ class MikrotikSnmp {
       memKnown: memTotal > 0,
       // الخفيفة بلا جداول اللاسلكيّ — والكاملة تضعها أدناه
       clientsRead: false,
+      portsRead: ifsRead,
     );
     if (vitalsOnly) return stats;
 

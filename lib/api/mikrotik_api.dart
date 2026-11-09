@@ -705,7 +705,11 @@ class MikrotikApi {
           w60gLinks.add(link);
           // التردّد في الإعداد قد يكون «auto» — والفعليّ من monitor.
           if (link.frequency != null && _iOrZero(w['frequency']) == 0) w['frequency'] = '${link.frequency}';
-        } catch (_) {/* monitor مرفوض لهذا المستخدم — تبقى الواجهة بلا وصلة لا بأرقامٍ مخترعة */}
+        } catch (e) {
+          // monitor مرفوض لهذا المستخدم أو انتهت مهلته — تبقى الواجهة بلا وصلة لا بأرقامٍ مخترعة، وإشارتها «لم تُقرأ» لا «سليم»
+          // (المراجعة الثانية: LHG 60G وصلةٌ بلا إشارة كانت «وصلة · سليم»)
+          if (!absent(e)) clientsRead = false;
+        }
       }
     }
     // Clients — جدول التسجيل لراديوات wireless/wifi وحدها (Cube 60Pro ac فيه راديو 5 GHz احتياطيّ بجانب الـ60).
@@ -1191,6 +1195,11 @@ class MikrotikStats {
   /// صراحةً؛ والمبنيّ يدويّاً (اختبار، لقطة) قراءةٌ كاملة.
   final bool clientsRead;
 
+  /// جدول الواجهات قُرئ كاملاً (الاسم والنوع والحال والتفعيل). SNMP يمسح كلّ عمودٍ وحده (SwOS دائماً، وRouterOS بعد رفض الأعمدة
+  /// المتوازية) ومهلةٌ في أحدها كانت تُبتلع: منافذ فارغة ⇒ «سويج · سليم»، أو حالٌ ضائع ⇒ «المنافذ 0/N» كاذبة (المراجعة الثانية).
+  /// false ⇒ لا واجهات تُبنى، و«المنافذ ما انقرت». الـAPI يرمي إن لم يُقرأ `/interface/print` — هناك true دائماً.
+  final bool portsRead;
+
   const MikrotikStats({
     required this.cpuLoad,
     required this.memUsedPercent,
@@ -1219,6 +1228,7 @@ class MikrotikStats {
     this.cpuKnown = true,
     this.memKnown = true,
     this.clientsRead = true,
+    this.portsRead = true,
   });
 
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
@@ -1259,6 +1269,7 @@ class MikrotikStats {
     List<MikrotikWirelessClient>? wirelessClients,
     List<MikrotikW60gLink>? w60gLinks,
     bool? clientsRead,
+    bool? portsRead,
   }) =>
       MikrotikStats(
         cpuLoad: cpuLoad,
@@ -1288,6 +1299,7 @@ class MikrotikStats {
         cpuKnown: cpuKnown,
         memKnown: memKnown,
         clientsRead: clientsRead ?? this.clientsRead,
+        portsRead: portsRead ?? this.portsRead,
       );
   int get downInterfacesCount =>
       interfaces.where((i) => !i.running && !i.disabled).length;

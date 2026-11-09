@@ -193,6 +193,7 @@ class DeviceCheckReport {
     this.pending = false,
     this.staleAt,
     this.staleFrom,
+    this.staleUpTo = false,
     this.readVia,
     this.readMs,
   });
@@ -233,8 +234,13 @@ class DeviceCheckReport {
   final DateTime? staleAt;
   final String? staleFrom;
 
-  /// «قبل 3 د» — عمر [staleAt].
-  String? get staleAge => staleAt == null ? null : DevicesCheck.ago(staleAt!, at);
+  /// [staleAt] أقدم ما يمكن لا لحظةٌ معروفة (ملخّص أولت الخادم بلا وقته — حتى ٣٠ د): العمر «حتى 30 د» لا «قبل 30 د».
+  final bool staleUpTo;
+
+  /// «قبل 3 د» — عمر [staleAt] (أو «حتى 30 د» لعمرٍ أقصى).
+  String? get staleAge => staleAt == null
+      ? null
+      : (staleUpTo ? 'حتى ${at.difference(staleAt!).inMinutes} د' : DevicesCheck.ago(staleAt!, at));
 
   /// طريق القراءة (API · SSH · الويب · SNMP · Telnet، و«عبر الـVPN») وزمنها بالمللي — يُكتبان على السطر («SSH · 18ث»).
   final String? readVia;
@@ -322,10 +328,15 @@ class DevicesCheck {
   ///
   /// [known] دوره من آخر قراءةٍ قُرئ فيها لاسلكيّه — يُحكم به حين لم يُقرأ لاسلكيّه هذه المرّة ([DeviceGlance.radioUnread]):
   /// نوع السجلّ وحده يقول «راوتر» لسكتر بيس بوكس (٩ نوفمبر).
-  static CheckRole roleOf(NetworkDevice d, DeviceGlance? g, {CheckRole? known}) {
+  ///
+  /// المراجعة الثانية: وضعٌ لم تقله القراءة ([DeviceGlance.apUnknown] — قراءة الخادم بلا `ap`) أو راديو مقروءٌ لا يعمل
+  /// ([DeviceGlance.linkDown]) يأخذان [known] كذلك؛ وسجلٌّ «وصلة» يقرأ نقطة وصولٍ بطرفٍ واحدٍ أو بلا طرف ([peers]) يبقى وصلة —
+  /// طرف الـPtP المرسل لا «سكتر» يقول «ما عليه أحد الآن» حين سقط طرفه الثاني.
+  static CheckRole roleOf(NetworkDevice d, DeviceGlance? g, {CheckRole? known, int peers = 0}) {
     if (OltProfile.fromDevice(d).opensOltPanel || (g?.onusTotal ?? 0) > 0) return CheckRole.olt;
-    if (g != null && g.radioUnread && g.isAp == null && known != null) return known;
+    if (g != null && (g.radioUnread || g.apUnknown || g.linkDown) && g.isAp == null && known != null) return known;
     final t = d.type.toLowerCase();
+    if (t == 'link' && g?.isAp == true && peers <= 1) return CheckRole.link;
     if (g?.isAp == true || t == 'sector' || t == 'ap') return CheckRole.sector;
     if (t == 'link' || g?.isAp == false) return CheckRole.link;
     if (t == 'switch') return CheckRole.switcher;
@@ -443,6 +454,7 @@ class DevicesCheck {
     bool pending = false,
     DateTime? staleAt,
     String? staleFrom,
+    bool staleUpTo = false,
     bool statusOnly = false,
     String? readVia,
     int? readMs,
@@ -452,7 +464,7 @@ class DevicesCheck {
     final g = detail?.glance;
     // دوره المعروف: من اللقطة، وإلّا لقطةٌ قديمة فيها مشتركون (تُحفظ للسكتر وحده)
     final known = prev?.role ?? (prev?.peers != null ? CheckRole.sector : null);
-    final role = roleOf(d, g, known: known);
+    final role = roleOf(d, g, known: known, peers: detail?.peers.length ?? 0);
     // آخر قراءةٍ لا هذا الفحص (٩ نوفمبر): لا مقارنة منافذ ولا «ما عليه أحد الآن» ولا لقطة — أرقامها بعمرها وحدها
     final stale = staleAt != null;
     final countsOnly = portsCountsOnly || stale;
@@ -528,15 +540,28 @@ class DevicesCheck {
     }
 
     // ── الوصلة ──
-    // الوصلة: إشارتها هنا وإشارة الطرف الثاني (من جدول تسجيلها) — والحكم على الأضعف
-    final remote = role == CheckRole.link && detail.peers.length == 1 ? detail.peers.first.txSignal : null;
+    // الوصلة: إشارتها هنا وإشارة الطرف الثاني (من جدول تسجيلها) — والحكم على الأضعف. طرفها المرسل (نقطة وصولٍ مسجّلة «وصلة»)
+    // لا إشارة له: طرفه الثاني محطّته الوحيدة (كيف تستقبلنا، وإلّا كيف نستقبلها) — المراجعة الثانية
+    final linkAp = role == CheckRole.link && g.isAp == true;
+    final one = role == CheckRole.link && detail.peers.length == 1 ? detail.peers.first : null;
+    final remote = one == null ? null : (linkAp ? (one.txSignal ?? one.signal) : one.txSignal);
+    // حكمٌ على الوصلة نفسها (مقطوعة أو بلا طرف) — يغني عن «إشارتها ما انقرت»
+    var linkJudged = false;
     if (role == CheckRole.link) {
-      final worst = [g.signal, remote].whereType<int>().fold<int?>(null, (a, b) => a == null || b < a ? b : a);
-      if (worst != null && worst <= limits.linkSignalMin) {
-        f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة $worst dBm — ضعيفة${worst == remote && remote != g.signal ? ' (عند الطرف الثاني)' : ''}'));
-      }
-      if (g.ccq != null && g.ccq! > 0 && g.ccq! < limits.linkCcqMin) {
-        f.add(CheckFinding(CheckLevel.warn, 'CCQ الوصلة ${g.ccq}٪ — واطي'));
+      if (g.linkDown) {
+        f.add(const CheckFinding(CheckLevel.bad, 'الوصلة مقطوعة — لا إشارة'));
+        linkJudged = true;
+      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty) {
+        f.add(const CheckFinding(CheckLevel.bad, 'الوصلة بلا طرفٍ ثانٍ'));
+        linkJudged = true;
+      } else {
+        final worst = [g.signal, remote].whereType<int>().fold<int?>(null, (a, b) => a == null || b < a ? b : a);
+        if (worst != null && worst <= limits.linkSignalMin) {
+          f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة $worst dBm — ضعيفة${worst == remote && remote != g.signal ? ' (عند الطرف الثاني)' : ''}'));
+        }
+        if (g.ccq != null && g.ccq! > 0 && g.ccq! < limits.linkCcqMin) {
+          f.add(CheckFinding(CheckLevel.warn, 'CCQ الوصلة ${g.ccq}٪ — واطي'));
+        }
       }
     }
 
@@ -575,7 +600,11 @@ class DevicesCheck {
         f.add(CheckFinding(
             CheckLevel.warn, '${[if (w > 0) 'إشارة ضعيفة: $w', if (l > 0) 'CCQ واطي: $l'].join(' · ')} — من ${subs.length} مشترك'));
       }
-      if (subsKnown && subs.isEmpty) {
+      if (g.linkDown && !stale) {
+        // راديو نقطة الوصول مفعّلٌ ومقروءٌ ولا يعمل — لا «ما عليه أحد الآن» بحالٍ «سليم» (المراجعة الثانية)
+        final was = prev?.peers ?? 0;
+        f.add(CheckFinding(CheckLevel.bad, 'الراديو لا يعمل${was > 0 ? ' — كانوا $was بالفحص السابق' : ''}'));
+      } else if (subsKnown && subs.isEmpty) {
         final was = prev?.peers ?? 0;
         f.add(was >= 3
             ? CheckFinding(CheckLevel.warn, 'ما عليه أحد الآن — كانوا $was بالفحص السابق')
@@ -598,8 +627,13 @@ class DevicesCheck {
         final answered = detail.onuLightsAnswered ?? read;
         // «ما لحق» لما لم يُسأل/لم يجب بمهلته وحده، و«بلا قراءة ضوء» لما أجاب بلا قيمةٍ صالحة (المراجعة)
         if (answered < wanted) {
+          // ملخّص الخادم: يقرأ بعضها ويُبقي الأضعف — «لم يقرأه الخادم» لا «ما لحق» (المراجعة الثانية)
+          final srv = detail.onuLightsServer;
           f.add(CheckFinding(
-              CheckLevel.info, read == 0 ? 'ضوء المشتركين ما انقرأ هالمرّة' : 'الضوء: قُرئ $read من $wanted — الباقي ما لحق'));
+              CheckLevel.info,
+              read == 0
+                  ? (srv ? 'ضوء المشتركين لم يقرأه الخادم' : 'ضوء المشتركين ما انقرأ هالمرّة')
+                  : 'الضوء: قُرئ $read من $wanted — ${srv ? 'الباقي لم يقرأه الخادم' : 'الباقي ما لحق'}'));
         }
         if (answered > read) f.add(CheckFinding(CheckLevel.info, 'بلا قراءة ضوء: ${answered - read}'));
       }
@@ -693,22 +727,33 @@ class DevicesCheck {
       }
     }
 
-    // لاسلكيّه لم يُقرأ ولراديو مفعّل (٩ نوفمبر — المراجعة): الوصلة بلا إشارتها، وما لم يُعرف دوره بلا وضعه ومشتركيه — لا «سليم»
+    // لاسلكيّه لم يُقرأ ولراديو مفعّل (٩ نوفمبر — المراجعة): الوصلة بلا إشارتها، وما لم يُعرف دوره بلا وضعه ومشتركيه — لا «سليم».
+    // المراجعة الثانية: الوصلة بلا إشارةٍ ولا جودة ولا طرفٍ ثانٍ لا تكون «سليم» أبداً (لا تحت radioUnread وحده) — إلّا وصلةٌ سلكيّة
+    // قُرئت واجهاتها بلا راديو
     var radioGap = false;
-    if (g.radioUnread) {
-      if (role == CheckRole.link && g.signal == null && g.signalPct == null) {
+    if (role == CheckRole.link) {
+      if (!linkJudged && g.signal == null && g.signalPct == null && remote == null && g.hasRadio != false) {
         f.add(const CheckFinding(CheckLevel.info, 'إشارة الوصلة ما انقرت'));
         radioGap = true;
-      } else if (role != CheckRole.sector && role != CheckRole.link && role != CheckRole.olt) {
-        f.add(const CheckFinding(CheckLevel.info, 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
-        radioGap = true;
       }
+    } else if (g.radioUnread && role != CheckRole.sector && role != CheckRole.olt && role != CheckRole.switcher) {
+      // السويج يُحكم بمنافذه — جدولٌ لم يُقرأ يقوله «المنافذ ما انقرت» أدناه، لا «وضعه اللاسلكيّ»
+      f.add(const CheckFinding(CheckLevel.info, 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+      radioGap = true;
     }
+    // جدول المنافذ لم يُقرأ (المراجعة الثانية): صريحاً من القارئ، أو سويج/راوتر كانت له منافذ وقراءته الجديدة بلا منفذٍ واحد —
+    // «المنافذ ما انقرت» و«لم يُقرأ»، لا «سليم» بلا منافذ (واللقطة تبقى بمنافذها)
+    final portsGap = g.portsUnread ||
+        (!countsOnly &&
+            phys.isEmpty &&
+            (role == CheckRole.switcher || role == CheckRole.router) &&
+            (prev?.ports.isNotEmpty ?? false));
+    if (portsGap) f.add(const CheckFinding(CheckLevel.info, 'المنافذ ما انقرت'));
 
     // «سليم» للسكتر حكمٌ عليه وعلى مشتركيه — قائمتهم لم تُقرأ ⇒ «لم يُقرأ» بحيويّاته وسطرها، لا «سليم» (٩ نوفمبر)
     final state = f.any((x) => x.level != CheckLevel.info)
         ? CheckState.warn
-        : ((role == CheckRole.sector && !subsKnown) || radioGap ? CheckState.unread : CheckState.ok);
+        : ((role == CheckRole.sector && !subsKnown) || radioGap || portsGap ? CheckState.unread : CheckState.ok);
     return DeviceCheckReport(
       device: d,
       role: role,
@@ -739,6 +784,7 @@ class DevicesCheck {
       pending: pending,
       staleAt: staleAt,
       staleFrom: staleFrom,
+      staleUpTo: staleUpTo,
       readVia: stale ? null : readVia,
       readMs: stale ? null : readMs,
       // قراءةٌ سابقة لا تكتب اللقطة — المقارنة التالية بما قُرئ فعلاً
@@ -749,7 +795,7 @@ class DevicesCheck {
               ports: countsOnly || phys.isEmpty ? (prev?.ports ?? const {}) : memoPorts,
               peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,
               // الدور يُحفظ حين قُرئ لاسلكيّه (أو لا راديو له) — لا من نوع السجلّ وقت الجهل
-              role: g.radioUnread && g.isAp == null ? prev?.role : role,
+              role: (g.radioUnread || g.apUnknown || g.linkDown) && g.isAp == null ? prev?.role : role,
             ),
     );
   }

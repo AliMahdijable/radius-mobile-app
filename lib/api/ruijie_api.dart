@@ -299,6 +299,8 @@ class RuijieApi {
     RuijieWirelessLink? link;
     RuijiePeer? peer;
     String? role;
+    // جدول الجسر اللاسلكيّ قُرئ (ولو فارغاً — جهازٌ بلا جسر) — مهلته أو خطؤه ⇒ الوصلة مجهولة لا «بلا وصلة» (المراجعة الثانية)
+    var linkRead = true;
     try {
       final linkCols = await _readRjTable(snmp, _oidRjLink);
       if (linkCols.isNotEmpty) {
@@ -343,6 +345,7 @@ class RuijieApi {
         } catch (_) {}
       }
     } catch (e) {
+      linkRead = false;
       if (kDebugMode) debugPrint('Ruijie bridge tables: $e');
     }
 
@@ -367,6 +370,7 @@ class RuijieApi {
       link: link,
       peer: peer,
       bridgeRole: role,
+      linkRead: linkRead,
     );
   }
 
@@ -494,6 +498,9 @@ class RuijieStats {
   final RuijiePeer? peer;
   final String? bridgeRole;
 
+  /// جدول الجسر اللاسلكيّ قُرئ — false ⇒ [link] مجهولة (مهلةٌ أو خطأ)، لا «جهازٌ بلا جسر».
+  final bool linkRead;
+
   const RuijieStats({
     this.sysDescr,
     this.sysName,
@@ -504,6 +511,7 @@ class RuijieStats {
     this.link,
     this.peer,
     this.bridgeRole,
+    this.linkRead = true,
   });
 
   /// هل هذا جسرٌ لاسلكيّ — يقرّر أيّ أقسامٍ تُعرَض.
@@ -554,6 +562,7 @@ class RuijieStats {
     RuijieWirelessLink? link,
     RuijiePeer? peer,
     String? bridgeRole,
+    bool linkRead = true,
   }) {
     // sysUpTime في SNMP = timeticks (1/100 ثانية)
     final upTicks = r[RuijieApi._oidSysUpTime]?.asInt ?? 0;
@@ -567,6 +576,7 @@ class RuijieStats {
       link: link,
       peer: peer,
       bridgeRole: bridgeRole,
+      linkRead: linkRead,
     );
   }
 }
