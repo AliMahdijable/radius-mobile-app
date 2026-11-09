@@ -66,6 +66,7 @@ class Ticket {
     this.canReply = false,
     this.canReopen = false,
     this.actions = const [],
+    this.moved = false,
   });
 
   final int id;
@@ -98,6 +99,9 @@ class Ticket {
   /// ما يضبطه الوكيل الآن: in_progress · resolved · closed
   final List<String> actions;
 
+  /// انتقل المشترك لوكيلٍ آخر (أو تبدّل مديره المباشر) بعد فتحها — للقراءة وحدها (الخادم يردّ الكتابة TICKET_MOVED).
+  final bool moved;
+
   bool get isFinal => status == 'closed' || status == 'cancelled';
   bool get waitingForAgent => status == 'open' || status == 'in_progress';
 
@@ -127,6 +131,7 @@ class Ticket {
       canReply: j['can_reply'] == true,
       canReopen: j['can_reopen'] == true,
       actions: acts is List ? acts.map((x) => x.toString()).toList() : const [],
+      moved: j['moved'] == true,
     );
   }
 }

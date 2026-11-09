@@ -332,6 +332,36 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('انتقل المشترك لوكيلٍ آخر: للقراءة — بلا حقل ردٍّ ولا أزرار حالة، وسطرٌ يقول ذلك، وردٌّ متسابق ⇒ رسالة الخادم', (t) async {
+      final moved = {..._ticket(9, 'closed'), 'moved': true, 'can_reply': false, 'can_reopen': false, 'actions': <String>[]};
+      server.reply('GET', '/api/v2/portal/tickets/summary', 200, _summary());
+      server.reply('GET', '/api/v2/portal/tickets', 200, _page([moved]));
+      server.reply('GET', '/api/v2/portal/tickets/9', 200, {'success': true, 'ticket': moved, 'messages': [_msg(1, 'subscriber', 'النت مقطوع')]});
+      await pumpSim(t, _v, home: (_) => const TicketsScreen());
+      await t.pumpAndSettle();
+      expect(find.text('انتقل المشترك'), findsOneWidget, reason: 'شارة الصفّ');
+      await t.tap(find.byKey(const ValueKey('ticket-tile-9')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('ticket-composer')), findsNothing);
+      expect(find.byKey(const ValueKey('ticket-action-reopen')), findsNothing);
+      expect(find.byKey(const ValueKey('ticket-action-closed')), findsNothing);
+      expect(find.text('انتقل المشترك لوكيلٍ آخر — التذكرة للقراءة فقط'), findsOneWidget);
+      expect(Ticket.fromJson(moved)!.moved, true);
+      // ردٌّ أُرسل قبل أن تُعلَّم (شاشةٌ مفتوحة من قبل): الخادم يردّ TICKET_MOVED بنصّه
+      await t.pumpWidget(const SizedBox());
+      server.reply('GET', '/api/v2/portal/tickets/9', 200, {'success': true, 'ticket': _ticket(9, 'open'), 'messages': [_msg(1, 'subscriber', 'مرحبا')]});
+      server.reply('POST', '/api/v2/portal/tickets/9/reply', 409,
+          {'success': false, 'code': 'TICKET_MOVED', 'message': 'انتقل المشترك لوكيلٍ آخر — التذكرة للقراءة فقط', 'ticket': moved});
+      await pumpSim(t, _v, home: (_) => const TicketThreadScreen(ticketId: 9));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const ValueKey('ticket-composer')), 'ردّ');
+      await t.tap(find.byKey(const ValueKey('ticket-send')));
+      await t.pumpAndSettle();
+      expect(find.text('انتقل المشترك لوكيلٍ آخر — التذكرة للقراءة فقط'), findsNWidgets(2), reason: 'الرسالة وسطر الحال الجديدة');
+      expect(find.byKey(const ValueKey('ticket-composer')), findsNothing);
+      await simDrain(t);
+    });
+
     testWidgets('نقر الإشعار portal_ticket يفتح المحادثة؛ وغيره false؛ والقسم المقفل ⇒ القائمة بسببها', (t) async {
       server.reply('GET', '/api/v2/portal/tickets/summary', 200, _summary());
       server.reply('GET', '/api/v2/portal/tickets/9', 200, {'success': true, 'ticket': _ticket(9, 'open'), 'messages': [_msg(1, 'subscriber', 'النت مقطوع')]});
