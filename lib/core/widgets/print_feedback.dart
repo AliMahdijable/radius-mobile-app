@@ -8,6 +8,7 @@ import '../../services/client_diag.dart';
 import '../../services/phone_output.dart';
 import '../../services/print_output.dart';
 import '../../services/receipt_printer/receipt_printer.dart';
+import '../../services/receipt_printer/receipt_printer_prefs.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -64,7 +65,10 @@ Future<void> showPrintResult(BuildContext context, PrintResult r) async {
 /// سبب فشل طابعة الوصولات بكلماتٍ يفهمها الوكيل — [printer] اسمها.
 String receiptPrinterIssueText(PrintIssue issue, String printer) => switch (issue) {
       PrintIssue.permission => 'receipt_printer.issue_permission'.tr(),
-      PrintIssue.permissionBlocked => 'receipt_printer.issue_permission_blocked'.tr(),
+      // الآيفون لا يقول «الأجهزة المجاورة»: البلوتوث من إعدادات التطبيق نفسه.
+      PrintIssue.permissionBlocked => ReceiptPrinterPrefs.isIos
+          ? 'receipt_printer.issue_permission_blocked_ios'.tr()
+          : 'receipt_printer.issue_permission_blocked'.tr(),
       PrintIssue.btUnsupported => 'receipt_printer.issue_bt_unsupported'.tr(),
       PrintIssue.btOff => 'receipt_printer.issue_bt_off'.tr(),
       PrintIssue.notFound => 'receipt_printer.issue_not_found'.tr(args: [printer]),

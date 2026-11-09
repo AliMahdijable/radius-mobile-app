@@ -207,6 +207,46 @@ void main() {
     expect(h.bridge.calls, contains('settings'));
   });
 
+  testWidgets('٣ج الآيفون: البلوتوث مرفوضٌ للتطبيق ⇒ كلمات الآيفون و«فتح الإعدادات» يفتحها (لا «حاول ثانيةً» وحدها)', (t) async {
+    ReceiptPrinterPrefs.debugIos = true;
+    ReceiptPrinterPrefs.debugBuiltinSupported = false;
+    h.bridge.state = const BtState(supported: true, enabled: true, authorized: false);
+    await openSheet(t);
+    await tapKey(t, 'receipt-mode-bluetooth');
+    expect(find.byKey(const ValueKey('receipt-printer-issue')), findsOneWidget);
+    expect(find.textContaining('افتح الإعدادات ← التطبيق ← فعّل «البلوتوث»'), findsOneWidget);
+    expect(find.textContaining('الأجهزة المجاورة'), findsNothing);
+    await t.tap(find.text('فتح الإعدادات'));
+    await t.pumpAndSettle();
+    expect(h.permission.opened, 1);
+  });
+
+  testWidgets('٣د الآيفون بعد وصل: ورقة السبب «فتح الإعدادات» بنقرته وحدها — «إغلاق» لا يفتح شيئاً', (t) async {
+    ReceiptPrinterPrefs.debugIos = true;
+    final r = PrintResult.failed(
+      'bt: unauthorized',
+      printer: 'MPT-II',
+      issue: PrintIssue.permissionBlocked,
+      retry: () async => const PrintResult.cancelled(),
+    );
+    await pumpApp(
+      t,
+      (c) => Center(child: TextButton(onPressed: () => showPrintResult(c, r), child: const Text('done'))),
+    );
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('افتح الإعدادات ← التطبيق'), findsOneWidget);
+    await t.tap(find.text('إغلاق'));
+    await t.pumpAndSettle();
+    expect(h.permission.opened, 0);
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فتح الإعدادات'));
+    await t.pumpAndSettle();
+    expect(h.permission.opened, 1);
+    await t.pump(const Duration(seconds: 7));
+  });
+
   testWidgets('٣ب لا مقترنة ⇒ شرح الإقران (الرمز 0000/1234) وزرّ إعدادات البلوتوث', (t) async {
     h.bridge.paired = const [];
     await openSheet(t);

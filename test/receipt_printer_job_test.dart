@@ -165,6 +165,25 @@ void main() {
       expect(h.bridge.connects, 0);
     });
 
+    test('الآيفون: البلوتوث مرفوضٌ للتطبيق ⇒ «مرفوضٌ دائماً» (فتح الإعدادات) لا «حاول ثانيةً»؛ أندرويد كما كان', () async {
+      h.useBluetooth();
+      ReceiptPrinterPrefs.debugIos = true;
+      h.bridge.state = const BtState(supported: true, enabled: true, authorized: false);
+      expect((await p().send(_doc('a'))).issue, PrintIssue.permissionBlocked);
+      expect((await p().discover()).issue, PrintIssue.permissionBlocked);
+      // رُفض بين السؤال والاتّصال (الطبقة الأصليّة: permission)
+      h.bridge.state = const BtState(supported: true, enabled: true);
+      h.bridge.connectFailure = 'permission';
+      expect((await p().send(_doc('b'))).issue, PrintIssue.permissionBlocked);
+      expect(h.bridge.receiptWrites, isEmpty);
+      // أندرويد يسأل ثانيةً: «permission» كما كان
+      ReceiptPrinterPrefs.debugIos = false;
+      expect((await p().send(_doc('c'))).issue, PrintIssue.permission);
+      h.bridge.connectFailure = null;
+      h.bridge.state = const BtState(supported: true, enabled: true, authorized: false);
+      expect((await p().send(_doc('d'))).issue, PrintIssue.permission);
+    });
+
     test('رموز الاتّصال ⇒ أسبابها (لا تردّ · بعيدة/مشغولة · غير مقترنة · بلا قناة BLE)', () async {
       h.useBluetooth();
       for (final (code, issue) in const [
