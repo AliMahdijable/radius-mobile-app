@@ -173,13 +173,12 @@ void main() {
       expect(texts(bare), contains('منافذ PON ما انقرت'));
     });
 
-    test('ملخّص الخادم بلا منفذٍ ولا مشترك ⇒ «لم يُقرأ»؛ وبعدده بلا قائمة منافذه، أو ببنيته كاملة ⇒ يُحكم كما كان', () {
+    test('ملخّص الخادم (منافذه من مشتركيه، وقراءته تمّت عنده) يُحكم به كما كان — بعدده بلا قائمة منافذه، أو ببنيته',
+        () {
       DeviceCheckReport remote(Map<String, dynamic> v) =>
           DevicesCheck.evaluate(d: olt, alive: true, detail: DeviceVitals.fromVpn(v).detail);
       final none = remote({'kind': 'olt', 'total': 0, 'online': 0, 'pons': []});
-      expect(none.state, CheckState.unread);
-      expect(texts(none), contains('منافذ PON ما انقرت'));
-      expect(none.vitals.where((v) => v.k == 'ONU'), isEmpty);
+      expect(texts(none), isNot(contains('منافذ PON ما انقرت')), reason: 'سطر قراءتنا لا يُنسب لقراءة الخادم');
       final counted = remote({'kind': 'olt', 'total': 120, 'online': 100, 'pons': []});
       expect(counted.state, CheckState.ok, reason: 'عدد المشتركين مقروء — لا «لم يُقرأ» كاذب');
       expect(counted.vitals.firstWhere((v) => v.k == 'ONU').v, '100/120');

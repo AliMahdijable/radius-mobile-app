@@ -616,10 +616,10 @@ class DevicesCheck {
     }
 
     // ── الأولت ──
-    // لا منفذ PON ولا مشترك مقروء (فيرموير بتسمياتٍ لا يعرفها المحلّل، عرض SNMP مقيّد، منافذ الصعود وحدها) ⇒ بنيته لم
-    // تُقرأ: «لم يُقرأ» لا «أولت · سليم»، ولا «ONU 0/0» (المراجعة الثالثة). عددٌ مقروء بلا قائمة منافذه (ملخّص الخادم)
-    // يُحكم به كما كان
-    final oltGap = role == CheckRole.olt && g.pons.isEmpty && (g.onusTotal ?? 0) == 0;
+    // قراءتنا لم يخرج منها منفذ PON ولا مشترك (فيرموير بتسمياتٍ لا يعرفها المحلّل، عرض SNMP مقيّد، منافذ الصعود
+    // وحدها) ⇒ بنيته لم تُقرأ: «لم يُقرأ» لا «أولت · سليم»، ولا «ONU 0/0» (المراجعة الثالثة). ملخّص الخادم (منافذه من
+    // مشتركيه، وقراءته تمّت عنده) يُحكم به كما كان
+    final oltGap = role == CheckRole.olt && !detail.onuLightsServer && g.pons.isEmpty && (g.onusTotal ?? 0) == 0;
     if (oltGap) f.add(const CheckFinding(CheckLevel.info, 'منافذ PON ما انقرت'));
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
