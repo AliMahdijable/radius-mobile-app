@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
@@ -39,6 +41,21 @@ const _phone = VisualDevice('', Size(390, 844), 3);
 Future<void> _tapSeg(WidgetTester t, String seg) async {
   await t.tap(find.byKey(ValueKey('subs-check-seg-$seg')));
   await settle(t, seconds: 1);
+}
+
+String _barText(WidgetTester t) => t.widget<Text>(find.byKey(const ValueKey('subs-check-progress-text'))).data!;
+
+/// التقرير المنسوخ بزرّه — الحافظة الوهميّة تلتقطه.
+Future<String> _copy(WidgetTester t) async {
+  String? copied;
+  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+    if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+    return null;
+  });
+  addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  await t.tap(find.byKey(const ValueKey('subs-check-copy')));
+  await settle(t, seconds: 3);
+  return copied!;
 }
 
 Future<void> _done(WidgetTester t) async {
@@ -282,5 +299,59 @@ void main() {
       expect(title(t), 'لا قراءات');
       await _done(t);
     });
+  });
+
+  // ───────────── F5: عبر الـVPN — عمر المعروض ظاهرٌ والفحص يُعاد أو تعذّر ─────────────
+
+  group('F5 — عمر قراءات الخادم المعروضة لا يختفي', () {
+    for (final width in [390.0, 320.0]) {
+      testWidgets('فحصٌ يُعاد ثمّ يتعذّر: «قراءات منذ 15 دقيقة» على الشاشة وفي التقرير — عرض $width', (t) async {
+        await visualSetUp(s1bSasOwner);
+        final subs = [_s('a.u'), _s('b.u')];
+        final job = VpnNow.subscribers;
+        addTearDown(() {
+          job.reset();
+          VpnNow.reset();
+        });
+        VpnNow.debugApply(VpnNowKind.subscribers, const VpnNowResult(ok: true, message: 'تم', readings: {
+          'a.u': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+          'b.u': VpnSubReading(src: 'cpe', sig: -80, ccq: 90, lan: '100'),
+        }));
+        VpnNow.debugBackdateReadings(const Duration(minutes: 15));
+        // «وضع VPN» يعيد الفحص والشاشة مفتوحة — المعروض من الفحص السابق
+        job
+          ..phase = VpnBarPhase.running
+          ..done = 40
+          ..total = 310;
+        await pumpVisual(t, VisualDevice('', Size(width, 844), 3),
+            home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: true));
+        await settle(t, seconds: 1);
+        const aged = 'عبر VPN · قراءات منذ 15 دقيقة';
+        expect(_barText(t), 'يفحص… 40 من 310');
+        expect(find.text(aged), findsOneWidget, reason: 'سليم 1 · بمشكلة 1 من فحصٍ عمره 15 دقيقة');
+        expect(t.renderObject<RenderParagraph>(find.text(aged)).didExceedMaxLines, isFalse, reason: 'يُقرأ كاملاً');
+        final lines = (await _copy(t)).split('\n');
+        expect(lines[0], 'الفحص العامّ للمشتركين — $aged');
+        expect(lines[1], 'يفحص… 40 من 310 — لم يكتمل');
+
+        job
+          ..phase = VpnBarPhase.failed
+          ..line = 'الـVPN ما اتّصل الآن — حاول بعد قليل';
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        job.notifyListeners();
+        await settle(t, seconds: 1);
+        expect(_barText(t), 'الـVPN ما اتّصل الآن — حاول بعد قليل');
+        expect(find.text(aged), findsOneWidget);
+        expect((await _copy(t)).split('\n')[0], 'الفحص العامّ للمشتركين — $aged');
+
+        // انتهى: العمر على الشريط — والمصدر كما هو
+        job.reset();
+        await settle(t, seconds: 1);
+        expect(_barText(t), 'انتهى الفحص — 2 مشترك');
+        expect(find.text('منذ 15 دقيقة'), findsOneWidget);
+        expect(find.text('عبر VPN'), findsOneWidget);
+        await _done(t);
+      });
+    }
   });
 }

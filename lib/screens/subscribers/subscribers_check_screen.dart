@@ -230,9 +230,17 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     return SubscribersCheck.progress(subs: r.total, wave: _wave ?? SubsWave.idle, at: _wave?.endedAt ?? asked());
   }
 
-  String get _source => _merged
-      ? mergedWord('كل الشركات — كلّ شركةٍ بطريقها', 'كل الصفحات — كلّ صفحةٍ بطريقها')
-      : (widget.viaVpn ? 'عبر VPN' : 'من موبايلك على الشبكة');
+  /// مصدر الفحص — وعبر الـVPN عمر المعروض ما لم يقله الشريط (فحصٌ يُعاد أو تعذّر): قراءات الخادم تبقى ٣٠ دقيقة فلا
+  /// تُقدَّم طازجة (المراجعة F5؛ في 179 «عبر VPN · منذ ١٥ دقيقة» دائماً). الشاشة والتقرير المنسوخ بالسطر نفسه.
+  String _sourceOf(SubsCheckProgress p) {
+    if (_merged) return mergedWord('كل الشركات — كلّ شركةٍ بطريقها', 'كل الصفحات — كلّ صفحةٍ بطريقها');
+    if (!widget.viaVpn) return 'من موبايلك على الشبكة';
+    final at = VpnNow.readingsAt;
+    if (at == null || p.state == SubsRunState.finished) return 'عبر VPN';
+    final age = timeAgoAr(at);
+    // «قراءات منذ 15 دقيقة» — قصيرةٌ تُقرأ كاملةً على ٣٢٠
+    return 'عبر VPN · قراءات ${age == 'الآن' ? 'قبل لحظات' : age}';
+  }
 
   Future<void> _copy(SubsCheckReport r, SubsCheckProgress p) async {
     final names = {for (final c in widget.companies ?? const <MergedCompany>[]) c.key: c.name};
@@ -241,7 +249,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       context,
       SubscribersCheck.reportText(r,
           progress: p,
-          source: _source,
+          source: _sourceOf(p),
           companyOf: all && names.isNotEmpty ? (s) => s.companyKey == null ? null : names[s.companyKey!] : null),
       label: 'تقرير الفحص',
     );
@@ -439,7 +447,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                   style: AppType.title(color: none ? AppColors.textHi : tone.fill)
                       .copyWith(fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text(_source,
+              Text(_sourceOf(p),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),

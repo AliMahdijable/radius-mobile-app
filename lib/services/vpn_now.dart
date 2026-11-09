@@ -730,6 +730,10 @@ class VpnNow {
   @visibleForTesting
   static void debugApply(VpnNowKind k, VpnNowResult r) => _apply(k, r);
 
+  /// للاختبار: قراءات المشتركين أقدم بـ[by] (عمر المعروض).
+  @visibleForTesting
+  static void debugBackdateReadings(Duration by) => _readAt = _readAt?.subtract(by);
+
   // ── طريق الوكيل (مربوط أم لا) — خمس دقائق ──
   static ({bool linked, String? via})? _route;
   static DateTime? _routeAt;
