@@ -1,11 +1,20 @@
 // «الفحص الشامل» (٦ نوفمبر — المالك: «يفحص الجهاز نفسه ويفحص المشتركين الي بداخلة ويعطي تقرير منفصل لكل جهاز» · «كذلك السوجات
 // من حيث المتغيرات الحيوية فكر بيها بدقة»): المقيِّم النقيّ — الحال، حيويّات الجهاز، مشتركو السكتر، منافذ السويج، الأولت، والمقارنة
 // بالفحص السابق؛ وقراءة حقول منافذ مايكروتك الجديدة.
+import 'dart:async';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
+import 'package:rad_mysvcs/api/ubnt_api.dart';
+import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/devices_check_runner.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 NetworkDevice dev(int id, {String type = 'router', String brand = 'mikrotik', String status = 'online', String name = 'جهاز'}) =>
     NetworkDevice(
@@ -487,5 +496,87 @@ void main() {
     expect(plain.halfDuplex, isFalse, reason: 'غياب الـmonitor ليس half');
     expect(plain.errors, isNull);
     expect(plain.linkDowns, isNull);
+  });
+
+  group('٩ نوفمبر — «لم يُقرأ» بسببه الحقيقيّ (لا «تأكّد من اسم المستخدم والرمز» لكلّ فشل)', () {
+    String why(Object e, {int deadline = 25, bool? serviceOk}) =>
+        DevicesCheckRunner.unreadReason(e, deadline: deadline, serviceOk: serviceOk);
+    const login = 'يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز';
+    const service = 'يردّ، لكن خدمة الإدارة لا تجيب — تأكّد من المنفذ والبروتوكول';
+
+    test('المهلة كلّها ⇒ «بطيء» بثوانيها (٢٥ من شبكتك، ٤٥ عبر الممرّ)', () {
+      expect(why(TimeoutException('read', const Duration(seconds: 25))), 'بطيء — لم تكتمل قراءته خلال 25ث');
+      expect(why(TimeoutException(null), deadline: 45), 'بطيء — لم تكتمل قراءته خلال 45ث');
+    });
+
+    test('رفض الدخول الحقيقيّ وحده يقول «اسم المستخدم والرمز» — ميكروتك، يوبيكويتي، سسكو', () {
+      expect(why(MikrotikException('invalid user name or password (6)', code: 'auth')), login);
+      expect(why(UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)')), login);
+      expect(why(CiscoException('رُفض الدخول إلى 10.0.0.1 — تحقّق من اسم المستخدم وكلمة السرّ.')), login);
+      expect(why(MikrotikException('not enough permissions (9)')), 'يردّ، لكن مستخدمه بلا صلاحيّة قراءة — راجع صلاحيّاته على الجهاز');
+    });
+
+    test('المنفذ المقفول/لا طريق ⇒ خدمة الإدارة؛ وزحمة الممرّ وسقوطه بكلمتهما', () {
+      expect(why(const SocketException('Connection refused')), service);
+      expect(why(MikrotikException('تعذّر الوصول عبر API والويب وSSH — فعّل إحداها على الجهاز (IP ← Services) أو اختر SNMP')), service);
+      expect(why(UbntException('SSH port 22 مغلق — تأكّد أن SSH مفعّل على الجهاز')), service);
+      expect(why(const SocketException('اتّصالاتٌ كثيرة الآن — لحظات')), 'اتّصالات كثيرة عبر الـVPN الآن — أعد الفحص بعد قليل');
+      expect(why(const SocketException('الـVPN ما اتّصل الآن — حاول بعد قليل')), 'ممرّ الـVPN ما ردّ لحظتها — أعد الفحص بعد قليل');
+    });
+
+    test('بيانات الدخول: طلبها من خادمنا فشل (٥٠٣) أو ناقصة', () {
+      final e503 = DioException(
+        requestOptions: RequestOptions(path: '/api/v2/admin/devices/7/credentials'),
+        response: Response(requestOptions: RequestOptions(path: '/api/v2/admin/devices/7/credentials'), statusCode: 503),
+        type: DioExceptionType.badResponse,
+      );
+      expect(why(e503), 'تعذّر جلب بيانات دخوله من الخادم — أعد الفحص بعد قليل');
+      expect(why(StateError('بيانات دخول ناقصة')), 'بيانات دخوله ناقصة — أكملها من صفحة الجهاز');
+    });
+
+    test('مهلةٌ من داخل القارئ: بطيءٌ إن أجابت خدمته البنك، وإلّا لا تُفتح؛ وSNMP بالـcommunity', () {
+      final slowRead = MikrotikException('انتهت مهلة القراءة (timeout)');
+      expect(why(slowRead, serviceOk: true), 'بطيء — ما كمّل جوابه بالوقت');
+      expect(why(slowRead, serviceOk: false), service);
+      final snmp = VsolException('تعذّر الاتّصال بالـOLT عبر SNMP: SNMP timeout بعد 4s — 10.0.0.9:161.');
+      expect(why(snmp), 'يردّ، لكن SNMP ما جاوب — تأكّد من الـcommunity والمنفذ');
+      expect(why(snmp, serviceOk: true), 'بطيء — ما كمّل جوابه بالوقت', reason: 'البنك أجاب بالـcommunity نفسها ⇒ بطيء لا خطأ');
+    });
+
+    test('ما لا يُعرف سببه لا يُنسب لاسم المستخدم أبداً', () {
+      expect(why(StateError('x')), 'يردّ، لكن ما انقرت معلوماته');
+      expect(why(StateError('x'), serviceOk: false), service);
+      for (final e in [
+        TimeoutException(null),
+        const SocketException('Connection refused'),
+        StateError('x'),
+        MikrotikException('انتهت مهلة القراءة (timeout)'),
+        VsolException('قراءةٌ ناقصة: لم يُجب الأولت بحالة كلّ الـONU'),
+      ]) {
+        expect(why(e), isNot(contains('اسم المستخدم')), reason: '$e');
+      }
+    });
+
+    test('الفاحص يكتب السبب: جهازٌ بطيء «بطيء…» وجهازٌ رُفض دخوله «اسم المستخدم» — لا الجملة نفسها للاثنين', () async {
+      SharedPreferences.setMockInitialValues({});
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugFetch = (d) async => d.id == 1
+          ? throw TimeoutException('read', const Duration(seconds: 25))
+          : throw MikrotikException('invalid user name or password (6)', code: 'auth');
+      addTearDown(() {
+        DevicesCheckRunner.debugLimits = null;
+        DevicesCheckRunner.debugSubscribers = null;
+        DevicesCheckRunner.debugProbe = null;
+        DevicesCheckRunner.debugFetch = null;
+      });
+      final run = DevicesCheckRunner([dev(1, type: 'sector'), dev(2)], viaVpn: false);
+      await run.run();
+      expect(run.reports[1]!.state, CheckState.unread);
+      expect(texts(run.reports[1]!), ['بطيء — لم تكتمل قراءته خلال 25ث']);
+      expect(texts(run.reports[2]!), [login]);
+      run.dispose();
+    });
   });
 }
