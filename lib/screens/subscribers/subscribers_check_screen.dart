@@ -1028,13 +1028,36 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       SubsCheckCat.problems =>
         _notice(LucideIcons.circleCheck, 'لا مشاكل ✓ — كلّ المقروئين ضمن حدود «تنبيه المشترك»', good: true),
       SubsCheckCat.healthy => _notice(LucideIcons.triangleAlert, 'لا أحد سليم — كلّ المقروئين بمشكلة'),
-      SubsCheckCat.noReply => _busy
-          ? _notice(LucideIcons.radar, 'لا أحد حتى الآن — الفحص يكمل')
-          : _notice(LucideIcons.circleCheck, 'كلّ المتّصلين قُرئت أجهزتهم ✓', good: true),
-      SubsCheckCat.offline => _notice(LucideIcons.circleCheck, 'الكلّ متّصل الآن ✓', good: true),
+      SubsCheckCat.noReply =>
+        _busy ? _notice(LucideIcons.radar, 'لا أحد حتى الآن — الفحص يكمل') : _noReplyEmpty(r),
+      SubsCheckCat.offline => _offlineEmpty(r),
       SubsCheckCat.noMetrics => _notice(LucideIcons.circleCheck, 'لا جهاز بلا مقاييس ✓', good: true),
       SubsCheckCat.unchecked => _notice(LucideIcons.circleCheck, 'وصل الفحص الجميع ✓', good: true),
     };
+  }
+
+  /// «جهازه ما ردّ» فارغاً والفحص منتهٍ: ما يعنيه وحده (المراجعة F4/F13 — كان «كلّ المتّصلين قُرئت أجهزتهم ✓» وفحص
+  /// الـVPN تعذّر فلم يُقرأ أحد): متّصلون بلا قراءة يُعدّون بأقسامهم، و✓ حين قُرئ كلّ متّصلٍ فعلاً.
+  Widget _noReplyEmpty(SubsCheckReport r) {
+    final unread = [
+      for (final c in const [SubsCheckCat.unchecked, SubsCheckCat.noMetrics])
+        if (r.count(c) > 0) '«${c.label}» ${formatIQD(r.count(c))}',
+    ];
+    if (unread.isNotEmpty) {
+      return _notice(LucideIcons.info, 'لا أحد جهازه ما ردّ\nمتّصلون بلا قراءة: ${unread.join(' · ')}');
+    }
+    return [...r.rows, ...r.healthy].any((x) => x.sub.isOnline)
+        ? _notice(LucideIcons.circleCheck, 'كلّ المتّصلين قُرئت أجهزتهم ✓', good: true)
+        : _notice(LucideIcons.info, 'لا أحد جهازه ما ردّ');
+  }
+
+  /// «غير متّصل الآن» فارغاً: «الكلّ متّصل» حين لا غير متّصلٍ في المعروض أصلاً — من له قراءةٌ سابقة يُعدّ بقسمها
+  /// (المراجعة F13).
+  Widget _offlineEmpty(SubsCheckReport r) {
+    final read = [...r.rows, ...r.healthy].where((x) => !x.sub.isOnline).length;
+    if (read == 0) return _notice(LucideIcons.circleCheck, 'الكلّ متّصل الآن ✓', good: true);
+    final where = '«${SubsCheckCat.healthy.label}» أو «${SubsCheckCat.problems.label}»';
+    return _notice(LucideIcons.info, 'لا أحد هنا — ${formatIQD(read)} غير متّصل الآن بقراءةٍ سابقة في $where');
   }
 
   static String _num(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
