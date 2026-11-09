@@ -422,8 +422,10 @@ void main() {
     });
 
     test('عبر الـVPN: «يفحص… 120 من 310»، ومراحل الخادم بكلماتها، ثمّ «انتهى الفحص» أو سبب التعذّر', () {
-      SubsVpnRun run({bool busy = true, bool failed = false, String? line, int done = 0, int total = 0, double? value}) =>
-          (busy: busy, failed: failed, line: line, done: done, total: total, value: value);
+      SubsVpnRun run(
+              {bool busy = true, bool failed = false, String? line, int done = 0, int total = 0, double? value,
+              String? stopped}) =>
+          (busy: busy, failed: failed, line: line, done: done, total: total, value: value, stopped: stopped);
       final p = SubscribersCheck.progress(subs: 310, vpn: run(line: 'يفحص مشتركينك… 120 من 310', done: 120, total: 310));
       expect([p.state, p.text], [SubsRunState.running, 'يفحص… 120 من 310']);
       expect(p.value, closeTo(120 / 310, 1e-9));
@@ -434,12 +436,23 @@ void main() {
       final x = SubscribersCheck.progress(subs: 310, vpn: run(busy: false, failed: true, line: 'الـVPN ما اتّصل الآن — حاول بعد قليل'), at: at);
       expect([x.state, x.text, x.value], [SubsRunState.failed, 'الـVPN ما اتّصل الآن — حاول بعد قليل', null]);
       expect(SubscribersCheck.progress(subs: 310, vpn: run(busy: false)).state, SubsRunState.idle, reason: 'لم يُفحص قطّ');
+      // المراجعة F14/F22: «وضع VPN» انطفأ والفحص جارٍ ⇒ «توقّف الفحص» بسببه — لا «انتهى الفحص» فحصٍ أقدم ولا «لم يُفحص
+      // بعد»
+      const why = 'توقّف الفحص — رجعت لشبكتك';
+      final st = SubscribersCheck.progress(subs: 310, vpn: run(busy: false, stopped: why), at: at);
+      expect([st.state, st.text, st.value, st.at], [SubsRunState.stopped, why, null, null]);
+      expect(SubscribersCheck.progress(subs: 310, vpn: run(busy: false, stopped: why)).state, SubsRunState.stopped);
+      expect(SubscribersCheck.progress(subs: 310, vpn: run(stopped: why)).state, SubsRunState.running,
+          reason: 'فحصٌ جديد بدأ — يُمسح سببه، والجاري يغلب');
+      const none = SubsCheckReport(total: 310, read: 0, rows: []);
+      expect(SubscribersCheck.reportText(none, progress: st).split('\n')[1], why,
+          reason: 'التقرير المنسوخ بلا وقتٍ لا يخصّه');
     });
 
     test('«كل الشركات»: موجة شبكتك ثمّ الخادم باسم الشركة، وانتهى حين ينتهي الاثنان — وتعذّر VPN شركةٍ لا يُبطل الباقي', () {
       final w = SubsWave.idle.start(const ['k|a'], started).progress(3, 9);
-      SubsVpnRun run({bool busy = true, bool failed = false, int done = 0, int total = 0}) =>
-          (busy: busy, failed: failed, line: null, done: done, total: total, value: null);
+      SubsVpnRun run({bool busy = true, bool failed = false, int done = 0, int total = 0, String? stopped}) =>
+          (busy: busy, failed: failed, line: null, done: done, total: total, value: null, stopped: stopped);
       final a = SubscribersCheck.progress(subs: 149, wave: w, vpn: run(done: 9, total: 22), merged: true, vpnCompany: 'ايرث لنك');
       expect(a.text, 'يفحص من شبكتك… 3 من 9');
       final b = SubscribersCheck.progress(
@@ -451,6 +464,13 @@ void main() {
       expect([d.state, d.text, d.value], [SubsRunState.finished, 'انتهى الفحص — 149 مشترك', 1.0]);
       final e = SubscribersCheck.progress(subs: 149, wave: w.finish(at), vpn: run(busy: false, failed: true), merged: true, at: at);
       expect(e.state, SubsRunState.finished, reason: 'شبكتك فُحصت؛ الشركة التي تعذّرت تُسمّى ببطاقة الشركات');
+      final g = SubscribersCheck.progress(
+          subs: 149,
+          wave: w.finish(at),
+          vpn: run(busy: false, stopped: 'توقّف الفحص — رجعت لشبكتك'),
+          merged: true,
+          at: at);
+      expect(g.state, SubsRunState.finished, reason: 'وكذلك المتروك — شبكتك فُحصت وبطاقة الشركات بأعمارها');
     });
 
     test('SubsWave: البدء يحفظ آخر انتهاء، والتقدّم يعدّ، والقطع بلا أهداف ينهي الجارية', () {
@@ -479,6 +499,19 @@ void main() {
       j.phase = VpnBarPhase.done;
       expect(j.waits('k3'), isFalse);
     });
+
+    test('VpnNowJob.cancel: الجاري يُترك بسببه ([stopped])، وغير الجاري لا — و reset يمسحه', () {
+      final j = VpnNowJob(VpnNowKind.subscribers)..phase = VpnBarPhase.running;
+      j.cancel(why: 'توقّف الفحص — رجعت لشبكتك');
+      expect([j.phase, j.busy, j.stopped], [VpnBarPhase.idle, false, 'توقّف الفحص — رجعت لشبكتك']);
+      expect(SubscribersCheck.vpnRunOf(j).stopped, 'توقّف الفحص — رجعت لشبكتك');
+      j.reset();
+      expect(j.stopped, isNull);
+      j
+        ..phase = VpnBarPhase.done
+        ..cancel(why: 'توقّف الفحص — رجعت لشبكتك');
+      expect(j.stopped, isNull, reason: 'لا فحص جارٍ يُترك — آخر فحصٍ اكتمل');
+    });
   });
 
   group('١٠ نوفمبر — التقرير المنسوخ بالأقسام نفسها', () {
@@ -494,7 +527,10 @@ void main() {
         'auth': const VpnSubReading(src: 'ping', ms: 9, err: 'login_failed'),
       };
       final r = SubscribersCheck.vpn(subs, limits, reading: (s) => reads[s.username], readAt: (_) => null, running: false);
-      final p = SubscribersCheck.progress(subs: r.total, vpn: (busy: false, failed: false, line: null, done: 0, total: 0, value: null), at: at);
+      final p = SubscribersCheck.progress(
+          subs: r.total,
+          vpn: (busy: false, failed: false, line: null, done: 0, total: 0, value: null, stopped: null),
+          at: at);
       final text = SubscribersCheck.reportText(r, progress: p, source: 'عبر VPN');
       final lines = text.split('\n');
       expect(lines[0], 'الفحص العامّ للمشتركين — عبر VPN');

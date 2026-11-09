@@ -77,6 +77,9 @@ class SubscribersCheckScreen extends StatefulWidget {
   State<SubscribersCheckScreen> createState() => _SubscribersCheckScreenState();
 }
 
+/// سطر شركةٍ في بطاقة «الشركات» — والتقرير المنسوخ بكلماته؛ [at] وقت ما يقوله (عمر قراءاتها — المراجعة F15).
+typedef _CompanyLine = ({MergedCompany co, int bad, IconData icon, AppTone tone, String text, DateTime? at});
+
 /// رأس مجموعةٍ في قسم «بمشكلة».
 class _Group {
   const _Group(this.kind, this.count);
@@ -202,8 +205,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     return widget.viaVpn ? SubscribersCheck.vpn(subs, _limits) : SubscribersCheck.local(subs, _limits, wave: _wave);
   }
 
-  /// شريط الفحص: موجة الهاتف أو فحص الخادم أو الاثنان («كل الشركات») — كلٌّ وانتهاؤه بوقته.
-  SubsCheckProgress _progress(SubsCheckReport r) {
+  /// شريط الفحص: موجة الهاتف أو فحص الخادم أو الاثنان («كل الشركات») — كلٌّ وانتهاؤه بوقته. بلا موجةٍ معروفة
+  /// الانتهاء: آخر سؤالٍ لأجهزة [subs] من الهاتف ([SubscribersCheck.lastAsked]) لا «لم يُفحص بعد» (المراجعة F6).
+  SubsCheckProgress _progress(SubsCheckReport r, List<Subscriber> subs, List<_CompanyLine>? lines) {
+    DateTime? asked() => _waveRunning ? null : SubscribersCheck.lastAsked(subs);
     final job = VpnNow.subscribers;
     if (_merged) {
       final cur = job.current;
@@ -213,34 +218,49 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         final t = VpnNow.readingsAtFor(c.key);
         if (t != null && (at == null || t.isAfter(at))) at = t;
       }
+      // شركةٌ مختارة: وقت سطرها في بطاقة «الشركات» — لا وقت أحدث الطرق على قراءاتها الأقدم (المراجعة F15)
+      final picked = _company == null ? null : lines?.where((l) => l.co.key == _company).firstOrNull;
+      if (picked != null) at = picked.at;
       return SubscribersCheck.progress(
         subs: r.total,
         wave: _wave,
         vpn: widget.vpnAllowed ? SubscribersCheck.vpnRunOf(job) : null,
         merged: true,
         vpnCompany: name,
-        at: at ?? r.newest,
+        at: at ?? (widget.viaVpn ? r.newest : asked()),
       );
     }
     if (widget.viaVpn) {
       return SubscribersCheck.progress(subs: r.total, vpn: SubscribersCheck.vpnRunOf(job), at: VpnNow.readingsAt);
     }
-    return SubscribersCheck.progress(subs: r.total, wave: _wave ?? SubsWave.idle, at: _wave?.endedAt ?? r.newest);
+    return SubscribersCheck.progress(subs: r.total, wave: _wave ?? SubsWave.idle, at: _wave?.endedAt ?? asked());
   }
 
-  String get _source => _merged
-      ? mergedWord('كل الشركات — كلّ شركةٍ بطريقها', 'كل الصفحات — كلّ صفحةٍ بطريقها')
-      : (widget.viaVpn ? 'عبر VPN' : 'من موبايلك على الشبكة');
+  /// مصدر الفحص — وعبر الـVPN عمر المعروض ما لم يقله الشريط (فحصٌ يُعاد أو تعذّر): قراءات الخادم تبقى ٣٠ دقيقة فلا
+  /// تُقدَّم طازجة (المراجعة F5؛ في 179 «عبر VPN · منذ ١٥ دقيقة» دائماً). الشاشة والتقرير المنسوخ بالسطر نفسه.
+  String _sourceOf(SubsCheckProgress p) {
+    if (_merged) return mergedWord('كل الشركات — كلّ شركةٍ بطريقها', 'كل الصفحات — كلّ صفحةٍ بطريقها');
+    if (!widget.viaVpn) return 'من موبايلك على الشبكة';
+    final at = VpnNow.readingsAt;
+    if (at == null || p.state == SubsRunState.finished) return 'عبر VPN';
+    final age = timeAgoAr(at);
+    // «قراءات منذ 15 دقيقة» — قصيرةٌ تُقرأ كاملةً على ٣٢٠
+    return 'عبر VPN · قراءات ${age == 'الآن' ? 'قبل لحظات' : age}';
+  }
 
-  Future<void> _copy(SubsCheckReport r, SubsCheckProgress p) async {
+  Future<void> _copy(SubsCheckReport r, SubsCheckProgress p, List<_CompanyLine>? lines) async {
     final names = {for (final c in widget.companies ?? const <MergedCompany>[]) c.key: c.name};
     final all = MergedMode.active.value && MergedMode.focused == null;
     await copyToClipboard(
       context,
       SubscribersCheck.reportText(r,
           progress: p,
-          source: _source,
-          companyOf: all && names.isNotEmpty ? (s) => s.companyKey == null ? null : names[s.companyKey!] : null),
+          source: _sourceOf(p),
+          companyOf: all && names.isNotEmpty ? (s) => s.companyKey == null ? null : names[s.companyKey!] : null,
+          companies: [
+            for (final l in lines ?? const <_CompanyLine>[])
+              if (_company == null || l.co.key == _company) (name: l.co.name, text: l.text),
+          ]),
       label: 'تقرير الفحص',
     );
   }
@@ -262,6 +282,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     final all = widget.subscribers();
     final full = _merged ? _report(all) : null;
+    final lines = full == null ? null : _companyLines(all, full);
     final subs = _company == null
         ? all
         : [
@@ -269,7 +290,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
               if (x.companyKey == _company) x
           ];
     final r = _company == null && full != null ? full : _report(subs);
-    final p = _progress(r);
+    final p = _progress(r, subs, lines);
     final mergedAll = MergedMode.active.value && MergedMode.focused == null;
     final items = _items(r);
     final caption = _captionOf(_seg);
@@ -306,10 +327,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
             sliver: SliverToBoxAdapter(
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                _summary(r, p),
+                _summary(r, p, lines),
                 const SizedBox(height: Sp.md),
-                if (_merged && full != null) ...[
-                  _companiesCard(all, full),
+                if (lines != null) ...[
+                  _companiesCard(lines),
                   const SizedBox(height: Sp.md),
                 ],
                 if (_seg == SubsCheckCat.problems && r.rows.isNotEmpty) ...[
@@ -321,7 +342,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             ),
           ),
           if (items.isEmpty)
-            SliverToBoxAdapter(child: _empty(r))
+            SliverToBoxAdapter(child: _empty(r, p))
           else
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
@@ -396,11 +417,14 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         ),
       ];
 
-  Widget _summary(SubsCheckReport r, SubsCheckProgress p) {
+  Widget _summary(SubsCheckReport r, SubsCheckProgress p, List<_CompanyLine>? lines) {
     final bad = r.rows.length;
     final none = r.read == 0;
     final tone = none ? AppTone.neutral : (bad == 0 ? AppTone.success : AppTone.danger);
-    final title = none ? 'لا قراءات بعد' : (bad == 0 ? 'لا مشاكل' : '${formatIQD(bad)} بمشكلة');
+    // «بعد» ما دام يُنتظر شيء — فحصٌ انتهى أو تعذّر بلا قراءات «لا قراءات» (المراجعة F6)
+    final title = none
+        ? (_awaits(r, p) ? 'لا قراءات بعد' : 'لا قراءات')
+        : (bad == 0 ? 'لا مشاكل' : '${formatIQD(bad)} بمشكلة');
     final minor = [
       for (final (c, t, icon) in _minor)
         if (r.count(c) > 0 || _seg == c) _minorPill(c, r.count(c), t, icon),
@@ -420,7 +444,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             height: 44,
             decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.md)),
             child: Icon(
-              none ? LucideIcons.radar : (bad == 0 ? LucideIcons.shieldCheck : LucideIcons.triangleAlert),
+              none
+                  ? (_busy ? LucideIcons.radar : LucideIcons.info)
+                  : (bad == 0 ? LucideIcons.shieldCheck : LucideIcons.triangleAlert),
               size: 22,
               color: tone.fill,
             ),
@@ -432,7 +458,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                   style: AppType.title(color: none ? AppColors.textHi : tone.fill)
                       .copyWith(fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text(_source,
+              Text(_sourceOf(p),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
@@ -443,7 +469,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             key: const ValueKey('subs-check-copy'),
             tooltip: 'نسخ التقرير',
             visualDensity: VisualDensity.compact,
-            onPressed: r.total == 0 ? null : () => _copy(r, p),
+            onPressed: r.total == 0 ? null : () => _copy(r, p, lines),
             icon: Icon(LucideIcons.copy, size: 18, color: AppColors.textMid),
           ),
         ]),
@@ -472,8 +498,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       SubsRunState.running => (AppTone.brand, null),
       SubsRunState.finished => (AppTone.success, LucideIcons.circleCheck),
       SubsRunState.failed => (AppTone.warning, LucideIcons.triangleAlert),
+      SubsRunState.stopped => (AppTone.warning, LucideIcons.circlePause),
       SubsRunState.idle => (AppTone.neutral, LucideIcons.circleDashed),
     };
+    final halted = p.state == SubsRunState.failed || p.state == SubsRunState.stopped;
     final v = p.value;
     final side = p.running ? (v == null ? null : '${(v * 100).round()}%') : (p.at == null ? null : timeAgoAr(p.at));
     final done = p.state == SubsRunState.finished;
@@ -492,12 +520,12 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
           Expanded(
             child: Text(p.text,
                 key: const ValueKey('subs-check-progress-text'),
-                maxLines: p.state == SubsRunState.failed ? 2 : 1,
+                maxLines: halted ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppType.label(
                         color: done
                             ? AppColors.textHi
-                            : (p.state == SubsRunState.failed ? tone.onSoft : AppColors.textMid))
+                            : (halted ? tone.onSoft : AppColors.textMid))
                     .copyWith(fontSize: 12.5, fontWeight: done ? FontWeight.w700 : FontWeight.w600)),
           ),
           if (side != null) ...[
@@ -607,7 +635,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
 
   /// سطرٌ لكلّ شركة كـ«الفحص الشامل»: طريقها (من شبكتك / عبر VPN الشركة / لماذا لم تُفحص) وكم قُرئ من متّصلي مشتركيها وكم
   /// بمشكلة — والضغط يعرض مشتركيها وحدهم. ١٠ نوفمبر: غير المتّصل بلا قراءة خارج العدد (لا يُقرأ أصلاً — «قُرئ» لا يكتمل معه).
-  Widget _companiesCard(List<Subscriber> all, SubsCheckReport full) {
+  /// والتقرير المنسوخ بالأسطر نفسها (المراجعة F15).
+  List<_CompanyLine> _companyLines(List<Subscriber> all, SubsCheckReport full) {
     final total = <String, int>{};
     for (final x in all) {
       final k = x.companyKey;
@@ -631,14 +660,23 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       final k = row.sub.companyKey;
       if (k != null) bad[k] = (bad[k] ?? 0) + 1;
     }
-    final shown = [
+    return [
       for (final c in widget.companies!)
-        if ((total[c.key] ?? 0) > 0) c
+        if ((total[c.key] ?? 0) > 0)
+          _companyLine(c,
+              total: total[c.key] ?? 0,
+              offline: offline[c.key] ?? 0,
+              read: read[c.key] ?? 0,
+              viaVpn: viaVpn[c.key] ?? 0,
+              bad: bad[c.key] ?? 0),
     ];
-    final picked = _company == null ? null : shown.where((c) => c.key == _company).firstOrNull;
+  }
+
+  Widget _companiesCard(List<_CompanyLine> lines) {
+    final picked = _company == null ? null : lines.where((l) => l.co.key == _company).firstOrNull?.co;
     final hint = picked != null
         ? '«${picked.name}» وحدها — اضغطها ثانيةً لعرض الكلّ'
-        : (shown.length > 1 ? mergedWord('اضغط شركةً لعرض مشتركيها وحدهم', 'اضغط صفحةً لعرض مشتركيها وحدهم') : null);
+        : (lines.length > 1 ? mergedWord('اضغط شركةً لعرض مشتركيها وحدهم', 'اضغط صفحةً لعرض مشتركيها وحدهم') : null);
     return Container(
       key: const ValueKey('subs-check-companies'),
       padding: const EdgeInsets.all(Sp.sm),
@@ -648,13 +686,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        for (final c in shown)
-          _companyRow(c,
-              total: total[c.key] ?? 0,
-              offline: offline[c.key] ?? 0,
-              read: read[c.key] ?? 0,
-              viaVpn: viaVpn[c.key] ?? 0,
-              bad: bad[c.key] ?? 0),
+        for (final l in lines) _companyRow(l),
         if (hint != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, 2),
@@ -675,9 +707,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     );
   }
 
-  Widget _companyRow(MergedCompany c,
+  _CompanyLine _companyLine(MergedCompany c,
       {required int total, required int offline, required int read, required int viaVpn, required int bad}) {
-    final on = _company == c.key;
     final counts = offline <= 0
         ? 'قُرئ ${formatIQD(read)} من ${formatIQD(total)}'
         : total - offline > 0
@@ -688,15 +719,22 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final note = _companyNote(c.key);
     final at = VpnNow.readingsAtFor(c.key);
     final probing = _waveRunning;
-    // المفتوحة: من الهاتف أوّلاً، وما قُرئ عبر VPN شركتها (ضوء الأولت) يُقال
+    final here = job.busy && job.current == c.key;
+    // المفتوحة: من الهاتف أوّلاً، وما قُرئ عبر VPN شركتها (ضوء الأولت) يُقال — وبعمره كغيرها (المراجعة F15): انتهاء
+    // موجة الهاتف لما قُرئ من شبكتك، ووقت فحص VPN شركتها لما قُرئ عبره
     final localWay = viaVpn == 0 ? 'من شبكتك' : (viaVpn == read ? 'عبر VPN الشركة' : 'من شبكتك وعبر VPN الشركة');
+    final localAt = viaVpn == 0 ? _wave?.endedAt : at;
     final (IconData icon, AppTone tone, String text) = local
         ? (probing
             ? (LucideIcons.loader, AppTone.brand, 'يُقرأ من شبكتك… · $counts')
-            : job.busy && job.current == c.key
+            : here
                 ? (LucideIcons.loader, AppTone.brand, 'يُكمَّل عبر VPN الشركة… · $counts')
-                : (LucideIcons.circleCheck, AppTone.success, '$localWay · $counts'))
-        : job.busy && job.current == c.key
+                : (
+                    LucideIcons.circleCheck,
+                    AppTone.success,
+                    '$localWay${localAt == null ? '' : ' · ${timeAgoAr(localAt)}'} · $counts'
+                  ))
+        : here
             ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة… · $counts')
             // ما قبل الحاليّة فُحص في هذا الفحص نفسه — لا «بانتظار دورها»
             : job.waits(c.key)
@@ -722,6 +760,15 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                                 '${read > viaVpn ? 'من شبكتك وعبر VPN الشركة' : 'عبر VPN الشركة'} · ${timeAgoAr(at)} · $counts'
                               )
                             : (LucideIcons.circleDashed, AppTone.neutral, 'لم تُفحص بعد عبر VPN · $counts');
+    // وقت ما يقوله السطر — يُختم به الشريط حين تُختار الشركة (المراجعة F15)
+    final lineAt = local ? (probing || here ? null : localAt) : (here || job.waits(c.key) || note != null ? null : at);
+    return (co: c, bad: bad, icon: icon, tone: tone, text: text, at: lineAt);
+  }
+
+  Widget _companyRow(_CompanyLine l) {
+    final c = l.co;
+    final on = _company == c.key;
+    final (icon, tone, text, bad) = (l.icon, l.tone, l.text, l.bad);
     final waiting = tone == AppTone.neutral;
     return Material(
       key: ValueKey('subs-check-company-${c.key}'),
@@ -1012,29 +1059,68 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
 
   // ─────────────────── الفراغ والتذييل ───────────────────
 
-  Widget _empty(SubsCheckReport r) {
+  /// لا قراءات بعد وشيءٌ يُنتظر: فحصٌ جارٍ، أو لم يُفحص أحدٌ قطّ ولم يُسأل جهاز.
+  bool _awaits(SubsCheckReport r, SubsCheckProgress p) =>
+      _busy || (p.state == SubsRunState.idle && r.count(SubsCheckCat.noReply) + r.count(SubsCheckCat.noMetrics) == 0);
+
+  Widget _empty(SubsCheckReport r, SubsCheckProgress p) {
     if (r.read == 0 && (_seg == SubsCheckCat.problems || _seg == SubsCheckCat.healthy)) {
       if (_busy) {
         return _notice(LucideIcons.radar,
             widget.viaVpn ? 'يفحص الخادم المشتركين عبر الـVPN…' : 'يُقرأ المشتركون الآن من موبايلك…');
       }
-      return _notice(
-          LucideIcons.info,
-          widget.viaVpn
-              ? 'لا قراءات عبر الـVPN بعد — اضغط «تحديث» ليفحص الخادم'
-              : 'لا قراءات بعد — يُفحص المشتركون الآن من موبايلك');
+      if (_awaits(r, p)) {
+        return _notice(LucideIcons.info,
+            widget.viaVpn ? 'لا قراءات عبر الـVPN بعد — اضغط «تحديث» ليفحص الخادم' : 'لم يُفحص بعد — اضغط «تحديث»');
+      }
+      // انتهى (أو تعذّر) بلا قراءة — لا «يُفحص الآن» (المراجعة F6: «قُرئ 0 من 80» والشريط «انتهى الفحص»): ما حدث
+      // بأعداد أقسامه
+      const why = [SubsCheckCat.noReply, SubsCheckCat.noMetrics, SubsCheckCat.unchecked, SubsCheckCat.offline];
+      final parts = [
+        for (final c in why)
+          if (r.count(c) > 0) '${c.label} ${formatIQD(r.count(c))}',
+      ];
+      final head = switch (p.state) {
+        SubsRunState.finished => 'انتهى الفحص بلا قراءات',
+        SubsRunState.failed || SubsRunState.stopped => 'لم يكتمل الفحص',
+        _ => 'لا قراءات',
+      };
+      return _notice(LucideIcons.info, parts.isEmpty ? head : '$head\n${parts.join(' · ')}');
     }
     return switch (_seg) {
       SubsCheckCat.problems =>
         _notice(LucideIcons.circleCheck, 'لا مشاكل ✓ — كلّ المقروئين ضمن حدود «تنبيه المشترك»', good: true),
       SubsCheckCat.healthy => _notice(LucideIcons.triangleAlert, 'لا أحد سليم — كلّ المقروئين بمشكلة'),
-      SubsCheckCat.noReply => _busy
-          ? _notice(LucideIcons.radar, 'لا أحد حتى الآن — الفحص يكمل')
-          : _notice(LucideIcons.circleCheck, 'كلّ المتّصلين قُرئت أجهزتهم ✓', good: true),
-      SubsCheckCat.offline => _notice(LucideIcons.circleCheck, 'الكلّ متّصل الآن ✓', good: true),
+      SubsCheckCat.noReply =>
+        _busy ? _notice(LucideIcons.radar, 'لا أحد حتى الآن — الفحص يكمل') : _noReplyEmpty(r),
+      SubsCheckCat.offline => _offlineEmpty(r),
       SubsCheckCat.noMetrics => _notice(LucideIcons.circleCheck, 'لا جهاز بلا مقاييس ✓', good: true),
       SubsCheckCat.unchecked => _notice(LucideIcons.circleCheck, 'وصل الفحص الجميع ✓', good: true),
     };
+  }
+
+  /// «جهازه ما ردّ» فارغاً والفحص منتهٍ: ما يعنيه وحده (المراجعة F4/F13 — كان «كلّ المتّصلين قُرئت أجهزتهم ✓» وفحص
+  /// الـVPN تعذّر فلم يُقرأ أحد): متّصلون بلا قراءة يُعدّون بأقسامهم، و✓ حين قُرئ كلّ متّصلٍ فعلاً.
+  Widget _noReplyEmpty(SubsCheckReport r) {
+    final unread = [
+      for (final c in const [SubsCheckCat.unchecked, SubsCheckCat.noMetrics])
+        if (r.count(c) > 0) '«${c.label}» ${formatIQD(r.count(c))}',
+    ];
+    if (unread.isNotEmpty) {
+      return _notice(LucideIcons.info, 'لا أحد جهازه ما ردّ\nمتّصلون بلا قراءة: ${unread.join(' · ')}');
+    }
+    return [...r.rows, ...r.healthy].any((x) => x.sub.isOnline)
+        ? _notice(LucideIcons.circleCheck, 'كلّ المتّصلين قُرئت أجهزتهم ✓', good: true)
+        : _notice(LucideIcons.info, 'لا أحد جهازه ما ردّ');
+  }
+
+  /// «غير متّصل الآن» فارغاً: «الكلّ متّصل» حين لا غير متّصلٍ في المعروض أصلاً — من له قراءةٌ سابقة يُعدّ بقسمها
+  /// (المراجعة F13).
+  Widget _offlineEmpty(SubsCheckReport r) {
+    final read = [...r.rows, ...r.healthy].where((x) => !x.sub.isOnline).length;
+    if (read == 0) return _notice(LucideIcons.circleCheck, 'الكلّ متّصل الآن ✓', good: true);
+    final where = '«${SubsCheckCat.healthy.label}» أو «${SubsCheckCat.problems.label}»';
+    return _notice(LucideIcons.info, 'لا أحد هنا — ${formatIQD(read)} غير متّصل الآن بقراءةٍ سابقة في $where');
   }
 
   static String _num(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';

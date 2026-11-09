@@ -231,7 +231,9 @@ class SubsWave {
   SubsWave settle(DateTime at) => running ? finish(at) : this;
 }
 
-enum SubsRunState { running, finished, failed, idle }
+/// [stopped]: فحص الخادم تُرك قبل أن يكمل (أُطفئ «وضع VPN» — رجع لشبكته) ⇒ يُقال، لا «انتهى» فحصٍ أقدم (المراجعة
+/// F14/F22).
+enum SubsRunState { running, finished, failed, stopped, idle }
 
 /// شريط «الفحص العامّ»: الفحص نفسه لا نسبة المقروء (١٠ نوفمبر) — جارٍ «يفحص… 12 من 30»، ثمّ «انتهى الفحص — 113 مشترك»
 /// بوقته والشريط ممتلئ (لا يبقى نصفاً بعد الانتهاء)، أو لماذا تعذّر، أو «لم يُفحص بعد».
@@ -250,8 +252,8 @@ class SubsCheckProgress {
   bool get running => state == SubsRunState.running;
 }
 
-/// فحص الخادم عبر الـVPN كما يقرؤه الشريط ([SubscribersCheck.vpnRunOf]).
-typedef SubsVpnRun = ({bool busy, bool failed, String? line, int done, int total, double? value});
+/// فحص الخادم عبر الـVPN كما يقرؤه الشريط ([SubscribersCheck.vpnRunOf]) — [stopped] سطر فحصٍ تُرك قبل أن يكمل.
+typedef SubsVpnRun = ({bool busy, bool failed, String? line, int done, int total, double? value, String? stopped});
 
 /// تقرير «الفحص العامّ» للمشتركين: من بمشكلة مصنّفين بنوعها، والسليم، ومن لم يُقرأ ولماذا — وأقسامه [SubsCheckCat].
 class SubsCheckReport {
@@ -396,6 +398,7 @@ class SubscribersCheck {
         done: j.done,
         total: j.total,
         value: j.value,
+        stopped: j.stopped,
       );
 
   /// شريط الفحص (١٠ نوفمبر — المالك: «مفروض العداد يمثل الفحص»): [subs] مشتركو التقرير · [wave] موجة الهاتف (null: ليست من
@@ -435,17 +438,34 @@ class SubscribersCheck {
     if (v != null && v.failed && w == null) {
       return SubsCheckProgress(SubsRunState.failed, v.line ?? 'تعذّر الفحص الآن — حاول بعد قليل');
     }
+    // وتُرك قبل أن يكمل (أُطفئ «وضع VPN») ⇒ يُقال — لا «انتهى الفحص» فحصٍ أقدم ولا «لم يُفحص بعد» (المراجعة F14/F22)
+    if (v != null && v.stopped != null && w == null) return SubsCheckProgress(SubsRunState.stopped, v.stopped!);
     if (at == null) return const SubsCheckProgress(SubsRunState.idle, 'لم يُفحص بعد');
     return SubsCheckProgress(SubsRunState.finished, 'انتهى الفحص — ${formatIQD(subs)} مشترك', value: 1, at: at);
   }
 
+  /// آخر سؤالٍ من الهاتف لأجهزة [subs] — ردّ أو ما ردّ، لا المقروء وحده: وقت «انتهى الفحص» حين لا تُعرف موجته (قائمةٌ
+  /// فُتحت من جديد وقراءاتها طازجة فلا موجة) — أجهزةٌ سُئلت قبل دقائق لا تُقال «لم يُفحص بعد» (المراجعة F6).
+  static DateTime? lastAsked(Iterable<Subscriber> subs) {
+    final look = debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
+    DateTime? out;
+    for (final s in subs) {
+      final at = look(s)?.at;
+      if (at != null && (out == null || at.isAfter(out))) out = at;
+    }
+    return out;
+  }
+
   /// التقرير منسوخاً (١٠ نوفمبر) بأقسام الشاشة وكلماتها: سطر الفحص، ثمّ الأعداد، ثمّ من بمشكلة بمشاكله ومن ما ردّ جهازه ومن بلا
-  /// مقاييس ومن لم يُفحص بأسبابهم — السليم وغير المتّصل عددٌ وحده (لا عطل يُتابَع). [companyOf] «كل الشركات»: اسم شركة المشترك.
+  /// مقاييس ومن لم يُفحص بأسبابهم — السليم وغير المتّصل عددٌ وحده (لا عطل يُتابَع). [companyOf] «كل الشركات»: اسم شركة
+  /// المشترك، و[companies] سطر كلّ شركةٍ كبطاقة «الشركات» — طريقها وعمر قراءاتها (المراجعة F15: لا يُختم الكلّ بوقت
+  /// أحدث الطرق).
   static String reportText(
     SubsCheckReport r, {
     required SubsCheckProgress progress,
     String? source,
     String? Function(Subscriber s)? companyOf,
+    List<({String name, String text})> companies = const [],
   }) {
     final running = progress.running;
     final at = progress.at;
@@ -458,6 +478,14 @@ class SubscribersCheck {
             '${c.labelFor(running: running)} ${formatIQD(r.count(c))}',
       ].join(' · '),
     ];
+    if (companies.isNotEmpty) {
+      out
+        ..add('')
+        ..add('${mergedWord('الشركات', 'الصفحات')}:');
+      for (final c in companies) {
+        out.add('• ${c.name} — ${c.text}');
+      }
+    }
     String who(Subscriber s) {
       final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
       final co = companyOf?.call(s);
