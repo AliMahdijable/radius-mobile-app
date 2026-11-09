@@ -204,7 +204,8 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
     PrintResult r;
     try {
       final pdf = await ReceiptPdf.build(doc, a4: PrintPrefs.currentTemplateType == 'a4');
-      r = await PrintOutput.send(pdf);
+      // نافذة الطباعة كما كانت ولو اختيرت «طابعة الوصولات» — المصمّم يجرّب القالب (A4 أو الكاشير) لا الطابعة.
+      r = await PrintOutput.send(pdf, receiptPrinter: false);
     } catch (e) {
       r = PrintResult.failed('$e');
     }

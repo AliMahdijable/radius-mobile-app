@@ -181,6 +181,23 @@ void main() {
       expect(h.bridge.receiptWrites, isNotEmpty);
     });
 
+    test('«اطبع تجربة» في مصمّم الوصل (receiptPrinter: false) ⇒ نافذة الطباعة كما كانت ولو اختيرت طابعة الوصولات', () async {
+      h.useBluetooth();
+      final r = await PrintOutput.send(_doc('activation-sample'), receiptPrinter: false);
+      expect(r.outcome, PrintOutcome.printed);
+      expect(backend.calls, ['layout']);
+      expect(h.bridge.calls, isEmpty);
+    });
+
+    test('المصمّم يطبع تجربته بنافذة الطباعة (receiptPrinter: false) — لا بطابعة الكاشير', () {
+      final src = File('lib/screens/print_templates/print_templates_screen.dart').readAsStringSync();
+      final from = src.indexOf('Future<void> _printSample()');
+      expect(from, isNonNegative);
+      final body = src.substring(from, src.indexOf('\n  }\n', from));
+      expect(body, contains('PrintOutput.send(pdf, receiptPrinter: false)'));
+      expect(RegExp(r'PrintOutput\.send\(').allMatches(body).length, 1);
+    });
+
     test('التقارير (allowDirect: false) ⇒ نافذة الطباعة دائماً — لا تذهب لطابعة الكاشير', () async {
       h.useBluetooth();
       await PrintOutput.send(_doc('report'), allowDirect: false);
