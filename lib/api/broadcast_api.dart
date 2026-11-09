@@ -288,6 +288,10 @@ class BroadcastApi {
       };
       final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/whatsapp/broadcast', data: body);
       final data = r.data ?? const {};
+      // الحساب الكبير: «نحسب…» — ليست خطأً؛ الشاشة تعيد السؤال حتى تجهز
+      if ((r.statusCode == 202 || data['pending'] == true) && data['success'] != false) {
+        return (preview: BroadcastPreview.pendingOf(data['message']?.toString()), message: null, code: null);
+      }
       if (r.statusCode != 200 || data['success'] == false || data['dryRun'] != true) {
         return (preview: null, message: data['message']?.toString() ?? 'تعذّرت المعاينة — لم يُرسَل شيء', code: data['code']?.toString());
       }
@@ -299,6 +303,68 @@ class BroadcastApi {
     } catch (e) {
       _log('preview', e);
       return (preview: null, message: 'تعذّرت المعاينة', code: null);
+    }
+  }
+
+  /// POST /api/telegram/broadcast {dryRun:true, debtFilter} — «إرسال عام» تلغرام بالتحديد: من يطابق من المربوطين المدينين
+  /// بالاسم والدين والعمر وبصمتهم. message اختياريّة للمعاينة (الشرائح وحدها).
+  static Future<({BroadcastPreview? preview, String? message, String? code})> telegramPreview({
+    required String adminId,
+    required DebtFilter debtFilter,
+    String message = '',
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/telegram/broadcast', data: {
+        'adminId': adminId,
+        if (message.trim().isNotEmpty) 'message': message.trim(),
+        'dryRun': true,
+        'debtFilter': debtFilter.toJson(),
+      });
+      final data = r.data ?? const {};
+      if (r.statusCode != 200 || data['success'] == false || data['dryRun'] != true) {
+        return (preview: null, message: data['message']?.toString() ?? 'تعذّرت المعاينة — لم يُرسَل شيء', code: data['code']?.toString());
+      }
+      return (preview: BroadcastPreview.fromTelegramJson(data), message: null, code: null);
+    } on DioException catch (e) {
+      _log('telegramPreview', e);
+      final d = e.response?.data is Map ? (e.response!.data as Map) : null;
+      return (preview: null, message: d?['message']?.toString() ?? 'خطأ في الشبكة', code: d?['code']?.toString());
+    } catch (e) {
+      _log('telegramPreview', e);
+      return (preview: null, message: 'تعذّرت المعاينة', code: null);
+    }
+  }
+
+  /// POST /api/telegram/broadcast بالتحديد — يحمل بصمة المعاينة؛ تغيّرت القائمة ⇒ 409 بلا إرسال (code BROADCAST_AUDIENCE_CHANGED).
+  static Future<({bool ok, int enqueued, String? message, String? code})> telegramSend({
+    required String adminId,
+    required String message,
+    required DebtFilter debtFilter,
+    required String audienceKey,
+    required int audienceCount,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/telegram/broadcast', data: {
+        'adminId': adminId,
+        'message': message.trim(),
+        'debtFilter': debtFilter.toJson(),
+        'audienceKey': audienceKey,
+        'audienceCount': audienceCount,
+      });
+      final data = r.data ?? const {};
+      return (
+        ok: r.statusCode == 200 && data['success'] == true,
+        enqueued: _toInt(data['enqueued']),
+        message: data['message']?.toString(),
+        code: data['code']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('telegramSend', e);
+      final d = e.response?.data is Map ? (e.response!.data as Map) : null;
+      return (ok: false, enqueued: 0, message: d?['message']?.toString() ?? 'فشل الإرسال', code: d?['code']?.toString());
+    } catch (e) {
+      _log('telegramSend', e);
+      return (ok: false, enqueued: 0, message: 'فشل الإرسال', code: null);
     }
   }
 
@@ -632,11 +698,24 @@ String _thousands(num v) {
 /// ما يدعمه الخادم لهذا الحساب: المبلغ دائماً، والعمر حيث لديونه دفتر (وإلّا سببه بكلماتٍ يفهمها الوكيل).
 @immutable
 class DebtFilterCapability {
-  const DebtFilterCapability({required this.age, required this.presets, this.ageNote, this.maxAgeDays = 3650});
+  const DebtFilterCapability({
+    required this.age,
+    required this.presets,
+    this.ageNote,
+    this.maxAgeDays = 3650,
+    this.telegram = false,
+    this.bigAsync = false,
+  });
   final bool age;
   final String? ageNote;
   final List<int> presets;
   final int maxAgeDays;
+
+  /// «إرسال عام» تلغرام يقبل التحديد (الخادم version ≥ 3).
+  final bool telegram;
+
+  /// الحساب الكبير (≥ ٥٠٠٠): المعاينة تُحسب في الخلفيّة — الخادم يردّ «نحسب…» والشاشة تعيد السؤال (bigPreview: 'async').
+  final bool bigAsync;
 
   static DebtFilterCapability? fromJson(Map<String, dynamic> j) {
     if (j['amount'] != true || j['presets'] is! List) return null;
@@ -645,6 +724,8 @@ class DebtFilterCapability {
       ageNote: j['ageNote']?.toString(),
       presets: [for (final p in j['presets'] as List) if (_toInt(p) > 0) _toInt(p)],
       maxAgeDays: _toInt(j['maxAgeDays']) > 0 ? _toInt(j['maxAgeDays']) : 3650,
+      telegram: j['telegram'] == true,
+      bigAsync: j['bigPreview'] == 'async',
     );
   }
 }
@@ -679,7 +760,42 @@ class BroadcastPreview {
     this.unknownAge = 0,
     this.legacy = 0,
     this.ageUnsupported = false,
+    this.pending = false,
+    this.pendingMessage,
+    this.notFound = 0,
+    this.notDebtor = 0,
+    this.blocked = 0,
+    this.totalBound = 0,
   });
+
+  /// الحساب الكبير: الخادم ما زال يحسب (202) — تُعاد المعاينة بعد ثوانٍ.
+  const BroadcastPreview.pendingOf(this.pendingMessage)
+      : pending = true,
+        count = 0,
+        audience = 0,
+        excludedHighRisk = 0,
+        deduped = 0,
+        rows = const [],
+        truncated = false,
+        audienceKey = '',
+        missing = 0,
+        partial = false,
+        unknownAge = 0,
+        legacy = 0,
+        ageUnsupported = false,
+        notFound = 0,
+        notDebtor = 0,
+        blocked = 0,
+        totalBound = 0;
+
+  final bool pending;
+  final String? pendingMessage;
+
+  /// تلغرام: مربوطون لم نجدهم في قائمة الشركة (لم يُشملوا) · مربوطون بلا دين · حظروا البوت · كلّ المربوطين.
+  final int notFound;
+  final int notDebtor;
+  final int blocked;
+  final int totalBound;
   final int count;
   final int audience;
   final int excludedHighRisk;
@@ -722,7 +838,17 @@ class BroadcastPreview {
       unknownAge: _toInt(df['unknownAge']),
       legacy: _toInt(df['legacy']),
       ageUnsupported: df['ageUnsupported'] == true,
+      notFound: _toInt(df['notFound']),
+      notDebtor: _toInt(df['notDebtor']),
+      blocked: _toInt(j['blocked']),
+      totalBound: _toInt(j['totalBound']),
     );
+  }
+
+  /// معاينة «إرسال عام» تلغرام: eligible = من يطابق ويصله (لا دمج أرقام ولا حارس حظر في تلغرام).
+  static BroadcastPreview fromTelegramJson(Map<String, dynamic> j) {
+    final eligible = _toInt(j['eligible']);
+    return BroadcastPreview.fromJson({...j, 'count': eligible, 'audience': eligible, 'excludedHighRisk': 0, 'deduped': 0});
   }
 }
 
