@@ -506,14 +506,18 @@ void main() {
   });
 
   group('٩ نوفمبر — «لم يُقرأ» بسببه الحقيقيّ (لا «تأكّد من اسم المستخدم والرمز» لكلّ فشل)', () {
-    String why(Object e, {int deadline = 25, bool? serviceOk}) =>
-        DevicesCheckRunner.unreadReason(e, deadline: deadline, serviceOk: serviceOk);
+    String why(Object e, {bool? serviceOk}) => DevicesCheckRunner.unreadReason(e, serviceOk: serviceOk);
     const login = 'يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز';
     const service = 'يردّ، لكن خدمة الإدارة لا تجيب — تأكّد من المنفذ والبروتوكول';
 
-    test('المهلة كلّها ⇒ «بطيء» بثوانيها (٢٥ من شبكتك، ٤٥ عبر الممرّ)', () {
-      expect(why(TimeoutException('read', const Duration(seconds: 25))), 'بطيء — لم تكتمل قراءته خلال 25ث');
-      expect(why(TimeoutException(null), deadline: 45), 'بطيء — لم تكتمل قراءته خلال 45ث');
+    test('المهل الإنتاجيّة: ٢٥ث/٩٠ث من شبكتك و٤٥ث/١٢٠ث عبر الممرّ، وسطر السقف بثوانيه؛ ومهلة القارئ الداخليّة بلا ثوانٍ مدّعاة', () {
+      expect(DevicesCheckRunner.debugTimes, isNull);
+      expect(DevicesCheckRunner.timesFor(piped: false), (soft: const Duration(seconds: 25), hard: const Duration(seconds: 90)));
+      expect(DevicesCheckRunner.timesFor(piped: true), (soft: const Duration(seconds: 45), hard: const Duration(seconds: 120)));
+      expect(DevicesCheckRunner.capText(DevicesCheckRunner.timesFor(piped: false).hard), 'بطيء — لم تكتمل قراءته خلال 90ث');
+      expect(DevicesCheckRunner.capText(DevicesCheckRunner.timesFor(piped: true).hard), 'بطيء — لم تكتمل قراءته خلال 120ث');
+      expect(why(TimeoutException('ssh', const Duration(seconds: 12)), serviceOk: true), 'بطيء — ما كمّل جوابه بالوقت');
+      expect(why(TimeoutException('ssh'), serviceOk: false), service);
     });
 
     test('رفض الدخول الحقيقيّ وحده يقول «اسم المستخدم والرمز» — ميكروتك، يوبيكويتي، سسكو', () {
@@ -751,8 +755,9 @@ void main() {
     });
 
     test('🚨 ميكروتك بطيء بجدول التسجيل: الطبقة الأولى تُعرض عند المهلة الأولى، وعند السقف تبقى بحيويّاتها ومنافذها', () async {
-      // القارئ الحقيقيّ (لا debugFetch): RouterOS يجيب الموارد والمنافذ فوراً وجدول التسجيل لا يجيب حتى بعد السقف
-      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 300), hard: const Duration(milliseconds: 900));
+      // القارئ الحقيقيّ (لا debugFetch): RouterOS يجيب الموارد والمنافذ فوراً وجدول التسجيل لا يجيب حتى بعد السقف.
+      // المهلة الأولى ١ث (الطبقة الأولى من قناةٍ بالذاكرة ببياناتٍ مبذورة — لا سباق ساعةٍ تحت حِمل)
+      DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 2));
       NetworkDevicesApi.debugSeedCredentials(4, {'user': 'admin', 'pass': 'x'}, DateTime.now());
       final gate = Completer<void>();
       MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _SlowRegTable(holdRegTable: gate);
@@ -1088,7 +1093,7 @@ void main() {
       DevicesCheckRunner.debugLimits = () async => const CheckLimits();
       DevicesCheckRunner.debugSubscribers = () async => const [];
       DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
-      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 300), hard: const Duration(milliseconds: 900));
+      DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 2));
       NetworkDevicesApi.debugSeedCredentials(5, {'user': 'admin', 'pass': 'x'}, DateTime.now());
       final gate = Completer<void>();
       MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _SlowRegTable(holdWireless: gate);
@@ -1245,6 +1250,7 @@ void main() {
         MikrotikApi.resetRoutesForTest();
       });
       DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 2));
       final run = DevicesCheckRunner([dev(42), dev(43)], viaVpn: false);
       await run.run();
       final capped = run.reports[42]!;

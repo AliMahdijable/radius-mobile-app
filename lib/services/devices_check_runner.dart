@@ -256,6 +256,9 @@ class DevicesCheckRunner extends ChangeNotifier {
   @visibleForTesting
   static ({Duration soft, Duration hard})? debugTimes;
 
+  /// سطر من بلغ السقف: «بطيء — لم تكتمل قراءته خلال 90ث».
+  static String capText(Duration hard) => 'بطيء — لم تكتمل قراءته خلال ${hard.inSeconds}ث';
+
   Future<void> _local(
       List<NetworkDevice> list, CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
     final queue = Queue<NetworkDevice>.from(list);
@@ -442,7 +445,7 @@ class DevicesCheckRunner extends ChangeNotifier {
     if (second is _Failed) return _final(d, short(why(second.error)), gen);
 
     // ٣) السقف: «بطيء» بثوانيه — وما يصل بعده يُحفظ ويحلّ محلّه ما دام الفحص نفسه قائماً (لا يُرمى)
-    final capped = short('بطيء — لم تكتمل قراءته خلال ${t.hard.inSeconds}ث');
+    final capped = short(capText(t.hard));
     _final(d, capped, gen);
     // الهويّة وحدها تحرس (لا رقم الجولة): فحصٌ كامل جديد يمسح التقارير، وتقريرٌ أحدث يحلّ محلّه — و«أعد قراءة غير المقروء» لأجهزةٍ
     // أخرى لا يُسقط ما وصل لهذا (المراجعة)
@@ -544,12 +547,10 @@ class DevicesCheckRunner extends ChangeNotifier {
   ///
   /// ٩ نوفمبر (المالك: «مرات اكو اجهزه بالنظام يتفحها ويعرض معلومات بس بقسم فحص الاجهزه يكول لم يقرا»): كان كلّ فشلٍ «تأكّد من
   /// اسم المستخدم والرمز» — ومهلة الجهاز البطيء، والمنفذ المقفول، وزحمة ممرّ الـVPN، وتعذّر جلب بيانات الدخول من خادمنا كلّها غيره.
-  /// رسالة الدخول الآن لرفض الدخول الحقيقيّ وحده. [deadline] مهلة القراءة كلّها (ث) حين تكون [e] هي (null = فشلٌ من داخل
-  /// القارئ)، و[serviceOk] جواب خدمة الإدارة بالبنك (null = لم يُعرف) — يفصل «بطيء» عن «لا يُفتح» حين تأتي المهلة من الداخل.
+  /// رسالة الدخول الآن لرفض الدخول الحقيقيّ وحده. الفشل هنا من **داخل** القارئ دائماً (المهلة الكلّيّة لا ترمي — يُسابَق بها،
+  /// وسطرها [capText])، و[serviceOk] جواب خدمة الإدارة بالبنك (null = لم يُعرف) — يفصل «بطيء» عن «لا يُفتح».
   @visibleForTesting
-  static String unreadReason(Object e, {int? deadline, bool? serviceOk}) {
-    // ١) المهلة كلّها — الجهاز يردّ لكنّ قراءته الكاملة أطول منها
-    if (e is TimeoutException && deadline != null) return 'بطيء — لم تكتمل قراءته خلال $deadlineث';
+  static String unreadReason(Object e, {bool? serviceOk}) {
     final s = e.toString();
     final low = s.toLowerCase();
     // ٢) ممرّ الـVPN وخادمنا (رسائل الخادم كما هي: «اتّصالاتٌ كثيرة الآن — لحظات»، «الـVPN ما اتّصل الآن…»)

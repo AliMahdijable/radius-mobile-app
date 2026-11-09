@@ -327,4 +327,47 @@ void main() {
     await settle(t);
     await t.pumpWidget(const SizedBox());
   });
+
+  testWidgets('المراجعة: رأس ضوء الأولت — الجزئيّ «الضوء n من N — المقروء جيّد» لا «ضوءهم كلّه جيّد»، والكامل بعدد الـONU', (t) async {
+    DevicesCheckRunner.debugFetch = (d) async => switch (d.id) {
+          // ١٩٥ متّصلة والمهلة انتهت: ٣ أجابت، ٢ بقيمة ⇒ «ما لحق» للباقي و«بلا قراءة ضوء: 1»
+          7 => _r(const DeviceDetail(
+              glance: DeviceGlance(onusOnline: 195, onusTotal: 200),
+              onuLights: [OnuLight(name: 'ONU 1/1', rx: -19.5), OnuLight(name: 'ONU 1/2', rx: -21.0)],
+              onuLightsWanted: 195,
+              onuLightsAnswered: 3)),
+          // قُرئت كلّها وواحدةٌ ضعيفة
+          8 => _r(const DeviceDetail(
+              glance: DeviceGlance(onusOnline: 2, onusTotal: 2),
+              onuLights: [OnuLight(name: 'ONU 2/1', rx: -18.0), OnuLight(name: 'ONU 2/2', rx: -29.0)],
+              onuLightsWanted: 2,
+              onuLightsAnswered: 2)),
+          // قُرئت كلّها وكلّها جيّدة
+          9 => _r(const DeviceDetail(
+              glance: DeviceGlance(onusOnline: 1, onusTotal: 1),
+              onuLights: [OnuLight(name: 'ONU 3/1', rx: -17.0)],
+              onuLightsWanted: 1,
+              onuLightsAnswered: 1)),
+          _ => throw StateError('no'),
+        };
+    NetworkDevice olt(int id, String name) => NetworkDevice(
+        id: id, adminId: '2', name: name, type: 'olt', brand: 'vsol', ip: '10.9.0.$id', port: 161, protocol: 'snmp',
+        hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+    final olts = [olt(7, 'أولت البرج'), olt(8, 'أولت الحيّ'), olt(9, 'أولت القرية')];
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: olts, viaVpn: false));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    Finder inCard(int id, String s) => find.descendant(of: find.byKey(ValueKey('check-card-$id')), matching: find.text(s));
+    await see(t, find.byKey(const ValueKey('check-card-7')));
+    expect(inCard(7, 'الضوء 2 من 195 — المقروء جيّد'), findsOneWidget);
+    expect(inCard(7, 'الضوء: قُرئ 2 من 195 — الباقي ما لحق'), findsOneWidget);
+    expect(inCard(7, 'بلا قراءة ضوء: 1'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-7')), matching: find.textContaining('كلّه جيّد')), findsNothing);
+    await see(t, find.byKey(const ValueKey('check-card-8')));
+    expect(inCard(8, 'المشتركون (ONU) 2 — 1 ضوءهم ضعيف'), findsOneWidget);
+    await see(t, find.byKey(const ValueKey('check-card-9')));
+    expect(inCard(9, 'المشتركون (ONU) 1 — ضوءهم كلّه جيّد'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
 }
