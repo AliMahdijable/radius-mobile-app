@@ -871,7 +871,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final p = _merged?.partOf(c.key);
     if (p == null) return null;
     if (p.bigTotal != null) return 'merged.chip_big'.trm();
-    if (p.rows == null) return 'merged.chip_failed'.trm();
+    if (p.rows == null) return p.denied ? 'merged.chip_denied'.trm() : 'merged.chip_failed'.trm();
     return null;
   }
 
@@ -2481,7 +2481,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // الصلاحيّة) — صفحته تقول السبب بزرٍّ مقفل.
                                     onPayDebt: s.hasDebt &&
                                             !_selectionMode &&
-                                            Perms.has('subscribers.pay_debt') &&
+                                            MergedMode.can(s.companyKey, 'subscribers.pay_debt') &&
                                             MergedOps.writeLock(s) == null
                                         ? () => _payDebtFromList(s)
                                         : null,

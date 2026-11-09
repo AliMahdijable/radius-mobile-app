@@ -183,6 +183,23 @@ class _SalesScreenState extends State<SalesScreen> {
       unawaited(_loadOverview());
       return;
     }
+    // «كل الصفحات» للموظّف: الصفحة المختارة بلا sales.view بخريطتها ⇒ لا طلب، والسبب باسمها مكان القوائم
+    final routed = _routedCompany;
+    if (routed != null && MergedMode.pagePerm(routed.key, 'sales.view') == false) {
+      final why = '«${routed.name}»: ${MergedMode.noAccess('مبيعاتها')}';
+      setState(() {
+        _shownKey = key;
+        _items = null;
+        _sales = null;
+        _debts = const {};
+        _debtsComplete = false;
+        _itemsError = why;
+        _salesError = why;
+        _loadingItems = false;
+        _loadingSales = false;
+      });
+      return;
+    }
     setState(() {
       if (key != _shownKey) {
         // شركةٌ أخرى: لا تبقى أرقام سابقتها تحت اسمها حتى يصل ردّها.
@@ -228,6 +245,10 @@ class _SalesScreenState extends State<SalesScreen> {
   /// شركةٌ واحدة: المفتوحة كما هي، وغيرها موجَّهٌ لها (قراءةٌ وحدها).
   Future<_CoSales> _loadCompany(MergedCompany c, String from, String to) async {
     final open = _isOpen(c);
+    // «كل الصفحات» للموظّف: صفحةٌ بلا sales.view بخريطتها ⇒ لا طلب، وبطاقتها تقول لماذا ولا تُجمع
+    if (MergedMode.pagePerm(c.key, 'sales.view') == false) {
+      return _CoSales(company: c, open: open, error: MergedMode.noAccess('مبيعاتها'));
+    }
     try {
       final (s, it) = await CompanyRoute.run(
         open ? null : c.key,

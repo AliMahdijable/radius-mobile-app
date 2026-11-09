@@ -37,6 +37,7 @@ class ManagersScreen extends StatefulWidget {
   /// (managers/full) قراءةٌ موجَّهة للساس وحده — شركة ايرث لنك أو غيرها غير المفتوحة ⇒ «غير متاح» بسببه (لا خطأ رفض).
   static Widget mergedPage() => MergedSection(
       readOnly: true,
+      perms: const ['managers.view'],
       prefixes: const ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
       serves: (c) => c.provider == MergedProvider.sas4,
       servesNote: 'merged.serves_sas'.trm(),

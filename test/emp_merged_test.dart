@@ -17,12 +17,14 @@ import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/employees/sheets/employee_pages_sheet.dart';
 import 'package:rad_mysvcs/screens/expenses/expenses_screen.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
+import 'package:rad_mysvcs/screens/settlements/settlements_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscriber_detail_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 import 'package:rad_mysvcs/services/auth_storage.dart';
 import 'package:rad_mysvcs/services/employee_session.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/services/merged_report_loader.dart';
 import 'package:rad_mysvcs/widgets/merged_company_strip.dart';
 import 'package:rad_mysvcs/widgets/merged_section.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -297,23 +299,81 @@ void main() {
       await empDown();
     });
 
-    testWidgets('٤-٢ الرصيد: المقنَّع (null) والمرفوض يُسمّيان ولا يُجمعان صفراً', (t) async {
-      await empUp();
+    testWidgets('٤-٢ الرصيد: باء بلا reports.financial بخريطتها — الخادم يردّ رقماً (الساس لا يقنّع) ولا يُطلب ولا يُعرض، ويُسمّى', (t) async {
+      final srv = await empUp();
       await t.runAsync(() => MergedMode.load(fresh: true));
+      expect(MergedMode.companyOf(kB)!.permissions!['reports.financial'], isFalse);
       final w = await t.runAsync(MergedDashboardApi.wallet);
       expect(w!.byKey.keys.toSet(), {kA, kC});
-      expect(w.value!.balance, 150000 + 90000);
+      expect(w.value!.balance, 150000 + 90000, reason: 'رقم باء (77,000) لا يدخل');
       expect(w.reasons[kB], 'لا صلاحيّة لك على رصيدها');
       expect(w.excluded, ['$nameB: لا صلاحيّة لك على رصيدها']);
+      final asked = srv.routed.where((o) => o.uri.path == '/api/v2/admin-widgets').map((o) => o.headers['x-company-key']).toSet();
+      expect(asked, {kA, kC}, reason: 'رصيد باء لا يُطلب أصلاً');
+      await empDown();
+    });
+
+    testWidgets('٤-٢ب خادمٌ أقدم بلا خرائط: كما كان — رقم باء يُعرض، والمقنَّع (null) يُسمّى', (t) async {
+      final srv = await empUp(companies: companiesBody(withPerms: false));
+      await t.runAsync(() => MergedMode.load(fresh: true));
+      expect(MergedMode.companyOf(kB)!.permissions, isNull);
+      expect(MergedMode.pagePerm(kB, 'reports.financial'), isNull);
+      final w = await t.runAsync(MergedDashboardApi.wallet);
+      expect(w!.value!.balance, 150000 + 77000 + 90000);
+      srv.maskB = true;
+      final w2 = await t.runAsync(MergedDashboardApi.wallet);
+      expect(w2!.reasons[kB], 'لا صلاحيّة لك على رصيدها');
+      expect(w2.value!.balance, 150000 + 90000);
+      await empDown();
+    });
+
+    testWidgets('٤-٢ج تفعيلات اليوم وواتساب وتقارير القوائم: صفحةٌ بلا مفتاحها لا تُطلب وتُسمّى', (t) async {
+      final srv = await empUp();
+      await t.runAsync(() => MergedMode.load(fresh: true));
+      final d = await t.runAsync(MergedDashboardApi.daily);
+      expect(d!.reasons[kB], 'لا صلاحيّة لك على تفعيلاتها');
+      expect(d.byKey.keys.toSet(), {kA, kC});
+      final wa = await t.runAsync(MergedDashboardApi.whatsApp);
+      expect(wa!.isDenied(kB), isTrue);
+      expect([wa.connected, wa.total], [1, 2], reason: 'باء لا تُعدّ في «واتساب N/M»');
+      final rep = await t.runAsync(() => loadMergedReport<int>(
+            perms: const ['reports.daily_activations'],
+            supports: (_) => true,
+            fetch: (_) async => (ok: true, rows: const [1], error: null, note: null),
+          ));
+      final pb = rep!.partOf(kB)!;
+      expect(pb.denied, isTrue);
+      expect(pb.error, 'لا صلاحيّة لك على هذا التقرير فيها');
+      expect(rep.total, 2, reason: 'ألف وجيم وحدهما');
+      for (final path in ['/api/activities/daily-activations', '/api/whatsapp/connection-status/jt%3A6836']) {
+        expect(srv.routed.where((o) => o.uri.path == Uri.decodeComponent(path) && o.headers['x-company-key'] == kB), isEmpty,
+            reason: '$path لباء لا يُطلب');
+      }
+      expect(srv.routed.where((o) => o.headers['x-company-key'] == kB && o.uri.path.startsWith('/api/whatsapp/')), isEmpty);
+      await empDown();
+    });
+
+    testWidgets('٤-٢د باء بلا subscribers.view: قائمتها لا تُطلب، تُسمّى «لا صلاحيّة» وصفوفها خارج الكلّ', (t) async {
+      final srv = await empUp(companies: companiesWithB({...permsB, 'subscribers.view': false}));
+      final r = await t.runAsync(() => MergedSubscribers.load(fresh: true));
+      final f = r!.failed.single;
+      expect(f.company.key, kB);
+      expect(f.denied, isTrue);
+      expect(f.error, '«$nameB»: لا صلاحيّة لك على مشتركيها');
+      expect(r.rows.where((s) => s.companyKey == kB), isEmpty);
+      expect(srv.routed.where((o) => o.headers['x-company-key'] == kB), isEmpty, reason: 'لا طلب لباء');
       await empDown();
     });
 
     testWidgets('٤-٣ التقرير الماليّ: باء (403) خارج المجموع مسمّاةً، والمجموع ألف + جيم', (t) async {
       await empUp();
       await t.runAsync(() => MergedMode.load(fresh: true));
+      final srv = ApiClient.dio.httpClientAdapter as EmpServer;
       final m = await t.runAsync(() => MergedFinanceApi.load());
       expect(m!.included.map((p) => p.company.key).toSet(), {kA, kC});
-      expect(m.excluded.single, startsWith('$nameB: '));
+      expect(m.excluded.single, '$nameB: لا صلاحيّة لك على تقريرها');
+      expect(srv.routed.where((o) => o.uri.path == '/api/reports/finance' && o.headers['x-company-key'] == kB), isEmpty,
+          reason: 'تقرير باء لا يُطلب');
       await empDown();
     });
 
@@ -328,10 +388,16 @@ void main() {
       expect(part(kC).open, isFalse);
       expect(part(kC).devices!.single.name, 'برج جيم');
       expect(part(kB).failed, isTrue);
-      expect(part(kB).error, 'ليس لديك صلاحيّة لهذا في «$nameB»');
+      expect(part(kB).error, '«$nameB»: لا صلاحيّة لك على أجهزتها');
       final devReqs = srv.all.where((o) => o.uri.path == '/api/v2/admin/devices').toList();
       expect(devReqs.map((o) => o.headers['x-company-key']).toList()..sort((a, b) => '$a'.compareTo('$b')),
-          [null, kB, kC]..sort((a, b) => '$a'.compareTo('$b')));
+          [null, kC]..sort((a, b) => '$a'.compareTo('$b')), reason: 'أجهزة باء لا تُطلب (بلا devices.view بخريطتها)');
+      // خادمٌ أقدم بلا خرائط: تُطلب ورفضه (403) يُسمّى كما كان
+      MergedMode.reset();
+      srv.companies = companiesBody(withPerms: false);
+      await t.runAsync(() => MergedMode.load(fresh: true));
+      final old = await t.runAsync(() => MergedDevicesApi.load(MergedMode.usable, openAdminId: open));
+      expect(old!.firstWhere((p) => p.company.key == kB).error, 'ليس لديك صلاحيّة لهذا في «$nameB»');
       await empDown();
     });
   });
@@ -404,6 +470,15 @@ void main() {
       expect(find.descendant(of: tile(kC), matching: find.text('90,000')), findsOneWidget);
       expect(find.descendant(of: tile(kB), matching: find.textContaining('لا صلاحيّة لك على رصيدها')), findsOneWidget,
           reason: 'لا صفر لصفحةٍ مرفوضة — سببها بخانتها');
+      expect(find.textContaining('77,000'), findsNothing, reason: 'رقم باء الحقيقيّ (الساس لا يقنّعه) لا يظهر أبداً');
+      // واتساب: باء بلا مفتاحه لا تُفحص ولا تُعدّ، وصفّها يقول لماذا
+      expect(find.text('واتساب 1/2'), findsOneWidget);
+      await t.tap(find.text('واتساب 1/2'));
+      await settle(t, seconds: 1);
+      expect(find.descendant(of: find.byKey(const ValueKey('wa-co-$kB')), matching: find.text('لا صلاحيّة لك على واتسابها')),
+          findsOneWidget);
+      Navigator.of(t.element(find.byKey(const ValueKey('wa-co-$kB')))).pop();
+      await settle(t, seconds: 1);
       await down(t);
     });
 
@@ -432,10 +507,45 @@ void main() {
       await t.scrollUntilVisible(find.text('تجديد الاشتراك'), 200, scrollable: find.byType(Scrollable).first);
       await t.tap(find.text('تجديد الاشتراك'));
       await settle(t, seconds: 1);
-      expect(find.text(MergedMode.writeLockedText), findsOneWidget, reason: 'التجديد مقفلٌ بالسبب نفسه');
+      // خريطة باء بلا subscribers.activate (ولو ملكها في صفحته الحاليّة): قفل الصلاحيّة يسبق سبب الصفحة — الانتقال إليها لا يفتحه
+      expect(MergedMode.can(kB, 'subscribers.activate'), isFalse);
+      expect(find.text('ليس لديك صلاحيّة لهذا الإجراء — اطلبها من مديرك'), findsOneWidget, reason: 'صلاحيّته في باء');
+      expect(find.byType(BottomSheet), findsNothing);
+      await settle(t, seconds: 3);
+      // وما يملكه في باء (تسديد) لكنّ كتابتها من «صفحاتي»: سبب الصفحة
+      srv.companies = companiesWithB({...permsB, 'subscribers.activate': true});
+      await t.runAsync(() => MergedMode.load(fresh: true));
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 6));
+      await pumpVisual(t, phone, home: (_) => SubscriberDetailScreen(sub: s));
+      await settle(t, seconds: 2);
+      await t.scrollUntilVisible(find.text('تجديد الاشتراك'), 200, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.text('تجديد الاشتراك'));
+      await settle(t, seconds: 1);
+      expect(find.text(MergedMode.writeLockedText), findsOneWidget, reason: 'يملكه في باء ⇒ سبب الصفحة');
       expect(find.byType(BottomSheet), findsNothing);
       expect(srv.routed.where((o) => o.method != 'GET'), isEmpty);
       await settle(t, seconds: 3);
+      await down(t);
+    });
+
+    testWidgets('٥-٦ب صفحة مشترك باء: كلمة سرّه لا تُطلب (لا subscribers.show_password بخريطة باء) — ومشترك ألف تُطلب', (t) async {
+      final srv = await empUp();
+      await t.runAsync(() => MergedMode.load(fresh: true));
+      MergedMode.active.value = true;
+      expect(MergedMode.can(kB, 'subscribers.view_activity'), isFalse, reason: 'خريطة باء لا صفحته الحاليّة');
+      expect(MergedMode.can(kA, 'subscribers.view_activity'), isTrue);
+      expect(MergedMode.can(null, 'subscribers.view_activity'), isTrue, reason: 'صفّ الوضع العاديّ ⇒ صلاحيّات الجلسة');
+      final b = Subscriber.fromJson(Map<String, dynamic>.from(pageRows[kB]![0])).withCompany(kB);
+      await pumpVisual(t, phone, home: (_) => SubscriberDetailScreen(sub: b));
+      await settle(t, seconds: 2);
+      expect(srv.routed.where((o) => o.uri.path.endsWith('/password')), isEmpty);
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 6));
+      final a = Subscriber.fromJson(Map<String, dynamic>.from(pageRows[kA]![0])).withCompany(kA);
+      await pumpVisual(t, phone, home: (_) => SubscriberDetailScreen(sub: a));
+      await settle(t, seconds: 2);
+      expect(srv.routed.where((o) => o.uri.path.endsWith('/password')).map((o) => o.headers['x-company-key']).toSet(), {kA});
       await down(t);
     });
 
@@ -483,6 +593,30 @@ void main() {
       await settleReal(t);
       expect(srv.routed.length, before, reason: 'المفتوحة لا تُوجَّه');
       expect(find.textContaining('للعرض هنا'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 6));
+      await empDown();
+    });
+  });
+
+  group('٧ب «قوائم أخرى» بخريطة كلّ صفحة', () {
+    Future<void> settleReal(WidgetTester t) async {
+      for (var i = 0; i < 6; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 60)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('٧ب-١ التسويات: باء بلا settlements.view ⇒ بطاقة «لا صلاحيّة» باسمها ولا طلب؛ ألف كما هي', (t) async {
+      final srv = await empUp();
+      await t.runAsync(MergedMode.enter);
+      MergedMode.focus.value = kB;
+      await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => SettlementsScreen.mergedPage());
+      await settleReal(t);
+      expect(t.takeException(), isNull);
+      expect(find.text('لا صلاحيّة لك على «تسوية الحساب» في «$nameB»'), findsOneWidget);
+      expect(find.byKey(const ValueKey('merged-open-only-switch')), findsNothing, reason: 'لا «انتقل إليها» — صلاحيّته هناك لا تتغيّر');
+      expect(srv.routed.where((o) => o.uri.path.startsWith('/api/v2/settlements')), isEmpty, reason: 'لا طلب لباء');
       await t.pumpWidget(const SizedBox());
       await t.pump(const Duration(seconds: 6));
       await empDown();

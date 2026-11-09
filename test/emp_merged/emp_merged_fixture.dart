@@ -75,7 +75,38 @@ final empPages = EmployeePageRef.listFrom(const [
   {'employee_id': 14, 'page_id': '9001', 'page_name': nameD, 'active': false, 'login_username': 'ali.m'},
 ]);
 
-Map<String, Object?> companiesBody({bool writes = true, bool writesB = false, bool fewer = false}) => {
+/// صلاحيّاته في كلّ صفحة (ردّ الخادم `permissions` — الافتراضيّة + المحفوظة لصفّه فيها، مفاتيح /me نفسها).
+/// ألف: كلّ شيء. باء: يرى المشتركين (وصرفياتها) — بلا مالٍ ولا تفعيلات اليوم ولا واتساب ولا أجهزة ولا تسويات ولا سجلّ حركات.
+/// جيم: المشتركون والمال والأجهزة وواتساب.
+const permsA = <String, bool>{
+  ...empKeys,
+  'reports.expenses': true,
+  'settlements.view': true,
+  'devices.deep_check_vpn': true,
+  'subscribers.show_password': true,
+};
+const permsB = <String, bool>{
+  'subscribers.view': true,
+  'subscribers.view_activity': false,
+  'subscribers.show_password': false,
+  'subscribers.pay_debt': true,
+  'reports.financial': false,
+  'reports.daily_activations': false,
+  'reports.expenses': true,
+  'settlements.view': false,
+  'devices.view': false,
+  'whatsapp.connect': false,
+  'whatsapp.send': false,
+};
+const permsC = <String, bool>{
+  'subscribers.view': true,
+  'reports.financial': true,
+  'reports.daily_activations': true,
+  'devices.view': true,
+  'whatsapp.connect': true,
+};
+
+Map<String, Object?> companiesBody({bool writes = true, bool writesB = false, bool fewer = false, bool withPerms = true}) => {
       'success': true,
       'routing': true,
       'writes': writes,
@@ -85,18 +116,26 @@ Map<String, Object?> companiesBody({bool writes = true, bool writesB = false, bo
           : [
               {'key': kA, 'code': 'supernet', 'username': 'admin@alef', 'name': nameA, 'provider': 'sas4', 'color_index': 0,
                 'admin_id': '2251', 'ns': 'nsA', 'currency': 'IQD', 'home': true, 'status': 'ok',
-                'employee_id': 11, 'current': true, 'primary': true, 'writes': writes},
+                'employee_id': 11, 'current': true, 'primary': true, 'writes': writes, if (withPerms) 'permissions': permsA},
               {'key': kB, 'code': 'jt', 'username': 'admin@baa', 'name': nameB, 'provider': 'sas4', 'color_index': 1,
                 'admin_id': 'jt:6836', 'ns': 'nsB', 'currency': 'IQD', 'status': 'ok',
-                'employee_id': 12, 'current': false, 'primary': false, 'writes': writesB},
+                'employee_id': 12, 'current': false, 'primary': false, 'writes': writesB, if (withPerms) 'permissions': permsB},
               {'key': kC, 'code': 'earthlink', 'username': 'admin@jeem', 'name': nameC, 'provider': 'earthlink', 'color_index': 2,
                 'admin_id': 'earthlink:1025', 'ns': 'nsC', 'currency': 'IQD', 'status': 'ok',
-                'employee_id': 13, 'current': false, 'primary': false, 'writes': false},
+                'employee_id': 13, 'current': false, 'primary': false, 'writes': false, if (withPerms) 'permissions': permsC},
               {'key': kD, 'code': 'x', 'username': 'admin@dal', 'name': nameD, 'provider': 'sas4', 'color_index': 3,
                 'admin_id': '9001', 'ns': 'nsD', 'status': 'unavailable', 'reason': 'employee_disabled',
                 'message': 'حسابك في «$nameD» معطّل — راجع مديرها', 'employee_id': 14, 'writes': false},
             ],
     };
+
+/// ردّ الصفحات وخريطة باء بدلاً — لحالات صلاحيّةٍ بعينها.
+Map<String, Object?> companiesWithB(Map<String, bool> pb) {
+  final c = companiesBody();
+  final list = [for (final e in c['companies']! as List) Map<String, Object?>.from(e as Map)];
+  list[1]['permissions'] = pb;
+  return {...c, 'companies': list};
+}
 
 Map<String, Object?> subRow(int idx, String parent, {String first = 'مشترك', int debt = 0, bool el = false}) => {
       'idx': idx,
@@ -159,6 +198,9 @@ class EmpServer implements HttpClientAdapter {
 
   /// صفحةٌ تردّ 403 EMPLOYEE_DISABLED (معطّلٌ فيها) — بلا صدى إن [dropEcho].
   String? disabledFor;
+
+  /// رصيد باء مقنَّعٌ (null) بدل رقمه.
+  bool maskB = false;
 
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
@@ -233,8 +275,9 @@ class EmpServer implements HttpClientAdapter {
       return json(200, {'success': true, 'message': 'تم التسديد', 'data': {'new_balance': 0}}, headers: h);
     }
     if (get && path == '/api/v2/admin-widgets') {
-      // باء بلا reports.financial ⇒ الخادم يقنّع الرصيد (null)
-      final bal = {kA: 150000, kB: null, kC: 90000}[key];
+      // ساس الخادم لا يقنّع رصيد الموظّف (ايرث لنك/فايبر اكس/المُضافة وحدها) — باء يردّ رقماً حقيقيّاً، والتطبيق لا يعرضه بلا
+      // reports.financial في خريطتها. [maskB]: خادمٌ يقنّعه (null) كمزوّدٍ يفعل.
+      final bal = {kA: 150000, kB: maskB ? null : 77000, kC: 90000}[key];
       return json(200, {'success': true, 'balance': bal, 'points': bal == null ? null : 0}, headers: h);
     }
     if (get && path == '/api/reports/finance') {
@@ -275,6 +318,9 @@ class EmpServer implements HttpClientAdapter {
         'total': 7000,
         'routed_writes': true,
       }, headers: h);
+    }
+    if (get && path == '/api/v2/settlements/current') {
+      return json(200, {'success': true, 'data': {'cash': 1000, 'can_settle': false}}, headers: h);
     }
     if (get && path == '/api/v2/online-users') return json(200, {'success': true, 'data': const []}, headers: h);
     if (get && path == '/api/v2/subscribers-usage') return json(200, {'success': true, 'data': const {}}, headers: h);

@@ -66,6 +66,10 @@ class MergedDevicesApi {
   /// أجهزة [c] — موجَّهةً لشركتها، أو بطلب الجلسة نفسها إن كانت المفتوحة ([open]). لا يرمي.
   static Future<MergedDevicesPart> one(MergedCompany c, {bool open = false}) async {
     final failed = 'تعذّر جلب أجهزة «${c.name}» الآن';
+    // «كل الصفحات»: لا devices.view له في هذه الصفحة ⇒ لا تُطلب أجهزتها، وتُسمّى (والفحص الشامل لا يشملها)
+    if (MergedMode.pagePerm(c.key, 'devices.view') == false) {
+      return MergedDevicesPart(company: c, error: '«${c.name}»: ${MergedMode.noAccess('أجهزتها')}', open: open);
+    }
     if (!CompanyRoute.keyRe.hasMatch(c.key) || c.adminId.trim().isEmpty) {
       return MergedDevicesPart(company: c, error: failed, open: open);
     }

@@ -135,7 +135,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
           mac: _searchField == 'mac' ? _searchValue : null,
         );
     if (_mergedOn) {
-      final m = await loadMergedReport<SessionRow>(supports: _servesSessions, fetch: (_) => fetch());
+      final m = await loadMergedReport<SessionRow>(perms: const ['reports.sessions'], supports: _servesSessions, fetch: (_) => fetch());
       if (!mounted || gen != _gen || !_mergedOn) return;
       setState(() {
         _loading = false;

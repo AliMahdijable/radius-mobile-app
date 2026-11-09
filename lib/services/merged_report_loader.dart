@@ -2,10 +2,18 @@ import '../api/company_route.dart';
 import '../api/merged_dashboard_api.dart';
 import '../models/merged_company.dart';
 import 'merged_mode.dart';
+import 'merged_text.dart';
 
 /// تقرير شركةٍ واحدة في «كل الشركات». [rows] null = لم يُقرأ (تعذّر أو نوعها لا يخدمه) — لا قائمةٌ فارغة تبدو ناجحة.
 class MergedReportPart<T> {
-  const MergedReportPart({required this.company, this.rows, this.error, this.note, this.unsupported = false});
+  const MergedReportPart({
+    required this.company,
+    this.rows,
+    this.error,
+    this.note,
+    this.unsupported = false,
+    this.denied = false,
+  });
   final MergedCompany company;
   final List<T>? rows;
 
@@ -17,6 +25,9 @@ class MergedReportPart<T> {
 
   /// نوع الشركة لا يخدم هذا التقرير (الخادم لا يوجّهه لها) — لم يُطلب.
   final bool unsupported;
+
+  /// «كل الصفحات»: لا صلاحيّة للموظّف على هذا التقرير في هذه الصفحة (خريطتها) — لم يُطلب، ويُسمّى.
+  final bool denied;
 
   bool get ok => rows != null;
 }
@@ -55,6 +66,7 @@ class MergedReport<T> {
   String? problemOf(MergedCompany c, {required String failedLabel, required String unsupportedLabel}) {
     final p = partOf(c.key);
     if (p == null || p.ok) return null;
+    if (p.denied) return 'merged.chip_denied'.trm();
     return p.unsupported ? unsupportedLabel : failedLabel;
   }
 
@@ -81,10 +93,14 @@ class MergedReport<T> {
 /// «كل الشركات» في تقارير القوائم (٧ نوفمبر — المالك: «التقارير… بنفس فكرة عرض المشتركين والاختيار بين الكل وشركة»): تقرير كلّ
 /// شركةٍ بطلبٍ موجَّه لها (x-company-key) — قائمتان معاً على الأكثر، وربطان للمدير نفسه يُطلبان مرّة. فشل شركةٍ يُحفظ باسمها ولا يوقف
 /// البقيّة؛ وشركةٌ لا يخدم نوعُها التقرير ([supports]) لا تُطلب وتُسمّى.
+///
+/// [perms] (٩ نوفمبر — «كل الصفحات» للموظّف): مفاتيح التقرير (أيٌّ منها) — صفحةٌ لا يملك فيها أيّاً منها بخريطتها لا تُطلب، وتُسمّى
+/// «لا صلاحيّة لك على هذا التقرير فيها». المالك أو خادمٌ بلا خرائط ⇒ كما كان.
 Future<MergedReport<T>> loadMergedReport<T>({
   required bool Function(MergedCompany c) supports,
   required Future<({bool ok, List<T> rows, String? error, String? note})> Function(MergedCompany c) fetch,
   int concurrency = 2,
+  List<String> perms = const [],
 }) async {
   final cs = MergedDashboardApi.countable();
   final missing = MergedMode.companies.where((c) => !c.usable).toList();
@@ -96,6 +112,10 @@ Future<MergedReport<T>> loadMergedReport<T>({
       final c = cs[i];
       if (!supports(c)) {
         out[i] = MergedReportPart<T>(company: c, unsupported: true);
+        continue;
+      }
+      if (perms.isNotEmpty && MergedMode.pagePermAny(c.key, perms) == false) {
+        out[i] = MergedReportPart<T>(company: c, error: MergedMode.noAccess('هذا التقرير فيها'), denied: true);
         continue;
       }
       try {

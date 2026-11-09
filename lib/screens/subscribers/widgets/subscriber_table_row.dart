@@ -35,6 +35,7 @@ import 'subscriber_columns.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../services/receipt_service.dart';
 import 'usage_on_demand.dart';
+import '../../../services/merged_mode.dart';
 
 /// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
 /// سحبه المدير). لا يسقط عمود حين يضيق الجدول: **الجدول كلّه** يتمرّر يميناً ويساراً قطعةً واحدة — لا جزءٌ ثابت ولا
@@ -583,7 +584,8 @@ class _RowActions extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     Widget quick(IconData icon, String tip, String perm, Future<Object?> Function() run) {
-      final locked = !Perms.has(perm);
+      // «كل الصفحات» للموظّف: صلاحيّته في صفحة الصفّ (خريطتها) — وإلّا Perms كما كان
+      final locked = !MergedMode.can(sub.companyKey, perm);
       if (locked && !permShown([perm])) return const SizedBox(width: 32);
       return AnimatedOpacity(
         duration: const Duration(milliseconds: 120),
@@ -660,21 +662,21 @@ Future<void> showSubscriberRowMenu(
   final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
   final items = <_MenuEntry?>[
     _gate('subscribers.activate', LucideIcons.zap, 'desktop.act_renew'.tr(),
-        () => showActivateSheet(context, s)),
+        () => showActivateSheet(context, s), company: s.companyKey),
     _gate('subscribers.extend', LucideIcons.calendarPlus, 'subscribers.op_extend'.tr(),
-        () => showExtendSheet(context, s)),
+        () => showExtendSheet(context, s), company: s.companyKey),
     _gate('subscribers.edit', LucideIcons.pencil, 'subscribers.op_edit'.tr(),
-        () => showEditSubscriberSheet(context, s)),
+        () => showEditSubscriberSheet(context, s), company: s.companyKey),
     null,
     if (s.hasDebt)
       _gate('subscribers.pay_debt', LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(),
-          () => showPayDebtSheet(context, s)),
+          () => showPayDebtSheet(context, s), company: s.companyKey),
     _gate('subscribers.add_debt', LucideIcons.plus, 'subscribers.op_add_debt'.tr(),
-        () => showAddDebtSheet(context, s)),
+        () => showAddDebtSheet(context, s), company: s.companyKey),
     _gate('subscribers.add_credit', LucideIcons.coins, 'إضافة رصيد',
-        () => showAddCreditSheet(context, s)),
+        () => showAddCreditSheet(context, s), company: s.companyKey),
     _gate('discounts.manage', LucideIcons.tag, 'subscribers.op_quick_discount'.tr(),
-        () => showQuickDiscountSheet(context, s)),
+        () => showQuickDiscountSheet(context, s), company: s.companyKey),
     if (s.idx != null)
       _gate(
           'subscriber_prices.manage',
@@ -685,12 +687,12 @@ Future<void> showSubscriberRowMenu(
                 idx: s.idx!,
                 name: s.fullName.trim().isNotEmpty ? s.fullName : s.username,
                 companyKey: s.companyKey,
-              )),
+              ), company: s.companyKey),
     null,
     _MenuEntry(LucideIcons.chartLine, 'subscribers.op_consumption'.tr(),
         () => showConsumptionSheet(context, s)),
     _gate('subscribers.view_activity', LucideIcons.history, 'subscribers.op_movements'.tr(),
-        () => showMovementsSheet(context, s)),
+        () => showMovementsSheet(context, s), company: s.companyKey),
     _MenuEntry(LucideIcons.printer, 'printer.receipt'.tr(), () async {
       await printSubscriberReceipt(context, s);
       return null;
@@ -772,10 +774,11 @@ class _Hidden extends _MenuEntry {
 }
 
 /// يملكه ⇒ حيّ؛ لا يملكه ويمكن أن يُمنحه ⇒ مقفل بمكانه؛ لا يُمنح لدوره ⇒ مخفيّ (كالتفاصيل).
-_MenuEntry _gate(String perm, IconData icon, String label, Future<Object?> Function() run) {
+_MenuEntry _gate(String perm, IconData icon, String label, Future<Object?> Function() run, {String? company}) {
   // موظّف المشروع الوطنيّ: «تعديل» بمفتاحٍ مُنحه للتعليق في البوّابة لا يخدمه الوطنيّ — مخفيٌّ كصفحة المشترك ([providerHidesAction])
   if (Perms.isEmployee && providerHidesAction(perm)) return const _Hidden();
-  if (Perms.has(perm)) return _MenuEntry(icon, label, run);
+  // «كل الصفحات» للموظّف: صلاحيّته في صفحة الصفّ [company] (خريطتها) — وإلّا Perms كما كان
+  if (MergedMode.can(company, perm)) return _MenuEntry(icon, label, run);
   if (permShown([perm])) return _MenuEntry(icon, label, run, locked: true);
   return const _Hidden();
 }

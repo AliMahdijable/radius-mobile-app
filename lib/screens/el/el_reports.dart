@@ -571,7 +571,8 @@ class _PackageRow extends StatelessWidget {
 /// الأخرى على شارتها «ليست ايرث لنك» ولا تُذكر في سطره.
 class _ElMerged {
   static Future<MergedReport<T>> load<T>(Future<({bool ok, List<T> rows, String? error, String? note})> Function() fetch) =>
-      loadMergedReport<T>(supports: (c) => c.provider == MergedProvider.earthlink, fetch: (_) => fetch());
+      loadMergedReport<T>(
+          perms: const ['reports.activations'], supports: (c) => c.provider == MergedProvider.earthlink, fetch: (_) => fetch());
 
   static Widget strip<T>(MergedReport<T> m) => MergedCompanyStrip(
         // شركات ايرث لنك وحدها (٨ نوفمبر — المالك: «مافهمته… ولاشركه يظهر بيها الباقات»)

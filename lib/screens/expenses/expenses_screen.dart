@@ -36,8 +36,11 @@ class ExpensesScreen extends StatefulWidget {
 
   /// «كل الشركات»: بغلاف قسمها (صرفيات الشركة المختارة بمكانها — expenses_routed) — من «قوائم أخرى» ومن «+ إضافة صرفية» لشركةٍ
   /// غير المفتوحة معاً.
-  static Widget mergedPage() =>
-      const MergedSection(prefixes: ['/api/admin/expenses', '/api/v2/expenses'], child: ExpensesScreen());
+  static Widget mergedPage() => MergedSection(
+      prefixes: const ['/api/admin/expenses', '/api/v2/expenses'],
+      perms: const ['reports.expenses'],
+      lockTitle: 'more.expenses'.tr(),
+      child: const ExpensesScreen());
 
   @override
   State<ExpensesScreen> createState() => _ExpensesScreenState();

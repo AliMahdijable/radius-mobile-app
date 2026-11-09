@@ -106,6 +106,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
       final openAdmin = await MergedMode.openAdminId();
       // الوطني بلا ديون محذوفين بعد (الخادم يرفضها)، وفايبر اكس من الموقع — لا تُطلبان
       final m = await loadMergedReport<DeletedDebtsPage>(
+        perms: const ['deleted_debts.view'],
         supports: _servedFor,
         fetch: (c) async {
           final r = await DeletedDebtsApi.list();

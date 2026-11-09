@@ -1483,6 +1483,7 @@
     "chip_unavailable": "متوقّفة",
     "chip_big": "كبيرة",
     "chip_failed": "تعذّرت",
+    "chip_denied": "لا صلاحيّة",
     "strip_hint": "اضغط شركة لعرضها وحدها",
     "strip_focused": "تعرض «{}» وحدها",
     "all_chip": "الكل",

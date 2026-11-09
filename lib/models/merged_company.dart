@@ -26,6 +26,7 @@ class MergedCompany {
     this.current = false,
     this.primary = false,
     this.writes,
+    this.permissions,
   });
 
   /// c + 12 hex — هو x-company-key.
@@ -80,6 +81,17 @@ class MergedCompany {
 
   /// الخادم يقبل الكتابة عليها من «كل الصفحات» — null: لم يقلها (المالك، أو خادمٌ أقدم).
   final bool? writes;
+
+  /// خريطة صلاحيّاته في هذه الصفحة (الافتراضيّة + المحفوظة لصفّه فيها — مفاتيح `/api/v2/employees/me` نفسها). null: المالك، أو
+  /// خادمٌ أقدم بلاها ⇒ يبقى ما كان (صلاحيّات صفحته الحاليّة، والخادم يحكم الباقي).
+  final Map<String, bool>? permissions;
+
+  static Map<String, bool>? _perms(Object? v) {
+    if (v is! Map) return null;
+    return Map<String, bool>.unmodifiable({
+      for (final e in v.entries) '${e.key}': e.value == true || e.value == 1 || e.value == '1',
+    });
+  }
 
   /// FTTH يعمل من الويب وحده الآن (الخادم يرفضه من التطبيق: ftth_web_only).
   // فايبر اكس لا تمرّ «كل الشركات» بالخادم أصلاً (companyRouting) — كالوطنيّ: «من الموقع» لا ساسٌ يُطلب.
@@ -152,6 +164,7 @@ class MergedCompany {
         current: row['current'] == true,
         primary: row['primary'] == true,
         writes: row['writes'] is bool ? row['writes'] as bool : null,
+        permissions: _perms(row['permissions']),
       ));
     }
     return out;

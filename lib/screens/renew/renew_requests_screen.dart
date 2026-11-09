@@ -21,6 +21,8 @@ class RenewRequestsScreen extends StatefulWidget {
   static Widget mergedPage() => const MergedSection(
       readOnly: true,
       prefixes: ['/api/v2/portal/renew-requests', '/api/v2/portal/renew-settings'],
+      perms: ['renew_requests.use'],
+      lockTitle: 'طلبات التفعيل',
       child: RenewRequestsScreen());
 
   @override

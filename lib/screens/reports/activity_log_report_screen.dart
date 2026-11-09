@@ -139,6 +139,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     if (_mergedOn) {
       // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — نطاق المفتوحة لا يُرسل لغيرها
       final m = await loadMergedReport<ActivityRow>(
+        perms: const ['reports.activity_log'],
         supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
         fetch: (c) async {
           final r = await ReportsApi.activities(

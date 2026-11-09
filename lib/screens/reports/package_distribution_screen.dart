@@ -172,6 +172,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
     if (_mergedOn) {
       // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — طلبٌ موجَّه لكلٍّ منها
       final m = await loadMergedReport<PackageReport>(
+        perms: const [_perm],
         supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
         fetch: (c) async {
           final r = await PackageReportApi.fetch(from: _range.from, to: _range.to, userIds: [c.adminId]);

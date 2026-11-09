@@ -164,7 +164,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool get _canPackages => _allows('reports.packages');
   bool get _canActivity => _allows('reports.daily_activations');
   bool get _canActivityLog => _allows('reports.activity_log');
-  bool get _canWa => !_elEmployee || Perms.hasAny(_waKeys);
+  bool get _canWa => (!_elEmployee || Perms.hasAny(_waKeys)) && !_focusDenied(_waKeys);
+
+  /// لم يصل ردّ فحص واتساب (الموظّف: رفضٌ لا انقطاع ⇒ الحبّة تغيب). «كل الصفحات»: حال الصفحات ([_mergedWa]) لا حال الوضع العاديّ —
+  /// `_waLive` لا يُملأ في الوضع، فكانت الحبّة تغيب عن الموظّف فيه دائماً.
+  bool get _waMissing => MergedMode.active.value ? _mergedWa == null : _waLive == null;
+
+  /// «كل الصفحات» (٩ نوفمبر): الصفحة المختارة في الشريط لا يملك فيها الموظّف أيّ مفتاحٍ من [keys] (خريطتها) — قسمها لا يُعرض
+  /// لها كما لا يُعرض في وضعه العاديّ. «الكل» ⇒ كلّ صفحةٍ بخريطتها داخل المجموع (MergedDashboardApi).
+  bool _focusDenied(List<String> keys) =>
+      MergedMode.active.value && MergedMode.pagePermAny(MergedMode.focused?.key, keys) == false;
 
   /// مفاتيح `connection-status` في الخادم (`requireWhatsAppAdminContext`).
   static const _waKeys = [
@@ -467,7 +476,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final p = _mergedList?.partOf(c.key);
     if (p == null) return null;
     if (p.bigTotal != null) return 'merged.chip_big'.trm();
-    if (p.rows == null) return 'merged.chip_failed'.trm();
+    if (p.rows == null) return p.denied ? 'merged.chip_denied'.trm() : 'merged.chip_failed'.trm();
     return null;
   }
 
@@ -979,7 +988,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     actions: [
                       if (_shown('wa_banner') &&
                           _canWa &&
-                          !(Perms.isEmployee && _waLoaded && _waLive == null))
+                          !(Perms.isEmployee && _waLoaded && _waMissing))
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: Perms.has('whatsapp.connect') || MergedMode.active.value ? _onWhatsAppTap : null,
@@ -1020,7 +1029,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // يكون رفضاً لا انقطاعاً — الحبّة تغيب. والمالك كما كان.
                 showWhatsApp: _shown('wa_banner') &&
                     _canWa &&
-                    !(Perms.isEmployee && _waLoaded && _waLive == null),
+                    !(Perms.isEmployee && _waLoaded && _waMissing),
                 // تنبيه اشتراك **الحساب** (إيميل المالك): موظّف ايرث لنك يدخل
                 // بلا حساب، فلا يملكه ولا يفعّله.
                 showSubscription: !_elEmployee,
@@ -1794,7 +1803,8 @@ class _MergedWaSheet extends StatelessWidget {
         children: [
           for (final r in wa.rows) ...[
             Builder(builder: (context) {
-              final st = _state(r.status);
+              // «كل الصفحات»: صفحةٌ بلا مفتاح واتساب للموظّف لم تُفحص — «لا صلاحيّة» لا «تعذّر الفحص»
+              final st = wa.isDenied(r.company.key) ? (text: MergedMode.noAccess('واتسابها'), tone: AppTone.neutral) : _state(r.status);
               final open = openAdmin != null && openAdmin!.isNotEmpty && r.company.adminId == openAdmin;
               final phone = r.status?.phone.trim() ?? '';
               return Container(
@@ -1858,6 +1868,7 @@ class _MergedWaSheet extends StatelessWidget {
             const SizedBox(height: Sp.sm),
           ],
           if (wa.rows.any((r) => r.status?.connected != true &&
+              !wa.isDenied(r.company.key) &&
               !(openAdmin != null && r.company.adminId == openAdmin)))
             Text(
               'dashboard.wa_other_hint'.trm(),

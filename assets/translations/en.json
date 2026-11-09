@@ -1483,6 +1483,7 @@
     "chip_unavailable": "Unavailable",
     "chip_big": "Large",
     "chip_failed": "Failed",
+    "chip_denied": "No access",
     "strip_hint": "Tap a company to show it alone",
     "strip_focused": "Showing “{}” alone",
     "all_chip": "All",

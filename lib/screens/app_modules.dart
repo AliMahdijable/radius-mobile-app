@@ -360,6 +360,7 @@ List<AppModule> buildAppModules() {
         // «كل الشركات» (٨ نوفمبر): كارتات الشركة المختارة للعرض (الشراء والنقل من صفحتها) — الساس وايرث لنك (الخادم b42e0dc)
         page: () => MergedSection(
             readOnly: true,
+            perms: cardKeys,
             prefixes: const ['/api/v2/cards'],
             serves: (c) => c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink,
             servesNote: 'merged.serves_sas_el'.trm(),
@@ -377,7 +378,8 @@ List<AppModule> buildAppModules() {
         brandGlyph: AppColors.channelTelegram,
         title: 'تلغرام',
         subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/telegram'], child: TelegramScreen()),
+        page: () => MergedSection(
+            readOnly: true, prefixes: const ['/api/telegram'], perms: tgGate, lockTitle: 'تلغرام', child: const TelegramScreen()),
       ),
     // التبليغات (broadcast) — إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء. موظّف ايرث لنك لا يراها.
     if (permShown(const ['whatsapp.broadcast']))
@@ -390,10 +392,12 @@ List<AppModule> buildAppModules() {
         brandGlyph: AppColors.channelWhatsApp,
         title: 'more.broadcast'.tr(),
         subtitle: 'more.broadcast_hint'.tr(),
-        page: () => const MergedSection(
+        page: () => MergedSection(
             readOnly: true,
-            prefixes: ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
-            child: BroadcastScreen()),
+            prefixes: const ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
+            perms: const ['whatsapp.broadcast'],
+            lockTitle: 'more.broadcast'.tr(),
+            child: const BroadcastScreen()),
       ),
     // حالة الرسائل — كل رسائل WhatsApp بأنواعها مع فلاتر + بحث + retry.
     if (permShown(logKeys))
@@ -464,7 +468,12 @@ List<AppModule> buildAppModules() {
         tone: AppTone.success,
         title: 'more.discounts'.tr(),
         subtitle: 'more.discounts_hint'.tr(),
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/discounts', '/api/v2/discounts'], child: DiscountsScreen()),
+        page: () => MergedSection(
+            readOnly: true,
+            prefixes: const ['/api/discounts', '/api/v2/discounts'],
+            perms: const ['discounts.view'],
+            lockTitle: 'more.discounts'.tr(),
+            child: const DiscountsScreen()),
       ),
     // «أسعار المشتركين» — سعر بيعٍ ثابت لمشتركٍ بعينه، بجانب الخصومات لأنّه أخوها.
     if (permShown(const ['subscriber_prices.view']))
@@ -489,7 +498,12 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.employees'.tr(),
         subtitle: 'more.employees_hint'.tr(),
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/v2/employees'], child: EmployeesScreen()),
+        page: () => MergedSection(
+            readOnly: true,
+            prefixes: const ['/api/v2/employees'],
+            perms: const ['employees.view'],
+            lockTitle: 'more.employees'.tr(),
+            child: const EmployeesScreen()),
       ),
     // بوابة المشترك — مفتوحةٌ لكلّ فاعل (الرمز يحتاجه الموظّف أيضاً)، والتخصيص داخلها بـ`settings.edit`.
     // الوطنيّ وحده بمكانه مقفلاً بالسبب.
@@ -534,6 +548,7 @@ List<AppModule> buildAppModules() {
           // ٨ نوفمبر (الخادم 99e1913): قراءةٌ موجَّهة لكلّ شركة ايرث لنك — غيرها «غير متاح» بسببه
           page: () => MergedSection(
               readOnly: true,
+              perms: const ['reports.financial'],
               prefixes: const ['/api/v2/el/prepaid-needed'],
               serves: (c) => c.provider == MergedProvider.earthlink,
               servesNote: 'merged.serves_el'.trm(),

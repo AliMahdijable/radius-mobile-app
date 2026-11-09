@@ -283,6 +283,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       final to = _dateTo == null ? null : _fmtDate(_dateTo!);
       final data = <String, CompanyManagerDebts>{};
       final m = await loadMergedReport<_MgrEvent>(
+        perms: const ['reports.manager_debts'],
         supports: (c) => c.provider == MergedProvider.sas4,
         fetch: (c) async {
           final r = await loadCompanyManagerDebts(from: from, to: to);

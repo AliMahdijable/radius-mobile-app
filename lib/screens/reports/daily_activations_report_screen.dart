@@ -156,6 +156,7 @@ class _DailyActivationsReportScreenState
     if (_mergedOn) {
       // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — نطاق المفتوحة لا يُرسل لغيرها
       final m = await loadMergedReport<DailyActivationRow>(
+        perms: const ['reports.daily_activations'],
         supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
         fetch: (c) async {
           final r = await ReportsApi.dailyActivations(from: _range.from, to: _range.to, userIds: [c.adminId]);

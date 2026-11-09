@@ -30,7 +30,11 @@ class SettlementsScreen extends StatefulWidget {
 
   /// «كل الشركات»: الشاشة بغلاف قسمها (صندوق الشركة المختارة وتسويتها بمكانها — settlements_routed) — من «قوائم أخرى» ومن
   /// «تسوية الحساب ←» (الصرفيات، التقرير الماليّ) معاً، فلا تُفتح يوماً بلا شريطها على صندوق المفتوحة.
-  static Widget mergedPage() => const MergedSection(prefixes: ['/api/v2/settlements'], child: SettlementsScreen());
+  static Widget mergedPage() => MergedSection(
+      prefixes: const ['/api/v2/settlements'],
+      perms: const ['settlements.view'],
+      lockTitle: 'more.settlements'.tr(),
+      child: const SettlementsScreen());
 
   @override
   State<SettlementsScreen> createState() => _SettlementsScreenState();

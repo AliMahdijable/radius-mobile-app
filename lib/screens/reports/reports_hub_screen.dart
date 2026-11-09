@@ -64,15 +64,19 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
   }
 
   /// «كل الشركات» وفيها شركة ساس صالحة — ديون مدرائها تُقرأ من هنا مهما كانت المفتوحة.
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): صفحة ساسٍ يملك فيها reports.manager_debts بخريطتها (بلا خريطة ⇒ كما كان).
   bool get _mergedSas =>
-      MergedMode.active.value && MergedMode.usable.any((c) => c.provider == MergedProvider.sas4);
+      MergedMode.active.value &&
+      MergedMode.usable
+          .any((c) => c.provider == MergedProvider.sas4 && (MergedMode.pagePerm(c.key, 'reports.manager_debts') ?? true));
 
   /// «كل الشركات» وفيها شركةٌ تُقرأ ديون محذوفيها (ساس، ايرث لنك، المُضافة).
   bool get _mergedDd =>
       MergedMode.active.value &&
       Perms.has('deleted_debts.view') &&
       MergedMode.usable.any((c) =>
-          c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit);
+          (c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit) &&
+          (MergedMode.pagePerm(c.key, 'deleted_debts.view') ?? true));
 
   Future<void> _loadDeletedDebts() async {
     final p = await DeletedDebtsHubSummary.fetch(previous: _deletedDebts);

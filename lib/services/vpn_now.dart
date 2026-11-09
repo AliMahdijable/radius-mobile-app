@@ -11,6 +11,7 @@ import '../core/net/vpn_pipe.dart';
 import 'agent_net_presence.dart';
 import 'connection_alerts.dart';
 import 'device_warm_service.dart';
+import 'merged_mode.dart';
 import 'merged_text.dart';
 
 export '../api/vpn_now_api.dart' show VpnNowKind, VpnSubReading, VpnDeviceResult, VpnNowResult;
@@ -122,6 +123,15 @@ class VpnNowJob extends ChangeNotifier {
     for (var i = 0; i < scope.length; i++) {
       final c = scope[i];
       if (gen != _gen) return;
+      // «كل الصفحات» للموظّف: الفحص عبر VPN الخادم لكلّ صفحةٍ بخريطة صلاحيّاته فيها — بلاها لا يُبدأ، وتُسمّى
+      final keys = kind == VpnNowKind.devices ? const ['devices.deep_check_vpn'] : const ['subscribers.vpn_check', 'conn_alerts.use'];
+      if (MergedMode.pagePermAny(c.key, keys) == false) {
+        final why = '«${c.name}»: ${MergedMode.noAccess(kind == VpnNowKind.devices ? 'فحص أجهزتها عبر VPN' : 'فحص مشتركيها عبر VPN')}';
+        VpnNow._dropCompany(c.key);
+        VpnNow._companyNotes[c.key] = why;
+        notes.add(why);
+        continue;
+      }
       final head = scope.length == 1 ? 'يفحص مشتركي «${c.name}»' : 'يفحص مشتركي «${c.name}» (${i + 1} من ${scope.length})';
       line = '$head…';
       value = null;

@@ -66,6 +66,7 @@ class MergedSection extends StatefulWidget {
     this.serves,
     this.servesNote,
     this.lockTitle,
+    this.perms = const [],
   })  : openOnlyTitle = null,
         openOnlyReason = null;
 
@@ -82,6 +83,7 @@ class MergedSection extends StatefulWidget {
   })  : prefixes = const [],
         readOnly = false,
         lockTitle = null,
+        perms = const [],
         openOnlyTitle = title,
         openOnlyReason = reason;
 
@@ -103,6 +105,10 @@ class MergedSection extends StatefulWidget {
 
   /// عنوان القسم لصفحة القفل (قسمٌ موجَّه لا يخدم الشركة المختارة).
   final String? lockTitle;
+
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): مفاتيح القسم (أيٌّ منها — قفله في «قوائم أخرى» نفسه). صفحةٌ مختارة لا يملك فيها أيّاً منها
+  /// بخريطتها ⇒ لا توجيه ولا طلب، وبطاقة «لا صلاحيّة» باسمها. المالك أو خادمٌ بلا خرائط ⇒ كما كان.
+  final List<String> perms;
 
   /// ما يعرضه أقرب قسم — null خارج قسمٍ أو خارج «كل الشركات».
   static MergedSectionInfo? of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_MergedSectionScope>()?.info;
@@ -197,6 +203,24 @@ class _MergedSectionState extends State<MergedSection> {
         ),
       );
     }
+    if (i != null &&
+        f != null &&
+        !i.open &&
+        widget.perms.isNotEmpty &&
+        MergedMode.pagePermAny(f.key, widget.perms) == false) {
+      CompanyRoute.leaveSection(this);
+      return _MergedSectionScope(
+        info: MergedSectionInfo(company: f, open: false, readOnly: widget.readOnly, served: false),
+        child: _OpenOnlyPage(
+          key: ValueKey('merged-denied-${f.key}'),
+          title: widget.lockTitle ?? '',
+          reason: '',
+          company: f,
+          served: false,
+          denied: true,
+        ),
+      );
+    }
     _apply(i);
     if (i != null && i.openOnly && i.other) {
       return _MergedSectionScope(
@@ -222,13 +246,23 @@ class _MergedSectionState extends State<MergedSection> {
 
 /// [MergedSection.openOnly] وشركةٌ غير المفتوحة مختارة: الشريط ثمّ بطاقة القفل بسببها و«بدّل إليها» (ورقة «شركاتي» تفتحها بنفسها).
 class _OpenOnlyPage extends StatefulWidget {
-  const _OpenOnlyPage({super.key, required this.title, required this.reason, required this.company, this.served = true});
+  const _OpenOnlyPage({
+    super.key,
+    required this.title,
+    required this.reason,
+    required this.company,
+    this.served = true,
+    this.denied = false,
+  });
   final String title;
   final String reason;
   final MergedCompany company;
 
   /// false = القسم لا يخدم هذه الشركة أصلاً ([MergedSection.serves]) — السبب وحده بلا «بدّل إليها».
   final bool served;
+
+  /// «كل الصفحات» للموظّف: لا صلاحيّة له على القسم في هذه الصفحة ([MergedSection.perms]) — بلا «انتقل إليها».
+  final bool denied;
 
   @override
   State<_OpenOnlyPage> createState() => _OpenOnlyPageState();
@@ -285,13 +319,19 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
                       Icon(LucideIcons.lock, size: 26, color: AppColors.textMid),
                       const SizedBox(height: Sp.md),
                       Text(
-                        (widget.served ? 'merged.open_only_title' : 'merged.not_served_title').trm(args: [widget.title, name]),
+                        widget.denied
+                            ? MergedMode.noAccess(widget.title.isEmpty ? 'هذا القسم في «$name»' : '«${widget.title}» في «$name»')
+                            : (widget.served ? 'merged.open_only_title' : 'merged.not_served_title').trm(args: [widget.title, name]),
                         textAlign: TextAlign.center,
                         style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 15, height: 1.5),
                       ),
                       const SizedBox(height: Sp.sm),
                       Text(
-                        widget.served ? 'merged.open_only_body'.trm(args: [widget.reason]) : widget.reason,
+                        widget.denied
+                            ? 'صلاحيّاتك في كلّ صفحةٍ يحدّدها مديرها — بقيّة صفحاتك كما هي'
+                            : widget.served
+                                ? 'merged.open_only_body'.trm(args: [widget.reason])
+                                : widget.reason,
                         textAlign: TextAlign.center,
                         style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 13, height: 1.6),
                       ),

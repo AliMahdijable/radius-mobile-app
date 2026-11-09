@@ -152,6 +152,32 @@ class MergedMode {
   /// صلاحيّته في تلك الصفحة غيرها هنا: رفضها يُسمّيها.
   static String deniedText(MergedCompany c) => 'ليس لديك صلاحيّة لهذا في «${c.name}»';
 
+  // ── صلاحيّاته لكلّ صفحة (٩ نوفمبر — المنسّق: «حسب الصلاحيات المعطاه اله» لكلّ صفحة؛ الخادم يرسل `permissions` لكلّ صفحة) ──
+  // PermissionsService = صفحته الحاليّة وحدها؛ وكلّ بوّابةٍ في التطبيق تُطبَّق على كلّ صفحةٍ بخريطتها هي: ما لا يملكه هناك لا يُطلب
+  // ويُسمّى «لا صلاحيّة لك …» باسمها، ولا يُجمع. لا خريطة (المالك، خادمٌ أقدم) ⇒ ما كان (null من [pagePerm]).
+
+  /// صلاحيّة [perm] للموظّف في صفحة [key] من خريطتها — null: لا خريطة (المالك، أو خادمٌ أقدم، أو صفّ الوضع العاديّ بلا مفتاح).
+  static bool? pagePerm(String? key, String perm) {
+    if (!employeeSession || key == null) return null;
+    final m = companyOf(key)?.permissions;
+    if (m == null) return null;
+    return m[perm] == true;
+  }
+
+  /// أيٌّ من [perms] في صفحة [key] — null: لا خريطة.
+  static bool? pagePermAny(String? key, Iterable<String> perms) {
+    if (!employeeSession || key == null) return null;
+    final m = companyOf(key)?.permissions;
+    if (m == null) return null;
+    return perms.any((p) => m[p] == true);
+  }
+
+  /// صلاحيّة [perm] لصفّ صفحة [key] — خريطتها إن وُجدت، وإلّا صلاحيّات الجلسة (Perms) كما كان: لزرٍّ كان يقرأ Perms.has.
+  static bool can(String? key, String perm) => pagePerm(key, perm) ?? PermissionsService.has(perm);
+
+  /// «لا صلاحيّة لك على [what]» — سبب صفحةٍ خارج رقمٍ أو قائمة (يُسبق باسمها حيث يُعرض).
+  static String noAccess(String what) => 'لا صلاحيّة لك على $what';
+
   /// نصّ تعذّر [c] من ردّ الخادم ([body]، و[status] إن عُرف): رسالته إن وُجدت وإلّا [fallback] — كما كان للمالك حرفاً. وفي
   /// «كل الصفحات» للموظّف يُسمّي الصفحة دائماً: رفض صلاحيّته فيها (403 — صلاحيّاته هناك غيرها هنا) ⇒ [deniedText]، ورسالةٌ لا
   /// تذكرها تُسبق باسمها — فلا يُقرأ رفض صفحةٍ كأنّه للكلّ، ولا يُعدّ صفراً.
@@ -312,7 +338,14 @@ class MergedMode {
 
 /// قائمة شركةٍ واحدة في «كل الشركات».
 class MergedCompanyList {
-  const MergedCompanyList({required this.company, this.rows, this.partial = false, this.error, this.bigTotal});
+  const MergedCompanyList({
+    required this.company,
+    this.rows,
+    this.partial = false,
+    this.error,
+    this.bigTotal,
+    this.denied = false,
+  });
 
   final MergedCompany company;
 
@@ -327,6 +360,9 @@ class MergedCompanyList {
 
   /// حسابٌ كبير (≥ BigSubscribersApi.threshold) — قائمته الكاملة لا تُجلب هنا (٨٩ ألفاً ≈ ٩٦ث)؛ يُفتح منفرداً.
   final int? bigTotal;
+
+  /// «كل الصفحات»: لا صلاحيّة له على مشتركي هذه الصفحة (خريطتها بلا subscribers.view) — لم تُطلب، وتُسمّى ولا تُعدّ.
+  final bool denied;
 }
 
 /// الصفوف المدموجة وحال قوائم الشركات تحتها.
@@ -416,8 +452,15 @@ class MergedSubscribers {
   static String _err(MergedCompany c, Object? body, String fallback, [int? status]) =>
       MergedMode.failText(c, body, fallback, status: status);
 
-  /// قائمة شركة: صفٌّ واحد يحسم «كبير؟» ثمّ القائمة الكاملة.
+  /// قائمة شركة: صفٌّ واحد يحسم «كبير؟» ثمّ القائمة الكاملة. صفحةٌ لا يرى الموظّف مشتركيها ⇒ لا طلب، وتُسمّى.
   static Future<MergedCompanyList> fetchCompany(MergedCompany c, {bool fresh = false}) {
+    if (MergedMode.pagePerm(c.key, 'subscribers.view') == false) {
+      return Future.value(MergedCompanyList(
+        company: c,
+        error: '«${c.name}»: ${MergedMode.noAccess('مشتركيها')}',
+        denied: true,
+      ));
+    }
     final hit = _cache[c.key];
     if (!fresh && hit != null && DateTime.now().difference(hit.at) < ttl) return Future.value(hit.value);
     final running = _inFlight[c.key];
