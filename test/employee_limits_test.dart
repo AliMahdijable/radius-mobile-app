@@ -88,6 +88,22 @@ void main() {
       expect(EmployeeLimitsFields.initialText(500000), '500,000');
       expect(EmployeeLimitsFields.initialText(null), '');
     });
+
+    test('أسماء عمليّات المحجوز بالعربيّ — ومنها «تعبئة محفظة» (الوطنيّ على الدين)', () {
+      const ops = {
+        'activate': 'تفعيل',
+        'activate_card': 'تفعيل',
+        'pay_debt': 'تسديد دين',
+        'add_debt': 'إضافة دين',
+        'sale': 'بيع',
+        'create': 'إضافة مشترك',
+        'wallet_topup': 'تعبئة محفظة',
+      };
+      for (final e in ops.entries) {
+        final h = EmployeeLimitHold(id: 1, op: e.key, cash: 0, debt: 1000, status: 'unknown');
+        expect(h.opLabel, e.value, reason: e.key);
+      }
+    });
   });
 
   group('بطاقة الموظّف', () {

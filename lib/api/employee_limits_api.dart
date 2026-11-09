@@ -175,6 +175,7 @@ class EmployeeLimitHold {
         'add_debt' => 'إضافة دين',
         'sale' => 'بيع',
         'create' => 'إضافة مشترك',
+        'wallet_topup' => 'تعبئة محفظة',
         _ => op,
       };
 
