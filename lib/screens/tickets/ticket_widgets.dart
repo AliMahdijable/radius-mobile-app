@@ -200,6 +200,7 @@ class TicketInboxSection extends StatelessWidget {
         final b = TicketsState.bell.value;
         if (!TicketsState.inBell || b.items.isEmpty) return const SizedBox.shrink();
         final count = TicketsState.bellBadge;
+        final more = TicketsState.bellWaiting - b.items.length;
         return Column(
           key: const ValueKey('tickets-inbox'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -241,13 +242,13 @@ class TicketInboxSection extends StatelessWidget {
               TicketTile(ticket: t, compact: true, onTap: () => _openBellTicket(context, t)),
               const SizedBox(height: Sp.sm),
             ],
-            if (b.more > 0)
+            if (more > 0)
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
                   key: const ValueKey('tickets-inbox-more'),
                   onPressed: () => _openAllTickets(context),
-                  child: Text('و${b.more} غيرها…'),
+                  child: Text('و$more غيرها…'),
                 ),
               ),
             const SizedBox(height: Sp.md),
@@ -258,7 +259,7 @@ class TicketInboxSection extends StatelessWidget {
   }
 }
 
-/// قارئ الشاشة لرقم رأس القسم — بالقاعدة نفسها ([kTicketsBadgeRule])، والعدد بتمييزه العربيّ (٣ تذاكر · ١١ تذكرة).
+/// قارئ الشاشة لرقم رأس القسم — بالقاعدة نفسها ([kTicketsBadgeRule]: الآن كلّ ما ينتظرك)، والعدد بتمييزه العربيّ (٣ تذاكر · ١١ تذكرة).
 String ticketsBadgeLabel(int n, [TicketsBadgeRule rule = kTicketsBadgeRule]) {
   final many = arCount(n, one: 'تذكرة', two: 'تذكرتان', few: 'تذاكر', many: 'تذكرة');
   return switch (rule) {

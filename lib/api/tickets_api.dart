@@ -236,37 +236,42 @@ class TicketCounts {
       };
 }
 
-/// ما يعدّه رقم الجرس من التذاكر (٩ نوفمبر). المالك لم يحسم بعد هل يعدّ كلّ «بانتظارك» — **[kTicketsBadgeRule] هو السطر الوحيد
-/// الذي يقلبه** (رقم الجرس ورقم رأس القسم فيه معاً)، والاختبار يفحص الوجهين (test/tickets_bell_test.dart).
+/// ما يعدّه رقم الجرس من التذاكر (٩ نوفمبر). **[kTicketsBadgeRule] هو السطر الوحيد الذي يقلبه** (رقم الجرس ورقم رأس القسم معاً)،
+/// والاختبار يفحص الوجهين (test/tickets_bell_test.dart).
 enum TicketsBadgeRule {
-  /// غير المقروءة وحدها (كجرس الويب 2e6f9a4): لا يبقى الجرس مضاءً لتذكرةٍ قرأتها وهي قيد المعالجة.
-  unread,
-
-  /// كلّ «بانتظارك» (جديدة أو قيد المعالجة) حتى يُردّ عليها أو تُحلّ.
+  /// كلّ ما ينتظرك (قرار المالك ٩ نوفمبر — كطلبات التجديد تبقى معدودةً حتى تُعالَج): التذاكر **المختلفة** غير المقروءة أو «بانتظارك»
+  /// (جديدة أو قيد المعالجة) — الجديدة غير المقروءة تُعدّ مرّةً واحدة. هي نفسها ما يعرضه قسم الجرس. كجرس الويب.
   waiting,
+
+  /// غير المقروءة وحدها (أوّل جرس الويب 2e6f9a4، قبل قرار المالك): لا يبقى الجرس مضاءً لتذكرةٍ قرأتها وهي قيد المعالجة.
+  unread,
 }
 
 /// قاعدة رقم الجرس — اقلبها هنا وحدها.
-const TicketsBadgeRule kTicketsBadgeRule = TicketsBadgeRule.unread;
+const TicketsBadgeRule kTicketsBadgeRule = TicketsBadgeRule.waiting;
 
-/// رقم التذاكر على الجرس من أعداد الخادم بالقاعدة [rule].
-int ticketsBadgeCount(TicketCounts c, [TicketsBadgeRule rule = kTicketsBadgeRule]) => switch (rule) {
+/// رقم التذاكر على الجرس بالقاعدة [rule]: [c] أعداد الخادم، و[outside] غير المقروءة خارج «بانتظارك» (ألغاها المشترك — من قائمة الجرس،
+/// [TicketsBell.outside]). «بانتظارك» + ما خارجها = كلّ تذكرةٍ غير مقروءة أو بانتظارك مرّةً واحدة (غير المقروءة داخلها لا تُعاد).
+int ticketsBadgeCount(TicketCounts c, {int outside = 0, TicketsBadgeRule rule = kTicketsBadgeRule}) => switch (rule) {
+      TicketsBadgeRule.waiting => c.open + outside,
       TicketsBadgeRule.unread => c.unread,
-      TicketsBadgeRule.waiting => c.open,
     };
 
-/// قسم «تذاكر المشتركين» في الجرس: ما ينتظر عملاً — غير المقروءة أوّلاً ثمّ «بانتظارك» — بأحدث [TicketsState.bellMax] منها،
-/// و[total] كلّ ما ينتظر (لسطر «و N غيرها…»).
+/// قسم «تذاكر المشتركين» في الجرس: ما ينتظر عملاً — غير المقروءة أوّلاً ثمّ «بانتظارك» — بأحدث [TicketsState.bellMax] منها، و[outside]
+/// غير المقروءة خارج «بانتظارك» (لعدّ كلّ ما ينتظر مرّةً واحدة مع «بانتظارك» من الملخّص).
 @immutable
 class TicketsBell {
-  const TicketsBell({this.items = const [], this.total = 0});
+  const TicketsBell({this.items = const [], this.outside = 0});
   final List<Ticket> items;
-  final int total;
+  final int outside;
 
   static const empty = TicketsBell();
 
-  /// ما لم يُعرض منها.
-  int get more => math.max(0, total - items.length);
+  /// كلّ ما ينتظرك — التذاكر المختلفة غير المقروءة أو «بانتظارك» ([c] الملخّص الأحدث).
+  int waitingOf(TicketCounts c) => math.max(c.open + outside, items.length);
+
+  /// ما لم يُعرض منها (سطر «و N غيرها…»).
+  int moreOf(TicketCounts c) => math.max(0, waitingOf(c) - items.length);
 }
 
 /// ترتيب الجرس كترتيب الخادم: غير المقروءة أوّلاً، ثمّ الأحدث نشاطاً.
@@ -484,6 +489,10 @@ class TicketsState {
   /// أقصى ما يُعرض في الجرس (كطلبات التجديد وجرس الويب).
   static const bellMax = 5;
 
+  /// «بانتظارك» تُقرأ كلّها حتى حدّ الخادم (pageMax) — فيُعرف كم منها غير مقروء وكم غير مقروءٍ خارجها، فيُعدّ كلّ ما ينتظر مرّةً واحدة.
+  /// الردّ بقدر ما يوجد (عادةً بضع تذاكر)، لا بالحدّ.
+  static const _waitingReadLimit = 50;
+
   /// قاعدة رقم الجرس — [kTicketsBadgeRule] دائماً؛ الاختبار وحده يبدّلها ([debugSetBadgeRule]) ليفحص الوجهين.
   static TicketsBadgeRule get badgeRule => _badgeRule;
   static TicketsBadgeRule _badgeRule = kTicketsBadgeRule;
@@ -514,8 +523,13 @@ class TicketsState {
 
   static bool _bellFor(TicketsAccess? a) => a != null && a.on && !a.scoped && Perms.has('tickets.view');
 
-  /// رقم التذاكر على الجرس ورأس قسمها ([ticketsBadgeCount] بالقاعدة [badgeRule]).
-  static int get bellBadge => inBell ? ticketsBadgeCount(gate.value!.counts ?? const TicketCounts(), badgeRule) : 0;
+  /// رقم التذاكر على الجرس ورأس قسمها ([ticketsBadgeCount] بالقاعدة [badgeRule]): الآن كلّ ما ينتظرك مرّةً واحدة.
+  static int get bellBadge => inBell
+      ? ticketsBadgeCount(gate.value!.counts ?? const TicketCounts(), outside: bell.value.outside, rule: badgeRule)
+      : 0;
+
+  /// كلّ ما ينتظرك (ما يعرضه القسم كلّه) — لسطر «و N غيرها…» أيّاً كانت القاعدة.
+  static int get bellWaiting => inBell ? bell.value.waitingOf(gate.value!.counts ?? const TicketCounts()) : 0;
 
   static Future<void> ensureFresh({bool force = false}) {
     final running = _inflight;
@@ -563,31 +577,32 @@ class TicketsState {
     gate.value = a;
   }
 
-  /// ما ينتظر عملاً للجرس: «بانتظارك» (غير المقروءة أوّلاً — ترتيب الخادم)، وغير المقروءة خارجها (ألغاها المشترك — يعدّها الخادم في
-  /// unread) حين لا تملأ الأولى الجرس — كلٌّ بنداءٍ حين يلزم وحده. null = تعذّر.
+  /// ما ينتظر عملاً للجرس: «بانتظارك» كلّها (غير المقروءة أوّلاً — ترتيب الخادم)، وغير المقروءة خارجها (ألغاها المشترك — يعدّها الخادم
+  /// في unread) بنداءٍ ثانٍ حين توجد وحده. والعدد: «بانتظارك» + ما خارجها = كلّ تذكرةٍ مرّةً واحدة. null = تعذّر.
   static Future<TicketsBell?> _readBell(TicketCounts c) async {
     if (c.open <= 0 && c.unread <= 0) return TicketsBell.empty;
-    var items = const <Ticket>[];
+    var open = const <Ticket>[];
+    var openAll = true;
     if (c.open > 0) {
-      final p = await TicketsApi.list(filter: TicketFilter.open, limit: bellMax);
+      final p = await TicketsApi.list(filter: TicketFilter.open, limit: _waitingReadLimit);
       if (p == null) return null;
-      items = p.items;
+      open = p.items;
+      openAll = !p.hasMore;
     }
-    final unreadOpen = items.where((t) => t.unread).length;
-    // غير المقروءة أوّل «بانتظارك»: الصفحة تحويها كلّها ما لم تمتلئ بها — فالباقي من العدد خارجها
-    final complete = items.length < bellMax || unreadOpen < items.length;
-    final outside = complete ? math.max(0, c.unread - unreadOpen) : 0;
+    final unreadOpen = open.where((t) => t.unread).length;
+    // غير المقروءة أوّل «بانتظارك»: الصفحة تحويها كلّها ما لم تمتلئ بها — فالباقي من العدد خارجها. وإلّا (أكثر من الحدّ وكلّها جديدة)
+    // يُعرف من «المنتهية» نفسها
+    final known = openAll || unreadOpen < open.length;
+    var outside = known ? math.max(0, c.unread - unreadOpen) : -1;
     var extra = const <Ticket>[];
-    if (outside > 0) {
+    if (outside != 0) {
       final p = await TicketsApi.list(filter: TicketFilter.closed, limit: bellMax);
       if (p == null) return null;
       extra = p.items.where((t) => t.unread).toList();
+      if (outside < 0) outside = extra.length;
     }
-    final all = sortBellFirst([...extra, ...items]);
-    return TicketsBell(
-      items: List<Ticket>.unmodifiable(all.take(bellMax)),
-      total: [c.open + outside, c.unread, all.length].reduce(math.max),
-    );
+    final all = sortBellFirst([...extra, ...open]);
+    return TicketsBell(items: List<Ticket>.unmodifiable(all.take(bellMax)), outside: outside);
   }
 
   /// العودة للتطبيق: إشعارٌ وصل والتطبيق بالخلفيّة لم يمرّ هنا — يُقرأ ثانيةً (بمهلةٍ قصيرة لا كلّ رجوع).

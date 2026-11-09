@@ -180,16 +180,22 @@ void main() {
   });
 
   group('القاعدة والترتيب', () {
-    test('رقم الجرس بوجهيه — غير المقروءة (الآن) أو كلّ «بانتظارك» — والقاعدة سطرٌ واحد', () {
-      const c = TicketCounts(open: 4, answered: 2, closed: 9, unread: 1, total: 15);
-      expect(kTicketsBadgeRule, TicketsBadgeRule.unread, reason: 'كجرس الويب 2e6f9a4 حتى يحسم المالك');
-      expect(ticketsBadgeCount(c), 1);
-      expect(ticketsBadgeCount(c, TicketsBadgeRule.unread), 1);
-      expect(ticketsBadgeCount(c, TicketsBadgeRule.waiting), 4, reason: '«بانتظارك» = جديدة + قيد المعالجة');
-      expect(ticketsBadgeLabel(1), 'تذكرةٌ فيها جديدٌ لم تقرأه');
-      expect(ticketsBadgeLabel(2), 'تذكرتان فيهما جديدٌ لم تقرأه');
-      expect(ticketsBadgeLabel(3, TicketsBadgeRule.waiting), '3 تذاكر بانتظارك');
-      expect(ticketsBadgeLabel(11), '11 تذكرة فيها جديدٌ لم تقرأه', reason: 'تمييز العدد بالعربيّة');
+    test('رقم الجرس بوجهيه — كلّ ما ينتظرك مرّةً واحدة (قرار المالك) أو غير المقروءة وحدها — والقاعدة سطرٌ واحد', () {
+      expect(kTicketsBadgeRule, TicketsBadgeRule.waiting, reason: 'قرار المالك ٩ نوفمبر — كطلبات التجديد حتى تُعالَج، وكجرس الويب');
+      // تذكرةٌ جديدة: غير مقروءة و«بانتظارك» معاً ⇒ تُعدّ مرّةً واحدة لا مرّتين
+      const one = TicketCounts(open: 1, unread: 1, total: 1);
+      expect(ticketsBadgeCount(one), 1, reason: 'غير مقروءة وبانتظارك = واحدة');
+      expect(ticketsBadgeCount(one, rule: TicketsBadgeRule.unread), 1);
+      // أربعٌ بانتظارك (واحدةٌ منها جديدة) + ملغاةٌ لم تُقرأ خارجها
+      const c = TicketCounts(open: 4, answered: 2, closed: 9, unread: 2, total: 15);
+      expect(ticketsBadgeCount(c, outside: 1), 5, reason: '«بانتظارك» + غير المقروءة خارجها — لا open + unread (٦)');
+      expect(ticketsBadgeCount(c, outside: 1, rule: TicketsBadgeRule.unread), 2);
+      expect(ticketsBadgeCount(const TicketCounts(answered: 3, closed: 4, total: 7)), 0, reason: '«تمّ الردّ» والمنتهية المقروءة لا تنتظرك');
+      expect(ticketsBadgeLabel(1), 'تذكرةٌ بانتظارك');
+      expect(ticketsBadgeLabel(2), 'تذكرتان بانتظارك');
+      expect(ticketsBadgeLabel(11), '11 تذكرة بانتظارك', reason: 'تمييز العدد بالعربيّة');
+      expect(ticketsBadgeLabel(1, TicketsBadgeRule.unread), 'تذكرةٌ فيها جديدٌ لم تقرأه');
+      expect(ticketsBadgeLabel(3, TicketsBadgeRule.unread), '3 تذاكر فيها جديدٌ لم تقرأه');
     });
 
     test('ترتيب الجرس كالخادم: غير المقروءة أوّلاً ثمّ الأحدث نشاطاً؛ و«و N غيرها» ممّا لم يُعرض', () {
@@ -200,8 +206,11 @@ void main() {
         Ticket.fromJson(_ticket(4, 'open', ago: const Duration(hours: 1)))!,
       ];
       expect(sortBellFirst(list).map((t) => t.id).toList(), [3, 2, 1, 4]);
-      expect(TicketsBell(items: list.take(2).toList(), total: 7).more, 5);
-      expect(TicketsBell.empty.more, 0);
+      const c = TicketCounts(open: 6, unread: 3, total: 6);
+      final b = TicketsBell(items: list.take(2).toList(), outside: 1);
+      expect(b.waitingOf(c), 7, reason: 'ستٌّ بانتظارك + ملغاةٌ لم تُقرأ');
+      expect(b.moreOf(c), 5);
+      expect(TicketsBell.empty.moreOf(const TicketCounts()), 0);
     });
   });
 
@@ -228,7 +237,7 @@ void main() {
       AlertsService.reset();
     });
 
-    testWidgets('متاحة وفيها ما ينتظر: «بانتظارك» بحدّ الجرس (غير المقروءة أوّلاً)، والرقم غير المقروءة — وبالوجه الآخر كلّ «بانتظارك»',
+    testWidgets('متاحة وفيها ما ينتظر: «بانتظارك» كلّها (غير المقروءة أوّلاً)، والرقم كلّ ما ينتظرك مرّةً واحدة — وبالوجه الآخر غير المقروءة',
         (t) async {
       _serve(server, [
         _ticket(9, 'open', unread: true),
@@ -239,9 +248,9 @@ void main() {
       await pumpSim(t, _v, home: (_) => _section());
       final lists = server.calls('GET', _listPath);
       expect(lists, hasLength(1), reason: 'غير المقروءة كلّها في «بانتظارك» ⇒ لا نداء «المنتهية»');
-      expect(lists.single.queryParameters, {'filter': 'open', 'offset': '0', 'limit': '${TicketsState.bellMax}'});
+      expect(lists.single.queryParameters, {'filter': 'open', 'offset': '0', 'limit': '50'}, reason: '«بانتظارك» كلّها لعدٍّ دقيق');
       expect(TicketsState.bell.value.items.map((x) => x.id).toList(), [9, 8]);
-      expect(TicketsState.bellBadge, 1);
+      expect(TicketsState.bellBadge, 2, reason: 'الجديدة (غير مقروءة وبانتظارك) مرّةً + قيد المعالجة — لا ٣');
       expect(find.text('تذاكر المشتركين'), findsOneWidget);
       expect(find.text('علي عباس'), findsOneWidget);
       expect(find.text('مصطفى كريم'), findsOneWidget);
@@ -251,21 +260,23 @@ void main() {
       expect(_textStarting('انقطاع أو بطء · منذ'), findsNWidgets(2), reason: 'النوع مع الوقت في سطرٍ واحد');
       expect(find.byKey(const ValueKey('ticket-unread-9')), findsOneWidget);
       expect(find.byKey(const ValueKey('ticket-unread-8')), findsNothing);
-      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('1')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('2')), findsOneWidget,
+          reason: 'رأس القسم بالرقم نفسه = ما يعرضه');
       expect(find.byKey(const ValueKey('tickets-inbox-more')), findsNothing);
       expect(find.text('الكلّ'), findsOneWidget);
-      // الوجه الآخر: كلّ «بانتظارك»
-      TicketsState.debugSetBadgeRule(TicketsBadgeRule.waiting);
-      expect(TicketsState.bellBadge, 2);
+      // الوجه الآخر: غير المقروءة وحدها
+      TicketsState.debugSetBadgeRule(TicketsBadgeRule.unread);
+      expect(TicketsState.bellBadge, 1);
       await t.pumpWidget(const SizedBox());
       await pumpSim(t, _v, home: (_) => _section());
-      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('2')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('1')), findsOneWidget);
+      expect(find.text('مصطفى كريم'), findsOneWidget, reason: 'القسم يعرض ما ينتظر أيّاً كانت قاعدة الرقم');
       expect(server.calls('GET', _listPath), hasLength(1), reason: 'إعادة الرسم لا تطلب ما لم تنتهِ مهلته');
       expect(t.takeException(), isNull);
       await simDrain(t);
     });
 
-    testWidgets('غير المقروءة خارج «بانتظارك» (ألغاها المشترك) تُجلب من «المنتهية» وتُعرض أوّلاً؛ وجرسٌ امتلأ بغير المقروءة لا يطلبها',
+    testWidgets('غير المقروءة خارج «بانتظارك» (ألغاها المشترك) تُجلب من «المنتهية» وتُعرض أوّلاً وتُعدّ مرّة؛ وأكثر من خمسٍ ⇒ «و N غيرها…»',
         (t) async {
       final world = [
         _ticket(7, 'in_progress', name: 'مصطفى كريم', ago: const Duration(hours: 2)),
@@ -276,16 +287,18 @@ void main() {
       await pumpSim(t, _v, home: (_) => _section());
       expect(server.calls('GET', _listPath).map((r) => r.queryParameters['filter']).toList(), ['open', 'closed']);
       expect(TicketsState.bell.value.items.map((x) => x.id).toList(), [6, 7]);
-      expect(TicketsState.bell.value.more, 0);
+      expect(TicketsState.bell.value.outside, 1);
+      expect(TicketsState.bellWaiting, 2);
       expect(find.text('زيد علي'), findsOneWidget);
       expect(find.text('ألغاها المشترك'), findsOneWidget);
       expect(find.byKey(const ValueKey('ticket-unread-6')), findsOneWidget);
       expect(find.text('سارة محمد'), findsNothing, reason: 'المنتهية المقروءة لا تنتظرك');
-      expect(TicketsState.bellBadge, 1);
-      TicketsState.debugSetBadgeRule(TicketsBadgeRule.waiting);
-      expect(TicketsState.bellBadge, 1, reason: '«بانتظارك» وحدها: قيد المعالجة');
+      expect(TicketsState.bellBadge, 2, reason: 'قيد المعالجة + الملغاة التي لم تُقرأ');
+      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('2')), findsOneWidget);
+      TicketsState.debugSetBadgeRule(TicketsBadgeRule.unread);
+      expect(TicketsState.bellBadge, 1, reason: 'الوجه الآخر: الملغاة وحدها غير مقروءة');
       TicketsState.debugSetBadgeRule(kTicketsBadgeRule);
-      // ستّ جديدةٌ غير مقروءة + الملغاة: «بانتظارك» تملأ الجرس ⇒ لا نداء «المنتهية»، و«و N غيرها…» بالباقي
+      // ستّ جديدةٌ غير مقروءة + الملغاة: سبعٌ تنتظرك (كلٌّ مرّة)، خمسٌ معروضة و«و N غيرها…» بالباقي
       world
         ..clear()
         ..addAll([
@@ -295,8 +308,9 @@ void main() {
       server.requests.clear();
       await t.runAsync(() => TicketsState.ensureFresh(force: true));
       await t.pumpAndSettle();
-      expect(server.calls('GET', _listPath).map((r) => r.queryParameters['filter']).toList(), ['open']);
+      expect(server.calls('GET', _listPath).map((r) => r.queryParameters['filter']).toList(), ['open', 'closed']);
       expect(TicketsState.bell.value.items, hasLength(TicketsState.bellMax));
+      expect(TicketsState.bellBadge, 7, reason: 'ستٌّ بانتظارك + الملغاة — لا open + unread (١٣)');
       expect(find.text('و2 غيرها…'), findsOneWidget, reason: 'سبعٌ تنتظرك وخمسٌ معروضة');
       expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('7')), findsOneWidget);
       expect(t.takeException(), isNull);
@@ -442,7 +456,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('رقم الجرس في الرأس: التذاكر بالقاعدة — غير المقروءة الآن، وكلّ «بانتظارك» بالوجه الآخر؛ والموظّف بلا العرض بلا رقم',
+    testWidgets('رقم الجرس في الرأس: كلّ ما ينتظرك مرّةً واحدة (الجديدة لا تُعدّ مرّتين)، وغير المقروءة بالوجه الآخر؛ والموظّف بلا العرض بلا رقم',
         (t) async {
       final world = [
         _ticket(9, 'open', unread: true),
@@ -454,12 +468,19 @@ void main() {
           find.descendant(of: find.byKey(const ValueKey('top-actions-notifications')), matching: find.text(n));
       Widget header() => Scaffold(appBar: AppBar(actions: const [TopActions()]));
       await pumpSim(t, _v, home: (_) => header());
-      expect(badge('1'), findsOneWidget, reason: 'غير المقروءة وحدها');
-      TicketsState.debugSetBadgeRule(TicketsBadgeRule.waiting);
+      expect(badge('3'), findsOneWidget, reason: 'ثلاثٌ بانتظارك، والجديدة منها مرّةً واحدة (لا ٤)');
+      TicketsState.debugSetBadgeRule(TicketsBadgeRule.unread);
       await t.pumpWidget(const SizedBox());
       await pumpSim(t, _v, home: (_) => header());
-      expect(badge('3'), findsOneWidget, reason: 'الوجه الآخر: كلّ «بانتظارك»');
+      expect(badge('1'), findsOneWidget, reason: 'الوجه الآخر: غير المقروءة وحدها');
       TicketsState.debugSetBadgeRule(kTicketsBadgeRule);
+      // تذكرةٌ جديدةٌ واحدة وحدها ⇒ ١ (غير مقروءة و«بانتظارك» معاً)
+      await t.pumpWidget(const SizedBox());
+      TicketsState.reset();
+      _serve(server, [_ticket(9, 'open', unread: true)]);
+      await pumpSim(t, _v, home: (_) => header());
+      expect(badge('1'), findsOneWidget);
+      expect(badge('2'), findsNothing);
       await t.pumpWidget(const SizedBox());
       TicketsState.reset();
       PermissionsService.debugSet(isEmployee: true, permissions: {'subscribers.view': true});
@@ -535,7 +556,8 @@ void main() {
       _serve(server, world);
       await pumpSim(t, _v, home: (_) => _section());
       expect(find.text('مصطفى كريم'), findsOneWidget);
-      expect(find.byKey(const ValueKey('tickets-inbox-count')), findsNothing, reason: 'لا جديد لم تقرأه');
+      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('1')), findsOneWidget,
+          reason: 'قيد المعالجة تنتظرك حتى تُعالَج');
       world.add(_ticket(12, 'open', unread: true, name: 'حسين جاسم', ago: Duration.zero));
       await t.runAsync(InboxService.clear);
       TicketsState.onInboxChanged(); // أوّل قراءةٍ للصندوق: لا تذكرة فيه
@@ -549,7 +571,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('حسين جاسم'), findsOneWidget);
       expect(TicketsState.bell.value.items.first.id, 12, reason: 'غير المقروءة أوّلاً');
-      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('1')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('2')), findsOneWidget);
       await t.runAsync(InboxService.clear);
       await simDrain(t);
     });
