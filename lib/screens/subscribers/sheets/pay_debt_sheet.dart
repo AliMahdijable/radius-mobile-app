@@ -19,6 +19,7 @@ import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/print_feedback.dart';
+import '../../../widgets/merged_write_lock.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -44,6 +45,7 @@ import '../../../core/widgets/print_feedback.dart';
 ///
 /// ويبقى كلّ شيءٍ آخر مقروءاً بلا نت — وهو غرض الكاش أصلاً.
 Future<bool?> showPayDebtSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
+  if (mergedWriteBlocked(context, sub)) return Future.value(false);
   // ⚠️ حارسٌ قبل العرض لا داخله: الشيت المفتوح يحمل الرقم القديم في
   // حالته، فلا يكفي أن نُعطّل زرّ الإرسال.
   if (SubscribersApi.offlineSnapshotAt != null) {

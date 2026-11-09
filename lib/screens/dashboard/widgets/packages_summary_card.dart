@@ -141,6 +141,17 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
       });
       return;
     }
+    // «كل الصفحات» للموظّف: الصفحة المختارة بلا reports.packages بخريطتها ⇒ لا طلب، والبطاقة «لا صلاحيّة» كرفض الخادم
+    if (focused != null && MergedMode.pagePerm(focused.key, 'reports.packages') == false) {
+      setState(() {
+        _needsFocus = false;
+        _loading = false;
+        _denied = true;
+        _data = null;
+        _error = null;
+      });
+      return;
+    }
     setState(() {
       _needsFocus = false;
       _loading = _data == null;

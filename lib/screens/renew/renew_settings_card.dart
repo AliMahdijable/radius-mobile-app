@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/renew_requests_api.dart';
@@ -8,6 +7,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_section.dart';
 import 'renew_requests_screen.dart';
+import '../../services/merged_text.dart';
 
 /// «طلب التجديد من التطبيق» في «بوابة المشترك» (٤ نوفمبر): مفتاح الوكيل (مشتركوه يرون زرّ الطلب) + أين يحوّلون (زين كاش/الماستر)
 /// + ملاحظة لهم. يظهر حين يُفتح المفتاح العامّ لحسابه وحده؛ والحفظ بـ«تعديل إعدادات النظام» (بدونها للقراءة بقفل).
@@ -212,7 +212,7 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
                   Expanded(
                     child: Text(
                         viewOnly
-                            ? 'merged.view_only_tap'.tr(args: [MergedSection.of(context)?.company?.name ?? '—'])
+                            ? 'merged.view_only_tap'.trm(args: [MergedSection.of(context)?.company?.name ?? '—'])
                             : 'ليس لديك صلاحيّة لتغيير هذا الإعداد — «تعديل إعدادات النظام»',
                         style: AppType.micro(color: AppColors.textLow)),
                   ),

@@ -211,6 +211,12 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
         ..message = msg;
     }
 
+    // «كل الصفحات»: فحص صفحةٍ أخرى عبر VPN الخادم — بخريطة صلاحيّاته فيها (لا devices.deep_check_vpn ⇒ لا فحص، ويُسمّى)
+    if (MergedMode.pagePerm(c.key, 'devices.deep_check_vpn') == false) {
+      fail(MergedCheckStatus.failed, MergedMode.noAccess('فحص أجهزتها عبر VPN'));
+      notifyListeners();
+      return;
+    }
     await CompanyRoute.run(c.key, () async {
       final route = await (debugRoute?.call(c) ?? _route());
       if (gen != _gen) return;

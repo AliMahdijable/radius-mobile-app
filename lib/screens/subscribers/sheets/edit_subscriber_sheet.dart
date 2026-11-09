@@ -23,6 +23,7 @@ import '../../../theme/typography.dart';
 import '../../../widgets/package_picker_field.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../widgets/merged_write_lock.dart';
 
 /// متى تتغيّر باقة مشتركٍ **فعّال** في SAS4 — خيار الساس نفسه (`user/changeProfile`
 /// بـ`change_type`)، بقرار المالك ١٨ أكتوبر. غير الفعّال «حالاً» وحدها كالساس.
@@ -121,6 +122,7 @@ Future<bool?> showEditSubscriberSheet(
   BuildContext context,
   Subscriber sub,
 ) {
+  if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,

@@ -22,6 +22,7 @@ import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/company_tag.dart';
+import '../../services/merged_text.dart';
 
 /// Spotlight-style search overlay: TextField at the top, mic button on
 /// the trailing side for voice input, suggestion list below.
@@ -497,7 +498,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                                           _Results(
                                             query: _q,
                                             future: _subsFuture,
-                                            emptyText: big.isEmpty ? null : 'لا نتائج في قوائم الشركات الأخرى',
+                                            emptyText: big.isEmpty ? null : mergedWord('لا نتائج في قوائم الشركات الأخرى', 'لا نتائج في قوائم الصفحات الأخرى'),
                                           ),
                                         if (_q.trim().isNotEmpty)
                                           for (final p in big)

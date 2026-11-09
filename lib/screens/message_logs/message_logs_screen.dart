@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -34,10 +35,12 @@ class MessageLogsScreen extends StatefulWidget {
   const MessageLogsScreen({super.key});
 
   /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن «الإرسال الجماعيّ» معاً.
-  static Widget mergedPage() => const MergedSection(
+  static Widget mergedPage() => MergedSection(
       readOnly: true,
-      prefixes: ['/api/whatsapp/message-logs', '/api/whatsapp/broadcasts', '/api/whatsapp/broadcast'],
-      child: MessageLogsScreen());
+      prefixes: const ['/api/whatsapp/message-logs', '/api/whatsapp/broadcasts', '/api/whatsapp/broadcast'],
+      perms: const ['whatsapp.broadcast', 'whatsapp.send'],
+      lockTitle: 'more.message_logs'.tr(),
+      child: const MessageLogsScreen());
 
   @override
   State<MessageLogsScreen> createState() => _MessageLogsScreenState();

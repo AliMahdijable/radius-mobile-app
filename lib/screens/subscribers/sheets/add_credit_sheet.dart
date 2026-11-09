@@ -14,6 +14,7 @@ import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../widgets/merged_write_lock.dart';
 
 /// Bottom sheet لإضافة رصيدٍ دائنٍ للمشترك — **عكس «إضافة الدين»** (طلب المالك
 /// ٢٧ أكتوبر «اضافة مبلغ رصيد للمشترك … عكس الدين»). مرآةٌ لـ`showAddDebtSheet`
@@ -21,6 +22,7 @@ import '../../../core/widgets/app_sheet.dart';
 /// الناتج (دائن إن صار موجباً، أو ديناً متبقّياً إن بقي سالباً). يرسل إلى
 /// `/api/v2/subscribers/:idx/add-credit`.
 Future<bool?> showAddCreditSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
+  if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,

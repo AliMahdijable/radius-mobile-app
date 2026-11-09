@@ -1,4 +1,3 @@
-import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
 import 'package:flutter/material.dart';
 
 import '../core/util/bidi.dart';
@@ -8,6 +7,7 @@ import '../services/merged_mode.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../services/merged_text.dart';
 
 /// رصيد شركةٍ في «كل الشركات»: قيمته، أو سبب غيابه (تعذّرت القراءة، عملةٌ أخرى).
 typedef MergedBalanceLine = ({String key, num? balance, String? reason});
@@ -118,7 +118,7 @@ class _Tile extends StatelessWidget {
             ),
           )
         else
-          Text(l.reason ?? 'merged.chip_failed'.tr(),
+          Text(l.reason ?? 'merged.chip_failed'.trm(),
               maxLines: 2, style: AppType.muted(color: AppColors.warning).copyWith(fontSize: 11.5)),
       ]),
     );
@@ -185,7 +185,7 @@ class MergedBalanceLines extends StatelessWidget {
               else
                 Flexible(
                   child: Text(
-                    l.reason ?? 'merged.chip_failed'.tr(),
+                    l.reason ?? 'merged.chip_failed'.trm(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,

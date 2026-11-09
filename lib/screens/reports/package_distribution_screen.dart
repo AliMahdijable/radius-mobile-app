@@ -22,6 +22,7 @@ import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
+import '../../services/merged_text.dart';
 
 /// نصّ ما تعذّر من التقرير — جزءاً جزءاً، لا صفر (كالويب: client-v2 package-report.ts).
 String packagePartText(String part) {
@@ -171,6 +172,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
     if (_mergedOn) {
       // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — طلبٌ موجَّه لكلٍّ منها
       final m = await loadMergedReport<PackageReport>(
+        perms: const [_perm],
         supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
         fetch: (c) async {
           final r = await PackageReportApi.fetch(from: _range.from, to: _range.to, userIds: [c.adminId]);
@@ -212,7 +214,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
       : (v < 0 ? AppColors.error : AppColors.success);
 
   List<String> get _exportColumns => [
-        if (_mergedAllRows != null) 'merged.col_company'.tr(),
+        if (_mergedAllRows != null) 'merged.col_company'.trm(),
         'pkgdist.card_title'.tr(),
         'pkgdist.subscribers_now'.tr(),
         'pkgdist.active'.tr(),
@@ -308,7 +310,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
                     countOf: (c) => _merged!.partOf(c.key)?.rows?.firstOrNull?.totals.activations,
                     total: [for (final p in _merged!.parts) ...?p.rows].fold<int>(0, (s, r) => s + r.totals.activations),
                     problemOf: (c) => _merged!.problemOf(c,
-                        failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'merged.web_only'.tr()),
+                        failedLabel: 'merged.chip_failed'.trm(), unsupportedLabel: 'merged.web_only'.trm()),
                     note: _mergedNote(_merged!),
                   ),
                   const SizedBox(height: Sp.md),
@@ -564,13 +566,13 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
     final lines = <String>[
       if (m.noteFor(focus?.key,
               unsupportedText: 'لا تقرير باقاتٍ لنوعها',
-              missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]))
+              missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')]))
           case final n?)
         n,
       if (focus == null)
         for (final e in _mergedOk)
           if (e.c.currency != 'IQD')
-            'merged.not_in_sum'.tr(args: ['إيراد «${e.c.name}» وربحها (${e.c.currency ?? 'عملةٌ غير معروفة'})']),
+            'merged.not_in_sum'.trm(args: ['إيراد «${e.c.name}» وربحها (${e.c.currency ?? 'عملةٌ غير معروفة'})']),
     ];
     return lines.isEmpty ? null : lines.join('\n');
   }
@@ -642,7 +644,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
           valueColor: _profitColor(profit),
           hint: profitOut.isNotEmpty
               ? notIn(profitOut)
-              : (anyExempt ? 'كلّ شركةٍ بقاعدتها — المعفاة بلا كلفة' : 'pkgdist.profit_after_cost'.tr(namedArgs: {
+              : (anyExempt ? mergedWord('كلّ شركةٍ بقاعدتها — المعفاة بلا كلفة', 'كلّ صفحةٍ بقاعدتها — المعفاة بلا كلفة') : 'pkgdist.profit_after_cost'.tr(namedArgs: {
                   'cost': _money(withProfit.fold<num>(0, (s, e) => s + (e.r.totals.cost ?? 0))),
                 })),
         ),

@@ -70,6 +70,7 @@ import '../whatsapp/conn_vpn_screen.dart';
 import '../whatsapp/connection_alerts_screen.dart';
 import '../../services/agent_net_presence.dart';
 import 'subscribers_check_screen.dart';
+import '../../services/merged_text.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -517,12 +518,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         for (final p in merged.parts)
           if ((p.rows ?? const <Subscriber>[]).isNotEmpty && (focus == null || p.company.key == focus)) p.company,
       ];
-      String? openAdmin;
-      try {
-        openAdmin = (await AuthStorage.readAdminId())?.trim();
-      } catch (_) {
-        openAdmin = null;
-      }
+      final openAdmin = await MergedMode.openAdminId();
       if (!mounted) return;
       final open = openAdmin == null || openAdmin.isEmpty
           ? null
@@ -874,8 +870,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   String? _mergedProblem(MergedCompany c) {
     final p = _merged?.partOf(c.key);
     if (p == null) return null;
-    if (p.bigTotal != null) return 'merged.chip_big'.tr();
-    if (p.rows == null) return 'merged.chip_failed'.tr();
+    if (p.bigTotal != null) return 'merged.chip_big'.trm();
+    if (p.rows == null) return p.denied ? 'merged.chip_denied'.trm() : 'merged.chip_failed'.trm();
     return null;
   }
 
@@ -885,16 +881,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (f != null) {
       final p = r.partOf(f.key);
       if (p == null) return null;
-      if (p.bigTotal != null) return 'merged.big'.tr(args: [f.name, formatIQD(p.bigTotal!)]);
-      if (p.rows == null) return p.error ?? 'merged.failed'.tr(args: [f.name]);
-      return p.partial ? 'merged.partial'.tr(args: [f.name]) : null;
+      if (p.bigTotal != null) return 'merged.big'.trm(args: [f.name, formatIQD(p.bigTotal!)]);
+      if (p.rows == null) return p.error ?? 'merged.failed'.trm(args: [f.name]);
+      return p.partial ? 'merged.partial'.trm(args: [f.name]) : null;
     }
     final parts = <String>[
-      for (final b in r.big) 'merged.big'.tr(args: [b.company.name, formatIQD(b.bigTotal!)]),
-      for (final f in r.failed) f.error ?? 'merged.failed'.tr(args: [f.company.name]),
-      for (final p in r.partial) 'merged.partial'.tr(args: [p.company.name]),
-      if (r.missing.isNotEmpty) 'merged.missing'.tr(args: [r.missing.map((c) => c.name).join('، ')]),
-      if (r.folded > 0) 'merged.folded'.tr(args: [formatIQD(r.folded)]),
+      for (final b in r.big) 'merged.big'.trm(args: [b.company.name, formatIQD(b.bigTotal!)]),
+      for (final f in r.failed) f.error ?? 'merged.failed'.trm(args: [f.company.name]),
+      for (final p in r.partial) 'merged.partial'.trm(args: [p.company.name]),
+      if (r.missing.isNotEmpty) 'merged.missing'.trm(args: [r.missing.map((c) => c.name).join('، ')]),
+      if (r.folded > 0) 'merged.folded'.trm(args: [formatIQD(r.folded)]),
     ];
     return parts.isEmpty ? null : parts.join('\n');
   }
@@ -2481,9 +2477,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // «تسديد» داخل شريط الدين — نفس شيت
                                     // التفاصيل بلا اختصار، ومحكوم بنفس
                                     // الصلاحيّة (subscribers.pay_debt).
+                                    // «كل الصفحات» للموظّف: مشترك صفحةٍ كتابتها من «صفحاتي» ⇒ لا اختصار تسديدٍ بكارته (كغياب
+                                    // الصلاحيّة) — صفحته تقول السبب بزرٍّ مقفل.
                                     onPayDebt: s.hasDebt &&
                                             !_selectionMode &&
-                                            Perms.has('subscribers.pay_debt')
+                                            MergedMode.can(s.companyKey, 'subscribers.pay_debt') &&
+                                            MergedOps.writeLock(s) == null
                                         ? () => _payDebtFromList(s)
                                         : null,
                                     // الموقع من القائمة مباشرةً — كان
@@ -2688,7 +2687,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         builder: (context, merged, _) => Text(
           merged
               ? (MergedMode.focused == null
-                  ? '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])} • $total مشترك'
+                  ? '${'merged.header'.trm()} · ${'merged.header_sub'.trm(args: ['${MergedMode.usable.length}'])} • $total مشترك'
                   : '«${MergedMode.focused!.name}» • $total مشترك')
               : 'desktop.subs_count'.tr(args: ['$total', '$online']),
           maxLines: 1,
@@ -2844,7 +2843,7 @@ class _ListHeader extends StatelessWidget {
             builder: (context, merged, child) => merged
                 ? Text(
                     MergedMode.focused == null
-                        ? '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])} • $total مشترك'
+                        ? '${'merged.header'.trm()} · ${'merged.header_sub'.trm(args: ['${MergedMode.usable.length}'])} • $total مشترك'
                         : '«${MergedMode.focused!.name}» • $total مشترك',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

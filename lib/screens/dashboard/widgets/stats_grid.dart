@@ -11,6 +11,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/merged_balance_lines.dart';
+import '../../../services/merged_text.dart';
 
 /// Pair of hero metric cards on the dashboard:
 ///   • Balance + Points (manager wallet, brand-colored accent)
@@ -88,7 +89,7 @@ class StatsGrid extends StatelessWidget {
           _ShellCard(
             icon: LucideIcons.wallet,
             iconAccent: AppColors.brand,
-            title: '${'dashboard.balance'.tr()} — لكلّ شركة',
+            title: '${'dashboard.balance'.tr()} — ${mergedWord('لكلّ شركة', 'لكلّ صفحة')}',
             body: MergedBalanceTiles(lines: walletLines!),
           ),
           const SizedBox(height: Sp.md),

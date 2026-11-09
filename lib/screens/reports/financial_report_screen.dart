@@ -23,6 +23,7 @@ import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 import '../desktop/desk_widgets.dart';
+import '../../services/merged_text.dart';
 
 /// التقرير المالي — نسخة موبايل من client-v2/Financial.tsx:
 ///  • هيرو إجمالي الإيراد + صافي بعد المصاريف — ولمالك حسابٍ على ساسٍ بعيد
@@ -185,7 +186,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       _mergedRes = res;
       _mergedParams = params;
       _data = res.report;
-      _error = res.report == null ? 'merged.finance_none'.tr(args: [res.excluded.join('، ')]) : null;
+      _error = res.report == null ? 'merged.finance_none'.trm(args: [res.excluded.join('، ')]) : null;
       _visibleCount = kReportPageStep;
     });
   }
@@ -199,13 +200,13 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     if (f != null) {
       final d = _data;
       final why = d == null ? null : MergedFinanceApi.gapReason(f, d);
-      return why == null ? null : 'merged.finance_gap'.tr(args: [why]);
+      return why == null ? null : 'merged.finance_gap'.trm(args: [why]);
     }
     final m = _mergedRes;
     if (m == null) return null;
     final lines = <String>[
-      if (m.excluded.isNotEmpty) 'merged.not_in_sum'.tr(args: [m.excluded.join('، ')]),
-      if (m.logsPartial.isNotEmpty) 'merged.finance_logs_partial'.tr(args: [m.logsPartial.join('، ')]),
+      if (m.excluded.isNotEmpty) 'merged.not_in_sum'.trm(args: [m.excluded.join('، ')]),
+      if (m.logsPartial.isNotEmpty) 'merged.finance_logs_partial'.trm(args: [m.logsPartial.join('، ')]),
     ];
     return lines.isEmpty ? null : lines.join('\n');
   }
@@ -532,7 +533,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             ),
             // «كل الشركات» بقاعدتين: الصيغة الواحدة لا تصحّ على المجموع — كلّ شركةٍ بقاعدتها
             if (mergedRule)
-              _heroNote('merged.finance_profit_rule'.tr(), warn: false)
+              _heroNote('merged.finance_profit_rule'.trm(), warn: false)
             else
               _heroNote(
                 (!k.hasGoods
@@ -653,7 +654,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         children: [
           Padding(
             padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.md, Sp.md, Sp.xs),
-            child: Text('merged.finance_by_company'.tr(),
+            child: Text('merged.finance_by_company'.trm(),
                 style: AppType.label(color: AppColors.textHi)
                     .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
           ),
@@ -990,7 +991,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
               fileNameBase: 'financial',
               columns: [
-                if (all != null) 'merged.col_company'.tr(),
+                if (all != null) 'merged.col_company'.trm(),
                 'reports.col_subscriber'.tr(),
                 'reports.col_username'.tr(),
                 'reports.col_amount'.tr(),

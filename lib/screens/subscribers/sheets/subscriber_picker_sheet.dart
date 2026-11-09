@@ -16,6 +16,7 @@ import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../services/merged_mode.dart';
 import '../../../widgets/company_tag.dart';
+import '../../../services/merged_text.dart';
 
 /// Bottom sheet that lets the admin pick a subscriber to operate on.
 /// Used by the FAB → 'إضافة سريعة' shortcuts for تفعيل / تجديد /
@@ -250,7 +251,7 @@ class _PickerSheetState extends State<_PickerSheet> {
             (!_merged
                 ? ''
                 : MergedMode.focused == null
-                    ? ' — من كلّ شركاتك'
+                    ? mergedWord(' — من كلّ شركاتك', ' — من كلّ صفحاتك')
                     : ' — من «${MergedMode.focused!.name}»'),
         onClose: () => Navigator.of(context).pop(),
       ),

@@ -22,6 +22,7 @@ import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import '../desktop/desk_widgets.dart';
 import '../../widgets/merged_company_strip.dart';
+import '../../services/merged_text.dart';
 
 /// تقرير موحّد للحركات المالية على المدراء الفرعيين — timeline.
 ///
@@ -282,6 +283,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       final to = _dateTo == null ? null : _fmtDate(_dateTo!);
       final data = <String, CompanyManagerDebts>{};
       final m = await loadMergedReport<_MgrEvent>(
+        perms: const ['reports.manager_debts'],
         supports: (c) => c.provider == MergedProvider.sas4,
         fetch: (c) async {
           final r = await loadCompanyManagerDebts(from: from, to: to);
@@ -438,7 +440,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
           if (!p.ok && !p.unsupported) '«${p.company.name}»',
       ];
       if (failed.isNotEmpty) {
-        out.add('merged.not_in_sum'.tr(args: [failed.join('، ')]));
+        out.add('merged.not_in_sum'.trm(args: [failed.join('، ')]));
       }
     }
     for (final v in _views) {
@@ -503,7 +505,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
         MergedMode.focused?.key,
         unsupportedText: _noSubAdmins,
         missingText: 'merged.missing'
-            .tr(args: [m.missing.map((c) => c.name).join('، ')]),
+            .trm(args: [m.missing.map((c) => c.name).join('، ')]),
         nameUnsupported: false,
       );
 
@@ -549,7 +551,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       return '«${p.company.name}»: ${p.error ?? 'تعذّر جلب ديون مدرائها الآن'}';
     }
     if (m.parts.any((p) => !p.ok && !p.unsupported)) return 'تعذّر جلب ديون المدراء الآن';
-    return 'لا مدراء فرعيّين في شركاتك';
+    return mergedWord('لا مدراء فرعيّين في شركاتك', 'لا مدراء فرعيّين في صفحاتك');
   }
 
   // ─── actions ───────────────────────────────
@@ -615,7 +617,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                     : 'كل الفترات',
                 fileNameBase: 'manager_debts_timeline',
                 columns: [
-                  if (_mergedOn) 'merged.col_company'.tr(),
+                  if (_mergedOn) 'merged.col_company'.trm(),
                   'المدير',
                   'اسم المستخدم',
                   'التاريخ',
@@ -676,7 +678,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                           problemOf: (c) => _dataOf(c.key)?.noSubAdmins == true
                               ? _noSubAdmins
                               : _merged!.problemOf(c,
-                                  failedLabel: 'merged.chip_failed'.tr(),
+                                  failedLabel: 'merged.chip_failed'.trm(),
                                   unsupportedLabel: _noSubAdmins),
                           note: _mergedNote(_merged!),
                         ),

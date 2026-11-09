@@ -6,10 +6,13 @@ import '../../../api/employees_api.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../services/employee_session.dart';
+import '../../../services/merged_mode.dart';
+import '../../../services/merged_text.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/merged_all_row.dart';
 import '../../account/employee_login_screen.dart';
 import '../../main_shell.dart';
 
@@ -17,7 +20,11 @@ import '../../main_shell.dart';
 /// … تمام ابدي بيها»): «صفحاتي» كـ«شركاتي» عند المدير. الحاليّة معلَّمة، والنقر على أخرى ينقله إليها بتوكنه القائم
 /// ([AuthApi.employeeSwitch]) — جلسة تلك الصفحة كاملة (صلاحيّاتها وسجلّها وأجهزتها) كما لو دخلها، ثمّ الرئيسيّة من جديد.
 /// [onManagers]: صفّ «الصفحات» (المدراء الفرعيّون داخل الصفحة المفتوحة) أعلاها لموظّفٍ يملك تبديلهم.
-Future<void> showEmployeePagesSheet(BuildContext context, {VoidCallback? onManagers}) {
+///
+/// ٩ نوفمبر — «كل الصفحات» (المالك: «اخي الموظف اريد يشوف كل الصفحات مثل المدير… قابل يتنقل بين الصفحات»): صفٌّ أعلاها
+/// كـ«كل الشركات» عند المالك — صفحاته كلّها معاً بالشاشات نفسها، كلٌّ بصلاحيّاته فيها ([MergedMode]). [autoSwitchTo]: صفّ
+/// صفحةٍ يُنتقل إليها فور فتح الورقة («انتقل إلى «X»» من شاشات الوضع — كـautoOpen في «تبديل الشركة»).
+Future<void> showEmployeePagesSheet(BuildContext context, {VoidCallback? onManagers, int? autoSwitchTo}) {
   HapticFeedback.selectionClick();
   return showAppSheet<void>(
     context: context,
@@ -25,14 +32,17 @@ Future<void> showEmployeePagesSheet(BuildContext context, {VoidCallback? onManag
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => EmployeePagesSheet(onManagers: onManagers),
+    builder: (_) => EmployeePagesSheet(onManagers: onManagers, autoSwitchTo: autoSwitchTo),
   );
 }
 
 class EmployeePagesSheet extends StatefulWidget {
-  const EmployeePagesSheet({super.key, this.onManagers});
+  const EmployeePagesSheet({super.key, this.onManagers, this.autoSwitchTo});
 
   final VoidCallback? onManagers;
+
+  /// صفّ الموظّف في صفحةٍ يُنتقل إليها فور الفتح (null: لا شيء).
+  final int? autoSwitchTo;
 
   /// منفذ الاختبار: نداء التنقّل وإكمال الجلسة (الخزنة الآمنة لا تعمل في `flutter test`).
   @visibleForTesting
@@ -49,8 +59,54 @@ class _EmployeePagesSheetState extends State<EmployeePagesSheet> {
   int? _busy;
   String? _error;
 
+  /// «كل الصفحات»: جارٍ الدخول.
+  bool _entering = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // «كل الصفحات» يظهر حين يفتحه الخادم ولصفحتين صالحتين فأكثر — سؤالٌ طازج لصفحاته بتوكنه
+    MergedMode.load(fresh: true);
+    final auto = widget.autoSwitchTo;
+    if (auto != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final pages = PermissionsService.employeePages;
+        for (final p in pages) {
+          if (p.employeeId == auto) {
+            _switch(p, pages);
+            return;
+          }
+        }
+      });
+    }
+  }
+
+  /// «كل الصفحات»: دخولٌ بلا تسجيل (صفحته الحاليّة كما هي)، أو العودة منه.
+  Future<void> _toggleAll() async {
+    if (_entering || _busy != null) return;
+    if (MergedMode.active.value) {
+      await MergedMode.exit();
+      if (mounted) Navigator.of(context).maybePop();
+      return;
+    }
+    HapticFeedback.lightImpact();
+    setState(() {
+      _entering = true;
+      _error = null;
+    });
+    final ok = await MergedMode.enter();
+    if (!mounted) return;
+    setState(() => _entering = false);
+    if (!ok) {
+      setState(() => _error = MergedMode.stopped.value ?? 'merged.unavailable'.trm());
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
   Future<void> _switch(EmployeePageRef p, List<EmployeePageRef> all) async {
-    if (_busy != null || p.current) return;
+    if (_busy != null || _entering || p.current) return;
     if (!p.active) {
       setState(() => _error = 'حسابك في «${p.pageName}» معطّل — راجع مدير تلك الصفحة');
       return;
@@ -123,7 +179,7 @@ class _EmployeePagesSheetState extends State<EmployeePagesSheet> {
                   icon: Icons.manage_accounts_outlined,
                   title: 'المدراء الفرعيّون',
                   subtitle: 'التبديل بين مدراء هذه الصفحة',
-                  locked: _busy != null,
+                  locked: _busy != null || _entering,
                   onTap: () {
                     Navigator.of(context).maybePop();
                     widget.onManagers!();
@@ -131,6 +187,30 @@ class _EmployeePagesSheetState extends State<EmployeePagesSheet> {
                 ),
                 const SizedBox(height: Sp.md),
               ],
+              // «كل الصفحات» — كـ«كل الشركات» أعلى «تبديل الشركة» عند المالك. أطفأه الخادم ⇒ بمكانه خافتاً برسالته.
+              ValueListenableBuilder(
+                valueListenable: MergedMode.data,
+                builder: (context, _, __) => ValueListenableBuilder<String?>(
+                  valueListenable: MergedMode.stopped,
+                  builder: (context, stopped, _) {
+                    final show = MergedMode.eligible || (stopped != null && pages.length >= 2);
+                    if (!show) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: Sp.md),
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: MergedMode.active,
+                        builder: (context, on, _) => MergedAllRow(
+                          key: const ValueKey('employee-pages-all'),
+                          active: on,
+                          busy: _entering,
+                          stoppedText: MergedMode.eligible ? null : stopped,
+                          onTap: _toggleAll,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
               if (pages.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: Sp.lg),
@@ -151,7 +231,7 @@ class _EmployeePagesSheetState extends State<EmployeePagesSheet> {
                               : null,
                   current: p.current,
                   busy: _busy == p.employeeId,
-                  locked: _busy != null || p.current,
+                  locked: _busy != null || _entering || p.current,
                   dimmed: !p.active,
                   onTap: () => _switch(p, pages),
                 ),

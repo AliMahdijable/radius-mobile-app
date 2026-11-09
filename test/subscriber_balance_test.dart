@@ -43,7 +43,8 @@ void main() {
     });
 
     test('🚨 إضافة الدين على البطاقة لا مدفونة', () {
-      expect(src.contains('onAddDebt: Perms.has(\'subscribers.add_debt\')'),
+      // «كل الصفحات» (٩ نوفمبر): البوّابة بصلاحيّة صفحة المشترك (`_has` = خريطتها، وإلّا Perms كما كان)
+      expect(src.contains('onAddDebt: _has(\'subscribers.add_debt\')'),
           isTrue);
       expect(card.contains("label: 'إضافة دين',"), isTrue);
     });
@@ -51,7 +52,7 @@ void main() {
     test('التسديد للمدين وحده — الرصيد الدائن بابه «إضافة دين»', () {
       // شيتٌ يقول «لا يوجد دين» لا يفيد أحداً. و٥ سبتمبر: `balanceAmount != 0` كان يفتح «تسديد» لصاحب الرصيد الدائن
       // أيضاً — والتسديد يجمع على الرصيد لا يطرح منه، فمن له ٣٠٬٠٠٠ يصير له ٦٠٬٠٠٠. (كان الاختبار يحرس الشرط القديم.)
-      expect(src.contains("onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')"), isTrue);
+      expect(src.contains("onPay: sub.hasDebt && _has('subscribers.pay_debt')"), isTrue);
       expect(src.contains('onPay: sub.balanceAmount != 0 &&'), isFalse, reason: 'عاد الشرط الذي يفتح «تسديد» للرصيد الدائن');
     });
   });

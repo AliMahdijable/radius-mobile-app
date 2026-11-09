@@ -23,7 +23,6 @@ import '../../models/subscriber.dart';
 import '../../services/merged_mode.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/connection_alerts.dart';
-import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../services/provider_limits.dart';
 import '../../services/subscriber_events.dart';
@@ -212,7 +211,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // Pro: أُعيدت البوّابة لكن بصلاحيّة **الساس** (subscribers.show_password):
     // أغلب الشركات العراقيّة لا تسمح بعرض الباسورد، ومن تسمح (=true) يبقى
     // متاحاً للدعم. لا نجلبه أصلاً إن مُنع — فلا يبقى في الذاكرة بلا داعٍ.
-    if (Perms.has('subscribers.show_password')) {
+    if (_has('subscribers.show_password')) {
       _loadPassword();
     }
     // «كل الشركات»: هويّته من ساس شركته أوّل الفتح — يسكّ عليها الخادم مرجع النافذة الذي تطلبه كلّ كتابة
@@ -393,25 +392,30 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       // تُخفي الزرّ كما كانت؛ أمّا نقص المفتاح وحده فيُبقيه
                       // **مقفلاً** في مكانه — لا يختفي ولا يرسل شيئاً.
                       onRemind: _remindState &&
-                              Perms.has('subscribers.send_whatsapp')
+                              _has('subscribers.send_whatsapp') &&
+                              _pageLock == null
                           ? () => _sendTemplate('debt_reminder')
                           : null,
-                      remindLocked:
-                          _remindState && _locked('subscribers.send_whatsapp'),
+                      remindLocked: _remindState &&
+                          (_locked('subscribers.send_whatsapp') ||
+                              (_pageLock != null && _has('subscribers.send_whatsapp'))),
                       // 2026-09-05: كان الشرط `balanceAmount != 0` فيفتح
                       // «تسديد» لصاحب الرصيد الدائن أيضاً — والتسديد يجمع
                       // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
                       // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
                       // دين» وهو ظاهرٌ له أصلاً.
-                      onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')
+                      onPay: sub.hasDebt && _has('subscribers.pay_debt') && _pageLock == null
                           ? () => showPayDebtSheet(context, sub)
                           : null,
-                      payLocked:
-                          sub.hasDebt && _locked('subscribers.pay_debt'),
-                      onAddDebt: Perms.has('subscribers.add_debt')
+                      payLocked: sub.hasDebt &&
+                          (_locked('subscribers.pay_debt') ||
+                              (_pageLock != null && _has('subscribers.pay_debt'))),
+                      onAddDebt: _has('subscribers.add_debt') && _pageLock == null
                           ? () => showAddDebtSheet(context, sub)
                           : null,
-                      addDebtLocked: _locked('subscribers.add_debt'),
+                      addDebtLocked: _locked('subscribers.add_debt') ||
+                          (_pageLock != null && _has('subscribers.add_debt')),
+                      lockedMessage: _pageLock,
                     ),
                     // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
                     // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
@@ -506,8 +510,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                         icon: LucideIcons.refreshCw,
                         label: 'subscribers.renew_subscription'.tr(),
                         busy: _isBusy,
-                        locked: _locked('subscribers.activate'),
-                        onTap: _locked('subscribers.activate')
+                        locked: _locked('subscribers.activate') || _pageLock != null,
+                        lockedMessage: _locked('subscribers.activate') ? null : _pageLock,
+                        onTap: _locked('subscribers.activate') || _pageLock != null
                             ? null
                             : () => showActivateSheet(context, sub),
                       ),
@@ -959,11 +964,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   ///
   /// وما لا يخدمه مزوّد الجلسة (فايبر اكس: تعديل/حذف/فصل… — [providerHidesAction]) لا يُعرض أصلاً، لا مقفلاً ولا حيّاً.
   bool _locked(String key) =>
-      !_providerHides(key) && !Perms.has(key) && permShown([key]);
+      !_providerHides(key) && !_has(key) && permShown([key]);
+
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): صلاحيّة [key] في صفحة **المشترك** (خريطتها من ردّ صفحاته) — صفحته الحاليّة غيرها في
+  /// غيرها. المالك، والوضع العاديّ، وخادمٌ بلا خرائط ⇒ Perms.has كما كان حرفاً.
+  bool _has(String key) => MergedMode.can(sub.companyKey, key);
+
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): مشترك صفحةٍ كتابتها مغلقةٌ من هنا (غير صفحته الحاليّة) ⇒ سبب القفل لكلّ عمليّة كتابة —
+  /// الزرّ بمكانه مقفلاً بهذا السبب («انتقل إلى الصفحة من «صفحاتي» لتنفيذها») ولا يُرسل شيء. null للمالك ولصفحته الحاليّة؛
+  /// والقراءات (الحركات، الجلسات، الاستهلاك، النسخ، الطباعة) كما هي.
+  String? get _pageLock => MergedOps.writeLock(sub);
 
   /// يُعرض الإجراء أصلاً (حيّاً أو مقفلاً)؟
   bool _shows(String key) =>
-      !_providerHides(key) && (Perms.has(key) || _locked(key));
+      !_providerHides(key) && (_has(key) || _locked(key));
 
   /// مزوّد **شركة المشترك** لا يخدم [key]. «كل الشركات» تُبقي الجلسة المفتوحة كما هي، ومشترك شركةٍ أخرى (`companyKey`)
   /// ساسٌ يصلح للتطبيق (فايبر اكس خارج `MergedCompany.appCapable`) — فقيود جلسة فايبر اكس لا تمسّه.
@@ -994,6 +1008,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           icon: LucideIcons.calendarPlus,
           label: 'subscribers.op_extend'.tr(),
           locked: _locked('subscribers.extend'),
+          unavailable: _pageLock,
           onTap: (_isBusy || _locked('subscribers.extend'))
               ? null
               : () => showExtendSheet(context, sub),
@@ -1003,6 +1018,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           icon: LucideIcons.pencil,
           label: 'subscribers.op_edit'.tr(),
           locked: _locked('subscribers.edit'),
+          unavailable: _pageLock,
           onTap: (_isBusy || _locked('subscribers.edit'))
               ? null
               : () => showEditSubscriberSheet(context, sub),
@@ -1021,6 +1037,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           color: sub.isDisabled ? AppColors.success : AppColors.warningFill,
           busy: _toggling,
           locked: _locked('subscribers.toggle'),
+          unavailable: _pageLock,
           onTap: (sub.idx == null || _isBusy || _locked('subscribers.toggle'))
               ? null
               : _confirmToggleEnabled,
@@ -1047,6 +1064,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           color: AppColors.error,
           busy: _disconnecting,
           locked: _locked('subscribers.toggle'),
+          unavailable: _pageLock,
           onTap: (_isBusy || _locked('subscribers.toggle'))
               ? null
               : _confirmDisconnect,
@@ -1084,7 +1102,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// نُنبّه مشتركاً على حالٍ ربّما تغيّرت. وكارت الجهاز يُحدّثها ثمّ ينادي
   /// `DeviceProbeBus` فتظهر.
   List<ConnectionProblem> _connectionProblems() {
-    if (!Perms.has('whatsapp.send') || sub.displayPhone.isEmpty) {
+    if (!_has('whatsapp.send') || sub.displayPhone.isEmpty) {
       return const [];
     }
     // «كل الشركات»: التنبيه (قوالب الشركة وإرسالها) للشركة وحدها — لا بلاطة تنتهي برفض. القراءة نفسها على كارت الجهاز.
@@ -1122,6 +1140,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'subscribers.op_add_debt'.tr(),
             color: AppColors.warningFill,
             locked: _locked('subscribers.add_debt'),
+            unavailable: _pageLock,
             onTap: _locked('subscribers.add_debt')
                 ? null
                 : () => showAddDebtSheet(context, sub),
@@ -1133,6 +1152,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'إضافة رصيد',
             color: AppColors.successFill,
             locked: _locked('subscribers.add_credit'),
+            unavailable: _pageLock,
             onTap: _locked('subscribers.add_credit')
                 ? null
                 : () => showAddCreditSheet(context, sub),
@@ -1149,6 +1169,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'subscribers.op_pay_debt'.tr(),
             color: AppColors.brandAccent,
             locked: _locked('subscribers.pay_debt'),
+            unavailable: _pageLock,
             meta: _locked('subscribers.pay_debt')
                 ? null
                 : formatIQD(sub.debtAbs.round()),
@@ -1165,6 +1186,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'sales.sell_to_sub'.tr(),
             color: AppColors.brandAccent,
             locked: _locked('sales.sell') || SalesState.gate.value!.scoped,
+            unavailable: _pageLock,
             onTap: (_locked('sales.sell') || SalesState.gate.value!.scoped)
                 ? null
                 : () => showSellToSubscriber(
@@ -1181,6 +1203,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             icon: LucideIcons.tag,
             label: 'subscribers.op_quick_discount'.tr(),
             locked: _locked('discounts.manage'),
+            unavailable: _pageLock,
             onTap: _locked('discounts.manage')
                 ? null
                 : () => showQuickDiscountSheet(context, sub),
@@ -1191,6 +1214,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             icon: LucideIcons.banknote,
             label: 'sp.op_fixed_price'.tr(),
             locked: _locked('subscriber_prices.manage'),
+            unavailable: _pageLock,
             meta: _locked('subscriber_prices.manage')
                 ? null
                 : (sub.isFixedPrice && sub.price != null
@@ -1218,6 +1242,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             color: AppColors.warningFill,
             busy: _sendingTemplate == 'debt_reminder',
             locked: _locked('subscribers.send_whatsapp'),
+            unavailable: _pageLock,
             onTap: _locked('subscribers.send_whatsapp')
                 ? null
                 : () => _sendTemplate('debt_reminder'),
@@ -1229,6 +1254,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             color: AppColors.warningFill,
             busy: _sendingTemplate == 'expiry_warning',
             locked: _locked('subscribers.send_whatsapp'),
+            unavailable: _pageLock,
             onTap: _locked('subscribers.send_whatsapp')
                 ? null
                 : () => _sendTemplate('expiry_warning'),
@@ -1239,6 +1265,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'subscribers.op_send_info'.tr(),
             busy: _sendingTemplate == 'subscriber_info',
             locked: _locked('subscribers.send_whatsapp'),
+            unavailable: _pageLock,
             onTap: _locked('subscribers.send_whatsapp')
                 ? null
                 : () => _sendTemplate('subscriber_info'),
@@ -1266,6 +1293,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             icon: LucideIcons.qrCode,
             label: 'subscribers.op_qr_login'.tr(),
             locked: _locked('subscribers.send_whatsapp'),
+            unavailable: _pageLock,
             onTap: _locked('subscribers.send_whatsapp')
                 ? null
                 : () => showQrLoginSheet(context, sub),
@@ -1294,6 +1322,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             icon: LucideIcons.notebookPen,
             label: _privateNote.note != null ? 'تعديل الملاحظة' : 'إضافة ملاحظة',
             locked: _locked('subscribers.private_note'),
+            unavailable: _pageLock,
             meta: _locked('subscribers.private_note') || _privateNote.ready
                 ? null
                 : (_privateNote.failed ? 'غير متاحة الآن' : 'جارٍ التحميل…'),
@@ -1366,15 +1395,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         // «إضافة موقع» مقفلاً. ١٨ أكتوبر: ولايرث لنك أيضاً — صار له مخزنٌ
         // محلّيّ على خادمنا، فالقفل بالصلاحيّة وحدها كباقي الشركات.
         if (sub.hasLocation ||
-            canEditLocation() ||
+            _has('subscribers.edit_location') ||
             _locked('subscribers.edit_location'))
           SubAction(
             icon: LucideIcons.mapPin,
             label: sub.hasLocation
                 ? 'subscribers.op_location'.tr()
                 : 'subscribers.op_location_add'.tr(),
-            locked: !sub.hasLocation && !canEditLocation(),
-            onTap: !sub.hasLocation && !canEditLocation()
+            locked: !sub.hasLocation && !_has('subscribers.edit_location'),
+            unavailable: sub.hasLocation ? null : _pageLock,
+            onTap: !sub.hasLocation && !_has('subscribers.edit_location')
                 ? null
                 : () async {
                     if (!sub.hasLocation) {
@@ -1399,6 +1429,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             color: _locked('subscribers.delete') ? null : AppColors.error,
             busy: _deleting,
             locked: _locked('subscribers.delete'),
+            unavailable: _pageLock,
             onTap: (sub.idx == null || _locked('subscribers.delete'))
                 ? null
                 : _confirmDelete,
@@ -2287,7 +2318,7 @@ class _SubscriberHero extends StatelessWidget {
           ),
           // Pro: عرض كلمة المرور مُسيَّجٌ بصلاحيّة الساس — أغلب الشركات لا
           // تسمح به. show_password=false → يختفي الفاصل والباسورد معاً.
-          if (Perms.has('subscribers.show_password')) ...[
+          if (MergedMode.can(sub.companyKey, 'subscribers.show_password')) ...[
             Container(
               width: 1,
               height: 16,

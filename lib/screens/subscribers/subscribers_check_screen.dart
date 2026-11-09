@@ -18,6 +18,7 @@ import '../../widgets/company_tag.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/subs_metric_strip.dart';
 import 'widgets/device_chip_micro.dart';
+import '../../services/merged_text.dart';
 
 /// «الفحص العامّ» للمشتركين (٨ نوفمبر — المالك: «أ» و«تره فحص المشتركين ثكيل كلش… مو مثل مايعرضون الاشارات وسرعته بكارت
 /// المشتركين»، ثمّ مع صورة الصفحة: «يحتاجلها ترتيب اكثر واظهار معلومات ال ccq كذلك وتصميم افضل»): تقريرٌ فوريّ من قراءات
@@ -317,7 +318,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final title = none ? 'لا قراءات بعد' : (bad == 0 ? 'لا مشاكل' : '${formatIQD(bad)} بمشكلة');
     final at = widget.viaVpn ? VpnNow.readingsAt : null;
     final source = _merged
-        ? 'كل الشركات — كلّ شركةٍ بطريقها'
+        ? mergedWord('كل الشركات — كلّ شركةٍ بطريقها', 'كل الصفحات — كلّ صفحةٍ بطريقها')
         : (widget.viaVpn ? 'عبر VPN${at != null ? ' · ${timeAgoAr(at)}' : ''}' : 'من موبايلك على الشبكة');
     final pct = r.total == 0 ? 0.0 : r.read / r.total;
     return Container(
@@ -456,7 +457,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final picked = _company == null ? null : shown.where((c) => c.key == _company).firstOrNull;
     final hint = picked != null
         ? '«${picked.name}» وحدها — اضغطها ثانيةً لعرض الكلّ'
-        : (shown.length > 1 ? 'اضغط شركةً لعرض مشتركيها وحدهم' : null);
+        : (shown.length > 1 ? mergedWord('اضغط شركةً لعرض مشتركيها وحدهم', 'اضغط صفحةً لعرض مشتركيها وحدهم') : null);
     return Container(
       key: const ValueKey('subs-check-companies'),
       padding: const EdgeInsets.all(Sp.sm),
@@ -760,7 +761,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final (text, tone) = switch (m.why) {
       SubsMissWhy.dead => ('لا يستجيب', AppTone.danger),
       SubsMissWhy.company => (
-          (m.note ?? '').contains('تحتاج VPN') ? 'شركته تحتاج VPN' : 'لم تُفحص شركته',
+          (m.note ?? '').contains('تحتاج VPN')
+              ? mergedWord('شركته تحتاج VPN', 'صفحته تحتاج VPN')
+              : mergedWord('لم تُفحص شركته', 'لم تُفحص صفحته'),
           AppTone.warning
         ),
       SubsMissWhy.offline => ('غير متّصل', AppTone.neutral),

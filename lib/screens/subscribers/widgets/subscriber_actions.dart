@@ -202,6 +202,7 @@ class SubscriberPrimaryAction extends StatelessWidget {
     required this.onTap,
     this.busy = false,
     this.locked = false,
+    this.lockedMessage,
   });
 
   final IconData icon;
@@ -211,6 +212,9 @@ class SubscriberPrimaryAction extends StatelessWidget {
 
   /// بلا مفتاح التفعيل: يفقد تعبئته ويحمل قفلاً، ونقرته رسالة القفل.
   final bool locked;
+
+  /// سبب القفل غير الصلاحيّة (٩ نوفمبر — «كل الصفحات» للموظّف: صفحةٌ كتابتها من «صفحاتي») مكان «اطلبها من مديرك».
+  final String? lockedMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -223,7 +227,7 @@ class SubscriberPrimaryAction extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.button),
         child: InkWell(
           onTap: locked
-              ? () => showNoPermission(context, action: true)
+              ? () => showNoPermission(context, action: true, message: lockedMessage)
               : (enabled ? onTap : null),
           borderRadius: BorderRadius.circular(R.button),
           child: Center(

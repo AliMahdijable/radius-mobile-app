@@ -46,6 +46,7 @@ class BalanceCard extends StatelessWidget {
     this.addDebtLocked = false,
     this.remindLocked = false,
     this.payLocked = false,
+    this.lockedMessage,
   });
 
   final Subscriber sub;
@@ -61,6 +62,9 @@ class BalanceCard extends StatelessWidget {
   final bool addDebtLocked;
   final bool remindLocked;
   final bool payLocked;
+
+  /// سبب القفل غير الصلاحيّة (٩ نوفمبر — «كل الصفحات» للموظّف: صفحةٌ كتابتها من «صفحاتي») مكان «اطلبها من مديرك».
+  final String? lockedMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +98,7 @@ class BalanceCard extends StatelessWidget {
           color: AppColors.warning,
           borderColor: AppColors.warningSoftBorder,
           locked: addDebtLocked,
+          lockedMessage: lockedMessage,
           onTap: onAddDebt,
         ),
       if (onRemind != null || remindLocked)
@@ -104,6 +109,7 @@ class BalanceCard extends StatelessWidget {
           color: AppColors.warning,
           borderColor: AppColors.warningSoftBorder,
           locked: remindLocked,
+          lockedMessage: lockedMessage,
           onTap: onRemind,
         ),
       if (onPay != null || payLocked)
@@ -113,6 +119,7 @@ class BalanceCard extends StatelessWidget {
           filled: true,
           color: isDebt ? AppColors.errorFill : AppColors.successFill,
           locked: payLocked,
+          lockedMessage: lockedMessage,
           onTap: onPay,
         ),
     ];
@@ -228,6 +235,7 @@ class _DebtButton extends StatelessWidget {
     required this.onTap,
     this.borderColor,
     this.locked = false,
+    this.lockedMessage,
   });
   final String label;
   final IconData icon;
@@ -239,6 +247,9 @@ class _DebtButton extends StatelessWidget {
   /// مقفل: لا تعبئة، حدٌّ محايد، قفلٌ مكان الأيقونة، ونصٌّ خافت.
   final bool locked;
 
+  /// سبب القفل غير الصلاحيّة — null ⇒ رسالة الصلاحيّة كما كانت.
+  final String? lockedMessage;
+
   @override
   Widget build(BuildContext context) {
     final solid = filled && !locked;
@@ -247,7 +258,7 @@ class _DebtButton extends StatelessWidget {
       color: solid ? color : AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
-        onTap: locked ? () => showNoPermission(context, action: true) : onTap,
+        onTap: locked ? () => showNoPermission(context, action: true, message: lockedMessage) : onTap,
         borderRadius: BorderRadius.circular(R.md),
         child: Container(
           height: H.chip,

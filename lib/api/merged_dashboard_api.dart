@@ -36,12 +36,17 @@ class MergedSum<T> {
 
 /// واتساب كلّ شركة في «كل الشركات» (٨ نوفمبر): الحال بمفتاحها، وnull = تعذّر فحصها (يُسمّى لا يُعدّ منقطعاً).
 class MergedWhatsApp {
-  const MergedWhatsApp(this.rows);
+  const MergedWhatsApp(this.rows, {this.denied = const {}});
   final List<({MergedCompany company, WhatsAppStatusResult? status})> rows;
 
-  int get total => rows.length;
+  /// «كل الصفحات»: صفحاتٌ لا يملك فيها الموظّف أيّ مفتاح واتساب — لم تُفحص، وصفّها يقول «لا صلاحيّة» ولا تُعدّ في N/M.
+  final Set<String> denied;
+
+  bool isDenied(String key) => denied.contains(key);
+
+  int get total => rows.where((r) => !denied.contains(r.company.key)).length;
   int get connected => rows.where((r) => r.status?.connected == true).length;
-  bool get allConnected => rows.isNotEmpty && connected == rows.length;
+  bool get allConnected => total > 0 && connected == total;
 
   /// صفّ الشركة (ربطٌ ثانٍ للمدير نفسه يُقرأ من أصله — جلسة واتساب واحدة).
   ({MergedCompany company, WhatsAppStatusResult? status})? of(String key) {
@@ -78,19 +83,30 @@ class MergedDashboardApi {
   /// شركةً معلّقة).
   static Future<MergedWhatsApp> whatsApp() async {
     final cs = countable();
+    // «كل الصفحات»: صفحةٌ بلا أيّ مفتاح واتساب للموظّف ⇒ لا فحص (بوّابة الرئيسيّة نفسها لكلّ صفحة)
+    final denied = {for (final c in cs) if (MergedMode.pagePermAny(c.key, waKeys) == false) c.key};
     final res = await _each(
       cs,
-      (c) => DashboardApi.fetchWhatsAppStatusAt(c.adminId)
-          .timeout(const Duration(seconds: 20), onTimeout: () => null)
-          .catchError((_) => null),
+      (c) => denied.contains(c.key)
+          ? Future<WhatsAppStatusResult?>.value(null)
+          : DashboardApi.fetchWhatsAppStatusAt(c.adminId)
+              .timeout(const Duration(seconds: 20), onTimeout: () => null)
+              .catchError((_) => null),
     );
-    return MergedWhatsApp([for (var i = 0; i < cs.length; i++) (company: cs[i], status: res[i])]);
+    return MergedWhatsApp([for (var i = 0; i < cs.length; i++) (company: cs[i], status: res[i])], denied: denied);
   }
+
+  /// مفاتيح `connection-status` بالخادم (requireWhatsAppAdminContext) — بوّابة حبّة واتساب الرئيسيّة نفسها.
+  static const waKeys = ['whatsapp.connect', 'whatsapp.send', 'whatsapp.broadcast', 'whatsapp.templates', 'whatsapp.schedules'];
 
   /// الرصيد (بإشارته) والنقاط.
   static Future<MergedSum<WalletResult>> wallet() async {
     final cs = countable();
     final res = await _each(cs, (c) async {
+      // «كل الصفحات»: لا reports.financial له في هذه الصفحة ⇒ لا يُطلب رصيدها (الساس لا يقنّعه للموظّف — البوّابة هنا)
+      if (MergedMode.pagePerm(c.key, 'reports.financial') == false) {
+        return <String, dynamic>{'success': false, 'code': 'PERMISSION_DENIED', 'local': true};
+      }
       try {
         final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/admin-widgets');
         return r.data;
@@ -109,9 +125,16 @@ class MergedDashboardApi {
       reasons[c.key] = why;
     }
 
+    // «كل الصفحات» للموظّف (٩ نوفمبر): صلاحيّاته في كلّ صفحةٍ غيرها في الأخرى — رفضٌ (403) أو رصيدٌ يقنّعه الخادم (null بلا
+    // reports.financial هناك) يُسمّى بالصفحة ولا يُجمع صفراً. المالك كما كان حرفاً.
+    final emp = MergedMode.employeeSession;
     for (var i = 0; i < cs.length; i++) {
       final c = cs[i];
       final b = res[i];
+      if (emp && b != null && (b['code'] == 'PERMISSION_DENIED' || (b['success'] != false && b['balance'] == null))) {
+        skip(c, MergedMode.noAccess('رصيدها'));
+        continue;
+      }
       if (b == null || b['success'] == false || b['balance_unavailable'] == true) {
         skip(c, 'تعذّرت قراءة الرصيد');
         continue;
@@ -136,7 +159,9 @@ class MergedDashboardApi {
   /// الإيراد للمدّة: مجموع الشركات بالدينار، والسلسلة اليوميّة مجموعةً بالتاريخ.
   static Future<MergedSum<RevenueResult>> revenue(RevenuePeriod period) async {
     final cs = countable();
-    final res = await _each(cs, (c) => DashboardApi.fetchRevenue(period, adminIdOverride: c.adminId));
+    bool denied(MergedCompany c) => MergedMode.pagePerm(c.key, 'reports.financial') == false;
+    final res = await _each(
+        cs, (c) => denied(c) ? Future<RevenueResult?>.value(null) : DashboardApi.fetchRevenue(period, adminIdOverride: c.adminId));
     var amount = 0;
     var any = false;
     final byDay = <DateTime, int>{};
@@ -146,7 +171,11 @@ class MergedDashboardApi {
     for (var i = 0; i < cs.length; i++) {
       final c = cs[i];
       final r = res[i];
-      final why = r == null ? 'تعذّر جلب الإيراد' : (!_iqd(c) ? (c.currency ?? 'عملةٌ غير معروفة') : null);
+      final why = denied(c)
+          ? MergedMode.noAccess('إيرادها')
+          : r == null
+              ? 'تعذّر جلب الإيراد'
+              : (!_iqd(c) ? (c.currency ?? 'عملةٌ غير معروفة') : null);
       if (why != null) {
         excluded.add('${c.name}: $why');
         reasons[c.key] = why;
@@ -168,7 +197,9 @@ class MergedDashboardApi {
   /// تفعيلات اليوم وتمديداته — مجموع العدد، وآخر العمليّات من كلّ الشركات (الأحدث أوّلاً).
   static Future<MergedSum<DailyActivationsResult>> daily() async {
     final cs = countable();
-    final res = await _each(cs, (c) => DashboardApi.fetchDailyActivations(adminIdOverride: c.adminId));
+    bool denied(MergedCompany c) => MergedMode.pagePerm(c.key, 'reports.daily_activations') == false;
+    final res = await _each(cs,
+        (c) => denied(c) ? Future<DailyActivationsResult?>.value(null) : DashboardApi.fetchDailyActivations(adminIdOverride: c.adminId));
     var act = 0;
     var ext = 0;
     var any = false;
@@ -179,8 +210,9 @@ class MergedDashboardApi {
     for (var i = 0; i < cs.length; i++) {
       final r = res[i];
       if (r == null) {
-        excluded.add('${cs[i].name}: تعذّر جلب تفعيلات اليوم');
-        reasons[cs[i].key] = 'تعذّر جلب تفعيلات اليوم';
+        final why = denied(cs[i]) ? MergedMode.noAccess('تفعيلاتها') : 'تعذّر جلب تفعيلات اليوم';
+        excluded.add('${cs[i].name}: $why');
+        reasons[cs[i].key] = why;
         continue;
       }
       act += r.activations;

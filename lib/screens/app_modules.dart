@@ -48,6 +48,7 @@ import 'topup/fiberx_topup_screen.dart';
 import 'topup/jtpay_screen.dart';
 import 'topup/topup_screen.dart';
 import '../widgets/merged_section.dart';
+import '../services/merged_text.dart';
 
 /// مجموعات القائمة الجانبيّة على الحاسبة — بترتيب الموقع (nav-config.ts).
 enum AppModuleGroup { manage, finance, comms, customize, earthlink }
@@ -329,7 +330,7 @@ List<AppModule> buildAppModules() {
         // «كل الشركات» (٨ نوفمبر): للمفتوحة وحدها — الشحن مالٌ يُضاف لرصيد صفحتها (لا يُوجَّه)
         page: () => MergedSection.openOnly(
             title: 'شحن رصيد الصفحة',
-            reason: 'merged.reason_topup'.tr(),
+            reason: 'merged.reason_topup'.trm(),
             child: ProviderService.isFiberx ? const FiberxTopupScreen() : const TopupScreen()),
       ),
     // ٣٠ أكتوبر: «شحن من pay الجزيرة» — لوكلاء شركة الجزيرة (jt لاسلكي / ftth فايبر) حين يقول الخادم إنّها
@@ -347,7 +348,7 @@ List<AppModule> buildAppModules() {
             ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
             : 'زين كاش أو بطاقة ← رصيد pay ← صفحتك بالساس',
         page: () => MergedSection.openOnly(
-            title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.tr(), child: const JtpayScreen()),
+            title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.trm(), child: const JtpayScreen()),
       ),
     // §١٢ «الكارتات» — مخزون كارتات التعبئة. الخادم يقول `enabled` في admin-widgets والبطاقة تتبعه،
     // ومجهولة الشارة لا تُظهرها. الموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها.
@@ -367,9 +368,10 @@ List<AppModule> buildAppModules() {
         // «كل الشركات» (٨ نوفمبر): كارتات الشركة المختارة للعرض (الشراء والنقل من صفحتها) — الساس وايرث لنك (الخادم b42e0dc)
         page: () => MergedSection(
             readOnly: true,
+            perms: cardKeys,
             prefixes: const ['/api/v2/cards'],
             serves: (c) => c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink,
-            servesNote: 'merged.serves_sas_el'.tr(),
+            servesNote: 'merged.serves_sas_el'.trm(),
             lockTitle: 'cards.title'.tr(),
             child: const CardsScreen()),
       ),
@@ -384,7 +386,8 @@ List<AppModule> buildAppModules() {
         brandGlyph: AppColors.channelTelegram,
         title: 'تلغرام',
         subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/telegram'], child: TelegramScreen()),
+        page: () => MergedSection(
+            readOnly: true, prefixes: const ['/api/telegram'], perms: tgGate, lockTitle: 'تلغرام', child: const TelegramScreen()),
       ),
     // التبليغات (broadcast) — إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء. موظّف ايرث لنك لا يراها.
     if (permShown(const ['whatsapp.broadcast']))
@@ -397,10 +400,12 @@ List<AppModule> buildAppModules() {
         brandGlyph: AppColors.channelWhatsApp,
         title: 'more.broadcast'.tr(),
         subtitle: 'more.broadcast_hint'.tr(),
-        page: () => const MergedSection(
+        page: () => MergedSection(
             readOnly: true,
-            prefixes: ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
-            child: BroadcastScreen()),
+            prefixes: const ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
+            perms: const ['whatsapp.broadcast'],
+            lockTitle: 'more.broadcast'.tr(),
+            child: const BroadcastScreen()),
       ),
     // حالة الرسائل — كل رسائل WhatsApp بأنواعها مع فلاتر + بحث + retry.
     if (permShown(logKeys))
@@ -480,7 +485,7 @@ List<AppModule> buildAppModules() {
         subtitle: 'more.packages_hint'.tr(),
         // «كل الشركات»: للمفتوحة وحدها — الأسعار لكلّ شركةٍ على حدة (نطاق التسعير لا يُوجَّه)
         page: () => MergedSection.openOnly(
-            title: 'more.packages'.tr(), reason: 'merged.reason_prices'.tr(), child: const PackagesScreen()),
+            title: 'more.packages'.tr(), reason: 'merged.reason_prices'.trm(), child: const PackagesScreen()),
       ),
     if (permShown(const ['discounts.view']))
       AppModule(
@@ -491,7 +496,12 @@ List<AppModule> buildAppModules() {
         tone: AppTone.success,
         title: 'more.discounts'.tr(),
         subtitle: 'more.discounts_hint'.tr(),
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/discounts', '/api/v2/discounts'], child: DiscountsScreen()),
+        page: () => MergedSection(
+            readOnly: true,
+            prefixes: const ['/api/discounts', '/api/v2/discounts'],
+            perms: const ['discounts.view'],
+            lockTitle: 'more.discounts'.tr(),
+            child: const DiscountsScreen()),
       ),
     // «أسعار المشتركين» — سعر بيعٍ ثابت لمشتركٍ بعينه، بجانب الخصومات لأنّه أخوها.
     if (permShown(const ['subscriber_prices.view']))
@@ -504,7 +514,7 @@ List<AppModule> buildAppModules() {
         title: 'sp.title'.tr(),
         subtitle: 'sp.module_hint'.tr(),
         page: () => MergedSection.openOnly(
-            title: 'sp.title'.tr(), reason: 'merged.reason_prices'.tr(), child: const SubscriberPricesScreen()),
+            title: 'sp.title'.tr(), reason: 'merged.reason_prices'.trm(), child: const SubscriberPricesScreen()),
       ),
     if (permShown(const ['employees.view']))
       AppModule(
@@ -516,7 +526,12 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.employees'.tr(),
         subtitle: 'more.employees_hint'.tr(),
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/v2/employees'], child: EmployeesScreen()),
+        page: () => MergedSection(
+            readOnly: true,
+            prefixes: const ['/api/v2/employees'],
+            perms: const ['employees.view'],
+            lockTitle: 'more.employees'.tr(),
+            child: const EmployeesScreen()),
       ),
     // بوابة المشترك — مفتوحةٌ لكلّ فاعل (الرمز يحتاجه الموظّف أيضاً)، والتخصيص داخلها بـ`settings.edit`.
     // الوطنيّ وحده بمكانه مقفلاً بالسبب.
@@ -543,9 +558,9 @@ List<AppModule> buildAppModules() {
           subtitle: 'تحويل الرصيد بين الوكلاء + كشف الحساب',
           page: () => MergedSection.openOnly(
               title: 'تحويل الرصيد',
-              reason: 'merged.reason_transfer'.tr(),
+              reason: 'merged.reason_transfer'.trm(),
               serves: (c) => c.provider == MergedProvider.earthlink,
-              servesNote: 'merged.serves_el'.tr(),
+              servesNote: 'merged.serves_el'.trm(),
               child: const ElTransferScreen()),
         ),
       // «الكارتات المطلوبة» — توقّع الكارتات والرصيد لمدّة؛ من «التقارير الماليّة».
@@ -561,9 +576,10 @@ List<AppModule> buildAppModules() {
           // ٨ نوفمبر (الخادم 99e1913): قراءةٌ موجَّهة لكلّ شركة ايرث لنك — غيرها «غير متاح» بسببه
           page: () => MergedSection(
               readOnly: true,
+              perms: const ['reports.financial'],
               prefixes: const ['/api/v2/el/prepaid-needed'],
               serves: (c) => c.provider == MergedProvider.earthlink,
-              servesNote: 'merged.serves_el'.tr(),
+              servesNote: 'merged.serves_el'.trm(),
               lockTitle: 'الكارتات المطلوبة',
               child: const ElRequiredCardsScreen()),
         ),

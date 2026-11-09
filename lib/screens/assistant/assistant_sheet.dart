@@ -20,6 +20,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'assistant_consent_sheet.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../services/merged_text.dart';
 
 /// نافذة المساعد الذكيّ — «اشرحلي» و«كيف أسوّي؟» في ورقةٍ واحدة.
 ///
@@ -254,7 +255,7 @@ class _AssistantSheetState extends State<AssistantSheet> {
             title: 'ai.title'.tr(),
             // «كل الشركات» (٨ نوفمبر — الفحص العامّ): المساعد يقرأ الشركة المفتوحة وحدها — يُقال بدل الشعار
             subtitle: MergedMode.active.value
-                ? 'ai.merged_scope'.tr(args: [ActiveCompany.current?.label ?? '—'])
+                ? 'ai.merged_scope'.trm(args: [MergedMode.currentPageName ?? ActiveCompany.current?.label ?? '—'])
                 : 'ai.slogan'.tr(),
             onClose: () => Navigator.of(context).pop(),
           ),

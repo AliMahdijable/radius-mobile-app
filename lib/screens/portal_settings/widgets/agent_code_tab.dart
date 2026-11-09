@@ -18,6 +18,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'portal_switch_tile.dart';
 import '../../../widgets/merged_section.dart';
+import '../../../services/merged_text.dart';
 
 /// تطبيق المشترك كما يجده في المتجر — المصدر الوحيد لنصّ «مشاركة».
 abstract final class SubscriberApp {
@@ -370,7 +371,7 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
   /// «كل الشركات»: نقرةٌ على مفتاحٍ مقفلٍ لشركةٍ للعرض — تقول لماذا (لا «اطلبها من مديرك»).
   void _viewOnlyTap() {
     final name = MergedSection.of(context)?.company?.name ?? '—';
-    _snack('merged.view_only_tap'.tr(args: [name]));
+    _snack('merged.view_only_tap'.trm(args: [name]));
   }
 
   @override

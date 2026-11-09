@@ -22,6 +22,11 @@ class MergedCompany {
     this.reason,
     this.message,
     this.retryAfterMs,
+    this.employeeId,
+    this.current = false,
+    this.primary = false,
+    this.writes,
+    this.permissions,
   });
 
   /// c + 12 hex — هو x-company-key.
@@ -62,6 +67,31 @@ class MergedCompany {
 
   /// ترتيبها في الردّ (ترتيب الربط) — «الأقدم ربطاً» في إزالة المكرّر.
   final int index;
+
+  // ── «كل الصفحات» للموظّف (٩ نوفمبر — GET /api/v2/employee-merged/companies): حقولٌ يرسلها ردّ الموظّف وحده (المالك بلاها) ──
+
+  /// صفّ الموظّف في هذه الصفحة (التنقّل إليها من «صفحاتي» به).
+  final int? employeeId;
+
+  /// صفحة توكنه الآن (الجلسة المفتوحة) — هي «المفتوحة» في الوضع، وكتابتها وحدها تُنفَّذ من هنا (المرحلة الأولى).
+  final bool current;
+
+  /// صفحته الأصليّة (التي يدخل بها).
+  final bool primary;
+
+  /// الخادم يقبل الكتابة عليها من «كل الصفحات» — null: لم يقلها (المالك، أو خادمٌ أقدم).
+  final bool? writes;
+
+  /// خريطة صلاحيّاته في هذه الصفحة (الافتراضيّة + المحفوظة لصفّه فيها — مفاتيح `/api/v2/employees/me` نفسها). null: المالك، أو
+  /// خادمٌ أقدم بلاها ⇒ يبقى ما كان (صلاحيّات صفحته الحاليّة، والخادم يحكم الباقي).
+  final Map<String, bool>? permissions;
+
+  static Map<String, bool>? _perms(Object? v) {
+    if (v is! Map) return null;
+    return Map<String, bool>.unmodifiable({
+      for (final e in v.entries) '${e.key}': e.value == true || e.value == 1 || e.value == '1',
+    });
+  }
 
   /// FTTH يعمل من الويب وحده الآن (الخادم يرفضه من التطبيق: ftth_web_only).
   // فايبر اكس لا تمرّ «كل الشركات» بالخادم أصلاً (companyRouting) — كالوطنيّ: «من الموقع» لا ساسٌ يُطلب.
@@ -130,6 +160,11 @@ class MergedCompany {
         message: _text(row['message']),
         retryAfterMs: _int(row['retry_after_ms']),
         index: out.length,
+        employeeId: _int(row['employee_id']),
+        current: row['current'] == true,
+        primary: row['primary'] == true,
+        writes: row['writes'] is bool ? row['writes'] as bool : null,
+        permissions: _perms(row['permissions']),
       ));
     }
     return out;

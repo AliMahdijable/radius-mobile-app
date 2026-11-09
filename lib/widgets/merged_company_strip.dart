@@ -1,4 +1,3 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../core/util/format.dart';
@@ -8,6 +7,7 @@ import '../services/merged_mode.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../services/merged_text.dart';
 
 /// «كل الشركات»: شريط الشركات أعلى الرئيسية والمشتركين والتقرير الماليّ — كشريط الويب (client-v2 CompanyStrip):
 /// «الكل» ثمّ شارةٌ لكلّ شركة بلونها (وعددها إن أُعطي). الضغط على شركة يعرضها وحدها (MergedMode.focus) والضغط ثانيةً
@@ -47,12 +47,12 @@ class MergedCompanyStrip extends StatelessWidget {
   final void Function(MergedCompany c, String message)? onProblem;
 
   static String? statusLabel(MergedCompany c) {
-    if (!c.appCapable) return 'merged.web_only'.tr();
+    if (!c.appCapable) return 'merged.web_only'.trm();
     return switch (c.status) {
       MergedStatus.ok => null,
-      MergedStatus.needsLogin => 'merged.needs_login'.tr(),
-      MergedStatus.loading => 'merged.chip_loading'.tr(),
-      MergedStatus.unavailable => 'merged.chip_unavailable'.tr(),
+      MergedStatus.needsLogin => 'merged.needs_login'.trm(),
+      MergedStatus.loading => 'merged.chip_loading'.trm(),
+      MergedStatus.unavailable => 'merged.chip_unavailable'.trm(),
     };
   }
 
@@ -84,13 +84,13 @@ class MergedCompanyStrip extends StatelessWidget {
                 Icon(Icons.layers_rounded, size: 16, color: AppColors.brand),
                 const SizedBox(width: 6),
                 Text(
-                  '${'merged.header'.tr()} · ${usable.length}',
+                  '${'merged.header'.trm()} · ${usable.length}',
                   style: AppType.bodyStrong(color: AppColors.textHi).copyWith(fontSize: 13),
                 ),
                 const SizedBox(width: Sp.sm),
                 Expanded(
                   child: Text(
-                    focused == null ? 'merged.strip_hint'.tr() : 'merged.strip_focused'.tr(args: [focused.name]),
+                    focused == null ? 'merged.strip_hint'.trm() : 'merged.strip_focused'.trm(args: [focused.name]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.body(color: AppColors.textLow).copyWith(fontSize: 11.5),
@@ -103,7 +103,7 @@ class MergedCompanyStrip extends StatelessWidget {
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       iconSize: 18,
-                      tooltip: 'merged.exit'.tr(),
+                      tooltip: 'merged.exit'.trm(),
                       onPressed: onExit,
                       icon: Icon(Icons.close_rounded, color: AppColors.textMid),
                     ),
@@ -116,7 +116,7 @@ class MergedCompanyStrip extends StatelessWidget {
               child: Row(
                 children: [
                   _Chip(
-                    label: 'merged.all_chip'.tr(),
+                    label: 'merged.all_chip'.trm(),
                     count: total,
                     selected: focused == null,
                     onTap: () => MergedMode.focus.value = null,
@@ -276,9 +276,11 @@ class MergedOpenCompanyNote extends StatelessWidget {
         if (!on) return const SizedBox.shrink();
         Theme.of(context); // theme-dep (dark-mode)
         final open = ActiveCompany.current;
-        final name = open == null
-            ? '—'
-            : (open.username.isEmpty || open.username == open.label ? open.label : '${open.label} · ${open.username}');
+        // الموظّف («كل الصفحات»): اسم صفحته الحاليّة من ردّ صفحاته — لا اسم مزوّدها ويوزر دخوله
+        final name = MergedMode.currentPageName ??
+            (open == null
+                ? '—'
+                : (open.username.isEmpty || open.username == open.label ? open.label : '${open.label} · ${open.username}'));
         return Padding(
           padding: padding,
           child: Container(
@@ -298,7 +300,7 @@ class MergedOpenCompanyNote extends StatelessWidget {
                 const SizedBox(width: Sp.sm),
                 Expanded(
                   child: Text(
-                    textKey.tr(args: [name]),
+                    textKey.trm(args: [name]),
                     style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
                   ),
                 ),

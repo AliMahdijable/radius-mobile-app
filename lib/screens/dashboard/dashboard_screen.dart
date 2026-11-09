@@ -55,6 +55,7 @@ import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
 import '../reports/financial_report_screen.dart';
+import '../../services/merged_text.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -163,7 +164,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool get _canPackages => _allows('reports.packages');
   bool get _canActivity => _allows('reports.daily_activations');
   bool get _canActivityLog => _allows('reports.activity_log');
-  bool get _canWa => !_elEmployee || Perms.hasAny(_waKeys);
+  bool get _canWa => (!_elEmployee || Perms.hasAny(_waKeys)) && !_focusDenied(_waKeys);
+
+  /// لم يصل ردّ فحص واتساب (الموظّف: رفضٌ لا انقطاع ⇒ الحبّة تغيب). «كل الصفحات»: حال الصفحات ([_mergedWa]) لا حال الوضع العاديّ —
+  /// `_waLive` لا يُملأ في الوضع، فكانت الحبّة تغيب عن الموظّف فيه دائماً.
+  bool get _waMissing => MergedMode.active.value ? _mergedWa == null : _waLive == null;
+
+  /// «كل الصفحات» (٩ نوفمبر): الصفحة المختارة في الشريط لا يملك فيها الموظّف أيّ مفتاحٍ من [keys] (خريطتها) — قسمها لا يُعرض
+  /// لها كما لا يُعرض في وضعه العاديّ. «الكل» ⇒ كلّ صفحةٍ بخريطتها داخل المجموع (MergedDashboardApi).
+  bool _focusDenied(List<String> keys) =>
+      MergedMode.active.value && MergedMode.pagePermAny(MergedMode.focused?.key, keys) == false;
 
   /// مفاتيح `connection-status` في الخادم (`requireWhatsAppAdminContext`).
   static const _waKeys = [
@@ -438,11 +448,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final f = MergedMode.focused;
     final parts = <String>[
       if (r != null && f == null) ...[
-        for (final b in r.big) 'merged.big'.tr(args: [b.company.name, formatIQD(b.bigTotal!)]),
-        for (final x in r.failed) x.error ?? 'merged.failed'.tr(args: [x.company.name]),
-        for (final p in r.partial) 'merged.partial'.tr(args: [p.company.name]),
-        if (r.missing.isNotEmpty) 'merged.missing'.tr(args: [r.missing.map((c) => c.name).join('، ')]),
-        if (r.folded > 0) 'merged.folded'.tr(args: [formatIQD(r.folded)]),
+        for (final b in r.big) 'merged.big'.trm(args: [b.company.name, formatIQD(b.bigTotal!)]),
+        for (final x in r.failed) x.error ?? 'merged.failed'.trm(args: [x.company.name]),
+        for (final p in r.partial) 'merged.partial'.trm(args: [p.company.name]),
+        if (r.missing.isNotEmpty) 'merged.missing'.trm(args: [r.missing.map((c) => c.name).join('، ')]),
+        if (r.folded > 0) 'merged.folded'.trm(args: [formatIQD(r.folded)]),
       ],
       if (r != null && f != null) ..._focusListNote(r, f),
       ..._mergedWalletExcluded,
@@ -455,9 +465,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _focusListNote(MergedListResult r, MergedCompany f) {
     final p = r.partOf(f.key);
     if (p == null) return const [];
-    if (p.bigTotal != null) return ['merged.big'.tr(args: [f.name, formatIQD(p.bigTotal!)])];
-    if (p.rows == null) return [p.error ?? 'merged.failed'.tr(args: [f.name])];
-    if (p.partial) return ['merged.partial'.tr(args: [f.name])];
+    if (p.bigTotal != null) return ['merged.big'.trm(args: [f.name, formatIQD(p.bigTotal!)])];
+    if (p.rows == null) return [p.error ?? 'merged.failed'.trm(args: [f.name])];
+    if (p.partial) return ['merged.partial'.trm(args: [f.name])];
     return const [];
   }
 
@@ -465,8 +475,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _mergedProblem(MergedCompany c) {
     final p = _mergedList?.partOf(c.key);
     if (p == null) return null;
-    if (p.bigTotal != null) return 'merged.chip_big'.tr();
-    if (p.rows == null) return 'merged.chip_failed'.tr();
+    if (p.bigTotal != null) return 'merged.chip_big'.trm();
+    if (p.rows == null) return p.denied ? 'merged.chip_denied'.trm() : 'merged.chip_failed'.trm();
     return null;
   }
 
@@ -802,12 +812,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _showMergedWa() async {
     final w = _mergedWa;
     if (w == null) return;
-    String? openAdmin;
-    try {
-      openAdmin = (await AuthStorage.readAdminId())?.trim();
-    } catch (_) {
-      openAdmin = null;
-    }
+    final openAdmin = await MergedMode.openAdminId();
     if (!mounted) return;
     final openWa = await showAppSheet<bool>(
       context: context,
@@ -983,7 +988,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     actions: [
                       if (_shown('wa_banner') &&
                           _canWa &&
-                          !(Perms.isEmployee && _waLoaded && _waLive == null))
+                          !(Perms.isEmployee && _waLoaded && _waMissing))
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: Perms.has('whatsapp.connect') || MergedMode.active.value ? _onWhatsAppTap : null,
@@ -1024,7 +1029,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // يكون رفضاً لا انقطاعاً — الحبّة تغيب. والمالك كما كان.
                 showWhatsApp: _shown('wa_banner') &&
                     _canWa &&
-                    !(Perms.isEmployee && _waLoaded && _waLive == null),
+                    !(Perms.isEmployee && _waLoaded && _waMissing),
                 // تنبيه اشتراك **الحساب** (إيميل المالك): موظّف ايرث لنك يدخل
                 // بلا حساب، فلا يملكه ولا يفعّله.
                 showSubscription: !_elEmployee,
@@ -1786,7 +1791,7 @@ class _MergedWaSheet extends StatelessWidget {
       ),
       footer: canOpen && hasOpen
           ? SheetFooterBar(
-              label: 'dashboard.wa_open_mine'.tr(),
+              label: 'dashboard.wa_open_mine'.trm(),
               icon: LucideIcons.messageCircle,
               enabled: true,
               busy: false,
@@ -1798,7 +1803,8 @@ class _MergedWaSheet extends StatelessWidget {
         children: [
           for (final r in wa.rows) ...[
             Builder(builder: (context) {
-              final st = _state(r.status);
+              // «كل الصفحات»: صفحةٌ بلا مفتاح واتساب للموظّف لم تُفحص — «لا صلاحيّة» لا «تعذّر الفحص»
+              final st = wa.isDenied(r.company.key) ? (text: MergedMode.noAccess('واتسابها'), tone: AppTone.neutral) : _state(r.status);
               final open = openAdmin != null && openAdmin!.isNotEmpty && r.company.adminId == openAdmin;
               final phone = r.status?.phone.trim() ?? '';
               return Container(
@@ -1834,7 +1840,7 @@ class _MergedWaSheet extends StatelessWidget {
                               ),
                               if (open) ...[
                                 const SizedBox(width: Sp.x6),
-                                Text('dashboard.wa_open_badge'.tr(),
+                                Text('dashboard.wa_open_badge'.trm(),
                                     style: AppType.micro(color: AppTone.brand.fill).copyWith(fontWeight: FontWeight.w700)),
                               ],
                             ],
@@ -1862,9 +1868,10 @@ class _MergedWaSheet extends StatelessWidget {
             const SizedBox(height: Sp.sm),
           ],
           if (wa.rows.any((r) => r.status?.connected != true &&
+              !wa.isDenied(r.company.key) &&
               !(openAdmin != null && r.company.adminId == openAdmin)))
             Text(
-              'dashboard.wa_other_hint'.tr(),
+              'dashboard.wa_other_hint'.trm(),
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
             ),
         ],

@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import '../models/merged_company.dart';
+import '../services/merged_mode.dart';
 import 'archive_info.dart';
 import 'company_route.dart';
 import 'merged_dashboard_api.dart';
@@ -106,8 +107,13 @@ class MergedFinanceApi {
 
   static Future<MergedFinanceResult> load({DateTime? from, DateTime? to, bool includeArchived = false}) async {
     final cs = MergedDashboardApi.countable();
+    // «كل الصفحات»: صفحةٌ لا يملك فيها الموظّف reports.financial ⇒ لا يُطلب تقريرها، وتُسمّى خارج المجموع
+    bool denied(MergedCompany c) => MergedMode.pagePerm(c.key, 'reports.financial') == false;
     final res = await Future.wait([
-      for (final c in cs) one(c, from: from, to: to, includeArchived: includeArchived),
+      for (final c in cs)
+        denied(c)
+            ? Future.value((ok: false, data: null, error: MergedMode.noAccess('تقريرها')))
+            : one(c, from: from, to: to, includeArchived: includeArchived),
     ]);
     final parts = <MergedFinancePart>[
       for (var i = 0; i < cs.length; i++)

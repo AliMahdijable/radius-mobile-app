@@ -17,6 +17,7 @@ import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/platform/desktop_layout.dart';
 import 'pill_tabs.dart';
+import '../../../services/merged_text.dart';
 
 /// Revenue hero card. Pulls live totals from /api/reports/finance for
 /// the selected period (day/week/month). No mock fallbacks — while a
@@ -364,7 +365,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
           if ((_mergedExcluded[_period] ?? const <String>[]).isNotEmpty) ...[
             const SizedBox(height: Sp.xs),
             Text(
-              'merged.not_in_sum'.tr(args: [_mergedExcluded[_period]!.join('، ')]),
+              'merged.not_in_sum'.trm(args: [_mergedExcluded[_period]!.join('، ')]),
               style: AppType.micro(color: AppColors.textLow).copyWith(height: 1.45),
             ),
           ],
