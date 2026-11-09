@@ -192,6 +192,68 @@ void main() {
       expect(perms.containsKey('renew_requests.use'), isFalse, reason: 'يبقى على المحفوظ عند الخادم');
       await simDrain(t);
     });
+
+    // مراجعة 3.0.18 الثانية: الدور لا يلمس ما عبر VPN والتنبيهات (00b20601) — فلا يقول «عرض فقط» «بلا أيّ عمليّة» والموظّف يربط VPN
+    // ويوافق على تنبيهات المشتركين ويرسلها؛ يسمّي ما بقي ممنوحاً فرادى.
+    testWidgets('«عرض فقط» وما مُنح فرادى من «ربط VPN» و«تنبيهات المشتركين» باقٍ: السطر يسمّيهما لا «بلا أيّ عمليّة»، والحفظ يُبقيهما', (t) async {
+      final prev = FlutterError.onError;
+      FlutterError.onError = (d) {
+        if (d.exceptionAsString().contains('ListTile background color')) return;
+        prev?.call(d);
+      };
+      addTearDown(() => FlutterError.onError = prev);
+      server.reply('PUT', '/api/v2/employees/42', 200, {'success': true});
+      final emp = Employee.fromJson({
+        'id': 42,
+        'username': 'sara.el',
+        'full_name': 'سارة',
+        'is_active': 1,
+        'permissions': {'subscribers.view': true, 'subscribers.send_whatsapp': true, 'conn_vpn.link': true, 'conn_alerts.use': true},
+      })!;
+      await open(t, employee: emp);
+      await t.tap(find.text('عرض فقط'));
+      await t.pumpAndSettle();
+      const plain = 'يشاهد المشتركين والباقات والخصومات والأسعار بلا أيّ عمليّة';
+      expect(find.text(plain), findsNothing, reason: 'الموظّف يربط VPN ويوافق على التنبيهات ويرسلها');
+      expect(find.text('$plain — عدا ما منحته فرادى: ربط VPN · تنبيهات المشتركين (الموافقة والإرسال)'), findsOneWidget);
+      await t.tap(find.text('حفظ'));
+      await t.pumpAndSettle();
+      final perms = Map<String, dynamic>.from(server.bodies('PUT', '/api/v2/employees/42').single['permissions'] as Map);
+      expect(perms['subscribers.send_whatsapp'], isFalse, reason: 'الدور ضبط مفاتيحه');
+      expect(perms['conn_vpn.link'], isTrue, reason: 'والممنوح فرادى كما هو — كما يقول السطر');
+      expect(perms['conn_alerts.use'], isTrue);
+      await simDrain(t);
+    });
+  });
+
+  group('سطر «عرض فقط»', () {
+    test('بلا عمليّةٍ ممنوحةٍ فرادى ⇒ الوصف كما هو؛ والفحص والإشعار وقسم تنبيهات الأجهزة ليست عمليّة؛ وما لا يعرضه الكتالوج لا يُذكر', () {
+      ProviderService.debugSet('earthlink');
+      final view = ElEmployeePerms.presets.firstWhere((p) => p.id == 'view');
+      final collect = ElEmployeePerms.presets.firstWhere((p) => p.id == 'collect');
+      final catalog = _catalog.permissions.keys;
+      final base = {for (final k in view.keys) k: true};
+      expect(ElEmployeePerms.captionFor(view, base, catalogKeys: catalog), view.description);
+      expect(
+        ElEmployeePerms.captionFor(view, {
+          ...base,
+          'devices.deep_check': true,
+          'subscribers.check': true,
+          'devices.deep_check_vpn': true,
+          'subscribers.vpn_check': true,
+          'agent_alerts.use': true,
+          'conn_vpn.link': false,
+        }, catalogKeys: catalog),
+        view.description,
+      );
+      expect(ElEmployeePerms.captionFor(view, {...base, 'conn_alerts.use': true}, catalogKeys: catalog),
+          '${view.description} — عدا ما منحته فرادى: تنبيهات المشتركين (الموافقة والإرسال)');
+      expect(ElEmployeePerms.captionFor(collect, {...base, 'conn_vpn.link': true}, catalogKeys: catalog), collect.description,
+          reason: 'لا يدّعي غيره أنّه بلا عمليّة');
+      ProviderService.debugSet('fiberx');
+      expect(ElEmployeePerms.captionFor(view, {...base, 'conn_vpn.link': true}, catalogKeys: catalog), view.description,
+          reason: 'فايبر اكس: «ربط VPN» خارج محرّره');
+    });
   });
 
   group('الموظّف', () {

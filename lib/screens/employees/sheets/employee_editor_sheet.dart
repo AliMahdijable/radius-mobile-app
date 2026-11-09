@@ -800,8 +800,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         ),
         const SizedBox(height: 6),
         Text(
-          current?.description ??
-              (none
+          current != null
+              ? ElEmployeePerms.captionFor(current, _perms, catalogKeys: widget.catalog.permissions.keys)
+              : (none
                   ? 'بلا صلاحيّات — لن يرى الموظف شيئاً بعد الدخول'
                   : 'مخصّص — عدّلت الصلاحيّات يدويّاً'),
           style: AppType.muted(color: none ? AppColors.error : AppColors.textMid),
