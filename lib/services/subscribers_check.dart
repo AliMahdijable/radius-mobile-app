@@ -162,7 +162,8 @@ enum SubsMissWhy {
   /// «كل الشركات»: شركته لم تُفحص عبر الـVPN (بلا طريق، أو تعذّر) — السبب في [SubsMissing] note ⇒ «لم يُفحص».
   company,
 
-  /// غير متّصلٍ الآن ولا قراءة له ⇒ «غير متّصل الآن» — ليس عطلاً بجهازه (١٠ نوفمبر: كان داخل «لم يُقرأ»).
+  /// غير متّصلٍ الآن ولا قراءة له من هذا الفحص ⇒ «غير متّصل الآن» — ليس عطلاً بجهازه (١٠ نوفمبر: كان داخل «لم يُقرأ»).
+  /// وقراءة هاتفٍ من قبل انقطاعه لا تُعدّ ([SubscribersCheck.currentFor]).
   offline,
 }
 
@@ -566,7 +567,20 @@ class SubscribersCheck {
   /// لا عنوان من الراديوس ولا نتيجة فحص ⇒ الموجة لم تسأل جهازه (المحفوظ يدويّاً يُفحص ويُقرأ باسمه).
   static String? _noAddress(Subscriber s) => (s.ipAddress ?? '').trim().isEmpty ? 'بلا عنوان IP' : null;
 
-  /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار، و[wave] الموجة الجارية (من لم تبلغه «لم يُفحص بعد»).
+  /// قراءة الهاتف [p] تُعدّ للمشترك في هذا الفحص؟ المتّصل: بأيّ عمر كما كانت (الموجة تعيد القديم). وغير المتّصل
+  /// الآن: إن كانت من هذا الفحص — طازجةً (دون مهلة ذاكرة الفحص، بعدها تعيدها الموجة) أو من الموجة الجارية أو الأخيرة
+  /// [w] — فالمطفأ يُفحص عمداً (جهاز وصوله قد يكون حيّاً) وقراءته من الفحص تُعدّ كما هي. وإلّا فهي من قبل انقطاعه:
+  /// ذاكرة الفحص لا تُمحى بانقطاعه، وبلا عنوانٍ لا تعيدها الموجة ⇒ «غير متّصل الآن» لا «سليم»/«بمشكلة» بقراءةٍ
+  /// عمرها ساعات (المراجعة ١٠ نوفمبر). قراءة الـVPN لا تمرّ هنا: عمرها حدّه ٣٠ دقيقة ([VpnNow.readingFor]) للمتّصل
+  /// وغيره.
+  static bool currentFor(Subscriber s, ({DeviceHealthSnapshot? snap, bool stale, DateTime at}) p, SubsWave? w) {
+    if (s.isOnline || !p.stale) return true;
+    final from = w?.startedAt;
+    return from != null && !p.at.isBefore(from);
+  }
+
+  /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار، و[wave] الموجة الجارية (من لم تبلغه «لم يُفحص بعد»)؛ وغير
+  /// المتّصل الآن بقراءةٍ من قبل هذا الفحص «غير متّصل الآن» ([currentFor]).
   static SubsCheckReport local(
     List<Subscriber> subs,
     ConnectionAlertThresholds Function(String? company) limits, {
@@ -589,7 +603,12 @@ class SubscribersCheck {
         missing.add(_missLocal(s, p, wave));
         continue;
       }
-      if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
+      // غير المتّصل الآن بقراءةٍ من قبل هذا الفحص ⇒ «غير متّصل الآن» لا قسمها ([currentFor])
+      if (!currentFor(s, p!, wave)) {
+        missing.add((sub: s, why: SubsMissWhy.offline, note: null));
+        continue;
+      }
+      if (oldest == null || p.at.isBefore(oldest)) oldest = p.at;
       if (newest == null || p.at.isAfter(newest)) newest = p.at;
       final probs = ConnectionAlerts.detect(snap!, limits(s.companyKey));
       final row = SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: x);
@@ -674,7 +693,8 @@ class SubscribersCheck {
     final missing = <SubsMissing>[];
     for (final s in subs) {
       final p = look(s);
-      final local = p == null ? null : SubsReading.ofSnapshot(p.snap, p.at);
+      // غير المتّصل الآن بقراءة هاتفٍ من قبل هذا الفحص ⇒ لا تُعدّ ([currentFor])
+      final local = p == null || !currentFor(s, p, wave) ? null : SubsReading.ofSnapshot(p.snap, p.at);
       final v = vpnLook(s);
       final checkedAt = when(s.companyKey);
       final vAt = v == null ? null : checkedAt;

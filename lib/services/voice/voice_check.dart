@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../core/util/format.dart';
+import '../../core/util/server_time.dart';
 import '../../models/device_health.dart';
 import '../../models/merged_company.dart';
 import '../../models/subscriber.dart';
@@ -55,7 +56,26 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   /// وسببه بعد اسم القسم.
   String? note;
 
+  /// فحص الـVPN لشركته لم يكتمل حين انتهت المهلة (جارٍ أو شركته بالدور) ⇒ «لم يُفحص بعد — بانتظار الفحص» كصفّه في
+  /// «الفحص العامّ»، والجواب يتحدّث وحده حين يكتمل (المراجعة ١٠ نوفمبر: كان «جهازه ما ردّ» والفحص لم يبلغه).
+  bool waitingVpn = false;
+
   bool _disposed = false;
+
+  // فحص الهاتف لهذا الجواب كما جرى: سُئل جهازه من شبكتك أم لا — يُحفظ عند البدء (بعد انتظار الـVPN قد تتغيّر حال
+  // الشبكة أو «وضع VPN»، وكان يُعاد تقديره فيُقال «ما ردّ من شبكتك» لجهازٍ لم يسأله الهاتف) — وشركته تُقرأ من شبكتك،
+  // وردّ بلا مقاييس.
+  bool _localTried = false;
+  bool _localWitness = true;
+  bool _localNoMetrics = false;
+
+  /// وقت قراءة الـVPN التي جاء منها الجواب — null لجوابٍ من فحص الهاتف أو بلا قراءة.
+  DateTime? _vpnFrom;
+
+  // انتظار فحص الـVPN: المهلة أو الإغلاق ⇒ يتوقّف ولا يبدأ فحصاً بعدها؛ ومتابعة الجاري حتى يكتمل.
+  bool _gaveUp = false;
+  Completer<void>? _wait;
+  VoidCallback? _follow;
 
   // بدائل الاختبار
   @visibleForTesting
@@ -68,6 +88,8 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   static bool Function()? debugVpnAllowed;
   @visibleForTesting
   static Future<bool> Function(MergedCompany c)? debugIsOpen;
+  @visibleForTesting
+  static DateTime Function()? debugNow;
 
   static const probeTimeout = Duration(seconds: 15);
   static const vpnTimeout = Duration(minutes: 3);
@@ -104,10 +126,11 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     final r = row;
     if (r == null) {
       final c = cat;
+      final label = c?.labelFor(running: waitingVpn);
       return switch (phase) {
         VoiceCheckPhase.probing => 'يُقرأ جهازه من شبكتك…',
         VoiceCheckPhase.vpn => 'يُقرأ جهازه عبر VPN الشركة…',
-        _ => c == null ? null : (note == null ? c.label : '${c.label} — $note'),
+        _ => label == null ? null : (note == null ? label : '$label — $note'),
       };
     }
     if (r.problems.isNotEmpty) return '${SubsCheckCat.problems.label} — ${r.problems.map((p) => p.label).join(' · ')}';
@@ -122,8 +145,20 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     return '${parts.length == 1 ? parts.first : '${parts.sublist(0, parts.length - 1).join('، ')} و${parts.last}'} سليمة';
   }
 
-  /// الجواب بجملةٍ واحدة (للنسخ ولردٍّ صوتيٍّ لاحقاً).
-  String get spoken => [headline, daysLine, deviceLine].whereType<String>().join(' · ');
+  /// الجواب بجملةٍ واحدة (للنسخ ولردٍّ صوتيٍّ لاحقاً) — وقراءة الـVPN القديمة بعمرها.
+  String get spoken {
+    final age = vpnAge;
+    return [headline, daysLine, deviceLine, if (age != null) 'عبر VPN الشركة · $age'].whereType<String>().join(' · ');
+  }
+
+  /// عمر قراءة الـVPN التي جاء منها الجواب بكلمات «الفحص العامّ» («منذ 12 دقيقة») — null لفحص الهاتف الطازج أو
+  /// لقراءةٍ من هذه الدقيقة (المراجعة ١٠ نوفمبر: آخر قراءةٍ عبر الـVPN — حتى ٣٠ د — كانت تُعرض بلا عمر كأنّها الآن).
+  String? get vpnAge {
+    final at = _vpnFrom;
+    final now = debugNow?.call() ?? DateTime.now();
+    if (at == null || now.difference(at).inMinutes < 1) return null;
+    return timeAgoAr(at, now: now);
+  }
 
   bool get _localAllowed =>
       debugLocalAllowed?.call() ?? (!VpnNow.mode.value && !AgentNetPresence.isOff && PermissionsService.subsCheckNet);
@@ -140,6 +175,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   void _unmeasured(VpnSubReading v) {
     final m = SubscribersCheck.unmeasured(sub, v);
     _miss(SubscribersCheck.catOf(m.why), m.why == SubsMissWhy.noMetrics ? _noMetricsWhy : SubscribersCheck.missText(m));
+    _vpnFrom = _vpnAt();
   }
 
   static const _noMetricsWhy = 'جهازه ليس نانو ولا وحدةً ضوئيّة';
@@ -160,6 +196,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       readAt: (_) => vpnAt,
     );
     row = [...r.rows, ...r.healthy].firstOrNull;
+    _vpnFrom = row?.reading?.vpn == true ? row!.reading!.at : null;
   }
 
   Future<void> run() async {
@@ -167,14 +204,13 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       _set(VoiceCheckPhase.done);
       return;
     }
-    // ١) من شبكتك: فحصٌ طازج لجهازه
-    var localNoMetrics = false;
+    // ١) من شبكتك: فحصٌ طازج لجهازه — وهل سُئل منها يُحفظ الآن ([_localTried])
+    _localTried = _localAllowed;
     // فشله شهادةٌ على جهازه لشركةٍ تُقرأ من شبكتك وحدها (خارج «كل الشركات»، أو المفتوحة) — غيرها طريقه VPN شركته، كـ«الفحص
     // العامّ» (١٠ نوفمبر). والقراءة الناجحة قراءةٌ من أيّ شركة.
-    var localWitness = true;
-    if (_localAllowed) {
+    if (_localTried) {
       final c = company;
-      if (c != null) localWitness = await (debugIsOpen?.call(c) ?? MergedMode.isOpenKey(c.key));
+      if (c != null) _localWitness = await (debugIsOpen?.call(c) ?? MergedMode.isOpenKey(c.key));
       if (_disposed) return;
       _set(VoiceCheckPhase.probing);
       DeviceHealthSnapshot? snap;
@@ -196,10 +232,10 @@ class SubscriberVoiceCheck extends ChangeNotifier {
         if (row != null) return _set(VoiceCheckPhase.done);
       }
       // ردّ جهازه بلا مقاييس (ليس نانو ولا ضوئيّاً) — يُقال إن لم يُقرأ عبر الـVPN
-      localNoMetrics = snap != null;
+      _localNoMetrics = snap != null;
     }
     // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر)
-    var v = VpnNow.readingFor(sub.username, company: sub.companyKey);
+    final v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead) {
       if (!v.measured) {
         _unmeasured(v);
@@ -210,11 +246,11 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     }
     // ٣) فحصٌ عبر VPN شركته الآن
     if (!_vpnAllowed) {
-      if (!_localAllowed) {
+      if (!_localTried) {
         _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
-      } else if (localNoMetrics) {
+      } else if (_localNoMetrics) {
         _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
-      } else if (localWitness) {
+      } else if (_localWitness) {
         _miss(SubsCheckCat.noReply, 'من شبكتك');
       } else {
         _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
@@ -225,14 +261,35 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     try {
       await (debugVpnRun?.call(sub, company) ?? _vpnRun()).timeout(vpnTimeout);
     } catch (_) {}
+    // المهلة: الانتظار يتوقّف ولا يبدأ فحصاً بعدها (كان يبدأ فحصاً لم يطلبه أحد بعد ظهور الجواب)
+    _stopWaiting();
     if (_disposed) return;
-    v = VpnNow.readingFor(sub.username, company: sub.companyKey);
+    _vpnAnswer();
+    _set(VoiceCheckPhase.done);
+  }
+
+  /// الجواب بعد فحص الـVPN بقواعد «الفحص العامّ» ([SubscribersCheck.mixed]): قراءته، أو قسمه وسببه. فحص شركته لم
+  /// يكتمل (جارٍ أو بالدور) ⇒ «لم يُفحص بعد — بانتظار الفحص» لا «ما ردّ»، ويُتابَع حتى يكتمل؛ ولا فحص مكتمل لشركته
+  /// (أُلغي أو لم يجرِ) ⇒ «لم يُفحص عبر VPN بعد» لا «لم يُقرأ عبر VPN» (المراجعة ١٠ نوفمبر).
+  void _vpnAnswer() {
+    row = null;
+    cat = null;
+    note = null;
+    _vpnFrom = null;
+    waitingVpn = false;
+    final v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead && !v.measured) {
       _unmeasured(v);
     } else if (v != null && !v.dead) {
       _apply(vpn: v, vpnAt: _vpnAt());
     } else if (v?.dead == true) {
       _miss(SubsCheckCat.noReply, 'لا يستجيب');
+      _vpnFrom = _vpnAt();
+    } else if (_vpnPending) {
+      waitingVpn = true;
+      _miss(SubsCheckCat.unchecked,
+          SubscribersCheck.missText((sub: sub, why: SubsMissWhy.unchecked, note: null), running: true));
+      _followVpn();
     } else {
       // لا قراءة له بأيّ طريق: شركته بلا طريق أو الفحص تعذّر ⇒ لم يُفحص؛ وفحصٌ مكتمل بلا قراءةٍ له ⇒ الخادم لم يسأل جهازه
       // (يوبيكويتي وحدها، والمؤجَّل) ⇒ «لم يُفحص» — إلّا إن سُئل من شبكتك وما ردّ (١٠ نوفمبر: كان «لا من شبكتك ولا عبر VPN»)
@@ -240,44 +297,91 @@ class SubscriberVoiceCheck extends ChangeNotifier {
           (VpnNow.subscribers.phase == VpnBarPhase.failed ? VpnNow.subscribers.line : null);
       if (why != null) {
         _miss(SubsCheckCat.unchecked, why);
-      } else if (localNoMetrics) {
+      } else if (_localNoMetrics) {
         _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
+      } else if (_localTried && _localWitness) {
+        _miss(SubsCheckCat.noReply, 'من شبكتك');
       } else {
-        _localAllowed && localWitness
-            ? _miss(SubsCheckCat.noReply, 'من شبكتك')
-            : _miss(SubsCheckCat.unchecked, SubscribersCheck.vpnUnreadNote);
+        _miss(SubsCheckCat.unchecked,
+            VpnNow.readingsAtFor(sub.companyKey) != null ? SubscribersCheck.vpnUnreadNote : 'لم يُفحص عبر VPN بعد');
       }
     }
-    _set(VoiceCheckPhase.done);
+  }
+
+  /// فحص الـVPN لشركته لم يكتمل بعد: «كل الشركات» ⇒ شركته في الفحص الجاري ولم يُنتهَ منها (الحاليّة أو بالدور)؛ وخارجه
+  /// ⇒ الفحص جارٍ (فحص المفتوحة نفسها).
+  bool get _vpnPending {
+    final c = company;
+    return c == null ? VpnNow.subscribers.busy : VpnNow.subscribers.waits(c.key);
+  }
+
+  /// الجواب «لم يُفحص بعد» يُتابع الفحص الجاري: يكتمل لشركته ⇒ الجواب من نتيجته (بلا فحصٍ جديد).
+  void _followVpn() {
+    if (_follow != null) return;
+    final job = VpnNow.subscribers;
+    void l() {
+      if (_disposed || _vpnPending) return;
+      _unfollow();
+      _vpnAnswer();
+      notifyListeners();
+    }
+
+    _follow = l;
+    job.addListener(l);
+  }
+
+  void _unfollow() {
+    final l = _follow;
+    if (l != null) VpnNow.subscribers.removeListener(l);
+    _follow = null;
   }
 
   DateTime? _vpnAt() =>
       sub.companyKey == null ? VpnNow.readingsAt : (VpnNow.readingsAtFor(sub.companyKey) ?? VpnNow.readingsAt);
 
-  /// فحص الـVPN لشركته وحدها (أو للمفتوحة خارج «كل الشركات») — وفحصٌ جارٍ يُنتظر لا يُكرَّر.
+  /// فحص الـVPN لشركته وحدها (أو للمفتوحة خارج «كل الشركات») — وفحصٌ جارٍ يشملها يُنتظر لا يُكرَّر: «كل الشركات» ⇒
+  /// دور شركته وحده (لا الفحص كلّه)، ونتيجته — قراءةٌ أو لا — هي الجواب؛ وفحصٌ جارٍ لغيرها يُنتظر ثمّ تُفحص هي. بعد
+  /// المهلة أو الإغلاق لا يبدأ فحصاً.
   Future<void> _vpnRun() async {
     final job = VpnNow.subscribers;
-    if (job.busy) {
-      final done = Completer<void>();
-      void l() {
-        if (!job.busy && !done.isCompleted) done.complete();
-      }
-
-      job.addListener(l);
-      try {
-        await done.future;
-      } finally {
-        job.removeListener(l);
-      }
-      if (VpnNow.readingFor(sub.username, company: sub.companyKey) != null) return;
-    }
     final c = company;
+    if (job.busy) {
+      final covered = c == null || job.queue.contains(c.key);
+      await _until(() => c != null && covered ? !job.waits(c.key) : !job.busy);
+      if (covered) return;
+    }
+    if (_gaveUp || _disposed) return;
     await (c != null ? job.run(only: [(key: c.key, name: c.name)]) : job.run());
+  }
+
+  /// ينتظر [ok] مع كلّ تغيّرٍ في فحص المشتركين — و[_stopWaiting] يقطعه.
+  Future<void> _until(bool Function() ok) async {
+    if (ok()) return;
+    final job = VpnNow.subscribers;
+    final done = _wait = Completer<void>();
+    void l() {
+      if (ok() && !done.isCompleted) done.complete();
+    }
+
+    job.addListener(l);
+    try {
+      await done.future;
+    } finally {
+      job.removeListener(l);
+    }
+  }
+
+  void _stopWaiting() {
+    _gaveUp = true;
+    final w = _wait;
+    if (w != null && !w.isCompleted) w.complete();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _stopWaiting();
+    _unfollow();
     super.dispose();
   }
 }
