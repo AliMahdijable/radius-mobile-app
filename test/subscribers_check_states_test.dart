@@ -396,4 +396,63 @@ void main() {
       });
     }
   });
+
+  // ───────────── F15: «كل الشركات» — لا يُختم المعروض بوقت أحدث الطرق ─────────────
+
+  group('F15 — «كل الشركات»: كلّ شركةٍ بعمر قراءاتها', () {
+    testWidgets('ايرث لنك عبر VPN قبل 23 دقيقة وموجة الهاتف قبل دقيقة: المختارة بوقتها، والتقرير بسطر كلّ شركة',
+        (t) async {
+      await visualSetUp(s1bSasOwner);
+      _mergedTwo();
+      final minuteAgo = DateTime.now().subtract(const Duration(minutes: 1));
+      final subs = [_s('s.ok', ip: '1').withCompany(_kS), _s('e.ok').withCompany(_kE), _s('e.bad').withCompany(_kE)];
+      SubscribersCheck.debugPeek = (s) => s.username == 's.ok' ? _read(minuteAgo) : null;
+      final wave = ValueNotifier(SubsWave(endedAt: minuteAgo));
+      VpnNow.debugApplyCompany(_kE, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'e.ok': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+        'e.bad': VpnSubReading(src: 'cpe', sig: -80, ccq: 90, lan: '100'),
+      }));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 23), company: _kE);
+      VpnNow.subscribers.phase = VpnBarPhase.running; // الفتح لا يبدأ فحصاً (لا شبكة)
+      addTearDown(() {
+        SubscribersCheck.debugPeek = null;
+        wave.dispose();
+        VpnNow.subscribers.reset();
+        VpnNow.clearCompanyReadings();
+        MergedMode.reset();
+      });
+      await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+          home: (_) => SubscribersCheckScreen(
+              subscribers: () => subs, viaVpn: false, wave: wave, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+      await settle(t, seconds: 1);
+      VpnNow.subscribers.reset();
+      await settle(t, seconds: 1);
+      Finder side() => find.byKey(const ValueKey('subs-check-progress-side'));
+      Finder line(String k, String text) =>
+          find.descendant(of: find.byKey(ValueKey('subs-check-company-$k')), matching: find.text(text));
+
+      expect(_barText(t), 'انتهى الفحص — 3 مشترك');
+      expect(t.widget<Text>(side()).data, 'منذ دقيقة', reason: 'آخر ما انتهى — والبطاقة تقول عمر كلّ شركة');
+
+      // ايرث لنك وحدها: قراءاتها عمرها 23 دقيقة — لا «منذ دقيقة» موجة الهاتف
+      await t.tap(find.byKey(const ValueKey('subs-check-company-$_kE')));
+      await settle(t, seconds: 1);
+      expect(_barText(t), 'انتهى الفحص — 2 مشترك');
+      expect(t.widget<Text>(side()).data, 'منذ 23 دقيقة');
+      final one = (await _copy(t)).split('\n');
+      expect(one[1], 'انتهى الفحص — 2 مشترك · منذ 23 دقيقة');
+      expect(one.where((l) => l.startsWith('• سوبرنت')), isEmpty, reason: 'التقرير لشركةٍ واحدة');
+      expect(one, contains('• ايرث لنك — عبر VPN الشركة · منذ 23 دقيقة · قُرئ 2 من 2'));
+
+      // الكلّ: سطر كلّ شركةٍ بعمره — في البطاقة والتقرير المنسوخ
+      await t.tap(find.byKey(const ValueKey('subs-check-company-$_kE')));
+      await settle(t, seconds: 1);
+      expect(line(_kS, 'من شبكتك · منذ دقيقة · قُرئ 1 من 1'), findsOneWidget);
+      expect(line(_kE, 'عبر VPN الشركة · منذ 23 دقيقة · قُرئ 2 من 2'), findsOneWidget);
+      final all = await _copy(t);
+      expect(all, contains('\n\nالشركات:\n• سوبرنت — من شبكتك · منذ دقيقة · قُرئ 1 من 1\n'
+          '• ايرث لنك — عبر VPN الشركة · منذ 23 دقيقة · قُرئ 2 من 2'));
+      await _done(t);
+    });
+  });
 }

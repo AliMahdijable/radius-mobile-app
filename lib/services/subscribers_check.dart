@@ -457,12 +457,15 @@ class SubscribersCheck {
   }
 
   /// التقرير منسوخاً (١٠ نوفمبر) بأقسام الشاشة وكلماتها: سطر الفحص، ثمّ الأعداد، ثمّ من بمشكلة بمشاكله ومن ما ردّ جهازه ومن بلا
-  /// مقاييس ومن لم يُفحص بأسبابهم — السليم وغير المتّصل عددٌ وحده (لا عطل يُتابَع). [companyOf] «كل الشركات»: اسم شركة المشترك.
+  /// مقاييس ومن لم يُفحص بأسبابهم — السليم وغير المتّصل عددٌ وحده (لا عطل يُتابَع). [companyOf] «كل الشركات»: اسم شركة
+  /// المشترك، و[companies] سطر كلّ شركةٍ كبطاقة «الشركات» — طريقها وعمر قراءاتها (المراجعة F15: لا يُختم الكلّ بوقت
+  /// أحدث الطرق).
   static String reportText(
     SubsCheckReport r, {
     required SubsCheckProgress progress,
     String? source,
     String? Function(Subscriber s)? companyOf,
+    List<({String name, String text})> companies = const [],
   }) {
     final running = progress.running;
     final at = progress.at;
@@ -475,6 +478,14 @@ class SubscribersCheck {
             '${c.labelFor(running: running)} ${formatIQD(r.count(c))}',
       ].join(' · '),
     ];
+    if (companies.isNotEmpty) {
+      out
+        ..add('')
+        ..add('${mergedWord('الشركات', 'الصفحات')}:');
+      for (final c in companies) {
+        out.add('• ${c.name} — ${c.text}');
+      }
+    }
     String who(Subscriber s) {
       final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
       final co = companyOf?.call(s);

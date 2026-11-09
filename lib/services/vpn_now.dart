@@ -740,9 +740,15 @@ class VpnNow {
   @visibleForTesting
   static void debugApply(VpnNowKind k, VpnNowResult r) => _apply(k, r);
 
-  /// للاختبار: قراءات المشتركين أقدم بـ[by] (عمر المعروض).
+  /// للاختبار: قراءات المشتركين — أو قراءات شركة [company] («كل الشركات») — أقدم بـ[by] (عمر المعروض).
   @visibleForTesting
-  static void debugBackdateReadings(Duration by) => _readAt = _readAt?.subtract(by);
+  static void debugBackdateReadings(Duration by, {String? company}) {
+    if (company == null) {
+      _readAt = _readAt?.subtract(by);
+    } else if (_companyReadAt[company] case final at?) {
+      _companyReadAt[company] = at.subtract(by);
+    }
+  }
 
   // ── طريق الوكيل (مربوط أم لا) — خمس دقائق ──
   static ({bool linked, String? via})? _route;
