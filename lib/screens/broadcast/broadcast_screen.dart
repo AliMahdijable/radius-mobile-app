@@ -23,6 +23,7 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
 import '../../widgets/list_kit.dart';
+import '../../widgets/debt_filter_panel.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -129,16 +130,15 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   // المبلغ او الاثنين») ─────────────────────────────────────────────────────────────────────────────────────────────
   // العمر = عمر **أقدم دينٍ لم يُسدَّد** (قراره بمثاله: ٣٥ ألفاً منذ ٩٠ يوماً + ٣٥ ألفاً قبل يومين ⇒ ٩٠ يوماً) — يحسبه الخادم وحده من
   // دفتر حركات الدين، فالقائمة هنا لا تُرشَّح محلّيّاً بالعمر: المعاينة (dryRun) تقول من يطابق، والإرسال يحمل بصمتها.
-  /// ما يدعمه الخادم لهذا الحساب — null ⇒ لا لوحة (خادمٌ أقدم، أو بلا صلاحيّة، أو حسابٌ كبير).
+  /// ما يدعمه الخادم لهذا الحساب — null ⇒ لا لوحة (خادمٌ أقدم، أو بلا صلاحيّة). الكبير حين يحسبه الخادم في الخلفيّة (bigAsync).
   DebtFilterCapability? _dfCap;
   DebtFilter _df = DebtFilter.none;
-  bool _dfCustomAge = false;
-  final TextEditingController _dfAgeCtrl = TextEditingController();
-  final TextEditingController _dfMinCtrl = TextEditingController();
-  final TextEditingController _dfMaxCtrl = TextEditingController();
   BroadcastPreview? _dfPreview;
   String? _dfPreviewError;
   bool _dfPreviewBusy = false;
+
+  /// الحساب الكبير: «نحسب…» من الخادم (يُعاد السؤال كلّ ٤ ثوانٍ حتى تجهز) — نصّه كما قاله الخادم.
+  String? _dfPending;
   int _dfSeq = 0;
   Timer? _dfDebounce;
 
@@ -173,9 +173,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   @override
   void dispose() {
     _dfDebounce?.cancel();
-    _dfAgeCtrl.dispose();
-    _dfMinCtrl.dispose();
-    _dfMaxCtrl.dispose();
     _bigSearch.dispose();
     _msg.dispose();
     _search.dispose();
@@ -269,8 +266,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ? _candidates
           : _candidates.where((s) => _selected.contains(s.username)).toList();
 
-  /// التحديد مفعّلٌ الآن (فئة المدينين، حسابٌ غير كبير، خادمٌ يدعمه، وحدٌّ واحدٌ على الأقلّ).
-  bool get _debtFilterOn => _filter == _Filter.debtors && !_big && _dfCap != null && _df.active;
+  /// اللوحة متاحة: خادمٌ يدعمها، والحساب الكبير حين يحسب الخادم معاينته في الخلفيّة (٩ نوفمبر ٢ — المالك «نعم» للكبيرة).
+  bool get _dfAvailable => _dfCap != null && (!_big || _dfCap!.bigAsync);
+
+  /// التحديد مفعّلٌ الآن (فئة المدينين، خادمٌ يدعمه لهذا الحساب، وحدٌّ واحدٌ على الأقلّ).
+  bool get _debtFilterOn => _filter == _Filter.debtors && _dfAvailable && _df.active;
 
   /// فلتر المدير الفرعيّ لا يعرفه الخادم: معه تُرسَل أسماء الفئة بعد الفلتر صراحةً (كان «عام» يرسل للفئة كلّها مهما اختير المدير).
   List<String>? get _managerScopedUsernames =>
@@ -288,6 +288,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _selected.clear();
       _dfPreview = null;
       _dfPreviewError = null;
+      _dfPending = null;
     });
     _schedulePreview();
   }
@@ -310,8 +311,22 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       targetUsernames: _managerScopedUsernames,
     );
     if (!mounted || seq != _dfSeq) return;
+    // الحساب الكبير: الخادم يحسب في الخلفيّة — السؤال نفسه بعد ٤ ثوانٍ (يُجاب من ذاكرته بلا ساس) ما لم يتغيّر التحديد
+    if (r.preview?.pending == true) {
+      setState(() {
+        _dfPreviewBusy = true;
+        _dfPending = r.preview!.pendingMessage ?? 'حسابك كبير: نحسب من يطابق في الخلفيّة — تظهر النتيجة خلال دقيقة تقريباً';
+        _dfPreviewError = null;
+      });
+      _dfDebounce?.cancel();
+      _dfDebounce = Timer(const Duration(seconds: 4), () {
+        if (mounted && seq == _dfSeq) _runPreview(seq);
+      });
+      return;
+    }
     setState(() {
       _dfPreviewBusy = false;
+      _dfPending = null;
       _dfPreview = r.preview;
       _dfPreviewError = r.preview == null ? (r.message ?? 'تعذّرت المعاينة') : null;
     });
@@ -447,8 +462,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   Future<void> _send() async {
-    if (_bigAll) return _sendBigAll();
     if (_debtFilterOn) return _sendFiltered();
+    if (_bigAll) return _sendBigAll();
     final targets = _targets;
     if (targets.isEmpty) return;
 
@@ -512,14 +527,30 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     final specific = _scope == _Scope.specific;
     final picked = specific ? _pickedFromPreview : null;
     if (specific && (picked == null || picked.isEmpty)) return;
+    // الكبير «الكلّ»: الخادم يجمع المدينين كلّهم — فلتر المدير لا يصله، فلا يُرسَل لأوسع ممّا اختاره المدير (كـ«عام» الكبير)
+    final bigAll = _big && !specific;
+    if (bigAll && _managerFilter.isNotEmpty) {
+      _snack('فلتر المدير لا يُطبَّق على «الكلّ» في الحساب الكبير — ألغِه أو استعمل «أختار بنفسي»', isError: true);
+      return;
+    }
     setState(() => _checkingRisk = true);
-    final pv = await BroadcastApi.preview(
+    var pv = await BroadcastApi.preview(
       intent: MessageIntent.debtors,
       debtFilter: _df,
       targetUsernames: specific ? picked : _managerScopedUsernames,
     );
+    // الكبير: معاينةٌ قديمة تُحسب من جديد في الخلفيّة — ننتظرها (حتى ٣ دقائق) قبل ورقة التأكيد
+    for (var i = 0; i < 45 && mounted && pv.preview?.pending == true; i++) {
+      await Future<void>.delayed(const Duration(seconds: 4));
+      if (!mounted) return;
+      pv = await BroadcastApi.preview(intent: MessageIntent.debtors, debtFilter: _df, targetUsernames: specific ? picked : _managerScopedUsernames);
+    }
     if (!mounted) return;
     setState(() => _checkingRisk = false);
+    if (pv.preview?.pending == true) {
+      _snack('ما زالت المعاينة تُحسب — أعد المحاولة بعد قليل. لم يُرسَل شيء', isError: true);
+      return;
+    }
     final preview = pv.preview;
     if (preview == null) {
       _snack(pv.message ?? 'تعذّرت المعاينة — لم يُرسَل شيء', isError: true);
@@ -540,6 +571,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         summary: _df.describe(),
         channel: _forceChannel,
         includeHighRisk: _includeHighRisk,
+        bigBackground: bigAll,
       ),
     );
     if (include == null || !mounted) return;
@@ -577,7 +609,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _schedulePreview();
     } else {
       _snack(r.message ?? 'فشل الإرسال', isError: true);
-      if (r.code == 'BROADCAST_AUDIENCE_CHANGED') _schedulePreview();
+      if (r.code == 'BROADCAST_AUDIENCE_CHANGED' || r.code == 'DEBT_FILTER_PREVIEW_EXPIRED') _schedulePreview();
     }
   }
 
@@ -1118,7 +1150,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           Expanded(
             child: Text(
               'حسابك كبير ($_bigTotal مشترك): «عام» يرسل للفئة كلّها — يجهّزها الخادم في الخلفيّة ويصلك إشعارٌ بالنتيجة. '
-              '«محدّد»: ابحث واختر حتى $_kBigMaxTargets مشترك في المرّة.',
+              '«محدّد»: ابحث واختر حتى $_kBigMaxTargets مشترك في المرّة.'
+              '${_dfAvailable ? ' و«المدينون» بالتحديد: من يطابق يُحسب في الخلفيّة، والإرسال لمن تراهم ولا يزالون يطابقون.' : ''}',
               style: AppType.body(color: AppColors.textBody).copyWith(fontSize: 12.5, height: 1.5),
             ),
           ),
@@ -1196,11 +1229,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   ListTone.info),
             ],
           ),
-          if (_filter == _Filter.debtors && _big) ...[
+          if (_filter == _Filter.debtors && _big && _dfCap != null && !_dfCap!.bigAsync) ...[
             const SizedBox(height: Sp.sm),
             _note(LucideIcons.funnel, 'تحديد المدينين بعمر الدين ومبلغه غير متاحٍ للحسابات الكبيرة — أرسل للمدينين كلّهم أو اختر بالبحث.'),
           ],
-          if (_filter == _Filter.debtors && !_big && _dfCap != null) ...[
+          if (_filter == _Filter.debtors && _dfAvailable) ...[
             const SizedBox(height: Sp.md),
             _debtFilterPanel(),
           ],
@@ -1290,228 +1323,16 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   /// لوحة «تحديد المدينين»: عمر أقدم دينٍ لم يُسدَّد و/أو مبلغ الدين — اختياريّان، والنتيجة من الخادم تحتهما.
-  Widget _debtFilterPanel() {
-    final cap = _dfCap!;
-    final problem = _df.problem(maxAgeDays: cap.maxAgeDays);
-    final ageIsPreset = _df.minAgeDays != null && cap.presets.contains(_df.minAgeDays) && !_dfCustomAge;
-    void setAmount(TextEditingController c, bool min) {
-      final v = AmountShorthand.parse(c.text);
-      _setDebtFilter(min
-          ? _df.copyWith(minAmount: () => v > 0 || c.text.trim().isNotEmpty ? v : null)
-          : _df.copyWith(maxAmount: () => v > 0 ? v : null));
-    }
-
-    Widget amountBox(TextEditingController c, String hint, bool min) => Expanded(
-          child: SizedBox(
-            height: H.search,
-            child: TextField(
-              key: ValueKey(min ? 'df-min' : 'df-max'),
-              controller: c,
-              keyboardType: TextInputType.number,
-              textDirection: TextDirection.ltr,
-              textAlign: TextAlign.end,
-              onChanged: (_) {
-                final v = AmountShorthand.parse(c.text);
-                final f = AmountShorthand.format(v);
-                if (f != c.text) c.value = TextEditingValue(text: f, selection: TextSelection.collapsed(offset: f.length));
-                setAmount(c, min);
-              },
-              style: AppType.input(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: AppType.input(color: AppColors.textPlaceholder),
-                suffixText: ' د.ع',
-                suffixStyle: AppType.micro(color: AppColors.textMid),
-                filled: true,
-                fillColor: AppColors.surface,
-                contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.warning)),
-              ),
-            ),
-          ),
-        );
-
-    void setRange(int? min, int? max) {
-      _dfMinCtrl.text = min == null ? '' : AmountShorthand.format(min);
-      _dfMaxCtrl.text = max == null ? '' : AmountShorthand.format(max);
-      _setDebtFilter(_df.copyWith(minAmount: () => min, maxAmount: () => max));
-    }
-
-    const ranges = <(String, int?, int?)>[
-      ('حتى 25 ألف', null, 25000),
-      ('25 إلى 50 ألف', 25000, 50000),
-      ('50 إلى 100 ألف', 50000, 100000),
-      ('100 ألف فأكثر', 100000, null),
-    ];
-    final pv = _dfPreview;
-    return Container(
-      key: const ValueKey('debt-filter-panel'),
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.warningSoftBg,
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.warningSoftBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(children: [
-            const ListIconBox(icon: LucideIcons.funnel, tone: ListTone.warning, size: 30),
-            const SizedBox(width: Sp.sm),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('تحديد المدينين (اختياري)', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.cardTitle(color: AppColors.textHi)),
-                Text('بعمر الدين، أو بمبلغه، أو بالاثنين', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
-              ]),
-            ),
-            if (_df.active)
-              TextButton(
-                onPressed: () {
-                  _dfAgeCtrl.clear();
-                  _dfMinCtrl.clear();
-                  _dfMaxCtrl.clear();
-                  _dfCustomAge = false;
-                  _setDebtFilter(DebtFilter.none);
-                },
-                child: Text('مسح', style: AppType.labelBold(color: AppColors.brand)),
-              ),
-          ]),
-          const SizedBox(height: Sp.md),
-          Text.rich(
-            TextSpan(children: [
-              TextSpan(text: 'عمر الدين ', style: AppType.labelBold(color: AppColors.textBody)),
-              TextSpan(text: '(أقدم دين لم يُسدَّد)', style: AppType.micro(color: AppColors.textMid)),
-            ]),
-          ),
-          const SizedBox(height: Sp.sm),
-          if (cap.age) ...[
-            Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
-              ListFilterChip(
-                label: 'أيّ عمر',
-                tone: ListTone.warning,
-                active: _df.minAgeDays == null && !_dfCustomAge,
-                onTap: () {
-                  setState(() => _dfCustomAge = false);
-                  _setDebtFilter(_df.copyWith(minAgeDays: () => null));
-                },
-              ),
-              for (final d in cap.presets)
-                ListFilterChip(
-                  key: ValueKey('df-age-$d'),
-                  label: arDaysCount(d),
-                  tone: ListTone.warning,
-                  active: ageIsPreset && _df.minAgeDays == d,
-                  onTap: () {
-                    setState(() => _dfCustomAge = false);
-                    _setDebtFilter(_df.copyWith(minAgeDays: () => d));
-                  },
-                ),
-              ListFilterChip(
-                label: 'مدّة أخرى',
-                tone: ListTone.warning,
-                active: _dfCustomAge,
-                onTap: () => setState(() => _dfCustomAge = true),
-              ),
-            ]),
-            if (_dfCustomAge) ...[
-              const SizedBox(height: Sp.sm),
-              Row(children: [
-                SizedBox(
-                  width: 96,
-                  height: H.search,
-                  child: TextField(
-                    key: const ValueKey('df-age-custom'),
-                    controller: _dfAgeCtrl,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-                    onChanged: (t) => _setDebtFilter(_df.copyWith(minAgeDays: () => int.tryParse(t))),
-                    style: AppType.input(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
-                    decoration: InputDecoration(
-                      hintText: '45',
-                      filled: true,
-                      fillColor: AppColors.surface,
-                      contentPadding: EdgeInsets.zero,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: Sp.sm),
-                Text('يوماً فأكثر', style: AppType.body(color: AppColors.textMid)),
-              ]),
-            ] else if (_df.minAgeDays != null) ...[
-              const SizedBox(height: Sp.xs),
-              Text('من عمر أقدم دينٍ لم يسدّده ${arDaysCount(_df.minAgeDays!)} فأكثر، ومن عليه «دين قديم»',
-                  style: AppType.micro(color: AppColors.textMid)),
-            ],
-          ] else
-            _note(LucideIcons.info, cap.ageNote ?? 'عمر الدين غير متاحٍ لهذه الشركة — حدّد بالمبلغ'),
-          const SizedBox(height: Sp.md),
-          Text('مبلغ الدين', style: AppType.labelBold(color: AppColors.textBody)),
-          const SizedBox(height: Sp.sm),
-          // بلا فاصل «إلى» بين الصندوقين: التلميحان «من»/«إلى» يكفيان، والعرض كلّه للرقم (٣٢٠ لا يلتصق «د.ع» به)
-          Row(children: [
-            amountBox(_dfMinCtrl, 'من', true),
-            const SizedBox(width: Sp.sm),
-            amountBox(_dfMaxCtrl, 'إلى', false),
-          ]),
-          const SizedBox(height: Sp.sm),
-          Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
-            for (final r in ranges)
-              ListFilterChip(
-                label: r.$1,
-                tone: ListTone.warning,
-                active: _df.minAmount == r.$2 && _df.maxAmount == r.$3,
-                onTap: () => setRange(r.$2, r.$3),
-              ),
-          ]),
-          if (_df.active) ...[
-            const SizedBox(height: Sp.md),
-            Container(
-              key: const ValueKey('debt-filter-result'),
-              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(R.md),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: problem != null
-                  ? Text(problem, style: AppType.labelBold(color: AppColors.error))
-                  : _dfPreviewError != null
-                      ? Row(children: [
-                          Expanded(child: Text(_dfPreviewError!, maxLines: 3, style: AppType.micro(color: AppColors.error))),
-                          TextButton(onPressed: _schedulePreview, child: Text('إعادة', style: AppType.labelBold(color: AppColors.brand))),
-                        ])
-                      : _dfPreviewBusy || pv == null
-                          ? Row(children: [
-                              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                              const SizedBox(width: Sp.sm),
-                              Text('يحسب من يطابق…', style: AppType.micro(color: AppColors.textMid)),
-                            ])
-                          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text.rich(TextSpan(children: [
-                                TextSpan(text: '${pv.audience}', style: AppType.statValue(color: AppColors.warningOnSoft)),
-                                TextSpan(text: ' مديناً يطابقون', style: AppType.body(color: AppColors.textMid)),
-                              ])),
-                              if (pv.count != pv.audience || pv.legacy > 0 || pv.unknownAge > 0)
-                                Text(
-                                  [
-                                    if (pv.count != pv.audience) 'سيصل ${pv.count}',
-                                    if (pv.legacy > 0) '${pv.legacy} دين قديم',
-                                    if (pv.unknownAge > 0) '${pv.unknownAge} بلا عمر معروف (لم يُشملوا)',
-                                  ].join(' · '),
-                                  style: AppType.micro(color: AppColors.textMid),
-                                ),
-                            ]),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  Widget _debtFilterPanel() => DebtFilterPanel(
+        cap: _dfCap!,
+        value: _df,
+        onChanged: _setDebtFilter,
+        busy: _dfPreviewBusy,
+        pendingText: _dfPending,
+        error: _dfPreviewError,
+        preview: _dfPreview,
+        onRetry: _schedulePreview,
+      );
 
   /// كارت فلتر المدير الفرعي — يظهر فقط لمن عنده مدراء فرعيون.
   /// التحديد فارغ = بدون قيد (كل المدراء).
@@ -1621,10 +1442,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   Widget _buildScopeCard() {
-    final allLabel = _big
-        ? 'الفئة كلّها'
-        : _debtFilterOn
-            ? (_dfPreview == null ? 'الكلّ' : 'الكلّ (${_dfPreview!.audience})')
+    final allLabel = _debtFilterOn
+        ? (_dfPreview == null ? 'الكلّ' : 'الكلّ (${_dfPreview!.audience})')
+        : _big
+            ? 'الفئة كلّها'
             : 'الكلّ (${_candidates.length})';
     return _sectionCard(
       icon: LucideIcons.layers,
@@ -1640,7 +1461,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ),
           if (_big && _scope == _Scope.all) ...[
             const SizedBox(height: 6),
-            Text('الفئة كلّها — يجهّزها الخادم في الخلفيّة', style: AppType.micro(color: AppColors.textMid)),
+            Text(
+              _debtFilterOn
+                  ? 'يُجهَّز في الخلفيّة على أحدث الديون — لمن تراهم ولا يزالون يطابقون'
+                  : 'الفئة كلّها — يجهّزها الخادم في الخلفيّة',
+              style: AppType.micro(color: AppColors.textMid),
+            ),
           ],
         ],
       ),
@@ -1760,6 +1586,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     }
                   } else {
                     for (final r in rows) {
+                      // الحساب الكبير: حتى $_kBigMaxTargets في المرّة (بحثٌ لكلٍّ منهم في الخادم)
+                      if (_big && _selected.length >= _kBigMaxTargets) break;
                       _selected.add(r.username);
                     }
                   }
@@ -2202,11 +2030,20 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 /// ورقة تأكيد الإرسال بالتحديد — من معاينة الطلب نفسه: كم سيصلهم، ومن هم (الاسم والدين والعمر أو «دين قديم»)، وما استُبعد ولماذا.
 /// تُرجع includeHighRisk (true/false) عند التأكيد، وnull عند الرجوع.
 class _FilteredConfirmSheet extends StatefulWidget {
-  const _FilteredConfirmSheet({required this.preview, required this.summary, required this.channel, required this.includeHighRisk});
+  const _FilteredConfirmSheet({
+    required this.preview,
+    required this.summary,
+    required this.channel,
+    required this.includeHighRisk,
+    this.bigBackground = false,
+  });
   final BroadcastPreview preview;
   final String summary;
   final String channel;
   final bool includeHighRisk;
+
+  /// الحساب الكبير «الكلّ»: يُجهَّز في الخلفيّة على أحدث الديون، لمن رآهم المدير ولا يزالون يطابقون.
+  final bool bigBackground;
 
   @override
   State<_FilteredConfirmSheet> createState() => _FilteredConfirmSheetState();
@@ -2228,6 +2065,8 @@ class _FilteredConfirmSheetState extends State<_FilteredConfirmSheet> {
       if (pv.missing > 0) '${pv.missing} من المختارين لم يعودوا في القائمة',
       if (pv.partial) 'تعذّر جلب كلّ المشتركين — من لم يُجلب لا يصله',
       if (widget.channel == 'telegram') 'تلغرام وحده: يصل لمن ربط حسابه من هؤلاء',
+      if (widget.bigBackground)
+        'حسابٌ كبير: يُجهَّز الإرسال في الخلفيّة على أحدث الديون، ويصل لمن تراهم هنا ولا يزالون يطابقون — ويصلك إشعارٌ بالعدد',
     ];
     return DesignSheet(
       header: SheetHeaderBar(
