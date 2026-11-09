@@ -47,7 +47,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     final r = _run;
     return r is MergedDevicesCheckRunner ? r : null;
   }
-  CheckState? _filter;
+  /// شريحة العدّ المختارة (حالٌ طازجة، أو «يقرأ»، أو «آخر قراءة») — null الكلّ.
+  CheckBucket? _filter;
 
   /// «كل الشركات»: شركةٌ مختارة من بطاقة «الشركات» ⇒ أجهزتها وحدها وعدّاداتها (٨ نوفمبر — المالك: «خلي امكانيه ان ينقر ع الشركه
   /// ويعرض بس الاجهزه بعد نتيجه الفحص»). الضغط ثانيةً يعيد الكلّ.
@@ -120,7 +121,11 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     if (rs.isEmpty) return;
     final m = _merged;
     if (m == null) {
-      await copyToClipboard(context, DevicesCheck.reportText(rs, viaVpn: widget.viaVpn), label: 'تقرير الفحص');
+      await copyToClipboard(
+          context,
+          DevicesCheck.reportText(rs,
+              viaVpn: widget.viaVpn, progress: _run.running ? (done: _run.done, total: _run.total) : null),
+          label: 'تقرير الفحص');
       return;
     }
     // «كل الشركات»: تقرير كلّ شركةٍ تحت اسمها، وسطر من لم تُفحص ولماذا — والمختارة وحدها إن اختيرت
@@ -136,6 +141,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       parts.add('$head\n${DevicesCheck.reportText(mine, viaVpn: s.viaVpn)}');
     }
     if (!mounted) return;
+    // أثناء الفحص: ما لم يكتمل يُقال أوّلاً (من لم يبدأ لا يغيب بصمت)
+    if (_run.running) parts.insert(0, 'لم يكتمل الفحص: ${_run.done} من ${_run.total}');
     await copyToClipboard(context, parts.join('\n\n'), label: 'تقرير الفحص');
   }
 
@@ -178,7 +185,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         builder: (context, _) {
           final rs = _reports;
           final scoped = _scoped(rs);
-          final shown = _filter == null ? scoped : scoped.where((r) => r.state == _filter).toList();
+          final shown = _filter == null ? scoped : scoped.where((r) => r.bucket == _filter).toList();
           return ListView(
             padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.xxl),
             children: [
@@ -407,11 +414,14 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   }
 
   Widget _counts(List<DeviceCheckReport> rs) {
-    Widget chip(CheckState s) {
-      final n = rs.where((r) => r.state == s).length;
-      final tone = _stateTone(s);
+    Widget chip(CheckBucket s) {
+      final n = rs.where((r) => r.bucket == s).length;
+      final tone = switch (s) {
+        CheckBucket.pending || CheckBucket.stale => AppTone.neutral,
+        _ => _stateTone(CheckState.values.byName(s.name)),
+      };
       final on = _filter == s;
-      final label = DevicesCheck.stateName(s);
+      final label = DevicesCheck.bucketName(s);
       return InkWell(
         key: ValueKey('check-count-${s.name}'),
         borderRadius: BorderRadius.circular(R.pill),
@@ -433,10 +443,12 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       );
     }
 
-    // «الحال فقط» (٩ نوفمبر) قسمٌ وحده حين يوجد — لا يُعدّ «لم يُقرأ» (لا يُقرأ أصلاً بإعداده)
+    // «الحال فقط» (٩ نوفمبر) قسمٌ وحده حين يوجد — لا يُعدّ «لم يُقرأ» (لا يُقرأ أصلاً بإعداده). والمؤقّت «يقرأ» وما عُرض من آخر
+    // قراءةٍ «آخر قراءة» شريحتان وحدهما حين توجدان — لا يُعدّان بحالهما «سليماً» الآن (المراجعة)
+    const always = {CheckBucket.down, CheckBucket.warn, CheckBucket.unread, CheckBucket.ok};
     return Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
-      for (final s in CheckState.values)
-        if (s != CheckState.statusOnly || rs.any((r) => r.state == s)) chip(s),
+      for (final s in CheckBucket.values)
+        if (always.contains(s) || rs.any((r) => r.bucket == s)) chip(s),
     ]);
   }
 
@@ -448,7 +460,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       );
 
   Widget _card(DeviceCheckReport r) {
-    final tone = _stateTone(r.state);
+    // القراءة جارية ⇒ لونٌ محايد لا لون حالها المؤقّت (المراجعة)
+    final tone = r.pending ? AppTone.neutral : _stateTone(r.state);
     // ٩ نوفمبر: طريق القراءة وزمنها على السطر («SSH · 18ث») — السبب في الميدان يُرى
     final sub = [r.roleLabel, r.device.ip, if (r.readLine != null) r.readLine!].where((x) => x.isNotEmpty).join(' · ');
     return Container(
@@ -479,8 +492,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                   ]),
                 ),
                 const SizedBox(width: Sp.xs),
-                // سطرٌ مؤقّت: قراءته جارية بعد المهلة الأولى؛ ومن آخر قراءةٍ بعمرها — لا يُقدَّم طازجاً (٩ نوفمبر)
-                r.pending ? _pill('يقرأ…', AppTone.neutral) : _pill(r.stateLabel, tone),
+                // «يقرأ…» للجاري، والعمر لما عُرض من آخر قراءة دائماً — لا يُقدَّم طازجاً (٩ نوفمبر)
+                _pill(r.stateLabel, tone),
               ]),
               if (r.vitals.isNotEmpty) ...[
                 const SizedBox(height: Sp.sm),

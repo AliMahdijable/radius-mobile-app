@@ -243,6 +243,7 @@ class DeviceGlance {
     this.uptimeSec,
     this.linkUptime = false,
     this.peersKnown = false,
+    this.radioUnread = false,
   });
 
   /// مدّة التشغيل بالثواني — أو مدّة **الوصلة** حين [linkUptime] (ميموزا: عمر وكيل SNMP يُصفَّر بلا سقوط، فلا يُعرض).
@@ -252,6 +253,11 @@ class DeviceGlance {
   /// قائمة العملاء/المحطّات في [DeviceDetail.peers] قُرئت فعلاً — فراغها «لا متّصلين» لا «لم تُقرأ بعد». القراءة الخفيفة
   /// (ميكروتك بلا جدول التسجيل، ميموزا بلا محطّاتها) تتركها false فلا يظهر «0 متّصل» كاذب.
   final bool peersKnown;
+
+  /// للجهاز راديو مفعّل (أو واجهاتٌ لم تُقرأ) وطبقة اللاسلكيّ لم تُقرأ هذه المرّة — طبقة ميكروتك الأولى، القراءة الخفيفة، أو أمر
+  /// اللاسلكيّ فشل. دوره (سكتر/وصلة) ومشتركوه وإشارته مجهولة: «الفحص الشامل» لا يحكم عليه من نوع سجلّه (٩ نوفمبر — المراجعة:
+  /// سكتر بيس بوكس محفوظٌ «راوتر» كان «راوتر · سليم» ولم يُقرأ مشتركوه).
+  final bool radioUnread;
 
   /// المعالج والذاكرة ٪، الحرارة °م، الفولتيّة، استهلاك PoE (واط)، جلسات PPP.
   final int? cpu, mem, temp;
@@ -681,6 +687,9 @@ class DeviceVitals {
     return mikrotikResult(d, s, prev, detailed: detailed);
   }
 
+  /// أنواع واجهات RouterOS اللاسلكيّة (wireless · wifi · wifiwave2 · 60GHz · CAPsMAN) — تلميح الراديو في الطبقة الأولى.
+  static const radioInterfaceTypes = {'wlan', 'wifi', 'wifiwave2', 'w60g', 'cap'};
+
   /// قراءة ميكروتك ⇒ الخانات والتفصيل — من جلسةٍ كاملة أو من طبقتها الأولى (عملاؤها «لم تُقرأ»: [MikrotikStats.clientsRead]).
   static ProbeResult mikrotikResult(NetworkDevice d, MikrotikStats s, CounterSample? prev, {required bool detailed}) {
     final counters = <String, ({int rx, int tx})>{};
@@ -753,10 +762,13 @@ class DeviceVitals {
     final isAp = wl == null ? (w60 != null ? false : null) : (wlMode.contains('ap') || wlMode == 'bridge' || wlMode == 'wds-master');
     final upstream = isAp == false && s.wirelessClients.isNotEmpty ? s.wirelessClients.first : null;
     int? pos(int? v) => v != null && v > 0 ? v : null;
+    // راديو مفعّل بواجهات الطبقة الأولى (wlan/wifi/w60g…) — أو واجهاتٌ لم تُقرأ أصلاً (طبقة SNMP الأولى)
+    final radio = s.interfaces.isEmpty || s.interfaces.any((i) => !i.disabled && radioInterfaceTypes.contains(i.type.toLowerCase()));
     final glance = DeviceGlance(
       uptimeSec: routerOsSeconds(s.uptime),
       // ٩ نوفمبر: المفصّلة وحدها لا تكفي — جدول تسجيلٍ انتهت مهلته يصل فارغاً ([MikrotikStats.clientsRead])
       peersKnown: detailed && s.clientsRead,
+      radioUnread: radio && !s.clientsRead,
       cpu: s.cpuKnown ? s.cpuLoad : null,
       mem: s.memKnown ? s.memUsedPercent : null,
       temp: s.temperature,

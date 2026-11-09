@@ -361,7 +361,8 @@ class DevicesCheckRunner extends ChangeNotifier {
           limits: limits,
           prev: prev,
           macUsers: macs,
-          readNote: '${last.from}؛ الجديدة: $reason',
+          // العمر بالسطر نفسه (المراجعة): يبقى ظاهراً ولو كانت شارة الحال «يقرأ…»، وفي النسخ
+          readNote: '${last.from} ${DevicesCheck.ago(last.at, DateTime.now())}؛ الجديدة: $reason',
           pending: pending,
           staleAt: last.at,
           staleFrom: last.from,

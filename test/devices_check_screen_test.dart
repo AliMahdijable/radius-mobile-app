@@ -1,8 +1,10 @@
 // شاشة «الفحص الشامل» (٦ نوفمبر): تقريرٌ منفصل لكلّ جهاز — الطافي أوّلاً، والسكتر بمشتركيه، والسويج بمنافذه، والأعداد فلاتر،
 // والنقر يفتح الكلّ؛ واللقطة تُحفظ للفحص التالي. الشبكة بدائل (debugProbe/debugFetch/debugLimits).
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
@@ -233,7 +235,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 100));
     }
     expect(find.text('ملاحظات · قبل لحظات'), findsOneWidget);
-    expect(find.textContaining('آخر قراءة؛ الجديدة:'), findsOneWidget);
+    expect(find.textContaining('آخر قراءة قبل لحظات؛ الجديدة:'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
 
@@ -259,6 +261,55 @@ void main() {
     expect(calls[6], 2);
     expect(calls[1], 1, reason: 'المقروء لا يُعاد');
     expect(rerun, findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('المراجعة: شريحتا «يقرأ» و«آخر قراءة» وحدهما، والشارة بعمرها أثناء القراءة، والنسخ أثناءه «لم يكتمل»', (t) async {
+    String? copied;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+      return null;
+    });
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    DeviceStatsCache.instance.clear();
+    addTearDown(DeviceStatsCache.instance.clear);
+    // الراوتر (1) قرأته بطاقته قبل قليل وقراءته الآن بطيئة؛ والسويج (3) قراءته تفشل ⇒ آخر قراءة
+    DeviceStatsCache.instance.putVitals(1, const [], const DeviceDetail(glance: DeviceGlance(cpu: 11, uptimeSec: 86400 * 9)));
+    DeviceStatsCache.instance.putVitals(3, const [], const DeviceDetail(glance: DeviceGlance(cpu: 6, uptimeSec: 86400 * 3)));
+    DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 30));
+    addTearDown(() => DevicesCheckRunner.debugTimes = null);
+    final base = DevicesCheckRunner.debugFetch!;
+    final slow = Completer<ProbeResult>();
+    addTearDown(() {
+      if (!slow.isCompleted) slow.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+    });
+    DevicesCheckRunner.debugFetch = (d) => switch (d.id) {
+          1 => slow.future,
+          3 => Future<ProbeResult>.error(const SocketException('Connection refused')),
+          _ => base(d),
+        };
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    for (var i = 0; i < 40 && find.byKey(const ValueKey('check-count-pending')).evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    Finder chip(String k, String n) =>
+        find.descendant(of: find.byKey(ValueKey('check-count-$k')), matching: find.text(n));
+    expect(chip('pending', '1'), findsOneWidget);
+    expect(chip('stale', '1'), findsOneWidget);
+    expect(chip('ok', '0'), findsOneWidget, reason: 'لا طازج سليم — المؤقّت والقديم لا يُعدّان «سليماً»');
+    await see(t, find.byKey(const ValueKey('check-card-1')));
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-1')), matching: find.text('يقرأ… · آخر قراءة قبل لحظات')),
+        findsOneWidget);
+    await t.scrollUntilVisible(find.byKey(const ValueKey('check-head')), -300, scrollable: find.byType(Scrollable).first);
+    await t.tap(find.byKey(const ValueKey('check-copy')));
+    await t.pump();
+    expect(copied, contains('لم يكتمل: 5 من 6'));
+    expect(copied, contains('يقرأ 1'));
+    expect(copied, contains('آخر قراءة 1'));
+    slow.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+    await settle(t);
     await t.pumpWidget(const SizedBox());
   });
 }
