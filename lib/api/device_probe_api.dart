@@ -109,6 +109,9 @@ class DeviceProbeApi {
       DeviceConfigApi.scoped(company, s);
 
   static const _ttl = Duration(minutes: 5);
+
+  /// عمر القراءة الطازجة: ما دونه لا تعيده الموجة ([needsProbe]) — «الفحص العامّ» يعدّه من موجته.
+  static const ttl = _ttl;
   // يطابق v1: 15s cap على probe واحد.
   static Duration _probeCap = const Duration(seconds: 15);
 
