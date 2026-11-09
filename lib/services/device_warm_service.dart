@@ -53,6 +53,11 @@ class DeviceWarmService with WidgetsBindingObserver {
   Timer? _first;
   DateTime? _lastWave;
   bool _running = false;
+
+  /// من بدأ الفحص ولم يوقفه بعد (٩ نوفمبر — مراجعة 179): الغلاف ([MainShell]) يبدأ به ويوقفه بنفسه. استبدال الغلاف بغلافٍ جديد
+  /// (البصمة، تبديل الشركة أو المدير الفرعيّ أو صفحة الموظّف — pushAndRemoveUntil) يُنهي القديم **بعد** أن يبدأ الجديد، فكان
+  /// إيقافه يُطفئ فحص الجديد بقيّة الجلسة ([start] يعود مبكّراً ما دام يعمل). الآن يعمل ما دام له مالك، وإيقاف مالكٍ لا يمسّ غيره.
+  final Set<Object> _owners = Set<Object>.identity();
   bool _waving = false;
   bool _offNet = false;
   bool _resumed = true;
@@ -61,26 +66,44 @@ class DeviceWarmService with WidgetsBindingObserver {
   @visibleForTesting
   static bool debugDisabled = false;
 
+  /// منفذ الاختبار (ملكيّة الغلاف): غير null ⇒ [start] يعمل تحت flutter test بمؤقّتاته (وهميّةٌ في testWidgets)، وكلّ خطوةٍ
+  /// حان وقتها تنادي هذا بدل الفحص — لا شبكة ولا أجهزة.
+  @visibleForTesting
+  static void Function()? debugOnStep;
+
+  /// الفحص الخلفيّ يعمل الآن (مؤقّتاته قائمة).
+  @visibleForTesting
+  static bool get debugRunning => _i._running;
+
   /// آخر موجةٍ بدأت (للاختبار والتشخيص).
   static DateTime? get lastWave => _i._lastWave;
 
-  static void start() {
-    // اختبارات الواجهة تبني الغلاف — لا مؤقّتات حقيقيّة فيها (والاختبار يستدعي [wave] مباشرةً)
-    if (debugDisabled || _i._running || Platform.environment.containsKey('FLUTTER_TEST')) return;
+  /// يبدأ الفحص الخلفيّ باسم [owner] (الغلاف نفسه) — يعمل أصلاً ⇒ يُضاف مالكاً ويستمرّ بمؤقّتاته كما هي.
+  static void start(Object owner) {
+    // اختبارات الواجهة تبني الغلاف — لا مؤقّتات حقيقيّة فيها إلّا بمنفذ [debugOnStep] (والاختبار يستدعي [wave] مباشرةً)
+    if (debugDisabled || (debugOnStep == null && Platform.environment.containsKey('FLUTTER_TEST'))) return;
+    _i._owners.add(owner);
+    if (_i._running) return;
     _i._running = true;
     WidgetsBinding.instance.addObserver(_i);
     _i._first = Timer(firstDelay, () => unawaited(_i._step()));
     _i._timer = Timer.periodic(_tick, (_) => unawaited(_i._step()));
   }
 
-  static void stop() {
-    if (!_i._running) return;
-    _i._running = false;
-    WidgetsBinding.instance.removeObserver(_i);
-    _i._timer?.cancel();
-    _i._first?.cancel();
-    _i._timer = null;
-    _i._first = null;
+  /// [owner] لم يعد يريده — يتوقّف حين لا يبقى مالك. مالكٌ غير مسجَّل (أوقف من قبل، أو لم يبدأ) لا يمسّ شيئاً.
+  static void stop(Object owner) {
+    if (!_i._owners.remove(owner) || _i._owners.isNotEmpty) return;
+    _i._halt();
+  }
+
+  void _halt() {
+    if (!_running) return;
+    _running = false;
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    _first?.cancel();
+    _timer = null;
+    _first = null;
   }
 
   /// الحاسبة (ويندوز/ماك) لا يُعلّقها النظام: نافذةٌ أخرى أمامها (inactive) أو مصغَّرة (hidden) ⇒ يستمرّ — محطّة قياسٍ بالمكتب.
@@ -103,6 +126,11 @@ class DeviceWarmService with WidgetsBindingObserver {
 
   Future<void> _step() async {
     if (_yield || _waving) return;
+    final hook = debugOnStep;
+    if (hook != null) {
+      hook();
+      return;
+    }
     // «وضع VPN»: الوكيل خارج شبكته والفحص من الخادم — لا موجة ولا إعادة قياسٍ من الموبايل (لا تصل شيئاً)
     if (VpnNow.mode.value) return;
     // ١) تحت المراقبة: من حان موعد تأكيده يُقاس وحده
@@ -290,7 +318,9 @@ class DeviceWarmService with WidgetsBindingObserver {
   @visibleForTesting
   static void debugReset() {
     debugCheckNow = null;
-    stop();
+    debugOnStep = null;
+    _i._owners.clear();
+    _i._halt();
     _i._lastWave = null;
     _i._waving = false;
     _i._resumed = true;
