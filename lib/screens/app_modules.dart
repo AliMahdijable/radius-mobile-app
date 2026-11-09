@@ -43,6 +43,7 @@ import 'sales/sales_screen.dart';
 import 'settlements/settlements_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'telegram/telegram_screen.dart';
+import 'tickets/ticket_widgets.dart';
 import 'tickets/tickets_screen.dart';
 import 'topup/fiberx_topup_screen.dart';
 import 'topup/jtpay_screen.dart';
@@ -110,8 +111,9 @@ Listenable appModulesListenable() => Listenable.merge([
       NationalMoreState.gate,
       // «طلبات التفعيل» — المفتاح العامّ portal_renew وما يملكه المستخدم (الاستماع يطلبها).
       RenewRequestsState.gate,
-      // «التذاكر» — المفتاح العامّ portal_tickets وما يملكه المستخدم وغير المقروءة (الاستماع يطلبها).
+      // «التذاكر» — المفتاح العامّ portal_tickets وما يملكه المستخدم وأعدادها (الاستماع يطلبها)، وقائمة الجرس (رقم البطاقة منها أيضاً).
       TicketsState.gate,
+      TicketsState.bell,
     ]);
 
 /// الأقسام بترتيب الهاتف («قوائم أخرى»). الحاسبة ترتّبها بمجموعاتها.
@@ -420,7 +422,8 @@ List<AppModule> buildAppModules() {
         page: MessageLogsScreen.mergedPage,
       ),
     // «التذاكر» (٩ نوفمبر — المالك: «للشركات كلها ما عدا الوطني»): تذاكر المشتركين من تطبيقهم — حين يُفتح المفتاح العامّ للحساب،
-    // ومقفلٌ بمكانه لموظّفٍ بلا «التذاكر — العرض»، والمقيَّد بمديرٍ فرعيّ بسببه. الرقم: غير المقروءة.
+    // ومقفلٌ بمكانه لموظّفٍ بلا «التذاكر — العرض»، والمقيَّد بمديرٍ فرعيّ بسببه. الرقم **رقم الجرس نفسه** (مصدرٌ واحد —
+    // [TicketsState.bellBadge] بقاعدة kTicketsBadgeRule: كلّ ما ينتظرك مرّةً واحدة).
     if (TicketsApi.servedByProvider && (TicketsState.gate.value?.available ?? false) && permShown(const ['tickets.view']))
       AppModule(
         id: 'tickets',
@@ -430,13 +433,11 @@ List<AppModule> buildAppModules() {
         icon: LucideIcons.ticket,
         tone: AppTone.info,
         title: 'التذاكر',
-        subtitle: switch (TicketsState.unread) {
+        subtitle: switch (TicketsState.bellBadge) {
           0 => 'تذاكر مشتركيك من تطبيقهم — ردّ وتابع حتى الحلّ',
-          1 => 'تذكرةٌ فيها جديدٌ لم تقرأه',
-          2 => 'تذكرتان فيهما جديدٌ لم تقرأه',
-          final n => '$n تذاكر فيها جديدٌ لم تقرأه',
+          final n => ticketsBadgeLabel(n, TicketsState.badgeRule),
         },
-        badge: TicketsState.unread,
+        badge: TicketsState.bellBadge,
         page: TicketsScreen.mergedPage,
       ),
     // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه

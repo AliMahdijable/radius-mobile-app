@@ -153,11 +153,12 @@ void main() {
     });
     tearDown(() {
       TicketsState.reset();
+      TicketsState.debugSetBadgeRule(kTicketsBadgeRule);
       ProviderService.debugSet(null);
       PermissionsService.debugReset();
     });
 
-    testWidgets('«قوائم أخرى»: البطاقة حين يقول الخادم «متاحة» وحده، برقم غير المقروءة؛ مقفلةٌ للموظّف بلا العرض، وبسببها للمقيَّد؛ والوطنيّ بلا بطاقة',
+    testWidgets('«قوائم أخرى»: البطاقة حين يقول الخادم «متاحة» وحده، برقم الجرس نفسه؛ مقفلةٌ للموظّف بلا العرض، وبسببها للمقيَّد؛ والوطنيّ بلا بطاقة',
         (t) async {
       await pumpSim(t, _v, home: (_) => const Scaffold(body: SizedBox()));
       AppModule? card() {
@@ -171,10 +172,19 @@ void main() {
       expect(card(), isNull, reason: 'لم يُعرف بعد');
       TicketsState.debugSet(TicketsAccess.off);
       expect(card(), isNull, reason: 'غير متاحة لحسابه');
-      TicketsState.debugSet(TicketsAccess.fromJson(_summary(unread: 3)));
+      // اثنتان بانتظارك (واحدةٌ منهما جديدة) + ملغاةٌ لم تُقرأ خارجها ⇒ ٣ — رقم الجرس نفسه (مصدرٌ واحد)
+      TicketsState.debugSet(TicketsAccess.fromJson(_summary(unread: 2)), bell: const TicketsBell(outside: 1));
       final c = card()!;
       expect([c.locked, c.unavailable, c.badge, c.group], [false, null, 3, AppModuleGroup.comms]);
-      expect(c.subtitle, contains('3'));
+      expect(c.badge, TicketsState.bellBadge);
+      expect(c.subtitle, '3 تذاكر بانتظارك');
+      // والقاعدة الأخرى تُقلب للاثنين معاً
+      TicketsState.debugSetBadgeRule(TicketsBadgeRule.unread);
+      expect([card()!.badge, TicketsState.bellBadge], [2, 2]);
+      expect(card()!.subtitle, 'تذكرتان فيهما جديدٌ لم تقرأه');
+      TicketsState.debugSetBadgeRule(kTicketsBadgeRule);
+      TicketsState.debugSet(TicketsAccess.fromJson({..._summary(), 'counts': const {'open': 0, 'answered': 1, 'unread': 0, 'total': 1}}));
+      expect([card()!.badge, card()!.subtitle], [0, 'تذاكر مشتركيك من تطبيقهم — ردّ وتابع حتى الحلّ']);
       PermissionsService.debugSet(isEmployee: true, permissions: {'subscribers.view': true});
       TicketsState.debugSet(TicketsAccess.fromJson(_summary(canView: false, canReply: false)));
       expect(card()!.locked, true, reason: 'بمكانها مقفلة لا مخفيّة');
@@ -189,11 +199,11 @@ void main() {
     });
 
     testWidgets('«قوائم أخرى» بالرسم: الرقم بجانب البطاقة', (t) async {
-      TicketsState.debugSet(TicketsAccess.fromJson(_summary(unread: 4)));
+      TicketsState.debugSet(TicketsAccess.fromJson(_summary(unread: 1)), bell: const TicketsBell(outside: 2));
       await pumpSim(t, const SimVariant(390, dark: false), home: (_) => const MoreModulesScreen());
       await t.pump(const Duration(seconds: 1));
       expect(find.text('التذاكر', skipOffstage: false), findsOneWidget);
-      expect(find.text('4 تذاكر فيها جديدٌ لم تقرأه', skipOffstage: false), findsOneWidget);
+      expect(find.text('4 تذاكر بانتظارك', skipOffstage: false), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('module-badge'), skipOffstage: false), matching: find.text('4', skipOffstage: false)),
           findsOneWidget);
       await simDrain(t);
