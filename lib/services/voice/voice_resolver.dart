@@ -7,7 +7,6 @@ import '../../core/util/arabic_text.dart';
 import '../../models/merged_company.dart';
 import '../../models/network_device.dart';
 import '../../models/subscriber.dart';
-import '../auth_storage.dart';
 import '../merged_mode.dart';
 
 /// مرشّحٌ بدرجة تطابقه (٠–١٠٠).
@@ -92,12 +91,9 @@ class VoiceResolver {
 
   static Future<List<({NetworkDevice device, VoiceDeviceCompany company})>> _mergedDevices() async {
     final data = await MergedMode.load();
-    String? openAdmin;
-    try {
-      openAdmin = (await AuthStorage.readAdminId())?.trim();
-    } catch (_) {
-      openAdmin = null;
-    }
+    // المفتوحة: المالك بمعرّف جلسته كما كان، والموظّف بصفحته الحاليّة («كل الصفحات» — جلسته تحفظ معرّف مدير الصفحة بصيغةٍ
+    // أخرى، فلا تُعرف صفحته فيُرفض فحص جهازه أو يُفحص عبر VPN) — كشاشة الأجهزة.
+    final openAdmin = await MergedMode.openAdminId();
     final parts = await MergedDevicesApi.load(data.usable, openAdminId: openAdmin);
     final seen = <int>{};
     return [
