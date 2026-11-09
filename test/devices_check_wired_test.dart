@@ -381,6 +381,20 @@ void main() {
       await check(bad, viaSsh: refused, viaRest: () => null);
       expect(rest, 1, reason: 'ليس EdgeSwitch ⇒ لا يُسأل REST في كلّ قراءة');
     });
+
+    test('راديو UISP (‏Wave) يجيب `/api/v1.0` نفسه بهويّته ⇒ لا يُقرأ «سويتشاً» ولا يُتذكّر — سببه الأصليّ كما هو',
+        () async {
+      final wave = dev(86, type: 'link', brand: 'ubnt', protocol: 'ssh');
+      Future<UbntStats> slow() async => throw UbntException('انتهت مهلة الاتصال — تأكّد من IP وأن SSH مفعّل');
+      const waveRest = EdgeSwitchStats(model: 'Wave-LR', product: 'Wave Long-Range', cpuPercent: 9, ports: [
+        EdgeSwitchPort(id: 'eth0', enabled: true, plugged: true, speed: 1000, speedRaw: '1000-full'),
+      ]);
+      final r = await check(wave, viaSsh: slow, viaRest: () => waveRest);
+      expect(r.state, CheckState.unread);
+      expect(r.role, CheckRole.link);
+      expect(texts(r), ['بطيء — ما كمّل جوابه بالوقت']);
+      expect(isEdgeSwitch(wave), isFalse);
+    });
   });
 }
 

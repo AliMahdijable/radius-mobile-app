@@ -1573,8 +1573,12 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
 /// سويتش EdgeSwitch: من طرازه أو اسمه كصفحة الجهاز (‏ES-8-150W · «EdgeSwitch 24»)، أو عنوانٌ قُرئ بـREST قبلاً.
 bool isEdgeSwitch(NetworkDevice d) {
   if (d.brand.toLowerCase() != 'ubnt') return false;
-  final c = '${d.model ?? ''} ${d.name}'.toLowerCase();
-  return c.contains('edgeswitch') || RegExp(r'\bes-\d').hasMatch(c) || _edgeSwitchHosts.contains(d.ip);
+  return _edgeSwitchName('${d.model ?? ''} ${d.name}') || _edgeSwitchHosts.contains(d.ip);
+}
+
+bool _edgeSwitchName(String s) {
+  final c = s.toLowerCase();
+  return c.contains('edgeswitch') || RegExp(r'\bes-\d').hasMatch(c);
 }
 
 /// عناوين قُرئت بـREST وطرازها غير محفوظ — تُقرأ بعدها بـREST مباشرة (كـ`_udapiHosts` في UbntApi).
@@ -1610,14 +1614,14 @@ Future<ProbeResult> _edgeSwitch(NetworkDevice d, Map<String, dynamic> creds) asy
   return _edgeSwitchResult(s);
 }
 
-/// جهاز ubnt بلا طرازٍ يقول EdgeSwitch: REST نفسه (طلب دخولٍ واحد يُرفض على غيره) — أجاب ⇒ يُتذكّر ويُقرأ به؛
-/// وإلّا null.
+/// جهاز ubnt بلا طرازٍ يقول EdgeSwitch: REST نفسه (طلب دخولٍ واحد يُرفض على غيره) — أجاب بهويّة EdgeSwitch ⇒ يُتذكّر
+/// ويُقرأ به؛ وإلّا null. الهويّة شرط: راديوات UISP (‏Wave · LTU) تجيب `/api/v1.0` نفسه وليست سويتشات.
 Future<ProbeResult?> _edgeSwitchTry(NetworkDevice d, Map<String, dynamic> creds) async {
   final no = _notEdgeSwitchAt[d.ip];
   if (no != null && DateTime.now().difference(no) < _edgeSwitchRetry) return null;
   if ((creds['user'] ?? '').toString().isEmpty) return null;
   final s = await _edgeSwitchRead(d, creds);
-  if (s == null) {
+  if (s == null || !_edgeSwitchName('${s.model ?? ''} ${s.product ?? ''}')) {
     _notEdgeSwitchAt[d.ip] = DateTime.now();
     return null;
   }
