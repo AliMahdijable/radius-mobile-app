@@ -111,10 +111,11 @@ class CompanyRoute {
     '/api/v2/whatsapp/bulk-risk',
   };
 
-  /// قراءةٌ لا كتابة: GET (أو HEAD) أو إحدى [readsByPost].
+  /// قراءةٌ لا كتابة: GET (أو HEAD)، أو POST على إحدى [readsByPost] — بـPOST وحده (مراجعة 179): PUT/PATCH/DELETE على مسارٍ منها
+  /// كتابةٌ تُحكم كالكتابة (لا تأخذ وجهة قسمٍ ولا تمرّ بلا رفض).
   static bool isRead(String method, String path) {
     final m = method.toUpperCase();
-    return m == 'GET' || m == 'HEAD' || readsByPost.contains(path);
+    return m == 'GET' || m == 'HEAD' || (m == 'POST' && readsByPost.contains(path));
   }
 
   // ─────────────────────────────── النطاقات ───────────────────────────────

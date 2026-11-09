@@ -13,7 +13,6 @@ import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/big_subscribers_api.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
-import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/receipt_settings_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
@@ -38,6 +37,7 @@ import 'package:rad_mysvcs/services/print_prefs.dart';
 import 'package:rad_mysvcs/widgets/manual_wa_chip.dart';
 
 import 'support/fiber_fixture.dart';
+import 'support/route_reviewed.dart';
 import 'visual_perm/visual_perm_harness.dart';
 
 /// مراجعة الإصدار 179 — التحقّق العدائيّ الثاني (route2_verify.json): اختبارٌ لكلّ بند، كلٌّ يفشل على 997c62de وينجح بعد الإصلاح.
@@ -369,37 +369,91 @@ void main() {
     expect(p.docs, hasLength(1), reason: 'طُبع: ${srv.asked}');
   }
 
-  /// الكتابات (لا GET ولا قراءةٌ بـPOST) على ما يطابق [where].
+  /// الكتابات (لا GET ولا قراءةٌ بـPOST) على ما يطابق [where] — القراءات بـPOST من القائمة المراجَعة لا من الكود المختبَر
+  /// (test/support/route_reviewed.dart): كتابةٌ تُضاف لـreadsByPost لا تختفي من هنا.
   List<String> writes(bool Function(String path) where) => srv.asked.where((a) {
         final path = a.split(' ')[1];
-        return !a.startsWith('GET ') && !CompanyRoute.readsByPost.contains(path) && where(path);
+        return !a.startsWith('GET ') && !(a.startsWith('POST ') && reviewedReadPaths.contains(path)) && where(path);
       }).toList();
 
   testWidgets('١ (مانع): جدول الحاسبة في «كل الشركات» — لا «تحديد الكلّ» برأسه ولا خانات صفوف: لا عمليّة جماعيّة بأرقام صفوف '
-      'شركتين', (t) async {
-    await up(t);
+      'شركتين (والمفاتيح موصولة: خارج الوضع تظهر الخانات وشريط الجماعيّ بها)', (t) async {
+    await up(t, merged: false);
     try {
       final cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
-      await pumpVisual(t, const VisualDevice('_desk', Size(1440, 900), 1),
-          home: (_) => DesktopScope(child: SubscribersScreen(filterCmd: cmd)));
-      await settle(t, seconds: 3);
-      final header = find.byType(SubscriberTableHeader);
-      expect(header, findsOneWidget, reason: 'جدول الحاسبة');
+      Future<void> table() async {
+        await pumpVisual(t, const VisualDevice('_desk', Size(1440, 900), 1),
+            home: (_) => DesktopScope(child: SubscribersScreen(filterCmd: cmd)));
+        await settle(t, seconds: 3);
+        expect(find.byType(SubscriberTableHeader), findsOneWidget, reason: 'جدول الحاسبة');
+      }
+
+      final selectAll = find.byKey(SubscriberTableHeader.selectAllKey);
+      final rowBoxes = find.byKey(SubscriberTableRow.selectKey);
+      final bar = find.byKey(SubscribersScreen.bulkBarKey);
+      // خارج الوضع: الخانات بمفاتيحها، و«تحديد الكلّ» يُظهر شريط الجماعيّ بمفتاحه — فغيابها في الوضع يعني شيئاً
+      await table();
+      expect(selectAll, findsOneWidget, reason: 'مفتاح «تحديد الكلّ» غير موصول');
+      expect(rowBoxes, findsWidgets, reason: 'مفتاح خانة الصفّ غير موصول');
+      await t.tap(selectAll);
+      await settleReal(t);
+      expect(bar, findsOneWidget, reason: 'مفتاح شريط الجماعيّ غير موصول');
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 3));
+
+      expect(await t.runAsync(() => MergedMode.enter()), isTrue);
+      await table();
       expect(find.text('b.nine'), findsWidgets, reason: 'صفوف JTSHOP في الجدول');
       expect(find.text('a.two'), findsWidgets, reason: 'وصفوف المفتوحة');
       // «تحديد الكلّ» برأس الجدول ⇒ (قبل الإصلاح) تحديدٌ لصفوف الشركتين وشريط العمليّات الجماعيّة: تسديد/تجديد/تعطيل/حذف/فصل
       // تذهب كلّها للمفتوحة بأرقامها
-      final selectAll = find.descendant(of: header, matching: _private('_CheckBox'));
       if (selectAll.evaluate().isNotEmpty) {
         await t.tap(selectAll.first);
         await settleReal(t);
       }
-      expect(_private('_BulkActionBar'), findsNothing,
-          reason: '«تحديد الكلّ» حدّد صفوف الشركتين للعمليّات الجماعيّة (أرقامها تذهب للمفتوحة)');
+      expect(bar, findsNothing, reason: '«تحديد الكلّ» حدّد صفوف الشركتين للعمليّات الجماعيّة (أرقامها تذهب للمفتوحة)');
       expect(selectAll, findsNothing, reason: 'لا خانة «تحديد الكلّ» في «كل الشركات»');
-      expect(find.descendant(of: find.byType(SubscriberTableRow), matching: _private('_CheckBox')), findsNothing,
-          reason: 'ولا خانات صفوف');
+      expect(rowBoxes, findsNothing, reason: 'ولا خانات صفوف');
       expect(writes((p) => p.startsWith('/api/v2/subscribers')), isEmpty);
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t, seconds: 6);
+    }
+  });
+
+  testWidgets('١ تكملة (البند ٨): تحديدٌ يحمل صفوف «كل الشركات» ولو وصل — الفصل والتعطيل والتشغيل والحذف الجماعيّ ترفضها بسببها '
+      'قبل أيّ تأكيد، ولا طلب', (t) async {
+    await up(t);
+    try {
+      await pumpVisual(t, phone, home: (_) => const SubscribersScreen());
+      await settle(t, seconds: 3);
+      final rows = MergedSubscribers.last.value?.rows ?? const <Subscriber>[];
+      expect(rows.where((s) => s.companyKey == _kB), isNotEmpty, reason: 'صفوف JTSHOP في القائمة');
+      expect(rows.every((s) => s.companyKey != null), isTrue);
+      // الواجهة لا تدخل التحديد في الوضع؛ المنفذ يضعه كما لو وصل (قسمٌ أُضيف، أو تحديدٌ بقي من قبل الوضع)
+      (t.state(find.byType(SubscribersScreen)) as dynamic).debugSelect(rows);
+      await settleReal(t);
+      final bar = find.byKey(SubscribersScreen.bulkBarKey);
+      expect(bar, findsOneWidget);
+      final refused = find.textContaining('العمليّات الجماعيّة لشركةٍ واحدة');
+      final actions = <String, VoidCallback? Function(dynamic b)>{
+        'فصل': (b) => b.onDisconnect as VoidCallback?,
+        'تعطيل': (b) => b.onDisable as VoidCallback?,
+        'تشغيل': (b) => b.onEnable as VoidCallback?,
+        'حذف': (b) => b.onDelete as VoidCallback?,
+      };
+      for (final a in actions.entries) {
+        srv.asked.clear();
+        final cb = a.value(t.widget(bar));
+        expect(cb, isNotNull, reason: '«${a.key}» غير متاح في الشريط');
+        cb!();
+        await settleReal(t);
+        expect(refused, findsWidgets, reason: '«${a.key}» الجماعيّ لم يرفض صفوف «كل الشركات»');
+        expect(find.byType(BottomSheet), findsNothing, reason: '«${a.key}»: تأكيدٌ فُتح لصفوف شركتين');
+        expect(find.byType(Dialog), findsNothing, reason: '«${a.key}»: تقدّمٌ فُتح');
+        expect(writes((p) => p.startsWith('/api/v2/subscribers')), isEmpty, reason: '«${a.key}»: ${srv.asked}');
+        await t.pump(const Duration(seconds: 4));
+      }
       expect(t.takeException(), isNull);
     } finally {
       await down(t, seconds: 6);
@@ -419,11 +473,13 @@ void main() {
       final f = showBulkPayDebtSheet(ctx, subs: rows);
       await settleReal(t);
       expect(_private('_BulkPayDebtSheet'), findsNothing, reason: 'تسديدٌ جماعيّ لصفوف شركتين يذهب للمفتوحة بأرقامها');
+      expect(find.byType(BottomSheet), findsNothing, reason: 'شيتٌ فُتح (أيّاً كان اسم صنفه)');
       expect(find.textContaining('العمليّات الجماعيّة لشركةٍ واحدة'), findsOneWidget);
       expect(await t.runAsync(() => f), isFalse);
       final g = showBulkActivateSheet(ctx, subs: rows);
       await settleReal(t);
       expect(_private('_BulkActivateSheet'), findsNothing, reason: 'تجديدٌ جماعيّ لصفوف شركتين يقرأ ويفعّل للمفتوحة بأرقامها');
+      expect(find.byType(BottomSheet), findsNothing, reason: 'شيتٌ فُتح (أيّاً كان اسم صنفه)');
       expect(await t.runAsync(() => g), isNull);
 
       // المعترض: كتابةٌ بلا شركةٍ صريحة على مسار مشترك في «كل الشركات» لا تصل الخادم (لا تُعرف شركة رقم الصفّ)
