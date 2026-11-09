@@ -263,9 +263,13 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     if (!widget.viaVpn) return 'من موبايلك على الشبكة';
     final at = VpnNow.readingsAt;
     if (at == null || p.state == SubsRunState.finished) return 'عبر VPN';
+    return 'عبر VPN · ${_readingsAge(at)}';
+  }
+
+  /// عمر قراءات الخادم المعروضة ما لم يقله الشريط: «قراءات منذ 15 دقيقة» — قصيرةٌ تُقرأ كاملةً على ٣٢٠.
+  static String _readingsAge(DateTime at) {
     final age = timeAgoAr(at);
-    // «قراءات منذ 15 دقيقة» — قصيرةٌ تُقرأ كاملةً على ٣٢٠
-    return 'عبر VPN · قراءات ${age == 'الآن' ? 'قبل لحظات' : age}';
+    return 'قراءات ${age == 'الآن' ? 'قبل لحظات' : age}';
   }
 
   Future<void> _copy(SubsCheckReport r, SubsCheckProgress p, List<_CompanyLine>? lines) async {
@@ -740,6 +744,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final at = VpnNow.readingsAtFor(c.key);
     final probing = _waveRunning;
     final here = job.busy && job.current == c.key;
+    // يُعاد فحصها أو بانتظار دورها: المعروض من فحصها السابق ⇒ بعمره (المراجعة R2: «قُرئ 2 من 2» بلا عمرٍ في أيّ مكان) —
+    // إلّا أن يكون كلّ مقروئها من شبكتك (صفوفه بأعمارها)
+    final prior = at != null && (viaVpn > 0 || read == 0) ? ' · ${_readingsAge(at)}' : '';
     // المفتوحة: من الهاتف أوّلاً، وما قُرئ عبر VPN شركتها (ضوء الأولت) يُقال — وبعمره كغيرها (المراجعة F15): انتهاء
     // موجة الهاتف لما قُرئ من شبكتك، ووقت فحص VPN شركتها لما قُرئ عبره
     final localWay = viaVpn == 0 ? 'من شبكتك' : (viaVpn == read ? 'عبر VPN الشركة' : 'من شبكتك وعبر VPN الشركة');
@@ -755,10 +762,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                     '$localWay${localAt == null ? '' : ' · ${timeAgoAr(localAt)}'} · $counts'
                   ))
         : here
-            ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة… · $counts')
+            ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة…$prior · $counts')
             // ما قبل الحاليّة فُحص في هذا الفحص نفسه — لا «بانتظار دورها»
             : job.waits(c.key)
-                ? (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها عبر VPN · $counts')
+                ? (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها عبر VPN$prior · $counts')
                 // شركةٌ غير المفتوحة قُرئ بعض مشتركيها من شبكتك (أجهزتهم يصلها موبايلك) — يُقال ذلك قبل حال الـVPN
                 : read > viaVpn && (note != null || at == null)
                     ? (
@@ -824,8 +831,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                     style:
                         AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
+                // ثلاثة أسطر على ٣٢٠ مع شارة «بمشكلة» (عمر قراءاتها، أو أعدادٌ كبيرة) — لا تُقصّ الأعداد ولا العمر
                 Text(text,
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.muted(color: tone == AppTone.warning ? tone.onSoft : AppColors.textMid)
                         .copyWith(fontSize: 11.5)),

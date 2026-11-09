@@ -600,4 +600,89 @@ void main() {
       });
     }
   });
+
+  // ───────────── R2-subui-3: يُعاد فحصها أو بانتظار دورها — عمر المعروض بسطرها ─────────────
+
+  group('R2-subui-3 — «كل الشركات»: قراءات شركةٍ يُعاد فحصها بعمرها', () {
+    Finder line(String k, String text) =>
+        find.descendant(of: find.byKey(ValueKey('subs-check-company-$k')), matching: find.text(text));
+
+    testWidgets('عبر الـVPN: «بانتظار دورها… · قراءات منذ 20 دقيقة» ثمّ «يُفحص…» بالعمر نفسه — كاملةً على ٣٢٠',
+        (t) async {
+      await visualSetUp(s1bSasOwner);
+      _mergedTwo();
+      final subs = [_s('s.ok').withCompany(_kS), _s('e.ok').withCompany(_kE), _s('e.bad').withCompany(_kE)];
+      VpnNow.debugApplyCompany(_kS, const VpnNowResult(ok: true, message: 'تم', readings: {
+        's.ok': VpnSubReading(src: 'cpe', sig: -50, ccq: 95, lan: '100'),
+      }));
+      VpnNow.debugApplyCompany(_kE, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'e.ok': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+        'e.bad': VpnSubReading(src: 'cpe', sig: -80, ccq: 90, lan: '100'),
+      }));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 2), company: _kS);
+      VpnNow.debugBackdateReadings(const Duration(minutes: 20), company: _kE);
+      final job = VpnNow.subscribers;
+      // «وضع VPN» يعيد الفحص والشاشة مفتوحة: سوبرنت الآن وايرث لنك بعدها
+      job
+        ..phase = VpnBarPhase.running
+        ..queue = const [_kS, _kE]
+        ..current = _kS
+        ..done = 5
+        ..total = 22;
+      addTearDown(() {
+        job.reset();
+        VpnNow.clearCompanyReadings();
+        MergedMode.reset();
+      });
+      await pumpVisual(t, const VisualDevice('', Size(320, 1200), 3),
+          home: (_) => SubscribersCheckScreen(
+              subscribers: () => subs, viaVpn: true, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+      await settle(t, seconds: 1);
+      expect(_barText(t), 'يفحص… 5 من 22 · «سوبرنت» عبر VPN');
+      const waits = 'بانتظار دورها عبر VPN · قراءات منذ 20 دقيقة · قُرئ 2 من 2';
+      expect(line(_kS, 'يُفحص عبر VPN الشركة… · قراءات منذ دقيقتين · قُرئ 1 من 1'), findsOneWidget);
+      expect(line(_kE, waits), findsOneWidget, reason: '«1 بمشكلة · 1 سليم» من فحصٍ عمره 20 دقيقة');
+      expect(t.renderObject<RenderParagraph>(line(_kE, waits)).didExceedMaxLines, isFalse, reason: 'تُقرأ كاملةً');
+      expect(await _copy(t), contains('• ايرث لنك — $waits'));
+
+      job.current = _kE;
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      job.notifyListeners();
+      await settle(t, seconds: 1);
+      const here = 'يُفحص عبر VPN الشركة… · قراءات منذ 20 دقيقة · قُرئ 2 من 2';
+      expect(line(_kE, here), findsOneWidget);
+      expect(t.renderObject<RenderParagraph>(line(_kE, here)).didExceedMaxLines, isFalse);
+      expect(line(_kS, 'عبر VPN الشركة · منذ دقيقتين · قُرئ 1 من 1'), findsOneWidget, reason: 'فُحصت قبلها');
+      await _done(t);
+    });
+
+    testWidgets('مقروؤها كلّه من شبكتك (أحدث من فحص VPN) وهي بانتظار دورها ⇒ لا عمر VPN على قراءات الهاتف', (t) async {
+      await visualSetUp(s1bSasOwner);
+      _mergedTwo();
+      final minuteAgo = DateTime.now().subtract(const Duration(minutes: 1));
+      final subs = [_s('s.ok', ip: '1').withCompany(_kS), _s('e.ok', ip: '2').withCompany(_kE)];
+      SubscribersCheck.debugPeek = (s) => _read(minuteAgo);
+      final wave = ValueNotifier(SubsWave(endedAt: minuteAgo));
+      VpnNow.debugApplyCompany(_kE, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'e.ok': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+      }));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 20), company: _kE);
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = const [_kE];
+      addTearDown(() {
+        SubscribersCheck.debugPeek = null;
+        wave.dispose();
+        job.reset();
+        VpnNow.clearCompanyReadings();
+        MergedMode.reset();
+      });
+      await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+          home: (_) => SubscribersCheckScreen(
+              subscribers: () => subs, viaVpn: false, wave: wave, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+      await settle(t, seconds: 1);
+      expect(line(_kE, 'بانتظار دورها عبر VPN · قُرئ 1 من 1'), findsOneWidget);
+      await _done(t);
+    });
+  });
 }
