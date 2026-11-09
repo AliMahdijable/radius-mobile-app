@@ -562,7 +562,8 @@ void main() {
         const ['subscribers.view', 'deleted_debts.view', 'deleted_debts.write_off', 'settings.edit'],
         const {'subscribers.view': true, 'deleted_debts.view': true, 'deleted_debts.write_off': true, 'settings.edit': true},
       );
-      expect(out, {'subscribers.view': true, 'deleted_debts.view': true, 'deleted_debts.write_off': true, 'settings.edit': false});
+      // ما لا يعرضه المحرّر لا يُرسل (٩ نوفمبر) — الخادم يكتبه false
+      expect(out, {'subscribers.view': true, 'deleted_debts.view': true, 'deleted_debts.write_off': true});
     });
   });
 

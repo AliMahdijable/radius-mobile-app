@@ -37,7 +37,7 @@ void main() {
     expect(ElEmployeePerms.hintFor('reports.financial'), 'يشمل رصيد الوكيل والكارتات المطلوبة');
   });
 
-  test('ما يُرسل لموظّف فايبر اكس: مفاتيحه بقيمها والباقي false (لا يُمنح ما لا يراه المالك)', () {
+  test('ما يُرسل لموظّف فايبر اكس: مفاتيحه بقيمها والباقي لا يُرسل (الخادم يكتبه false — لا يُمنح ما لا يراه المالك)', () {
     ProviderService.debugSet('fiberx');
     final out = ElEmployeePerms.outgoing(
       const ['subscribers.view', 'subscribers.add', 'subscribers.toggle', 'whatsapp.send', 'subscribers.send_whatsapp'],
@@ -45,8 +45,6 @@ void main() {
     );
     expect(out, {
       'subscribers.view': true,
-      'subscribers.add': false,
-      'subscribers.toggle': false,
       'whatsapp.send': true,
       'subscribers.send_whatsapp': true,
     });

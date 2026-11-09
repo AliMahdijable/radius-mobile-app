@@ -257,10 +257,12 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   /// والإشعار يغطّي زرّ «حفظ» ثلاث ثوانٍ، والمعتاد «دورٌ ثمّ حفظ» مباشرةً
   /// فكانت أوّل ضغطةٍ على الحفظ تُغلق الإشعار لا تحفظ.
   /// ما لا يعرضه الكتالوج لا يُلمس — كان يُعَدّ في «الصلاحيات (N)» ولا يُرسَل.
+  /// ولا [ElEmployeePerms.roleFreeKeys] (الفحصان وما عبر VPN والتنبيهات، ٩ نوفمبر): تُمنح فرادى، فالدور لا يُطفئ الفحص المفعّل افتراضاً.
   void _applyElPreset(ElPermPreset p) {
     setState(() {
       for (final k
           in ElEmployeePerms.offered(widget.catalog.permissions.keys)) {
+        if (ElEmployeePerms.roleFreeKeys.contains(k)) continue;
         _perms[k] = p.keys.contains(k);
       }
     });
@@ -322,8 +324,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       _saving = true;
       _error = null;
     });
-    // ايرث لنك: المحرّر يعرض مفاتيح موظّفي ايرث لنك وحدها، فما سواها يُرسَل
-    // false دائماً — لا يُمنح ما لم يره المالك.
+    // ايرث لنك/فايبر اكس/الشركات المُضافة: المحرّر يعرض مفاتيح موظّفيها وحدها، فما سواها لا يُرسَل (٩ نوفمبر): الخادم يكتبه
+    // false — لا يُمنح ما لم يره المالك — إلّا ما يُبقيه على المحفوظ/الافتراضيّ (الفحصان المفعّلان افتراضاً…).
     // غير ايرث لنك: مفاتيح الكتالوج المعروض وحدها — مفتاحٌ مخفيّ عنه (المساعد
     // الذكي قبل تفعيله) لا يُرسَل، فيُبقي الخادم قيمته المحفوظة.
     final perms = _el
@@ -352,6 +354,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         password: _passCtrl.text.isEmpty ? null : _passCtrl.text,
         isActive: _isActive,
         permissions: perms,
+        permsShownOnly: _el,
         scopeAdminId: scopeChanged
             ? (_scopeAdminId ?? '') // '' = clear
             : null, // null = no change
@@ -368,6 +371,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         isActive: _isActive,
         permissions: perms,
+        permsShownOnly: _el,
         scopeAdminId: _el ? null : _scopeAdminId,
       );
       ok = r.ok;
