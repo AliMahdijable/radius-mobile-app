@@ -254,7 +254,8 @@ class _NotificationsChipState extends State<_NotificationsChip> {
               key: const ValueKey('top-actions-notifications'),
               icon: Icons.notifications_none_rounded,
               label: 'notifications.title'.tr(),
-              badge: InboxService.unreadCount + alerts + RenewRequestsState.pending + TicketsState.bellBadge,
+              // إشعار التذكرة غير المقروء لا يُعدّ مع تذكرته ([TicketsState.inboxDuplicates]) — كلّ تذكرةٍ مرّةً واحدة
+              badge: InboxService.unreadCount - TicketsState.inboxDuplicates + alerts + RenewRequestsState.pending + TicketsState.bellBadge,
               onTap: () => widget.onOpen(const InboxScreen()),
             ),
           ),
