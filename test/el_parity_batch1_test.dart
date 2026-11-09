@@ -374,7 +374,7 @@ void main() {
       }
     });
 
-    test('ما يُرسَل: الأجهزة كما اختارها المالك، وما لا يُمنح false دائماً', () {
+    test('ما يُرسَل: الأجهزة كما اختارها المالك، وما لا يُمنح لا يُرسل (الخادم يكتبه false)', () {
       final out = ElEmployeePerms.outgoing(
         const [
           'subscribers.view',
@@ -395,9 +395,10 @@ void main() {
       expect(out['devices.view'], isTrue);
       expect(out['devices.monitor'], isTrue);
       expect(out['devices.manage'], isFalse);
-      expect(out['whatsapp.broadcast'], isFalse);
-      expect(out['settings.edit'], isFalse);
-      expect(out['print_templates.edit'], isFalse);
+      // ما لا يُمنح لا يُرسل (٩ نوفمبر) — الخادم يكتب الغائب false
+      expect(out.containsKey('whatsapp.broadcast'), isFalse);
+      expect(out.containsKey('settings.edit'), isFalse);
+      expect(out.containsKey('print_templates.edit'), isFalse);
     });
 
     testWidgets('المحرّر يعرض فئة الأجهزة بمفاتيحها الثلاثة', (t) async {

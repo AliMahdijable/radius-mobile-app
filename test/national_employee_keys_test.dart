@@ -114,7 +114,7 @@ void main() {
       expect(out['reports.sessions'], isTrue);
       expect(out['notifications.view'], isTrue);
       expect(out['subscribers.edit'], isFalse, reason: 'قيمتها كما اختارها المالك');
-      expect(out['managers.view'], isFalse, reason: 'ما لا يراه المالك لا يُمنح');
+      expect(out.containsKey('managers.view'), isFalse, reason: 'ما لا يراه المالك لا يُرسل (الخادم يكتبه false)');
       final granted = ElEmployeePerms.outgoing(_catalog.permissions.keys, {'subscribers.edit': true});
       expect(granted['subscribers.edit'], isTrue);
     });
@@ -197,7 +197,7 @@ void main() {
         expect(perms['reports.sessions'], isTrue);
         expect(perms['subscribers.edit'], isFalse);
         expect(perms['subscribers.view'], isTrue);
-        expect(perms['managers.view'], isFalse);
+        expect(perms.containsKey('managers.view'), isFalse, reason: 'لا يُرسل — الخادم يكتبه false');
         await simDrain(t);
       });
     });

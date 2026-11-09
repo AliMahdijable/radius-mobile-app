@@ -350,9 +350,10 @@ class ElPermPreset {
 /// وحده بلا مفتاح (تحويل الرصيد وكشف الإيداع، إلغاء التسوية) — والموظّف لا
 /// يدير موظّفين أبداً.
 ///
-/// فمحرّر موظّفي ايرث لنك يعرض هذه وحدها، و[outgoing] يُرسل غيرها `false`
-/// دائماً: لا يمنح المحرّر ما لا يراه المالك (مفاتيحُ افتراضيّتها `true`
-/// كـ`whatsapp.send` كانت ستُمنح خفيةً).
+/// فمحرّر موظّفي ايرث لنك يعرض هذه وحدها، و[outgoing] لا يُرسل غيرها: الخادم
+/// يكتب الغائب `false` (لا يمنح المحرّر ما لا يراه المالك)، إلّا مفاتيح
+/// `KEEP_WHEN_MISSING` عنده فتبقى على المحفوظ أو الافتراضيّ (٩ نوفمبر — كانت
+/// تُرسل `false` فيُسحب «الفحص الشامل» والرادار المفعّلان افتراضاً بصمت).
 class ElEmployeePerms {
   ElEmployeePerms._();
 
@@ -375,6 +376,22 @@ class ElEmployeePerms {
   /// «التذاكر» (٩ نوفمبر، الخادم server/tickets.js): العرض والإشعار، والردّ والحالة والإغلاق — مطفأان افتراضاً، ويُمنحان فرادى
   /// (خارج «موظّف عام»). لموظّفي ايرث لنك وفايبر اكس والشركات المُضافة كموظّفي الساس، ما عدا المشروع الوطنيّ.
   static const ticketKeys = <String>{'tickets.view', 'tickets.reply'};
+
+  /// الفحصان على شبكة الوكيل (٨ نوفمبر — المالك: «الافتراضي يكون لديه صلاحيه على شبكه فقط»): «الفحص الشامل» للأجهزة والرادار
+  /// («الفحص العامّ») للمشتركين — مفعّلان افتراضاً (`PermissionsService.deepCheckNet`/`subsCheckNet`)، فيُعرضان لكلّ شركة (٩ نوفمبر:
+  /// كانا خارج المحرّر فيُرسلان false ويختفي الفحصان عن موظّفيها).
+  static const checkKeys = <String>{'devices.deep_check', 'subscribers.check'};
+
+  /// ما عبر VPN (٨ نوفمبر — مطفأةٌ افتراضاً، يفرضها الخادم `connVpn/agentRoutes`): الفحص الشامل والفحص العامّ عبر VPN، و«ربط VPN».
+  /// ايرث لنك والشركات المُضافة وحدهما (بوّابتاهما تمرّران `conn-vpn`؛ فايبر اكس لا).
+  static const vpnKeys = <String>{'devices.deep_check_vpn', 'subscribers.vpn_check', 'conn_vpn.link'};
+
+  /// «تنبيهات المشتركين» و«تنبيهات الوكيل» (٤ نوفمبر) — القسم والإشعار، مطفأةٌ افتراضاً؛ ايرث لنك والشركات المُضافة وحدهما
+  /// (بوّابتاهما تمرّران `connection-alerts` و`agent-alerts` منذ ٦ نوفمبر؛ فايبر اكس لا).
+  static const alertKeys = <String>{'conn_alerts.use', 'conn_alerts.notify', 'agent_alerts.use', 'agent_alerts.notify'};
+
+  /// خارج الأدوار الجاهزة: الدور لا يلمسها ([presets] · `_applyElPreset`) ولا تُحسب في مطابقته ([matching]) — تُمنح فرادى.
+  static const roleFreeKeys = <String>{...checkKeys, ...vpnKeys, ...alertKeys};
 
   /// جلسة المشروع الوطنيّ (شركةٌ مُضافة أبو مشتركها الزون — watani).
   static bool get isNationalSession => ProviderService.isKit && ProviderService.parentIsZone;
@@ -440,6 +457,9 @@ class ElEmployeePerms {
     'devices.manage',
     'assistant.use',
     ...ticketKeys,
+    ...checkKeys,
+    ...vpnKeys,
+    ...alertKeys,
   };
 
   /// موظّفونا لحساب فايبر اكس (٣١ أكتوبر — المالك: «فايبر اكس خلي موظفينا فقط… احنه اصلا موفرين هلمزية»): ما يفرضه
@@ -483,6 +503,8 @@ class ElEmployeePerms {
     'devices.manage',
     assistantKey,
     ...ticketKeys,
+    // الفحصان على الشبكة وحدهما — بوّابة فايبر اكس لا تمرّر ما عبر VPN ولا التنبيهات
+    ...checkKeys,
   };
 
   /// ما يختلف معناه لموظّف فايبر اكس عن ايرث لنك.
@@ -533,6 +555,10 @@ class ElEmployeePerms {
     'sales.void',
     // «التذاكر» (٩ نوفمبر) — تُمنح وحدها (خارج «موظّف عام»).
     ...ticketKeys,
+    // الفحصان (مفعّلان افتراضاً) وما عبر VPN والتنبيهات (٩ نوفمبر) — خارج الأدوار الجاهزة ([roleFreeKeys]).
+    ...checkKeys,
+    ...vpnKeys,
+    ...alertKeys,
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في
@@ -661,26 +687,31 @@ class ElEmployeePerms {
   /// ليس عمليّة — [assistantKey]).
   static int activeCount(Map<String, bool> perms) => keys.where((k) => k != assistantKey && perms[k] == true).length;
 
-  /// ما يُرسَل للخادم: كلّ مفاتيح الكتالوج — مفاتيح ايرث لنك من [perms]،
-  /// والباقي `false`. الاستثناء `whatsapp.send`: يتبع «إرسال واتساب»
-  /// (`subscribers.send_whatsapp`) — مسارا تذكير الدين/معلومات المشترك يرسلان
-  /// عبر `/api/whatsapp/send-message` بتوكن الموظّف، وهو يفحص `whatsapp.send`،
-  /// فبدونه يُرفض موظّفٌ مُنح المراسلة (كـbuildElPermissions في الويب).
+  /// ما يُرسَل للخادم: مفاتيح الكتالوج التي يعرضها المحرّر ([keys]) بقيمها من [perms] — **وحدها**. ما لا يعرضه لا يُرسل
+  /// (٩ نوفمبر): الخادم يكتب الغائب `false` فلا يُمنح ما لا يراه المالك، ومفاتيح `KEEP_WHEN_MISSING` عنده (الفحصان المفعّلان
+  /// افتراضاً، التنبيهات، طلبات التفعيل…) تبقى على المحفوظ أو الافتراضيّ — كان يُرسلها `false` فيُطفئها بصمت. والطلب يحمل
+  /// `perms_shown_only` ([EmployeesApi.create]/[EmployeesApi.update]) فيثق الخادم بقيم الفحصين المعروضين.
+  /// الاستثناء `whatsapp.send`: يتبع «إرسال واتساب» (`subscribers.send_whatsapp`) — مسارا تذكير الدين/معلومات المشترك يرسلان
+  /// عبر `/api/whatsapp/send-message` بتوكن الموظّف، وهو يفحص `whatsapp.send`، فبدونه يُرفض موظّفٌ مُنح المراسلة (كـbuildElPermissions
+  /// في الويب).
   static Map<String, bool> outgoing(Iterable<String> catalogKeys, Map<String, bool> perms) {
-    final out = {
-      for (final k in catalogKeys) k: keys.contains(k) && perms[k] == true,
-    };
-    if (out.containsKey('whatsapp.send')) {
-      out['whatsapp.send'] = perms['subscribers.send_whatsapp'] == true;
+    final shown = keys;
+    var hasWhatsappSend = false;
+    final out = <String, bool>{};
+    for (final k in catalogKeys) {
+      if (k == 'whatsapp.send') hasWhatsappSend = true;
+      if (shown.contains(k)) out[k] = perms[k] == true;
     }
+    if (hasWhatsappSend) out['whatsapp.send'] = perms['subscribers.send_whatsapp'] == true;
     return out;
   }
 
   /// الدور الجاهز المطابق للمفعَّل الآن تماماً، وإلّا null (مخصّص).
   /// [catalogKeys]: ما يعرضه كتالوج الخادم — مفتاحٌ لا يعرضه (ميزةٌ لم تُفتح
   /// للحساب) لا يُحسب من الدور، فلا يصير «موظّف عام» القديم «مخصّصاً».
+  /// ولا [roleFreeKeys] (الفحصان وما عبر VPN والتنبيهات): تُمنح فرادى، فالفحص المفعّل افتراضاً لا يجعل الدور «مخصّصاً».
   static ElPermPreset? matching(Map<String, bool> perms, {Iterable<String>? catalogKeys}) {
-    final avail = offered(catalogKeys);
+    final avail = offered(catalogKeys).difference(roleFreeKeys);
     final on = {
       for (final k in avail)
         if (k != assistantKey && perms[k] == true) k,
@@ -820,6 +851,10 @@ class EmployeesApi {
     /// 2026-08-26: يقيّد الموظّف بمدير فرعي (يشوف بياناته فقط).
     /// null = يشاهد بيانات الأب كاملة.
     String? scopeAdminId,
+
+    /// محرّر ايرث لنك/فايبر اكس/الشركات المُضافة ([ElEmployeePerms.outgoing]، ٩ نوفمبر): [permissions] ما عرضه المحرّر وحده —
+    /// فيثق الخادم بقيم الفحصين فيه (محرّرٌ أقدم بلا العلامة يُرسل `false` لما لم يعرضه فيعدّه الخادم غائباً).
+    bool permsShownOnly = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -831,6 +866,7 @@ class EmployeesApi {
           if (phone != null) 'phone': phone,
           'is_active': isActive,
           'permissions': permissions,
+          if (permsShownOnly) 'perms_shown_only': true,
           if (scopeAdminId != null && scopeAdminId.isNotEmpty) 'scope_admin_id': scopeAdminId,
         },
       );
@@ -875,6 +911,9 @@ class EmployeesApi {
     ///   - '' (empty string): مسح القيد → يشاهد كل شجرة الأب
     ///   - non-empty: يقيّد بمدير فرعي محدَّد
     String? scopeAdminId,
+
+    /// كـ[create]: [permissions] ما عرضه محرّر ايرث لنك/فايبر اكس/الشركات المُضافة وحده.
+    bool permsShownOnly = false,
   }) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
@@ -885,6 +924,7 @@ class EmployeesApi {
           if (password != null && password.isNotEmpty) 'password': password,
           if (isActive != null) 'is_active': isActive,
           if (permissions != null) 'permissions': permissions,
+          if (permissions != null && permsShownOnly) 'perms_shown_only': true,
           // فرّق بين "لا تغيير" (null) و "مسح" (empty string).
           if (scopeAdminId != null) 'scope_admin_id': scopeAdminId.isEmpty ? null : scopeAdminId,
         },
