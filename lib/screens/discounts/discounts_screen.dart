@@ -6,7 +6,6 @@ import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
-import '../../core/widgets/design_sheet.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
@@ -20,6 +19,7 @@ import '../desktop/desk_bulk_picker.dart';
 import '../../widgets/merged_section.dart';
 import '../../api/company_route.dart';
 import '../../services/merged_mode.dart';
+import '../../widgets/list_kit.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -370,142 +370,221 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           ? _viewOnlyBody(accent)
           : DesktopScope.of(context)
           ? _desktopBody(filtered, accent)
-          : SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // ---------- HEADER (hero + actions + amount + search) ----------
-            Padding(
+          : _phoneBody(filtered, accent)),
+      // الهاتف (٩ نوفمبر — التصميم الجديد): شريط التحديد يظهر حين يُحدَّد أحد — العدد ومسحٌ و«خصم» يفتح ورقة المبلغ. لمن لا يملك
+      // discounts.manage (يشاهد فقط) ولـ«كل الشركات» للعرض وللحاسبة: لا شريط.
+      bottomNavigationBar: !_canManage || _viewOnly || DesktopScope.of(context) || _selected.isEmpty
+          ? null
+          : ListSelectionBar(
+              count: _selected.length,
+              onClear: _clearSelection,
+              actions: [
+                ListBarButton(
+                  key: const ValueKey('discounts-apply'),
+                  label: _submitting ? 'جاري التطبيق...' : 'خصم',
+                  icon: LucideIcons.percent,
+                  tone: ListTone.success,
+                  busy: _submitting,
+                  onPressed: _openApplySheet,
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// ورقة المبلغ ثمّ التطبيق — المنطق نفسه (_submit) بالمبلغ المختار.
+  Future<void> _openApplySheet() async {
+    if (_selected.isEmpty || _submitting) return;
+    final n = _selected.length;
+    final picked = _all.where((s) => _selected.contains(s.username)).toList();
+    final base = picked.isNotEmpty && picked.every((s) => s.packageSalePrice == picked.first.packageSalePrice)
+        ? picked.first.packageSalePrice
+        : null;
+    final v = await showListAmountSheet(
+      context,
+      title: 'خصم على $n مشترك',
+      subtitle: 'يُطرح من سعر باقة كلٍّ منهم عند كلّ تجديد',
+      icon: LucideIcons.percent,
+      fieldLabel: 'مبلغ الخصم',
+      confirmLabel: 'تطبيق {amount} على $n',
+      tone: ListTone.success,
+      quickAdds: const [5000, 10000, 15000, 20000, 25000],
+      previewOf: base == null || base <= 0 ? null : (a) => 'السعر بعد الخصم: ${formatIQD((base - a).clamp(0, base))} د.ع',
+    );
+    if (v == null || v <= 0 || !mounted) return;
+    _amount = v;
+    await _submit();
+  }
+
+  /// الهاتف (٩ نوفمبر — المالك: «القائمة الوحيده تصميمها بالهاتف مزعج ورديئ»): بطاقات أرقام، ثمّ «الخصومات الحاليّة» و«حذف الكلّ»،
+  /// ثمّ البحث وشرائح «الكلّ · عليهم خصم · بلا خصم»، ثمّ صفٌّ لكلّ مشترك يُلمس للتحديد — بدل شبكة الكرتات الصغيرة.
+  Widget _phoneBody(List<Subscriber> filtered, Color accent) {
+    final rows = switch (_deskFilter) {
+      1 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).toList(),
+      2 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) <= 0).toList(),
+      _ => filtered,
+    };
+    final discounted = _all.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).length;
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: accent,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onGridScroll,
+        child: CustomScrollView(
+          key: const ValueKey('discounts-list'),
+          slivers: [
+            SliverPadding(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-              child: Column(
-                children: [
-                  _hero(accent),
-                  const SizedBox(height: Sp.sm),
-                  // مطلب 2026-06-11: زر "حذف الكل" يختفي إذا الموظف
-                  // ما عنده discounts.manage. لو الاثنين ما متوفرة
-                  // (نادر — discounts.view بس)، الـRow كله يختفي.
-                  if (_canManage)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ActionCard(
-                            icon: LucideIcons.list,
-                            label: 'الخصومات الحالية',
-                            sub: '${_existing.length} مطبّق',
-                            color: accent,
-                            onTap: _openExistingDiscounts,
-                          ),
-                        ),
-                        const SizedBox(width: Sp.sm),
-                        Expanded(
-                          child: _ActionCard(
-                            icon: LucideIcons.trash2,
-                            label: 'حذف الكل',
-                            sub: _existing.isNotEmpty
-                                ? 'إزالة الجميع'
-                                : 'لا يوجد',
-                            color: AppColors.error,
-                            onTap:
-                                _existing.isNotEmpty ? _confirmDeleteAll : null,
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    _ActionCard(
-                      icon: LucideIcons.list,
-                      label: 'الخصومات الحالية',
-                      sub: '${_existing.length} مطبّق',
-                      color: accent,
-                      onTap: _openExistingDiscounts,
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  Row(children: [
+                    Expanded(
+                      child: ListKpiTile(
+                        icon: LucideIcons.percent,
+                        tone: ListTone.success,
+                        label: 'عليهم خصم',
+                        value: '${_existing.length}',
+                        active: _deskFilter == 1,
+                        onTap: () => setState(() => _deskFilter = _deskFilter == 1 ? 0 : 1),
+                      ),
                     ),
-                  if (_canManage) ...[
-                    const SizedBox(height: Sp.md),
-                    _amountField(accent),
-                  ],
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: ListKpiTile(
+                        icon: LucideIcons.wallet,
+                        tone: ListTone.warning,
+                        label: 'مجموع الخصومات',
+                        value: _fmt(_totalDiscount.round()).isEmpty ? '0' : _fmt(_totalDiscount.round()),
+                        unit: 'د.ع',
+                      ),
+                    ),
+                  ]),
                   const SizedBox(height: Sp.sm),
-                  _searchField(),
-                  const SizedBox(height: 8),
-                  _selectionBar(accent, filtered.length),
-                ],
+                  Row(children: [
+                    Expanded(
+                      child: _ActionCard(
+                        icon: LucideIcons.list,
+                        label: 'الخصومات الحالية',
+                        sub: '${_existing.length} مطبّق',
+                        color: accent,
+                        onTap: _openExistingDiscounts,
+                      ),
+                    ),
+                    if (_canManage) ...[
+                      const SizedBox(width: Sp.sm),
+                      // زرٌّ مربّع بكلمته (لا نصف عرض): «الخصومات الحالية» تأخذ الباقي فلا تُقصّ على ٣٢٠–٣٦٠
+                      SizedBox(
+                        width: 84,
+                        child: Material(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(R.lg),
+                          child: InkWell(
+                            key: const ValueKey('discounts-delete-all'),
+                            onTap: _existing.isNotEmpty ? _confirmDeleteAll : null,
+                            borderRadius: BorderRadius.circular(R.lg),
+                            child: Container(
+                              constraints: const BoxConstraints(minHeight: 60),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(R.lg),
+                                border: Border.all(color: _existing.isNotEmpty ? AppColors.dangerSoftBorder : AppColors.border),
+                              ),
+                              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                Icon(LucideIcons.trash2, size: 18, color: _existing.isNotEmpty ? AppColors.error : AppColors.textHint),
+                                const SizedBox(height: 4),
+                                Text('حذف الكل',
+                                    maxLines: 1,
+                                    style: AppType.labelBold(color: _existing.isNotEmpty ? AppColors.error : AppColors.textHint)),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ]),
+                  const SizedBox(height: Sp.xs),
+                ]),
               ),
             ),
-            // ---------- GRID ----------
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : filtered.isEmpty
-                      ? _emptyState()
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          color: accent,
-                          child: NotificationListener<ScrollNotification>(
-                          onNotification: _onGridScroll,
-                          child: GridView.builder(
-                            padding:
-                                const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
-                            gridDelegate: DesktopScope.of(context)
-                                // الحاسبة: خلايا بعرضٍ أقصى وارتفاعٍ ثابت — لا بطاقاتٌ طويلة فارغة.
-                                ? const SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: 280,
-                                    mainAxisExtent: 96,
-                                    crossAxisSpacing: Sp.sm,
-                                    mainAxisSpacing: Sp.sm,
-                                  )
-                                : const SliverGridDelegateWithFixedCrossAxisCount(
-                              // مطلب 2026-06-11: cards أصغر — 3
-                              // أعمدة + childAspectRatio أعلى = خلايا
-                              // قصيرة، أكثر مشتركاً مرئياً في الشاشة.
-                              crossAxisCount: 3,
-                              childAspectRatio: 1.7,
-                              crossAxisSpacing: 6,
-                              mainAxisSpacing: 6,
-                            ),
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final s = filtered[i];
-                              return _SubscriberCard(
-                                sub: s,
-                                selected: _selected.contains(s.username),
-                                accent: accent,
-                                existingDiscount:
-                                    _existing[s.username.toLowerCase()],
-                                onTap: () => _toggle(s.username),
-                              );
-                            },
+            // البحث والشرائح والعدّ مثبّتةٌ أعلى القائمة أثناء التمرير (الطويلة خاصّةً)
+            PinnedHeaderSliver(
+              child: ColoredBox(
+                color: AppColors.bg,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListSearchField(controller: _searchCtrl, hint: 'ابحث بالاسم أو اليوزر أو الهاتف'),
+                      const SizedBox(height: Sp.sm),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: [
+                          ListFilterChip(label: 'الكلّ', active: _deskFilter == 0, onTap: () => setState(() => _deskFilter = 0)),
+                          const SizedBox(width: Sp.x6),
+                          ListFilterChip(
+                            label: 'عليهم خصم',
+                            icon: LucideIcons.percent,
+                            tone: ListTone.success,
+                            count: discounted,
+                            active: _deskFilter == 1,
+                            onTap: () => setState(() => _deskFilter = 1),
                           ),
-                          ),
-                        ),
-            ),
-          ],
-        ),
-      )),
-      // زرّ التطبيق ثابت أسفل الشاشة — زرّ النظام نفسه (SheetFooterBar)
-      // كشاشة الأسعار، فيتطابق الشريطان. يتفعّل مع amount + مشتركين
-      // مختارين، ويختفي كاملاً لمن لا يملك discounts.manage (يشاهد فقط).
-      bottomNavigationBar: !_canManage || _viewOnly || DesktopScope.of(context)
-          ? null
-          : ColoredBox(
-              color: AppColors.surface,
-              child: SafeArea(
-                top: false,
-                child: deskFooter(
-                  context,
-                  SheetFooterBar(
-                    label: _submitting
-                        ? 'جاري التطبيق...'
-                        : (_amount > 0 && _selected.isNotEmpty
-                            ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
-                            : 'تطبيق الخصم'),
-                    icon: LucideIcons.percent,
-                    color: accent,
-                    busy: _submitting,
-                    enabled: _amount > 0 && _selected.isNotEmpty,
-                    onPressed: _submit,
+                          const SizedBox(width: Sp.x6),
+                          ListFilterChip(label: 'بلا خصم', active: _deskFilter == 2, onTap: () => setState(() => _deskFilter = 2)),
+                        ]),
+                      ),
+                      const SizedBox(height: Sp.sm),
+                      _selectionBar(accent, filtered.length),
+                    ],
                   ),
                 ),
               ),
             ),
+            if (_loading)
+              const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
+            else if (rows.isEmpty)
+              SliverToBoxAdapter(child: _emptyState())
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                sliver: DecoratedSliver(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(R.lg),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  sliver: SliverList.separated(
+                    itemCount: rows.length,
+                    separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: AppColors.divider),
+                    itemBuilder: (_, i) {
+                      final s = rows[i];
+                      final d = _existing[s.username.toLowerCase()];
+                      final hasName = s.fullName.trim().isNotEmpty && s.fullName != s.username;
+                      final sale = s.saleAfter(d ?? 0);
+                      final sub = [if (hasName) s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · ');
+                      return ListSubscriberRow(
+                        key: ValueKey('discount-row-${s.username}'),
+                        title: hasName ? s.fullName : s.username,
+                        subtitle: sub,
+                        selectable: _canManage,
+                        selected: _selected.contains(s.username),
+                        onTap: _canManage ? () => _toggle(s.username) : null,
+                        trailing: ListAmountCell(
+                          amount: sale != null && sale > 0 ? _fmt(sale.round()) : '—',
+                          // السالب ملاصقٌ لرقمه: معزولٌ LTR (LRI…PDI) داخل السطر العربيّ
+                          badge: (d ?? 0) > 0 ? '\u2066−${_fmt(d!.round())}\u2069' : null,
+                          badgeTone: ListTone.success,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: Sp.huge)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -843,36 +922,6 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     );
   }
 
-  Widget _searchField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-      child: Row(
-        children: [
-          Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              style: AppType.input(color: AppColors.textHi),
-              decoration: InputDecoration(
-                hintText: 'ابحث عن مشترك…',
-                hintStyle: AppType.input(color: AppColors.textLow),
-                border: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _selectionBar(Color accent, int filteredCount) {
     return Row(
       children: [
@@ -1052,120 +1101,4 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-/// ============================================================
-/// Subscriber select card — مطابق v1 _SubscriberSelectCard.
-/// ============================================================
-class _SubscriberCard extends StatelessWidget {
-  const _SubscriberCard({
-    required this.sub,
-    required this.selected,
-    required this.accent,
-    required this.existingDiscount,
-    required this.onTap,
-  });
 
-  final Subscriber sub;
-  final bool selected;
-  final Color accent;
-  final num? existingDiscount;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final hasName =
-        sub.fullName.trim().isNotEmpty && sub.fullName != sub.username;
-    // «سعر البيع الحالي» = سعر الباقة ناقص خصم هذه الشاشة (جدول المدير)،
-    // لا ينزل تحت الصفر. نمرّر خصم الشاشة نفسه الذي تعرضه الشارة ليبقيا
-    // متّسقين. null حين لا يُعرَف سعر الباقة.
-    final currentSale = sub.saleAfter(existingDiscount ?? 0);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-          decoration: BoxDecoration(
-            color:
-                selected ? accent.withValues(alpha: 0.10) : AppColors.surface,
-            // تجانس مع بطاقات المشتركين: نفس الحافّة (border) والراديوس، مع
-            // إبقاء الكثافة (خليّة شبكةٍ مدمجة للاختيار). (المالك ٢٧ أكتوبر)
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(
-              color: selected ? accent : AppColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              // الـheader: checkbox + اسم (عربي إن وُجد، وإلا username).
-              Row(
-                children: [
-                  Icon(
-                    selected ? LucideIcons.squareCheck : LucideIcons.square,
-                    size: 11,
-                    color: selected ? accent : AppColors.textLow,
-                  ),
-                  const SizedBox(width: 3),
-                  Expanded(
-                    child: Text(
-                      hasName ? sub.fullName : sub.username,
-                      style: AppType.label(color: AppColors.textHi).copyWith(
-                          fontSize: 10.5, fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              // sub-line: username لو الـheader فيه الاسم العربي،
-              // أو الباقة لو ما في اسم عربي.
-              if (hasName)
-                Text(
-                  sub.username,
-                  style: AppType.muted().copyWith(fontSize: 9.5),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              // الـfooter: الباقة + «سعر البيع الحالي» (بعد الخصم) + شارة
-              // الخصم المطبّق. مطابقٌ بنيةً لصفّ شاشة الأسعار.
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      [
-                        if ((sub.profileName ?? '').isNotEmpty) sub.profileName!,
-                        if (currentSale != null) formatIQD(currentSale),
-                      ].join(' · '),
-                      style: AppType.label(color: AppColors.success).copyWith(
-                          fontSize: 9.5, fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (existingDiscount != null && existingDiscount! > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppColors.warningSoftBg,
-                        borderRadius: BorderRadius.circular(R.sm),
-                      ),
-                      child: Text(
-                        '-${formatIQD(existingDiscount!)}',
-                        style: AppType.daysWordBold(color: AppColors.warning),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

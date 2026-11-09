@@ -827,7 +827,8 @@ void main() {
 
     testWidgets('«محدّد»: type=expiring والأسماء من القائمة نفسها', (t) async {
       final proxy = await open(t);
-      await t.tap(find.text('محدّد'));
+      // التصميم الجديد (٩ نوفمبر): «محدّد» صار «أختار بنفسي» في شريطٍ مقسّم
+      await t.tap(find.text('أختار بنفسي'));
       await settle(t, seconds: 1);
       await t.tap(find.text('تحديد الكل'));
       await settle(t, seconds: 1);
