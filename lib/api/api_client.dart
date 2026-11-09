@@ -198,16 +198,16 @@ class _AuthInterceptor extends Interceptor {
     options.headers['x-device-label'] = AppPlatform.deviceLabel;
     // نسخة التطبيق (٣ نوفمبر — إجبار التحديث، server/appGate.js): ما قبل 3.0.15 لا يرسلها فيُعرف قديماً.
     options.headers.addAll(ApiClient.versionHeaders());
-    // كتابةٌ لم تحدّد شركتها وقسمٌ يعرض شركةً أخرى لمسارها ⇒ لا تُرسل أبداً (لا للمفتوحة ولا لتلك): ردٌّ محلّيّ «لم يُنفَّذ شيء».
-    final refused = decision.refusedFor;
-    if (refused != null) {
+    // كتابةٌ لم تحدّد شركتها وقسمٌ يعرض شركةً أخرى لمسارها، أو كتابةٌ ضمنيّة على مشتركٍ في «كل الشركات» ⇒ لا تُرسل أبداً (لا
+    // للمفتوحة ولا لتلك): ردٌّ محلّيّ «لم يُنفَّذ شيء».
+    if (decision.refused) {
       return handler.resolve(Response(
         requestOptions: options,
         statusCode: 409,
         data: {
           'success': false,
           'code': CompanyRouteCodes.ambiguous,
-          'message': CompanyRoute.ambiguousText(refused),
+          'message': decision.refusalText,
           'local': true,
         },
       ));

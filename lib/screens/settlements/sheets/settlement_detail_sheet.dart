@@ -109,7 +109,8 @@ class _DetailSheetState extends State<_DetailSheet> {
     final s = _s;
     if (s == null || _printing) return;
     setState(() => _printing = true);
-    final r = await SettlementPrint.printVoucher(s);
+    // باسم شركة الصندوق ومديرها (null = المفتوحة) — التحقّق الثاني من 179
+    final r = await SettlementPrint.printVoucher(s, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _printing = false);
     showPrintResult(context, r);

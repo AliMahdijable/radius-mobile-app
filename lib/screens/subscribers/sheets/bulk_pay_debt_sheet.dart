@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
@@ -41,6 +42,12 @@ Future<bool?> showBulkPayDebtSheet(
   BuildContext context, {
   required List<Subscriber> subs,
 }) {
+  // «كل الشركات»: التسديد الجماعيّ بلا شركةٍ لكلّ صفّ — يذهب للمفتوحة بأرقام صفوف غيرها (مانع التحقّق الثاني من 179) ⇒ لا يُفتح.
+  final merged = MergedOps.bulkRefusal(subs);
+  if (merged != null) {
+    showSheetSnack(context, merged, isError: true);
+    return Future.value(false);
+  }
   // ⚠️ حارسٌ قبل العرض لا داخله: الشيت المفتوح يحمل الرقم القديم في
   // حالته، فلا يكفي أن نُعطّل زرّ الإرسال.
   if (SubscribersApi.offlineSnapshotAt != null) {

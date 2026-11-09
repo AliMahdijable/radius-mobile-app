@@ -258,7 +258,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
           context: context,
           preview: result.waPreview!,
           opTitle: 'تأكيد التسديد',
-          sas4Idx: widget.sub.idx,
+          sub: widget.sub,
         );
         if (!mounted) return;
       } else {

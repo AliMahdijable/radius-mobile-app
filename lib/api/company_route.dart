@@ -79,6 +79,13 @@ class CompanyRoute {
   /// اسم الشركة [key] لرسالة الرفض ([ambiguousText]) — يضبطه MergedMode (الملفّ لا يعرف الشركات).
   static String? Function(String key)? nameOf;
 
+  /// «كل الشركات» فعّال الآن — يضبطه MergedMode. فيه تُرفض كلّ كتابةٍ **ضمنيّة** على مسار مشترك ([decide]): كلّ كتابةٍ شرعيّة على
+  /// مشتركٍ في الوضع صريحة (MergedOps بمفتاح صفّه، وبلا مفتاح ⇒ المفتوحة صراحةً) — والضمنيّة لا تعرف لأيّ شركةٍ رقم الصفّ.
+  static bool Function()? mergedActive;
+
+  /// مسار مشترك: `/api/v2/subscribers` (إضافة) أو ما تحته (`/:idx/...`).
+  static bool isSubscriberPath(String path) => path == '/api/v2/subscribers' || path.startsWith('/api/v2/subscribers/');
+
   /// «كل الصفحات» للموظّف: كلمة «صفحة» بدل «شركة» في رسالة الرفض — يضبطه MergedMode.
   static bool Function()? employeeWords;
 
@@ -97,6 +104,8 @@ class CompanyRoute {
   static const Set<String> readsByPost = {
     '/api/v2/subscribers/device-batch',
     '/api/v2/subscribers/last-macs',
+    // بحث الحساب الكبير بأرقام/يوزرات (big_subscribers_api lookup) — قراءة
+    '/api/v2/subscribers/lookup',
     '/api/v2/sales/debt-status',
     '/api/v2/whatsapp/contact-risk',
     '/api/v2/whatsapp/bulk-risk',
@@ -305,6 +314,9 @@ class CompanyRoute {
       // الكتابة لا تأخذ وجهة قسم: الشاشة تعرض شركةً أخرى لهذا المسار ولم يقل النداء لأيّها ⇒ لا تُرسل
       final shown = top?.key;
       if (shown != null) return RouteDecision._(null, refusedFor: shown);
+      // «كل الشركات»: كتابةٌ ضمنيّة على مشترك ⇒ لا تُرسل (التحقّق الثاني من 179: «تحديد الكلّ» بجدول الحاسبة أرسل أرقام صفوف
+      // شركاتٍ أخرى للمفتوحة) — الشرعيّة كلّها صريحة.
+      if (isSubscriberPath(path) && (mergedActive?.call() ?? false)) return const RouteDecision._(null, unscoped: true);
       _taint(path, null, top);
       return const RouteDecision._(null);
     }
@@ -325,6 +337,11 @@ class CompanyRoute {
     }
   }
 
+  /// نصّ رفض كتابةٍ ضمنيّة على مشتركٍ في «كل الشركات» ([RouteDecision.unscoped]).
+  static String unscopedText() => (employeeWords?.call() ?? false)
+      ? 'لم يُنفَّذ شيء — في «كل الصفحات» نفّذها من صفحة المشترك نفسه لتذهب لصفحته'
+      : 'لم يُنفَّذ شيء — في «كل الشركات» نفّذها من صفحة المشترك نفسه لتذهب لشركته';
+
   /// نصّ رفض الكتابة بلا شركةٍ صريحة ([RouteDecision.refused]).
   static String ambiguousText(String key) {
     final emp = employeeWords?.call() ?? false;
@@ -341,12 +358,18 @@ typedef ScopeOrder = ({int level, int seq});
 
 /// قرار [CompanyRoute.decide]: [key] الوجهة (null = المفتوحة)، و[refusedFor] كتابةٌ لا تُرسل.
 class RouteDecision {
-  const RouteDecision._(this.key, {this.refusedFor});
+  const RouteDecision._(this.key, {this.refusedFor, this.unscoped = false});
   final String? key;
 
   /// كتابةٌ بلا شركةٍ صريحة وأعلى نطاقٍ لمسارها قسمٌ يعرض الشركة [refusedFor] ⇒ لا تُرسل (ردٌّ محلّيّ 409).
   final String? refusedFor;
-  bool get refused => refusedFor != null;
+
+  /// كتابةٌ ضمنيّة على مشتركٍ و«كل الشركات» فعّال ⇒ لا تُرسل ([CompanyRoute.unscopedText]).
+  final bool unscoped;
+  bool get refused => refusedFor != null || unscoped;
+
+  /// نصّ الرفض للردّ المحلّيّ.
+  String get refusalText => refusedFor != null ? CompanyRoute.ambiguousText(refusedFor!) : CompanyRoute.unscopedText();
 }
 
 class _Scope {

@@ -12,6 +12,7 @@ import '../../../services/fiber/fiber_band.dart';
 import '../../../services/fiber/fiber_monitor.dart';
 import '../../../services/fiber/fiber_onu.dart';
 import '../../../services/fiber/fiber_store.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -66,6 +67,10 @@ class _FiberSubscriberCardState extends State<FiberSubscriberCard> {
   FiberMonitor? _m;
   bool _ready = false;
 
+  /// المشترك من الشركة المفتوحة؟ («كل الشركات»، ٩ نوفمبر — التحقّق الثاني من 179): شبكة الألياف شبكة المفتوحة وحدها، فمشترك
+  /// شركةٍ أخرى بيوزرٍ يطابق مشتركاً فيها كان يُعرض بجهاز المفتوحة (حالته وضوؤه وصندوقه وتشخيصه) — لا كرت له. null حتى يُعرف.
+  bool? _openCompany;
+
   /// مطويٌّ أوّلاً — طلب المالك ٢٧ أكتوبر: «توكلد وظاهر التنبيه بالتكول بالعنوان، من ينقر عليه يظهرله القسم».
   bool _open = false;
 
@@ -84,6 +89,7 @@ class _FiberSubscriberCardState extends State<FiberSubscriberCard> {
   }
 
   FiberOnuRecord? _find() {
+    if (_openCompany != true) return null;
     final u = widget.sub.username.toLowerCase();
     for (final r in FiberStore.layout.value.onus.values) {
       if (r.username?.toLowerCase() == u) return r;
@@ -92,6 +98,9 @@ class _FiberSubscriberCardState extends State<FiberSubscriberCard> {
   }
 
   Future<void> _init() async {
+    final key = widget.sub.companyKey;
+    _openCompany = key == null || await MergedMode.isOpenKey(key);
+    if (!mounted || _openCompany != true) return; // مشترك شركةٍ أخرى: لا كرت
     try {
       await FiberStore.ensureLoaded();
     } catch (_) {

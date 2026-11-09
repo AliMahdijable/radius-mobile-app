@@ -806,7 +806,9 @@ class _EditSheetState extends State<_EditSheet> {
     // ٣) ايرث لنك: «تابع إلى» — نقل المشترك لمديرٍ فرعيّ عبر بوّابة الإدارة (تحقّقٌ بعديّ على الخادم)، بعد نجاح ما قبله.
     var transferred = false;
     if (ok && transferTo != null) {
-      final tr = await SubscribersApi.transferSubscriber(idx: widget.sub.idx!.toString(), target: transferTo);
+      // صفّ المفتوحة وحده (_canTransfer) — لها صراحةً («كل الشركات» يرفض كتابة مشتركٍ ضمنيّة)
+      final tr = await MergedOps.run(
+          widget.sub, () => SubscribersApi.transferSubscriber(idx: widget.sub.idx!.toString(), target: transferTo));
       ok = tr.ok;
       if (tr.ok) {
         transferred = tr.changed;

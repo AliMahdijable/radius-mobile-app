@@ -152,7 +152,9 @@ class SubscriberTableHeader extends StatelessWidget {
   final bool descending;
   final ValueChanged<SortField> onSort;
   final bool allSelected;
-  final VoidCallback onSelectAll;
+
+  /// null = لا خانة «تحديد الكلّ» («كل الشركات»: العمليّات الجماعيّة للشركة وحدها — مانع التحقّق الثاني من 179).
+  final VoidCallback? onSelectAll;
   final void Function(String key, double delta) onResize;
   final VoidCallback onResizeEnd;
   final ValueChanged<String> onResetWidth;
@@ -243,7 +245,7 @@ class SubscriberTableHeader extends StatelessWidget {
             const SizedBox(width: SubscriberTableColumns.stripe + Sp.sm - 4),
             SizedBox(
               width: SubscriberTableColumns.check,
-              child: _CheckBox(value: allSelected, onTap: onSelectAll),
+              child: onSelectAll == null ? null : _CheckBox(value: allSelected, onTap: onSelectAll!),
             ),
             const SizedBox(width: SubscriberTableColumns.avatar),
             cell(
@@ -328,7 +330,8 @@ class SubscriberTableRow extends StatefulWidget {
 
   /// فتح التفاصيل (اللوحة) — وفيها ما لا تحمله القائمة (تعطيل، فصل، حذف، إرسال…).
   final VoidCallback onTap;
-  final VoidCallback onToggleSelect;
+  /// null = لا خانة تحديد («كل الشركات»: العمليّات الجماعيّة للشركة وحدها).
+  final VoidCallback? onToggleSelect;
 
   @override
   State<SubscriberTableRow> createState() => _SubscriberTableRowState();
@@ -352,7 +355,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
     final packageInline = !cols.has(SubCol.package) && (s.profileName ?? '').isNotEmpty;
     // Tab إلى الصفّ ثمّ Enter يفتحه كالنقر (أو يحدّده في وضع التحديد)، بإطار تركيزٍ مع الكيبورد وحده.
     return _dragScroll(context, cols, widget.scroll, DeskPressable(
-      onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
+      onTap: widget.selectionMode && widget.onToggleSelect != null ? widget.onToggleSelect : widget.onTap,
       onSecondaryTapUp: (d) => _menuAt(d.globalPosition),
       onLongPressStart: (d) => _menuAt(d.globalPosition),
       selected: widget.selected || widget.open,
@@ -394,7 +397,9 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
               const SizedBox(width: Sp.sm - 4),
               SizedBox(
                 width: SubscriberTableColumns.check,
-                child: _CheckBox(value: widget.selected, onTap: widget.onToggleSelect),
+                child: widget.onToggleSelect == null
+                    ? null
+                    : _CheckBox(value: widget.selected, onTap: widget.onToggleSelect!),
               ),
               SizedBox(
                 width: SubscriberTableColumns.avatar,

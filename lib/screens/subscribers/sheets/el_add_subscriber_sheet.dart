@@ -21,6 +21,7 @@ import '../../../widgets/el_deposit_password_field.dart';
 import '../../../widgets/package_picker_field.dart';
 import '../../../api/company_route.dart';
 import '../../../models/merged_company.dart';
+import '../../../services/merged_mode.dart';
 
 /// «مشترك جديد» لجلسات ايرث لنك — يفتحه `showAddSubscriberSheet` بدل شيت
 /// SAS4 حين يكون معرّف المدير المحفوظ `earthlink:<idx>`، بلا سحبٍ للإغلاق.
@@ -71,10 +72,12 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
   // باسورد الإيداع: المحفوظ على الخادم («محفوظ · تغيير») أو يُكتب (+ «احفظه» للمالك).
   late final _deposit = ElDepositPasswordController(companyKey: widget.company?.key);
 
-  /// طلبٌ لشركة النافذة ([ElAddSubscriberSheet.company]) — خارج «كل الشركات» الطلب كما هو حرفاً.
+  /// طلبٌ لشركة النافذة ([ElAddSubscriberSheet.company]) — خارج «كل الشركات» الطلب كما هو حرفاً، وفيها والمفتوحة هي المختارة:
+  /// لها صراحةً (كـadd_subscriber_sheet — «كل الشركات» يرفض كتابة مشتركٍ ضمنيّة، وقسمٌ ظاهرٌ لغيرها لا يأخذ قراءاتها).
   Future<T> _co<T>(Future<T> Function() f) {
     final c = widget.company;
-    return c == null ? f() : CompanyRoute.run(c.key, f);
+    if (c != null) return CompanyRoute.run(c.key, f);
+    return MergedMode.active.value ? CompanyRoute.runOpen(f) : f();
   }
   final _identifierCtrl = TextEditingController(); // رقم الكارت
   final _pinCtrl = TextEditingController(); // Pin الكارت
