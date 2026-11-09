@@ -238,9 +238,10 @@ class ReceiptPrinter {
       final chunks = EscPos.job(img, bandRows: bluetoothBandRows, cut: t.paper == ReceiptPaper.mm80);
       for (var i = 0; i < chunks.length; i++) {
         _phase(ReceiptJobPhase.sending, name, quiet, i / chunks.length);
-        await bridge.btWrite(chunks[i]);
-        // بعد «ESC @» كلّ قطعةٍ قد تُطبع — الانقطاع بعدها «غير مؤكَّد».
+        // بعد «ESC @» كلّ قطعةٍ **بدأت** كتابتها قد يخرج منها شيء (أندرويد يكتب الشريط ٥١٢ بايتاً ٥١٢ بايتاً، والآيفون
+        // أجزاءً): انقطاعٌ أو مهلةٌ أثناءها «غير مؤكَّد» لا «لم يُطبع شيء» — ولو كانت الشريطَ الأوّل.
         if (i > 0) printedSome = true;
+        await bridge.btWrite(chunks[i]);
         // لا نسبق الطابعة كثيراً: بعضها بلا تحكّمٍ بالتدفّق يفيض ويخرج الوصل مشوّهاً.
         if (i > 0 && i < chunks.length - 1) await pause(bandPause(bluetoothBandRows));
       }

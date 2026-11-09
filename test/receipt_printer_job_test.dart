@@ -134,6 +134,16 @@ void main() {
       expect(r.issue, PrintIssue.disconnected);
       expect(r.uncertain, isFalse);
     });
+
+    test('ينقطع أثناء **الشريط الأوّل** ⇒ «غير مؤكَّد» (قد خرج جزءٌ منه) لا «لم يُطبع شيء» — مراجعة 179', () async {
+      h.useBluetooth();
+      // الكتابات: ١ سؤال الورق · ٢ ESC @ · ٣ الشريط الأوّل ← ينقطع أثناء كتابته
+      h.bridge.dropAtWrite = 3;
+      final r = await p().send(_doc('x'));
+      expect(r.issue, PrintIssue.disconnectedMidway);
+      expect(r.uncertain, isTrue);
+      expect(r.retry, isNotNull);
+    });
   });
 
   group('٤ الإذن والبلوتوث والطابعة', () {
