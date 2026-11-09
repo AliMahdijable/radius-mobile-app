@@ -13,6 +13,7 @@ import '../../models/subscriber.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/merged_mode.dart';
 import '../../services/subscribers_check.dart';
+import '../../services/agent_net_presence.dart';
 import '../../services/vpn_now.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -192,7 +193,12 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       : (widget.viaVpn ? VpnNow.subscribers.busy : _waveRunning);
 
   SubsCheckReport _report(List<Subscriber> subs) {
-    if (_merged) return SubscribersCheck.mixed(subs, _limits, companyNote: _companyNote, wave: _wave);
+    if (_merged) {
+      // فشل الهاتف «ما ردّ من شبكتك» لشركةٍ تُقرأ من شبكتك وهو عليها وحده — غيرها طريقه VPN شركتها (١٠ نوفمبر)
+      final onNet = !VpnNow.mode.value && !AgentNetPresence.isOff;
+      return SubscribersCheck.mixed(subs, _limits,
+          companyNote: _companyNote, wave: _wave, localFailsFor: (c) => onNet && c != null && _isLocal(c));
+    }
     return widget.viaVpn ? SubscribersCheck.vpn(subs, _limits) : SubscribersCheck.local(subs, _limits, wave: _wave);
   }
 

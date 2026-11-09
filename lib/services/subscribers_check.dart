@@ -7,6 +7,7 @@ import '../core/util/format.dart';
 import '../core/util/server_time.dart';
 import '../models/device_health.dart';
 import '../models/subscriber.dart';
+import 'agent_net_presence.dart';
 import 'connection_alerts.dart';
 import 'merged_text.dart';
 import 'vpn_now.dart';
@@ -147,13 +148,14 @@ enum SubsMissWhy {
   /// ⇒ «جهازه ما ردّ» بسببه.
   unmeasured,
 
-  /// متّصلٌ وفُحص ولا قراءة له: جهازه ما ردّ من شبكتك، أو فحص الخادم المكتمل بلا قراءةٍ له (note) ⇒ «جهازه ما ردّ».
+  /// متّصلٌ وسُئل جهازه من شبكتك وما ردّ ⇒ «جهازه ما ردّ» (فحص الخادم المكتمل بلا قراءةٍ له صار [unchecked] — ١٠ نوفمبر).
   noReply,
 
   /// جهازه يردّ بلا مقاييس (ليس نانو ولا وحدةً ضوئيّة) ⇒ «بلا مقاييس».
   noMetrics,
 
-  /// متّصلٌ ولم يصله الفحص: الجاري لم يبلغه بعد (note null)، أو لا فحص له أصلاً — بلا عنوان، أو لم يُفحص عبر الـVPN بعد (note)
+  /// متّصلٌ ولم يصله الفحص: الجاري لم يبلغه بعد (note null)، أو لا فحص له أصلاً — بلا عنوان، أو لم يُفحص عبر الـVPN بعد، أو فحص
+  /// الخادم اكتمل ولم يسأل جهازه ([SubscribersCheck.vpnUnreadNote]) (note)
   /// ⇒ «لم يُفحص». ١٠ نوفمبر: كان «لم يُقرأ — جهازه لم يردّ» ولم يُسأل جهازه.
   unchecked,
 
@@ -359,6 +361,11 @@ class SubscribersCheck {
   }
 
   static int _missRank(SubsMissing m) => SubsMissWhy.values.indexOf(m.why);
+
+  /// فحص الخادم لشركته اكتمل ولا قراءة له ⇒ «لم يُفحص» بهذا السبب، لا «جهازه ما ردّ» (١٠ نوفمبر، فحص المحاكي: ١٦ من ١٣٣ متّصلاً
+  /// بلا قراءة سُمّوا «ما ردّ»): الخادم يسأل أجهزة يوبيكويتي وحدها ويؤجّل رافض كلمة السرّ والساقط وبلا إدارة (connVpn
+  /// targetsState.plan) — ومن سأله وما ردّ تأتي قراءته `dead` («لا يستجيب»)، فغياب القراءة يعني أنّ جهازه لم يُسأل.
+  static const vpnUnreadNote = 'لم يُقرأ عبر VPN';
 
   /// قسم من لم يُقرأ.
   static SubsCheckCat catOf(SubsMissWhy why) => switch (why) {
@@ -593,13 +600,13 @@ class SubscribersCheck {
   }
 
   /// من لا قراءة بمقاييس له عبر الـVPN: غير المتّصل أوّلاً، ثمّ من لا نتيجة له (الفحص جارٍ ⇒ لم يبلغه بعد؛ لا فحص مكتمل ⇒ لم
-  /// يُفحص؛ فحصٌ مكتمل بلا قراءةٍ له ⇒ ما ردّ)، ثمّ الميّت، ومن يردّ بلا مقاييس.
+  /// يُفحص؛ فحصٌ مكتمل بلا قراءةٍ له ⇒ لم يُفحص [vpnUnreadNote])، ثمّ الميّت، ومن يردّ بلا مقاييس.
   static SubsMissing _missVpn(Subscriber s, VpnSubReading? r, {required bool busy, required DateTime? checkedAt}) {
     if (!s.isOnline) return (sub: s, why: SubsMissWhy.offline, note: null);
     if (r == null) {
       if (busy) return (sub: s, why: SubsMissWhy.unchecked, note: null);
       if (checkedAt == null) return (sub: s, why: SubsMissWhy.unchecked, note: 'لم يُفحص عبر VPN بعد');
-      return (sub: s, why: SubsMissWhy.noReply, note: 'لم يُقرأ عبر VPN');
+      return (sub: s, why: SubsMissWhy.unchecked, note: vpnUnreadNote);
     }
     if (r.dead) return (sub: s, why: SubsMissWhy.dead, note: null);
     return unmeasured(s, r);
@@ -620,9 +627,15 @@ class SubscribersCheck {
     String? Function(String? company)? companyNote,
     SubsWave? wave,
     bool Function(String? company)? vpnWaits,
+    bool Function(String? company)? localFailsFor,
   }) {
     final look =
         peek ?? debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
+    // فشل فحص الهاتف شهادةٌ على جهازه وهو على الشبكة وحده (كالأمر الصوتيّ): خارجها أو بـ«وضع VPN» لا يصل الهاتف شيئاً، فـ«ما ردّ من
+    // شبكتك» كاذبة (١٠ نوفمبر، المحاكي خارج الشبكة) — والشاشة تحصره بشركةٍ تُقرأ من شبكتك (المفتوحة): غيرها طريقه VPN شركته.
+    // القراءة الناجحة تبقى قراءةً من أيّ مكان.
+    final onNet = !VpnNow.mode.value && !AgentNetPresence.isOff;
+    final localFails = localFailsFor ?? ((_) => onNet);
     final vpnLook = reading ?? (s) => VpnNow.readingFor(s.username, company: s.companyKey);
     final when = readAt ?? (c) => c == null ? VpnNow.readingsAt : VpnNow.readingsAtFor(c);
     final waits = vpnWaits ?? (c) => c != null && VpnNow.subscribers.waits(c);
@@ -673,11 +686,11 @@ class SubscribersCheck {
               ? (sub: s, why: SubsMissWhy.company, note: note)
               : p?.snap != null
                   ? (sub: s, why: SubsMissWhy.noMetrics, note: null)
-                  : p != null
+                  : p != null && localFails(s.companyKey)
                       ? (sub: s, why: SubsMissWhy.noReply, note: null)
-                      // فحص الخادم لشركته اكتمل بلا قراءةٍ له ⇒ ما ردّ؛ ولا فحص له بأيّ طريق ⇒ لم يُفحص
+                      // فحص الخادم لشركته اكتمل بلا قراءةٍ له ⇒ لم يُسأل جهازه ([vpnUnreadNote])؛ ولا فحص له بأيّ طريق ⇒ لم يُفحص
                       : checkedAt != null
-                          ? (sub: s, why: SubsMissWhy.noReply, note: 'لم يُقرأ عبر VPN')
+                          ? (sub: s, why: SubsMissWhy.unchecked, note: vpnUnreadNote)
                           : (sub: s, why: SubsMissWhy.unchecked, note: _noAddress(s)));
     }
     return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest);

@@ -121,6 +121,7 @@ void main() {
       SubscriberVoiceCheck.debugVpnRun = null;
       SubscriberVoiceCheck.debugLocalAllowed = null;
       SubscriberVoiceCheck.debugVpnAllowed = null;
+      SubscriberVoiceCheck.debugIsOpen = null;
       VpnNow.reset();
       ConnectionAlertSettings.current.value = const ConnectionAlertThresholds();
     });
@@ -257,7 +258,7 @@ void main() {
       expect(c.spoken, 'فعّال ومتّصل · باقي 20 يوماً · جهازه ما ردّ — لا يستجيب');
     });
 
-    test('١٠ نوفمبر: ما ردّ من شبكتك (بلا VPN لك) · ولا من شبكتك ولا عبر VPN · ردّ بلا مقاييس · تعذّر الفحص ⇒ «لم يُفحص»', () async {
+    test('١٠ نوفمبر: ما ردّ من شبكتك (بلا VPN لك، أو والخادم لم يقرأه) · ردّ بلا مقاييس · الخادم لم يسأله أو تعذّر الفحص ⇒ «لم يُفحص»', () async {
       SubscriberVoiceCheck.debugLocalAllowed = () => true;
       SubscriberVoiceCheck.debugVpnAllowed = () => false;
       SubscriberVoiceCheck.debugProbe = (_) async => null;
@@ -278,7 +279,28 @@ void main() {
           VpnNow.debugApply(VpnNowKind.subscribers, const VpnNowResult(ok: true, message: 'تم', readings: {'other': VpnSubReading(src: 'dead')}));
       final v = SubscriberVoiceCheck(_sub('v'));
       await v.run();
-      expect([v.cat, v.deviceLine], [SubsCheckCat.noReply, 'جهازه ما ردّ — لا من شبكتك ولا عبر VPN']);
+      expect([v.cat, v.deviceLine], [SubsCheckCat.noReply, 'جهازه ما ردّ — من شبكتك'],
+          reason: 'سُئل من شبكتك وما ردّ؛ والخادم لم يسأله فلا يُقال «ولا عبر VPN»');
+
+      // خارج شبكتك (لا فحص من الهاتف) والخادم اكتمل بلا قراءةٍ له ⇒ لم يُسأل جهازه ⇒ «لم يُفحص» لا «ما ردّ»
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      final w = SubscriberVoiceCheck(_sub('w'));
+      await w.run();
+      expect([w.cat, w.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُقرأ عبر VPN']);
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+
+      // «كل الشركات»: مشترك شركةٍ غير المفتوحة طريقها VPN شركتها — فشل الهاتف معه ليس «ما ردّ من شبكتك»
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugIsOpen = (c) async => c.key != b.key;
+      final o = SubscriberVoiceCheck(_sub('o', company: b.key), company: b);
+      await o.run();
+      expect([o.cat, o.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — لم يُقرأ عبر VPN']);
+      // والمفتوحة نفسها تُقرأ من شبكتك ⇒ فشلها «ما ردّ»
+      SubscriberVoiceCheck.debugIsOpen = (_) async => true;
+      final p = SubscriberVoiceCheck(_sub('p', company: b.key), company: b);
+      await p.run();
+      expect([p.cat, p.deviceLine], [SubsCheckCat.noReply, 'جهازه ما ردّ — من شبكتك']);
+      SubscriberVoiceCheck.debugIsOpen = null;
 
       // الفحص عبر الـVPN تعذّر ⇒ لم يُفحص بسببه (لا «ما ردّ» كاذبة)
       VpnNow.reset();
