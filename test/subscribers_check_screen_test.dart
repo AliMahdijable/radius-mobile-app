@@ -65,7 +65,9 @@ void main() {
     expect(inSeg('problems', '3'), findsOneWidget);
     expect(inSeg('healthy', '2'), findsOneWidget);
     // ١٠ نوفمبر: كان «لم يُقرأ 3» يخلط الميّت وغير المتّصل ومن لا قراءة له — والشريط «قُرئ 5 من 8»
-    expect(inSeg('noReply', '2'), findsOneWidget, reason: 'الميّت ومن لم يُقرأ عبر VPN — لا غير المتّصل');
+    expect(inSeg('noReply', '1'), findsOneWidget, reason: 'الميّت وحده — لا غير المتّصل');
+    // ١٠ نوفمبر (المحاكي): فحصٌ مكتمل بلا قراءةٍ له = الخادم لم يسأل جهازه ⇒ «لم يُفحص» لا «ما ردّ»
+    expect(inSeg('unchecked', '1'), findsOneWidget, reason: 'none.u: فُحصت شركته ولم يُسأل جهازه');
     expect(inSeg('offline', '1'), findsOneWidget);
     expect(find.text('قُرئ 5 من 8'), findsNothing);
     expect(find.text('انتهى الفحص — 8 مشترك'), findsOneWidget);
@@ -100,10 +102,13 @@ void main() {
     await settle(t, seconds: 1);
     expect(find.descendant(of: find.byKey(const ValueKey('subs-check-miss-|dead.u')), matching: find.text('لا يستجيب')),
         findsOneWidget);
+    expect(find.byKey(const ValueKey('subs-check-miss-|none.u')), findsNothing, reason: 'لم يُسأل جهازه — ليس «ما ردّ»');
+    expect(find.byKey(const ValueKey('subs-check-miss-|off.u')), findsNothing);
+    await t.tap(find.byKey(const ValueKey('subs-check-seg-unchecked')));
+    await settle(t, seconds: 1);
     expect(
         find.descendant(of: find.byKey(const ValueKey('subs-check-miss-|none.u')), matching: find.text('لم يُقرأ عبر VPN')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('subs-check-miss-|off.u')), findsNothing);
     // غير متّصل الآن: قسمه وحده
     await t.tap(find.byKey(const ValueKey('subs-check-seg-offline')));
     await settle(t, seconds: 1);
@@ -190,19 +195,19 @@ void main() {
     expect(find.text('«ايرث لنك» وحدها — اضغطها ثانيةً لعرض الكلّ'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const ValueKey('subs-check-seg-problems')), matching: find.text('1')), findsOneWidget);
 
-    // من لم يُقرأ: الجزيرة بسببها تحت «لم يُفحص» — وe.none (فُحصت شركته ولا قراءة له) تحت «جهازه ما ردّ»
+    // من لم يُقرأ: الجزيرة بسببها تحت «لم يُفحص»، وe.none (فُحصت شركته ولم يُسأل جهازه) تحته أيضاً بسببه — لا «ما ردّ» (١٠ نوفمبر)
     await t.tap(company(kE));
     await settle(t, seconds: 1);
     await t.tap(find.byKey(const ValueKey('subs-check-seg-unchecked')));
     await settle(t, seconds: 1);
     expect(find.descendant(of: find.byKey(const ValueKey('subs-check-miss-$kX|x.one')), matching: find.text('شركته تحتاج VPN')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('subs-check-miss-$kE|e.none')), findsNothing);
-    await t.tap(find.byKey(const ValueKey('subs-check-seg-noReply')));
-    await settle(t, seconds: 1);
     expect(
         find.descendant(of: find.byKey(const ValueKey('subs-check-miss-$kE|e.none')), matching: find.text('لم يُقرأ عبر VPN')),
         findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('subs-check-seg-noReply')));
+    await settle(t, seconds: 1);
+    expect(find.byKey(const ValueKey('subs-check-miss-$kE|e.none')), findsNothing);
 
     await t.pumpWidget(const SizedBox());
     await visualTearDown();

@@ -123,8 +123,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   String get spoken => [headline, daysLine, deviceLine].whereType<String>().join(' · ');
 
   bool get _localAllowed =>
-      debugLocalAllowed?.call() ??
-      (!VpnNow.mode.value && !AgentNetPresence.isOff && PermissionsService.subsCheckNet);
+      debugLocalAllowed?.call() ?? (!VpnNow.mode.value && !AgentNetPresence.isOff && PermissionsService.subsCheckNet);
 
   bool get _vpnAllowed => debugVpnAllowed?.call() ?? PermissionsService.subsCheckVpn;
 
@@ -224,7 +223,8 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     } else if (v?.dead == true) {
       _miss(SubsCheckCat.noReply, 'لا يستجيب');
     } else {
-      // لا قراءة له بأيّ طريق: شركته بلا طريق أو الفحص تعذّر ⇒ لم يُفحص؛ وفحصٌ مكتمل بلا قراءةٍ له ⇒ ما ردّ
+      // لا قراءة له بأيّ طريق: شركته بلا طريق أو الفحص تعذّر ⇒ لم يُفحص؛ وفحصٌ مكتمل بلا قراءةٍ له ⇒ الخادم لم يسأل جهازه
+      // (يوبيكويتي وحدها، والمؤجَّل) ⇒ «لم يُفحص» — إلّا إن سُئل من شبكتك وما ردّ (١٠ نوفمبر: كان «لا من شبكتك ولا عبر VPN»)
       final why = (company != null ? VpnNow.noteOf(company!.key) : null) ??
           (VpnNow.subscribers.phase == VpnBarPhase.failed ? VpnNow.subscribers.line : null);
       if (why != null) {
@@ -232,7 +232,9 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       } else if (localNoMetrics) {
         _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
       } else {
-        _miss(SubsCheckCat.noReply, _localAllowed ? 'لا من شبكتك ولا عبر VPN' : 'لم يُقرأ عبر VPN');
+        _localAllowed
+            ? _miss(SubsCheckCat.noReply, 'من شبكتك')
+            : _miss(SubsCheckCat.unchecked, SubscribersCheck.vpnUnreadNote);
       }
     }
     _set(VoiceCheckPhase.done);

@@ -260,7 +260,7 @@ void main() {
       }
     });
 
-    test('«جهازه ما ردّ» يجمع ما ردّ من شبكتك والميّت ومن يردّ بلا مقاييس عبر الـVPN — وكلٌّ بسببه', () {
+    test('«جهازه ما ردّ» يجمع ما ردّ من شبكتك والميّت ومن يردّ بلا مقاييس عبر الـVPN — وكلٌّ بسببه؛ ومن لم يُسأل «لم يُفحص»', () {
       final subs = [_sub('dead'), _sub('ping'), _sub('auth'), _sub('none'), _sub('cpe0')];
       final reads = <String, VpnSubReading>{
         'dead': const VpnSubReading(src: 'dead'),
@@ -274,8 +274,10 @@ void main() {
         'dead': 'لا يستجيب',
         'ping': 'يردّ، ما انقرت مقاييسه',
         'auth': 'يردّ، ما انفتح برمزه المحفوظ',
-        'none': 'لم يُقرأ عبر VPN',
       });
+      // ١٠ نوفمبر: فحصٌ مكتمل بلا قراءةٍ له = الخادم لم يسأل جهازه (يوبيكويتي وحدها والمؤجَّل) ⇒ «لم يُفحص» بسببه
+      final unchecked = r.missingIn(SubsCheckCat.unchecked).single;
+      expect([unchecked.sub.username, SubscribersCheck.missText(unchecked)], ['none', 'لم يُقرأ عبر VPN']);
       expect(r.missingIn(SubsCheckCat.noMetrics).single.sub.username, 'cpe0', reason: 'ردّ بلا أرقام — ليس «ما ردّ»');
       expect(SubscribersCheck.missText(r.missingIn(SubsCheckCat.noMetrics).single), 'جهازه بلا مقاييس');
     });
@@ -321,7 +323,7 @@ void main() {
       expect(SubsCheckCat.unchecked.labelFor(), 'لم يُفحص');
     });
 
-    test('عبر الـVPN: الجاري ⇒ «لم يُفحص بعد»، ولا فحص مكتمل ⇒ «لم يُفحص»، وفحصٌ مكتمل بلا قراءةٍ له ⇒ «ما ردّ»', () {
+    test('عبر الـVPN: الجاري ⇒ «لم يُفحص بعد»، ولا فحص مكتمل ⇒ «لم يُفحص»، وفحصٌ مكتمل بلا قراءةٍ له ⇒ «لم يُفحص» بسببه', () {
       final subs = [_sub('a'), _sub('b')];
       VpnSubReading? read(Subscriber s) => s.username == 'a' ? const VpnSubReading(src: 'dead') : null;
       final running = SubscribersCheck.vpn(subs, limits, reading: read, readAt: (_) => at, running: true);
@@ -331,7 +333,33 @@ void main() {
       expect(never.count(SubsCheckCat.noReply), 0, reason: 'لا فحص ⇒ لا «ما ردّ» كاذبة');
       expect(never.missing.first.note, 'لم يُفحص عبر VPN بعد');
       final done = SubscribersCheck.vpn(subs, limits, reading: read, readAt: (_) => at, running: false);
-      expect([for (final m in done.missingIn(SubsCheckCat.noReply)) m.why], [SubsMissWhy.dead, SubsMissWhy.noReply]);
+      expect([for (final m in done.missingIn(SubsCheckCat.noReply)) m.why], [SubsMissWhy.dead],
+          reason: 'من سأله الخادم وما ردّ تأتي قراءته dead');
+      expect([for (final m in done.missingIn(SubsCheckCat.unchecked)) (m.sub.username, m.note)], [('b', 'لم يُقرأ عبر VPN')],
+          reason: 'لا قراءة بعد فحصٍ مكتمل = لم يُسأل جهازه');
+    });
+
+    test('١٠ نوفمبر · «كل الشركات» خارج الشبكة أو بـ«وضع VPN»: فشل فحص الهاتف ليس «ما ردّ من شبكتك»', () {
+      final subs = [_sub('l.fail', company: 'kL', ip: '10.0.0.5'), _sub('l.ok', company: 'kL', ip: '10.0.0.6')];
+      final peeks = <String, ({DeviceHealthSnapshot? snap, bool stale, DateTime at})>{
+        'l.fail': (snap: null, stale: false, at: at),
+        'l.ok': (snap: ok('6'), stale: false, at: at),
+      };
+      SubsCheckReport run({required bool onNet, DateTime? checked}) => SubscribersCheck.mixed(subs, limits,
+          peek: (s) => peeks[s.username], reading: (_) => null, readAt: (_) => checked, localFailsCount: onNet);
+      final on = run(onNet: true);
+      expect(on.missingIn(SubsCheckCat.noReply).single.sub.username, 'l.fail', reason: 'على الشبكة: سُئل جهازه وما ردّ');
+      expect(SubscribersCheck.missText(on.missingIn(SubsCheckCat.noReply).single), 'ما ردّ من شبكتك');
+      final off = run(onNet: false);
+      expect(off.count(SubsCheckCat.noReply), 0, reason: 'خارجها لا يصل الهاتف شيئاً');
+      expect(off.missingIn(SubsCheckCat.unchecked).single.sub.username, 'l.fail');
+      final offChecked = run(onNet: false, checked: at);
+      expect(SubscribersCheck.missText(offChecked.missingIn(SubsCheckCat.unchecked).single), 'لم يُقرأ عبر VPN',
+          reason: 'شركته فُحصت عبر الـVPN ولم يُسأل جهازه');
+      for (final r in [on, off, offChecked]) {
+        expect(r.healthy.single.sub.username, 'l.ok', reason: 'القراءة الناجحة قراءةٌ من أيّ مكان');
+        expect(SubsCheckCat.values.fold<int>(0, (n, c) => n + r.count(c)), r.total, reason: 'كلّ مشتركٍ بقسمٍ واحد');
+      }
     });
 
     test('«كل الشركات»: شركةٌ يفحصها الخادم الآن أو بعدها بالدور ⇒ «لم يُفحص بعد»؛ بلا طريق ⇒ «لم يُفحص» بسببها', () {
@@ -349,8 +377,9 @@ void main() {
       expect(miss['e.q'], (SubsMissWhy.unchecked, null), reason: 'شركته بالدور');
       expect(miss['s.w'], (SubsMissWhy.unchecked, null), reason: 'الموجة لم تبلغه');
       expect(miss['x.q'], (SubsMissWhy.company, '«ثالثة» تحتاج VPN'));
-      expect(miss['d.q'], (SubsMissWhy.noReply, 'لم يُقرأ عبر VPN'), reason: 'فُحصت شركته ولا قراءة له');
-      expect(r.count(SubsCheckCat.unchecked), 3);
+      expect(miss['d.q'], (SubsMissWhy.unchecked, 'لم يُقرأ عبر VPN'), reason: 'فُحصت شركته ولم يُسأل جهازه');
+      expect(r.count(SubsCheckCat.unchecked), 4);
+      expect(r.count(SubsCheckCat.noReply), 0);
       expect(SubscribersCheck.missText(r.missing.firstWhere((m) => m.sub.username == 'x.q')), 'شركته تحتاج VPN');
     });
 
