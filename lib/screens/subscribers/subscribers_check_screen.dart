@@ -500,7 +500,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                 key: const ValueKey('subs-check-progress-side'),
                 textDirection: p.running ? TextDirection.ltr : null,
                 style: AppType.label(color: p.running ? AppColors.textHi : AppColors.textMid)
-                    .copyWith(fontSize: 12, fontWeight: p.running ? FontWeight.w700 : FontWeight.w500)),
+                    .copyWith(fontSize: 12.5, fontWeight: p.running ? FontWeight.w700 : FontWeight.w500)),
           ],
         ]),
         if (p.running || done) ...[
@@ -586,11 +586,11 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             const SizedBox(width: Sp.xs),
             Text(c.labelFor(running: _busy),
                 style: AppType.label(color: on ? AppColors.textHi : AppColors.textMid)
-                    .copyWith(fontSize: 12, fontWeight: on ? FontWeight.w700 : FontWeight.w600)),
+                    .copyWith(fontSize: 11.5, fontWeight: on ? FontWeight.w700 : FontWeight.w600)),
             const SizedBox(width: Sp.x6),
             Text(formatIQD(n),
                 style: AppType.label(color: on ? AppColors.textHi : AppColors.textBody)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
+                    .copyWith(fontSize: 11.5, fontWeight: FontWeight.w700)),
           ]),
         ),
       ),
