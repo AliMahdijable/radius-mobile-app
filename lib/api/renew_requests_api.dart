@@ -316,12 +316,38 @@ class RenewRequestsState {
   static Future<void>? _inflight;
   static String? _lastInboxId;
 
+  /// متى سُئلت القائمة المنشورة — ما وصل الصندوقَ قبله من إشعارات الطلبات حالُه فيها ([inboxDuplicates]).
+  static DateTime? _countsAsOf;
+
+  /// الشركة التي تعرض الحال طلباتها (المفتوحة، كما في بيانات دفعها `company_admin_id`).
+  static String? _adminId;
+
   static const ttl = Duration(minutes: 2);
   static const _accessTtl = Duration(minutes: 10);
   static const _cooldown = Duration(seconds: 20);
 
   static bool get on => gate.value?.on ?? false;
   static int get pending => on ? gate.value!.pending : 0;
+
+  /// إشعارات طلبات تجديدٍ غير مقروءة في الصندوق يعدّها [pending] أصلاً — تُطرح من رقم الجرس (`TopActions`) فيُعدّ كلّ طلبٍ مرّةً واحدة
+  /// (مراجعة 3.0.18 — قاعدة التذاكر نفسها، `TicketsState.inboxDuplicates`: طلبٌ جديد والتطبيق مفتوح كان ٢ — إشعاره غير المقروء
+  /// والطلب). المعدود: إشعارٌ لطلبٍ بانتظارك الآن، أو وصل قبل آخر سؤالٍ للقائمة فحاله فيها (بانتظارك ⇒ معدود، قُبل أو رُفض أو
+  /// فُعّل ⇒ لا ينتظرك). وما سواه يُعدّ كأيّ إشعار: طلبٌ جديد لم تُقرأ القائمة بعده (حتى تُقرأ — فلا يتأخّر الرقم ولا يتضاعف)، أو
+  /// لشركةٍ أخرى («إشعارات كلّ شركاتي» — الجرس لطلبات المفتوحة وحدها)، أو والقسم مقفلٌ له.
+  static int get inboxDuplicates {
+    if (!on) return 0;
+    final waiting = {for (final r in gate.value!.items) if (r.isPending) r.id};
+    final asOf = _countsAsOf;
+    var n = 0;
+    for (final x in InboxService.all) {
+      if (x.isRead || x.data['type'] != 'renew_request') continue;
+      final company = (x.data['company_admin_id'] ?? '').trim();
+      if (company.isNotEmpty && company != _adminId) continue;
+      final id = int.tryParse(x.data['request_id'] ?? '');
+      if ((id != null && waiting.contains(id)) || (asOf != null && !x.receivedAt.isAfter(asOf))) n++;
+    }
+    return n;
+  }
 
   static Future<void> ensureFresh({bool force = false}) {
     final running = _inflight;
@@ -344,6 +370,13 @@ class RenewRequestsState {
 
   static Future<void> _fetch(int epoch, bool force) async {
     final now = DateTime.now();
+    String? adminId;
+    try {
+      adminId = (await AuthStorage.readAdminId())?.trim();
+    } catch (_) {
+      adminId = null;
+    }
+    if (epoch != _epoch) return;
     var acc = _access;
     final accAt = _accessAt;
     if (force || acc == null || accAt == null || now.difference(accAt) >= _accessTtl) {
@@ -363,6 +396,7 @@ class RenewRequestsState {
       gate.value = RenewSnapshot(access: acc);
       return;
     }
+    final asked = DateTime.now();
     final l = await RenewRequestsApi.list();
     if (epoch != _epoch) return;
     if (l == null) {
@@ -371,6 +405,8 @@ class RenewRequestsState {
     }
     _fetchedAt = DateTime.now();
     _failedAt = null;
+    _countsAsOf = asked;
+    _adminId = adminId;
     gate.value = RenewSnapshot(access: acc, items: sortOpenFirst(l.items), pending: l.pending, accepted: l.accepted);
   }
 
@@ -406,18 +442,22 @@ class RenewRequestsState {
     _access = null;
     _accessAt = null;
     _inflight = null;
+    _countsAsOf = null;
+    _adminId = null;
     gate.value = null;
     RenewRequestsApi.clearImages();
   }
 
   @visibleForTesting
-  static void debugSet(RenewSnapshot? s) {
+  static void debugSet(RenewSnapshot? s, {String? adminId}) {
     _epoch++;
     _inflight = null;
     _failedAt = null;
     _access = s?.access;
     _accessAt = s == null ? null : DateTime.now();
     _fetchedAt = s == null ? null : DateTime.now();
+    _countsAsOf = _fetchedAt;
+    _adminId = adminId;
     gate.value = s;
   }
 
