@@ -5,6 +5,8 @@
 //   F19 وصلة RouterOS وضعها لم يُقرأ (الخادم بلا ap، حزمة wifi) بطرفٍ واحد ⇒ إشارة صفّه لا «إشارة الوصلة ما انقرت».
 //   F2  «كل الشركات»: سكتر الخادم بلا ap وradio/reg_ok وقائمةٍ فارغة ⇒ «لم يُقرأ» ما لم يقل إنّ راديوه يعمل (ru)؛
 //       و`ru:false` ⇒ «الراديو لا يعمل» / «الوصلة مقطوعة» كقراءة موبايلك.
+//   F11 مدير CAPsMAN v1 (واجهات «cap» بأسمائها الافتراضيّة) ⇒ جدوله يُسأل، وأجاب ⇒ «راوتر · سليم» بإشارات عملائه
+//       (rx-signal لا «0 dBm»)؛ ولم يُجب ⇒ «لم يُقرأ».
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -467,6 +469,52 @@ void main() {
       final idle = remote(dev(48, brand: 'mikrotik', protocol: 'api'), v('$head"ru":true,$tail'));
       expect(texts(idle), ['ما عليه أحد الآن']);
       expect(idle.state, CheckState.ok);
+    });
+  });
+
+  group('F11 مدير CAPsMAN v1: جدول عملاء الـCAP يُسأل بنوع واجهاته، وما قُرئ يُحكم به', () {
+    const caps = '/caps-man/registration-table/print';
+    Map<String, Object> manager(Object table) => {
+          '/interface/print': [
+            {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+            {'name': 'cap1', 'type': 'cap', 'running': 'true', 'disabled': 'false'},
+            {'name': 'cap2', 'type': 'cap', 'running': 'true', 'disabled': 'false'},
+          ],
+          '/interface/wireless/print': <Map<String, String>>[],
+          caps: table,
+        };
+    final rows = [
+      {'interface': 'cap1', 'mac-address': 'AA:BB:CC:00:01:01', 'rx-signal': '-63', 'uptime': '2h'},
+      {'interface': 'cap2', 'mac-address': 'AA:BB:CC:00:01:02', 'rx-signal': '-70', 'uptime': '5m'},
+    ];
+
+    test('🚨 مديرٌ «راوتر» بواجهتَي cap1 وcap2 وجدوله أجاب ⇒ «راوتر · سليم» بعميلَيه وإشارتيهما لا «لم يُقرأ» دائم',
+        () async {
+      final d = dev(51, type: 'router', brand: 'mikrotik', protocol: 'api');
+      final r = await judgeRos(d, manager(rows));
+      expect(r.role, CheckRole.router);
+      expect(texts(r), isEmpty);
+      expect(r.state, CheckState.ok);
+      MikrotikApi.channelFactory =
+          (route, ip, port, user, pass, timeout) => RosReplies({...rosResource, ...manager(rows)});
+      final s = await MikrotikApi.fetchStatsFor(ip: d.ip, protocol: 'api', creds: const {'user': 'admin', 'pass': 'x'});
+      final p = DeviceVitals.mikrotikResult(d, s, null, detailed: true);
+      expect(p.detail.glance.peersKnown, isTrue);
+      expect([for (final c in p.detail.peers) c.signal], [-63, -70]);
+    });
+
+    test('جدوله انتهت مهلته أو غائب ⇒ «وضعه اللاسلكيّ ومشتركوه ما انقرأوا» — لا «سليم» من قراءةٍ ناقصة', () async {
+      for (final table in <Object>[TimeoutException('caps-man'), MikrotikException('no such command prefix')]) {
+        final r = await judgeRos(dev(52, type: 'router', brand: 'mikrotik', protocol: 'api'), manager(table));
+        expect(r.state, CheckState.unread, reason: '$table');
+        expect(texts(r), ['وضعه اللاسلكيّ ومشتركوه ما انقرأوا'], reason: '$table');
+      }
+    });
+
+    test('صفّ CAPsMAN بـrx-signal ⇒ إشارته لا «0 dBm»', () {
+      final c = MikrotikWirelessClient.fromApiMap(
+          const {'interface': 'cap1', 'mac-address': 'AA:BB:CC:00:01:01', 'rx-signal': '-63'});
+      expect(c.signalStrength, -63);
     });
   });
 }

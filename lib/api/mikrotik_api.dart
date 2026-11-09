@@ -812,17 +812,19 @@ class MikrotikApi {
         }
       }
     }
-    // CAPsMAN: نضيفه فقط لو الجهاز يبدو manager (اسم "capsman" في
-    // interfaces، أو مسار /caps-man موجود مع wireless section null).
-    // بدون هذا: كل جهاز عادي يهدر 6s على /caps-man غير الموجود.
-    final looksLikeCapsMan = interfaceRows
-        .any((i) => (i['name'] ?? '').toLowerCase().contains('capsman'));
+    // CAPsMAN: نضيفه فقط لو الجهاز يبدو manager — بدون هذا: كل جهاز عادي يهدر 6s على /caps-man غير الموجود.
+    // مراجعة 180: راديوات الـCAP البعيدة واجهاتٌ نوعها «cap» في /interface/print (أسماؤها الافتراضيّة cap1…capN،
+    // بلا «capsman» غالباً — والاسم احتياط). أجاب جدوله ⇒ [MikrotikStats.capsRead]: عملاؤها مقروءون لا «لم يُقرأ» دائم.
+    final looksLikeCapsMan = interfaceRows.any((i) =>
+        (i['type'] ?? '').toLowerCase() == 'cap' || (i['name'] ?? '').toLowerCase().contains('capsman'));
+    var capsRead = false;
     if (looksLikeCapsMan) {
       try {
         final regs = await ch
             .query(['/caps-man/registration-table/print']).timeout(
                 const Duration(seconds: 8));
         wirelessClients.addAll(regs);
+        capsRead = true;
         if (kDebugMode) {
           debugPrint(
               '🟢 [mikrotik] caps-man reg-table → ${regs.length} clients');
@@ -896,6 +898,7 @@ class MikrotikApi {
     // ═══ Tier 2 كامل — يُرجع النسخة النهائيّة ═══
     return tier1.copyWith(
       clientsRead: clientsRead,
+      capsRead: capsRead,
       wirelessInterfaces:
           wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
       w60gLinks: w60gLinks,
@@ -1200,6 +1203,10 @@ class MikrotikStats {
   /// false ⇒ لا واجهات تُبنى، و«المنافذ ما انقرت». الـAPI يرمي إن لم يُقرأ `/interface/print` — هناك true دائماً.
   final bool portsRead;
 
+  /// جدول تسجيل CAPsMAN (`/caps-man/registration-table/print`) أجاب — عملاء واجهات «cap» (راديوات الـCAP البعيدة
+  /// على مديرها) مقروءون، فلا تبقى «مجهولة» (مراجعة 180). false افتراضاً: لا يُدّعى ما لم يُسأل.
+  final bool capsRead;
+
   const MikrotikStats({
     required this.cpuLoad,
     required this.memUsedPercent,
@@ -1229,6 +1236,7 @@ class MikrotikStats {
     this.memKnown = true,
     this.clientsRead = true,
     this.portsRead = true,
+    this.capsRead = false,
   });
 
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
@@ -1270,6 +1278,7 @@ class MikrotikStats {
     List<MikrotikW60gLink>? w60gLinks,
     bool? clientsRead,
     bool? portsRead,
+    bool? capsRead,
   }) =>
       MikrotikStats(
         cpuLoad: cpuLoad,
@@ -1300,6 +1309,7 @@ class MikrotikStats {
         memKnown: memKnown,
         clientsRead: clientsRead ?? this.clientsRead,
         portsRead: portsRead ?? this.portsRead,
+        capsRead: capsRead ?? this.capsRead,
       );
   int get downInterfacesCount =>
       interfaces.where((i) => !i.running && !i.disabled).length;
@@ -1514,8 +1524,8 @@ class MikrotikWirelessClient {
       // RouterOS 7 wifi package أحياناً يستعمل `mac` بدل `mac-address`.
       mac: j['mac-address'] ?? j['mac'] ?? '',
       iface: j['interface'] ?? '',
-      // RX signal — wireless: `signal-strength`، wifi7+: `signal`.
-      signalStrength: _parseSignal(j['signal-strength'] ?? j['signal']),
+      // RX signal — wireless: `signal-strength`، wifi7+: `signal`، CAPsMAN: `rx-signal` (كان «0 dBm» — مراجعة 180).
+      signalStrength: _parseSignal(j['signal-strength'] ?? j['signal'] ?? j['rx-signal']),
       // TX signal — wireless: `tx-signal-strength`، wifi7+: `tx-signal`.
       txSignalStrength: _parseSignal(j['tx-signal-strength'] ?? j['tx-signal']),
       // SNR — wireless: `signal-to-noise`، wifi7+: `snr` أحياناً.

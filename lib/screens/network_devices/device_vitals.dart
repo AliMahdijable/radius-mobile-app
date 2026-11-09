@@ -827,9 +827,16 @@ class DeviceVitals {
     // SwOS (CSS/netPower Lite) سويجٌ لا لاسلكيّ له أصلاً — واجهاتٌ لم تُقرأ لا تجعله «راديو مجهولاً»
     final swos = s.version.startsWith('SwOS');
     final radio = !swos && (s.interfaces.isEmpty || radioIfs.isNotEmpty);
-    // راديو بالطبقة الأولى لا يغطّيه صفٌّ لاسلكيّ مقروء ولا وصلة 60 — حزمةٌ لا يسألها القارئ (wifiwave2، CAPsMAN «cap»): عملاؤه ووضعه
-    // مجهولة لا «لا أحد» (المراجعة الثانية)
-    final covered = {for (final w in s.wirelessInterfaces) w.name, for (final l in s.w60gLinks) l.iface};
+    // راديو بالطبقة الأولى لا يغطّيه صفٌّ لاسلكيّ مقروء ولا وصلة 60 — حزمةٌ لا يسألها القارئ (wifiwave2، أو CAPsMAN
+    // «cap» لم يُجب جدوله): عملاؤه ووضعه مجهولة لا «لا أحد» (المراجعة الثانية)
+    final covered = {
+      for (final w in s.wirelessInterfaces) w.name,
+      for (final l in s.w60gLinks) l.iface,
+      // CAPsMAN v1: واجهات «cap» على مديرها يغطّيها جدول تسجيله حين أجاب (مراجعة 180 — كانت «لم يُقرأ» دائماً)
+      if (s.capsRead)
+        for (final i in radioIfs)
+          if (i.type.toLowerCase() == 'cap') i.name,
+    };
     final uncovered = detailed && s.clientsRead && radioIfs.any((i) => !covered.contains(i.name));
     // مقروءٌ ومفعّل ولا يعمل: محطّةٌ فقدت نقطتها، أو نقطة وصولٍ راديوها لا يشتغل (المراجعة الثانية). الحال من `/interface/print`
     // (الطبقة الأولى — running فيها دائماً) لا من صفوف قوائم اللاسلكيّ (قائمةٌ بلا running كانت ستُقرأ «طافٍ» لراديو شغّال)
