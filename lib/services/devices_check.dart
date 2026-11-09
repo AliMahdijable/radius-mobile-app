@@ -179,6 +179,7 @@ class DeviceCheckReport {
     this.portsTotal,
     this.onusOnline,
     this.onusTotal,
+    this.lightsWanted,
     this.memo,
   });
 
@@ -203,6 +204,9 @@ class DeviceCheckReport {
   final List<CheckPort> ports;
   final int? portsUp, portsTotal;
   final int? onusOnline, onusTotal;
+
+  /// أولت: كم ONU متّصلة طُلب ضوؤها — أكثر من [subs] المقروءة ⇒ «الضوء n من N» (٩ نوفمبر).
+  final int? lightsWanted;
 
   /// للحفظ والمقارنة بالفحص التالي.
   final CheckMemo? memo;
@@ -502,7 +506,16 @@ class DevicesCheck {
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
       if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON طافي: ${downPons.join('، ')}'));
-      // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر
+      // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
+      // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
+      final wanted = detail.onuLightsWanted;
+      if (wanted != null && wanted > 0 && detail.onuLights.length < wanted) {
+        f.add(CheckFinding(
+            CheckLevel.info,
+            detail.onuLights.isEmpty
+                ? 'ضوء المشتركين ما انقرأ هالمرّة'
+                : 'الضوء: قُرئ ${detail.onuLights.length} من $wanted — الباقي ما لحق'));
+      }
       if (detail.onuLights.isNotEmpty) {
         subsKnown = true;
         subs = [
@@ -623,6 +636,7 @@ class DevicesCheck {
       portsTotal: phys.isEmpty ? null : phys.length,
       onusOnline: g.onusOnline,
       onusTotal: g.onusTotal,
+      lightsWanted: role == CheckRole.olt ? detail.onuLightsWanted : null,
       memo: CheckMemo(
         ports: portsCountsOnly ? (prev?.ports ?? const {}) : memoPorts,
         peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,

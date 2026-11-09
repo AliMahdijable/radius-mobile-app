@@ -10,6 +10,9 @@ import 'package:rad_mysvcs/api/bdcom_epon.dart';
 import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
+import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
+import 'package:rad_mysvcs/api/olt_profile.dart';
+import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
@@ -20,6 +23,7 @@ import 'package:rad_mysvcs/theme/colors.dart';
 
 import 'support/app_fonts.dart';
 import 'support/device_cards_fixture.dart';
+import 'support/fake_snmp_agent.dart';
 
 /// «البطاقات الكبيرة» بقسم الأجهزة (المالك ٣١ أكتوبر: «نظرة عامه ع الاجهز نلغيها ونستبدل بدالها تغير نوع العرض… كارتات كبار
 /// بيها المعلومات المهمّة وملوّنة… بدقّة»): أرقام البطاقة من مسارات القراءة الحقيقيّة (ميكروتك سكتراً ومحطّةً، والأولت)، دور
@@ -87,6 +91,62 @@ void main() {
       expect([for (final f in rep.findings) f.text], ['قائمة مشتركيه ما انقرت']);
       expect(rep.state, CheckState.unread);
       expect(rep.memo!.peers, 6);
+    });
+
+    test('٩ نوفمبر: الأولت — الحكم من البنية فوراً، والضوء للفحص وحده بمهلته وجزئيّاً «قُرئ n من N»، والبطاقة لا تطلبه', () async {
+      // VSOL بـ١٩٥ متّصلاً (أحد أولتات الإنتاج): الضوء وحده ~٦٩ث — كان «لم يُقرأ» كلّ مرّة
+      const prof = OltProfile(vendor: OltVendor.vsol, oltLikely: true, identified: true, model: 'V1600D');
+      final onus = [
+        for (var i = 1; i <= 200; i++)
+          VsolOnu(ifIndex: i, slot: 0, ponPort: 1 + (i - 1) ~/ 50, onuId: (i - 1) % 50 + 1, online: i <= 195),
+      ];
+      VsolOltApi.debugFetch = () async => VsolOltStats(
+            uptime: const Duration(days: 3),
+            profile: prof,
+            ponPorts: [
+              for (var p = 1; p <= 4; p++)
+                VsolPonPort(index: 100 + p, slot: 0, port: p, up: true, rxBytes: 0, txBytes: 0, onuTotal: 50, onuOnline: p == 4 ? 45 : 50),
+            ],
+            onus: onus,
+          );
+      final agent = _SlowAgent({
+        for (final o in onus)
+          if (o.online) '${OltFiberReads.vsolEponOptics}.7.${o.ponPort}.${o.onuId}': snmpText('', o.ifIndex == 7 ? '-29.5' : '-21.5'),
+      });
+      DeviceVitals.snmpFor = (h, p, c) => agent;
+      DeviceVitals.resetLightsCursorForTest();
+      addTearDown(() => DeviceVitals.snmpFor = (h, p, c) => SnmpV2c(host: h, port: p, community: c));
+      final d = NetworkDevice(
+          id: 31, adminId: '1', name: 'olt', type: 'olt', brand: 'vsol', ip: '10.0.0.31', port: 161, protocol: 'snmp',
+          hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026));
+
+      // البطاقة الكبيرة/البرج (detailed بلا الضوء) ⇒ لا طلب ضوء
+      final card = await DeviceVitals.fetch(d, detailed: true);
+      expect(agent.gets, isEmpty, reason: 'البطاقة لا تعرض الضوء — كان يخنق وكيل VSOL كلّ ١٥ث');
+      expect(card.detail.onuLightsWanted, isNull);
+
+      // الفحص: مهلةٌ قصيرة ⇒ جزءٌ من الضوء، والحكم كاملٌ من البنية
+      final t0 = DateTime.now();
+      final r = await DeviceVitals.fetch(d,
+          detailed: true, withOnuLights: true, lightsUntil: DateTime.now().add(const Duration(milliseconds: 120)));
+      expect(DateTime.now().difference(t0), lessThan(const Duration(seconds: 2)));
+      expect(r.detail.onuLightsWanted, 195);
+      final n = r.detail.onuLights.length;
+      expect(n, inInclusiveRange(4, 60));
+      final rep = DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw);
+      expect(rep.state, isNot(CheckState.unread));
+      expect([rep.onusOnline, rep.onusTotal], [195, 200]);
+      expect([for (final f in rep.findings) f.text], contains('الضوء: قُرئ $n من 195 — الباقي ما لحق'));
+      expect(rep.lightsWanted, 195);
+      // الضعيف يُعدّ من المقروء وحده: ONU رقم 7 ضمن الشريحة الأولى
+      expect([for (final f in rep.findings) f.text], contains('ضوء ضعيف: 1 — من $n مشترك'));
+
+      // الفحص التالي يبدأ من حيث وقف (تناوب) — لا الشريحة نفسها
+      final asked1 = agent.gets.expand((g) => g).toSet();
+      agent.gets.clear();
+      await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, lightsUntil: DateTime.now().add(const Duration(milliseconds: 120)));
+      final asked2 = agent.gets.expand((g) => g).toSet();
+      expect(asked2.intersection(asked1), isEmpty, reason: 'الشريحة التالية');
     });
 
     test('ميكروتك بلا مجسّ حرارة ولا SwOS معالج: «—» لا صفر', () async {
@@ -543,4 +603,14 @@ MikrotikStats _mtk({required String mode, required int clients, bool temp = true
     ],
     wirelessClients: [for (var i = 1; i <= clients; i++) c(i, -36 - i + 1)],
   );
+}
+
+/// وكيل SNMP بطيء (كـVSOL: ~١٫٤ث للطلب — هنا ٢٠ مللي) لقياس الوقوف عند المهلة.
+class _SlowAgent extends FakeSnmpAgent {
+  _SlowAgent(super.data);
+  @override
+  Future<List<Varbind>> get(List<String> oids) async {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    return super.get(oids);
+  }
 }

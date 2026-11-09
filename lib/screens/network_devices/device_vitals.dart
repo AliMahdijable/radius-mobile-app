@@ -178,10 +178,14 @@ class DeviceDetail {
     this.extras = const [],
     this.glance = const DeviceGlance(),
     this.onuLights = const [],
+    this.onuLightsWanted,
   });
 
-  /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (detailed).
+  /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (`withOnuLights`).
   final List<OnuLight> onuLights;
+
+  /// كم ONU متّصلة طُلب ضوؤها (null = لم يُطلب) — أقلّ من [onuLights] المقروءة ⇒ «قُرئ n من N» لا «ضوءهم كلّه جيّد» (٩ نوفمبر).
+  final int? onuLightsWanted;
 
   final String? uptime;
   final String? firmware;
@@ -360,6 +364,17 @@ class DeviceVitals {
   /// ستّ وتنتظر مهلتها كاملةً.
   /// سبب الامتناع خارج شبكة الوكيل — البطاقة الكبيرة تعرضه سطراً ([DeviceBigCard]).
   static const offNetworkReason = 'خارج شبكتك';
+
+  /// من أين يبدأ ضوء كلّ أولت في الفحص التالي (فهرس الواجهة) — حين لم يكتمل بمهلته.
+  static final Map<int, int> _lightsFrom = {};
+
+  @visibleForTesting
+  static void resetLightsCursorForTest() => _lightsFrom.clear();
+
+  /// وكيل SNMP لقراءة ضوء الأولت — يُستبدل في الاختبار.
+  @visibleForTesting
+  static SnmpV2c Function(String host, int port, String community) snmpFor =
+      (host, port, community) => SnmpV2c(host: host, port: port, community: community);
 
   static String? skipReason(NetworkDevice d) {
     // ٥ نوفمبر: خارج شبكة الوكيل لا جلسة تصل الجهاز من الموبايل — محاولاتٌ تفشل وتحجز الخانات، وتُظهر «راجع الإعدادات» لجهازٍ
@@ -547,18 +562,36 @@ class DeviceVitals {
     );
   }
 
+  /// [withOnuLights] (٩ نوفمبر — «الفحص الشامل» وحده): ضوء كلّ ONU متّصلة بعد البنية، حتى [lightsUntil] أو [isCancelled] —
+  /// والحكم من البنية نفسها ولو لم يكتمل الضوء. البطاقة الكبيرة والبرج لا يطلبانه (لا يعرضانه، وكان يخنق وكيل VSOL ٣٤–١٠٢ث).
   static Future<ProbeResult> fetch(NetworkDevice d,
-      {CounterSample? prev, bool detailed = false}) async {
-    final r = await _fetch(d, prev: prev, detailed: detailed);
+      {CounterSample? prev,
+      bool detailed = false,
+      bool withOnuLights = false,
+      DateTime? lightsUntil,
+      bool Function()? isCancelled}) async {
+    final r = await _fetch(d,
+        prev: prev,
+        detailed: detailed,
+        withOnuLights: withOnuLights,
+        lightsUntil: lightsUntil,
+        isCancelled: isCancelled);
     // «القراءات الحسّاسة» (٤ نوفمبر): ما قُرئ يُرفع للخادم — المعالج والحرارة والفولتيّة والإشارة وCCQ ([VitalsReporter]؛ لا شيء ما لم
     // تُفتح للشركة)
     VitalsReporter.instance.record(d, r.detail.glance, peers: r.detail.peers);
     return r;
   }
 
-  static Future<ProbeResult> _fetch(NetworkDevice d, {CounterSample? prev, bool detailed = false}) async {
+  static Future<ProbeResult> _fetch(NetworkDevice d,
+      {CounterSample? prev,
+      bool detailed = false,
+      bool withOnuLights = false,
+      DateTime? lightsUntil,
+      bool Function()? isCancelled}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
-    if (_isOlt(d)) return _olt(d, creds, detailed: detailed);
+    if (_isOlt(d)) {
+      return _olt(d, creds, withOnuLights: withOnuLights, lightsUntil: lightsUntil, isCancelled: isCancelled);
+    }
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
         return _mikrotik(d, creds, prev, detailed);
@@ -1070,7 +1103,8 @@ class DeviceVitals {
 ///
 /// ⚡ والحمولة لقطة أولت كاملة البنية: تُحفظ في المخزن فتُفتح اللوحة
 /// المفردة بالمشتركين ومنافذ PON فوراً، كما تُفتح لوحة ميكروتك بحمولة جدارها.
-Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool detailed = false}) async {
+Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds,
+    {bool withOnuLights = false, DateTime? lightsUntil, bool Function()? isCancelled}) async {
   final community = (creds['community'] ?? creds['pass'] ?? '').toString().trim();
   if (community.isEmpty) throw StateError('أدخل الـcommunity');
   final port = d.apiPort ?? 161;
@@ -1088,13 +1122,30 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool deta
     final c = s.profile.readsHsgqTables ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
     if (!c.isEmpty) s = s.copyWith(chassis: c);
   }
-  // «الفحص الشامل» (٦ نوفمبر — المالك: «+ الاولتي… مفروض هم تظهرهن»): ضوء كلّ ONU متّصلة بمسح عموده (قارئ شبكة الألياف نفسه)
+  // «الفحص الشامل» (٦ نوفمبر — المالك: «+ الاولتي… مفروض هم تظهرهن»): ضوء كلّ ONU متّصلة بمسح عموده (قارئ شبكة الألياف نفسه).
+  // ٩ نوفمبر (التحقيق R2): الحكم من البنية أعلاه (ثوانٍ)، والضوء خطوةٌ بعدها بما بقي من المهلة — كان داخل مهلة الـ٢٥ث نفسها،
+  // وضوء VSOL الكبير وحده ٣٤–١٠٢ث (أربع قيمٍ بالطلب ~١٫٤ث) ⇒ «لم يُقرأ» كلّ مرّة ويُرمى ما قُرئ. الآن يقف عند [lightsUntil] أو
+  // [isCancelled] بين طلبٍ وآخر ويُرجع ما قرأه، و«قُرئ n من N» يقول الباقي.
   var lights = const <OnuLight>[];
-  if (detailed) {
+  int? wanted;
+  if (withOnuLights) {
+    // تناوبٌ بين الفحوص: يبدأ من حيث وقف آخر ضوءٍ لم يكتمل — فحوصٌ متتالية تغطّي أولتاً كبيراً كلّه (كشرائح شبكة الألياف)
+    final online = [for (final o in s.onus) if (o.online) o]..sort((a, b) => a.ifIndex.compareTo(b.ifIndex));
+    wanted = online.length;
+    final from = DeviceVitals._lightsFrom[d.id] ?? 0;
+    final start = online.indexWhere((o) => o.ifIndex >= from);
+    final ordered = start <= 0 ? online : [...online.sublist(start), ...online.sublist(0, start)];
+    bool stop() => (isCancelled?.call() ?? false) || (lightsUntil != null && !DateTime.now().isBefore(lightsUntil));
     try {
-      final snmp = SnmpV2c(host: d.ip, port: port, community: community);
-      final rx = await OltFiberReads.rxColumn(snmp, s.profile, s.onus).timeout(const Duration(seconds: 25));
+      final snmp = DeviceVitals.snmpFor(d.ip, port, community);
+      final rx = wanted == 0 || stop() ? null : await OltFiberReads.rxColumn(snmp, s.profile, ordered, cancelled: stop);
       if (rx != null) {
+        final last = ordered.lastIndexWhere((o) => rx.containsKey(o.ifIndex));
+        if (rx.length >= ordered.length || last < 0 || last == ordered.length - 1) {
+          DeviceVitals._lightsFrom.remove(d.id);
+        } else if (last >= 0) {
+          DeviceVitals._lightsFrom[d.id] = ordered[last + 1].ifIndex;
+        }
         lights = [
           for (final o in s.onus)
             if (o.online && rx[o.ifIndex] != null)
@@ -1107,7 +1158,7 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool deta
       }
     } catch (_) {}
   }
-  return oltProbeResult(s, lights: lights);
+  return oltProbeResult(s, lights: lights, lightsWanted: wanted);
 }
 
 /// ضوء ONU واحدة (dBm) — لتقرير الأولت.
@@ -1120,7 +1171,7 @@ class OnuLight {
 }
 
 /// خانات بطاقة الأولت وتفصيلها من لقطةٍ واحدة — الجدار وشاشات الألياف بالحساب نفسه ([bridgeFiberVitals]).
-ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const []}) {
+ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const [], int? lightsWanted}) {
   final cpu = s.chassis?.cpuPct;
   final pct = s.onusTotal == 0 ? null : s.onusOnline * 100 / s.onusTotal;
   return ProbeResult(
@@ -1162,6 +1213,7 @@ ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const []}) {
     ],
     detail: DeviceDetail(
       onuLights: lights,
+      onuLightsWanted: lightsWanted,
       uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
       model: s.profile.model,
       ports: [

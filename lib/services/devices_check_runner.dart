@@ -206,7 +206,7 @@ class DevicesCheckRunner extends ChangeNotifier {
     Future<void> worker() async {
       while (queue.isNotEmpty && gen == _gen) {
         final d = queue.removeFirst();
-        final r = await _checkLocal(d, limits, memos[d.id], macs);
+        final r = await _checkLocal(d, limits, memos[d.id], macs, () => gen != _gen);
         if (gen != _gen) return;
         reports[d.id] = r;
         done++;
@@ -218,7 +218,8 @@ class DevicesCheckRunner extends ChangeNotifier {
     await Future.wait([for (var i = 0; i < 6; i++) worker()]);
   }
 
-  static Future<DeviceCheckReport> _checkLocal(NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs) async {
+  static Future<DeviceCheckReport> _checkLocal(
+      NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs, bool Function() cancelled) async {
     DeviceProbe? probe;
     // عبر الـVPN كلّ رحلةٍ أطول (الموبايل ⇄ الخادم ⇄ النفق) ⇒ مهلٌ أوسع
     final piped = DeviceNet.viaPipe(d.ip);
@@ -237,7 +238,14 @@ class DevicesCheckRunner extends ChangeNotifier {
     }
     final deadline = piped ? 45 : 25;
     try {
-      final p = await (debugFetch?.call(d) ?? DeviceVitals.fetch(d, detailed: true)).timeout(Duration(seconds: deadline));
+      // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
+      final p = await (debugFetch?.call(d) ??
+              DeviceVitals.fetch(d,
+                  detailed: true,
+                  withOnuLights: true,
+                  lightsUntil: DateTime.now().add(Duration(seconds: deadline - 5)),
+                  isCancelled: cancelled))
+          .timeout(Duration(seconds: deadline));
       return DevicesCheck.evaluate(
         d: d,
         alive: true,

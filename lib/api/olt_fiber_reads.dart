@@ -258,7 +258,11 @@ class OltFiberReads {
   /// ⚡ **الضوء وحده بمسح عموده** — لكلّ أولت: VSOL (EPON/GPON، فهرس المنفذ.الجهاز) وBDCOM (فهرس الواجهة). ~٧ رحلاتٍ
   /// لـ٣٠٠ جهاز بدل ٥٠ طلباً بأربع قيمٍ للجهاز؛ الإرسال والحرارة والفولتيّة لجهازٍ واحد حين يُفتح ([vsolOptics] /
   /// [BdcomEpon.readings]). `null` = العمود لم يُجب (تبقى القراءة السابقة).
-  static Future<Map<int, double>?> rxColumn(SnmpV2c snmp, OltProfile profile, Iterable<VsolOnu> onus) async {
+  ///
+  /// [cancelled] (٩ نوفمبر — «الفحص الشامل»): يُسأل بين طلبٍ وآخر في سؤال VSOL المباشر (~١٫٤ث للطلب) فيقف عند مهلته أو حين
+  /// يُغلق الفحص ويُرجع ما قُرئ حتى تلك اللحظة — لا يبقى يطرق وكيل الأولت بعد أن تُرك.
+  static Future<Map<int, double>?> rxColumn(SnmpV2c snmp, OltProfile profile, Iterable<VsolOnu> onus,
+      {bool Function()? cancelled}) async {
     final online = [for (final o in onus) if (o.online) o];
     if (online.isEmpty) return const {};
     final out = <int, double>{};
@@ -280,7 +284,7 @@ class OltFiberReads {
       final mine = [for (final o in online) if (o.slot == 0) o];
       if (mine.isEmpty) return const {};
       String oid(VsolOnu o) => '${o.technology == VsolPonTechnology.gpon ? vsolGponOptics : vsolEponOptics}.7.${_suffix(o)}';
-      final got = await _getAll(snmp, [for (final o in mine) oid(o)], null, perGet: _vsolOpticsPerGet, parallel: 1);
+      final got = await _getAll(snmp, [for (final o in mine) oid(o)], cancelled, perGet: _vsolOpticsPerGet, parallel: 1);
       if (got.isEmpty) return null;
       answered = true;
       for (final o in mine) {

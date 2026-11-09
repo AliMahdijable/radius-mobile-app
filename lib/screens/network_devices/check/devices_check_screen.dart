@@ -520,8 +520,11 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     final bad = r.subs.where((s) => s.bad).toList();
     final shown = open ? r.subs : bad.take(3).toList();
     final olt = r.role == CheckRole.olt;
+    // ٩ نوفمبر: ضوءٌ جزئيّ ⇒ «الضوء n من N» — «كلّه جيّد» للمقروء وحده لا يُقال عن الكلّ
+    final partial = olt && (r.lightsWanted ?? 0) > r.subs.length;
     final head = olt
-        ? 'المشتركون (ONU) ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} ضوءهم ضعيف' : ' — ضوءهم كلّه جيّد'}'
+        ? '${partial ? 'الضوء ${r.subs.length} من ${r.lightsWanted}' : 'المشتركون (ONU) ${r.subs.length}'}'
+            '${r.subsBad > 0 ? ' — ${r.subsBad} ضوءهم ضعيف' : (partial ? ' — المقروء جيّد' : ' — ضوءهم كلّه جيّد')}'
         : 'المشتركون ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} فيهم مشكلة' : ' — كلّهم بخير'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.users, head),
