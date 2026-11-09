@@ -94,6 +94,11 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
   @override
   Set<int> get slowPending => _inner?.slowPending ?? const {};
 
+  /// الهاتف يقرأ أجهزة الشركة المفتوحة وحدها — الشركات الأخرى يفحصها الخادم (دقائق لكلّ شركة) والهاتف لا يقرأ شيئاً، فلا يُمسك
+  /// قسم الأجهزة لأجلها؛ وفحصٌ لشركةٍ أخرى وحدها («افحص سكتر» صوتيّاً) لا يمسكه أبداً (المراجعة الثانية).
+  @override
+  bool get readsLocally => running && (_inner?.running ?? false);
+
   @override
   bool isRemote(int deviceId) {
     final key = companyOf[deviceId];

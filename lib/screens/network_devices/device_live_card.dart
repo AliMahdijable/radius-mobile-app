@@ -226,6 +226,8 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     if (!mounted) return;
     // «الفحص الشامل» مفتوحٌ فوق القسم ([DeviceSweep]) — لا جلسة بطاقةٍ تزاحمه على الجهاز نفسه؛ النبضة التالية بعد خروجه تقرأ (٩ نوفمبر)
     if (DeviceSweep.suspended) return;
+    // وقراءة الفحص لهذا الجهاز ما زالت جارية بعد سقفه — لا جلسة ثانية على الجهاز البطيء (المراجعة الثانية)
+    if (DeviceSweep.busy(widget.device.id)) return;
     final st = widget.vitals.value;
     final blocked = widget.blocked;
     if (blocked != null) {
@@ -285,7 +287,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
       try {
         if (!mounted) return;
         // مهمّةٌ انتظرت دورها والفحص الشامل بدأ بعدها ([DeviceSweep]) — لا جلسة تزاحمه؛ ولا تبقى البطاقة باهتة (المراجعة)
-        if (DeviceSweep.suspended) {
+        if (DeviceSweep.suspended || DeviceSweep.busy(widget.device.id)) {
           final cur = widget.vitals.value;
           widget.onVitals(VitalsState(vitals: cur.vitals, detail: cur.detail, error: cur.error, at: cur.at));
           return;

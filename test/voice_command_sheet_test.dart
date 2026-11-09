@@ -323,4 +323,51 @@ void main() {
     expect(find.byKey(const ValueKey('voice-dev-state')), findsOneWidget);
     await close(t);
   });
+
+  testWidgets('المراجعة الثانية: «افحص سكتر…» مرّتين والطريق ما زال يُسأل ⇒ فاحصٌ واحد، ولا فاحصٌ يتيم يمسك القسم بعد الإغلاق',
+      (t) async {
+    final sector = NetworkDevice(
+      id: 4, adminId: '2', name: 'سكتر الشرق', type: 'sector', brand: 'ubnt', ip: '10.9.0.4', port: 443,
+      protocol: 'https', hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026, 11, 1),
+    );
+    VoiceResolver.loadDevices = () async => [sector];
+    VpnNow.reset(); // لا طريقٌ مخبوء من اختبارٍ سابق — يُسأل الخادم فعلاً (والسؤال ينتظر)
+    final route = VpnNow.routeSource;
+    final routeGate = Completer<({bool linked, String? via})?>();
+    VpnNow.routeSource = () => routeGate.future;
+    AgentNetPresence.debugSet(NetPresence.on);
+    final slow = Completer<ProbeResult>();
+    var reads = 0;
+    DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+    DevicesCheckRunner.debugSubscribers = () async => const [];
+    DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+    DevicesCheckRunner.debugFetch = (d) {
+      reads++;
+      return slow.future;
+    };
+    DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 20), hard: const Duration(seconds: 40));
+    addTearDown(() {
+      if (!routeGate.isCompleted) routeGate.complete((linked: false, via: null));
+      if (!slow.isCompleted) slow.complete(const ProbeResult(vitals: [], counters: {}, detail: DeviceDetail()));
+      VoiceResolver.loadDevices = () async => const [];
+      VpnNow.routeSource = route;
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+    await open(t);
+    await say(t, 'افحص سكتر الشرق'); // ينتظر الطريق (نداء خادمٍ والمخبأ فارغ)
+    await say(t, 'افحص سكتر الشرق'); // كرّرها قبل أن يجيب
+    routeGate.complete((linked: false, via: null));
+    for (var i = 0; i < 10; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    expect(reads, 1, reason: 'فاحصٌ واحد يقرأ السكتر — لا جلستان على الجهاز نفسه');
+    expect(DeviceSweep.suspended, isTrue, reason: 'يجري');
+    await close(t);
+    expect(DeviceSweep.suspended, isFalse, reason: 'أُغلق ⇒ لا فاحصٌ يتيم يمسك القسم حتى ينتهي');
+  });
 }

@@ -414,16 +414,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     super.dispose();
   }
 
+  /// التطبيق ظاهرٌ أمام المستخدم — فحصٌ شامل انتهى والتطبيق بالخلفيّة (إفلاتٌ هناك) لا يعيد حلقة العشرين ثانية بالخلفيّة
+  /// (المراجعة الثانية)؛ العودة تعيدها مع جولةٍ فوريّة.
+  bool _appVisible = true;
+
   /// عند background نوقف الـtimer (توفير باتري) — عند resumed نُشغّله + probe فوري
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
+      _appVisible = false;
       _probeTimer?.cancel();
       // ⚠️ والتسخين معه: خدمةٌ صامتة لا معنى لها والتطبيق في الخلفيّة،
       // وتركُها تستنزف الشبكة والبطّاريّة بلا ناظر.
       DeviceWarmup.instance.stop();
     } else if (state == AppLifecycleState.resumed) {
+      _appVisible = true;
       _startProbeTimer();
       // probe فوري لتحديث الحالة بعد العودة
       if (_all.isNotEmpty) {
@@ -437,7 +443,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// الشاشة حيّة **ومرئيّة** — الشرطان معاً يفتحان حلقة الفحص.
   /// ⚠️ لا نمسح إن كان جدار الأجهزة مفتوحاً فوقنا — راجع [DeviceSweep].
   bool get _mayProbe =>
-      (widget.isActive?.value ?? true) && !DeviceSweep.suspended;
+      _appVisible && (widget.isActive?.value ?? true) && !DeviceSweep.suspended;
 
   /// الإمساك يُفلَت أحياناً من dispose فاحصٍ يُغلق (والشجرة مقفلة) — الاستئناف بعدها لا داخلها (المراجعة: setState بشجرةٍ مقفلة
   /// في نسخ التطوير كان يترك `_probing` عالقاً).

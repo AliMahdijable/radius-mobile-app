@@ -171,6 +171,10 @@ class DevicesCheckRunner extends ChangeNotifier {
   /// كم جهازاً لم يُقرأ هذه المرّة («لم يُقرأ» أو من آخر قراءة) — بلا المؤقّت الجاري.
   int get unreadCount => reports.values.where(_needsRead).length;
 
+  /// الهاتف نفسه يقرأ الأجهزة الآن (من شبكتك أو عبر الممرّ) — [CheckSectionHold] يمسك القسم بهذا لا بـ[running]: «كل الشركات»
+  /// تفحص الشركات الأخرى على الخادم دقائق والهاتف لا يقرأ شيئاً (المراجعة الثانية).
+  bool get readsLocally => running;
+
 
   Future<void> _runFor(List<NetworkDevice> list) async {
     if (running) return;
@@ -341,6 +345,8 @@ class DevicesCheckRunner extends ChangeNotifier {
     var rd = _inflight[d.id];
     if (rd == null) {
       final fresh = rd = _Read();
+      // بطاقته والتسخين والبرج لا يفتحون عليه جلسةً ما دامت جارية — ولو انتهت الجولة وفُكّ الإمساك (المراجعة الثانية)
+      DeviceSweep.readStarted(d.id);
       // ميكروتك: الطبقة الأولى (الموارد والصحّة والمنافذ) حين تصل — إن تأخّر الباقي يُحكم بها وعملاؤه «لم تُقرأ».
       // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة الأولى) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
       final read = debugFetch?.call(d) ??
@@ -354,6 +360,7 @@ class DevicesCheckRunner extends ChangeNotifier {
       _inflight[d.id] = fresh;
       unawaited(fresh.outcome.whenComplete(() {
         if (identical(_inflight[d.id], fresh)) _inflight.remove(d.id);
+        DeviceSweep.readEnded(d.id);
       }));
     }
     final outcome = rd.outcome;
@@ -660,10 +667,11 @@ class CheckSectionHold {
   bool _held = false;
 
   void _sync() {
-    if (run.running && !_held) {
+    final reading = run.readsLocally;
+    if (reading && !_held) {
       _held = true;
       DeviceSweep.acquire();
-    } else if (!run.running && _held) {
+    } else if (!reading && _held) {
       _held = false;
       DeviceSweep.release();
     }

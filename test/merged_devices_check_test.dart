@@ -10,6 +10,7 @@ import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:rad_mysvcs/services/merged_devices_check.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
@@ -142,6 +143,66 @@ void main() {
     expect(r.reports[101]!.state, CheckState.ok, reason: 'كانت تبقى «لم يُقرأ» — المستمع فُكّ بانتهاء الجولة');
     expect(r.reports[101]!.cpu, 4);
     r.dispose();
+  });
+
+  test('المراجعة الثانية: القسم يُمسك ما دام الهاتف يقرأ المفتوحة — لا طول فحص الخادم للشركات الأخرى، ولا أبداً لشركةٍ أخرى وحدها',
+      () async {
+    expect(DeviceSweep.suspended, isFalse);
+    final openGate = Completer<void>();
+    final serverGate = Completer<void>();
+    DevicesCheckRunner.debugProbe = (d) async {
+      await openGate.future;
+      return (status: 'offline', responseMs: null, packetLoss: 100.0, serviceOk: null);
+    };
+    MergedDevicesCheckRunner.debugPoll = (c, id) async {
+      await serverGate.future; // فحص الخادم لشركةٍ أخرى — دقائق
+      return (done: true, progress: null, result: results[c.key]);
+    };
+    addTearDown(() {
+      if (!openGate.isCompleted) openGate.complete();
+      if (!serverGate.isCompleted) serverGate.complete();
+    });
+    Future<void> tick() => Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final r = MergedDevicesCheckRunner(parts(), openViaVpn: false);
+    final hold = CheckSectionHold(r);
+    final f = r.run();
+    await tick();
+    expect(DeviceSweep.suspended, isTrue, reason: 'الهاتف يقرأ أجهزة المفتوحة');
+    openGate.complete();
+    for (var i = 0; i < 50 && r.reports[101] == null; i++) {
+      await tick();
+    }
+    await tick();
+    expect(r.running, isTrue, reason: 'الجزيرة ما زالت تُفحص على الخادم');
+    expect(DeviceSweep.suspended, isFalse, reason: 'الهاتف لا يقرأ شيئاً الآن — جولة الحال والتنبيهات تعود');
+    serverGate.complete();
+    await f;
+    hold.dispose();
+    r.dispose();
+
+    // «افحص سكتر» لجهاز شركةٍ أخرى: فاحصٌ بجزءٍ بعيدٍ وحده — لا يمسك القسم لحظةً
+    final serverGate2 = Completer<void>();
+    MergedDevicesCheckRunner.debugPoll = (c, id) async {
+      await serverGate2.future;
+      return (done: true, progress: null, result: results[c.key]);
+    };
+    addTearDown(() {
+      if (!serverGate2.isCompleted) serverGate2.complete();
+    });
+    final solo = MergedDevicesCheckRunner([
+      MergedCheckPart(company: _b, devices: [_d(202, 'jt:22', 'سكتر الجزيرة', ip: '192.168.88.20', type: 'sector')])
+    ], openViaVpn: false);
+    final h2 = CheckSectionHold(solo);
+    final f2 = solo.run();
+    await tick();
+    expect(solo.running, isTrue);
+    expect(DeviceSweep.suspended, isFalse);
+    serverGate2.complete();
+    await f2;
+    h2.dispose();
+    solo.dispose();
+    expect(DeviceSweep.suspended, isFalse);
   });
 
   test('كلّ شركةٍ بطريقها: المفتوحة محلّيّاً، والجزيرة عبر VPN شركتها، وايرث لنك بلا طريق تُسمّى', () async {

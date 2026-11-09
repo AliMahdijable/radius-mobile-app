@@ -43,6 +43,10 @@ class DeviceWarmup {
   final List<NetworkDevice> _queue = [];
   final Set<int> _done = {};
 
+  /// جولة السلسلة الحاليّة — [stop] يرفعها، فسلسلةٌ كانت تنتظر قراءتها لا تُكمل بجانب سلسلةٍ بدأت بعد [start] جديد
+  /// (المراجعة الثانية: تبديل النافذة على الحاسبة وقراءةٌ جارية كانا يتركان سلسلتين ⇒ جلستين معاً).
+  int _gen = 0;
+
   bool get isRunning => _running;
   int get remaining => _queue.length;
 
@@ -79,6 +83,7 @@ class DeviceWarmup {
 
   void stop() {
     _running = false;
+    _gen++;
     _timer?.cancel();
     _timer = null;
     _queue.clear();
@@ -108,6 +113,7 @@ class DeviceWarmup {
 
   Future<void> _tick() async {
     if (!_running) return;
+    final gen = _gen;
     if (_queue.isEmpty) {
       // انتهى الطابور — نتوقّف ولا ندور فارغين.
       _running = false;
@@ -130,6 +136,12 @@ class DeviceWarmup {
     }
 
     final d = _queue.removeAt(0);
+    // قراءة الفحص الشامل له جارية بعد سقفه ⇒ آخر الطابور، لا جلسة ثانية الآن (المراجعة الثانية)
+    if (DeviceSweep.busy(d.id)) {
+      _queue.add(d);
+      _timer = Timer(gap, _tick);
+      return;
+    }
     _done.add(d.id);
 
     // ⚠️ **ننتظر اكتمالها** قبل التالي.
@@ -141,8 +153,8 @@ class DeviceWarmup {
     final done = Completer<void>();
     DeepProbeScheduler.instance.submit(_WarmOwner(d.id), () async {
       try {
-        // انتظرت دورها والفحص الشامل بدأ بعدها — تعود للطابور بلا جلسة (المراجعة)
-        if (DeviceSweep.suspended) {
+        // انتظرت دورها والفحص الشامل بدأ بعدها (أو قراءته لهذا الجهاز جارية) — تعود للطابور بلا جلسة (المراجعة)
+        if (DeviceSweep.suspended || DeviceSweep.busy(d.id)) {
           _done.remove(d.id);
           _queue.insert(0, d);
           return;
@@ -176,7 +188,8 @@ class DeviceWarmup {
         .timeout(DeepProbeScheduler.jobTimeout + const Duration(seconds: 5))
         .catchError((_) {});
 
-    if (!_running) return;
+    // أُوقف ثمّ بدأ من جديد وهي تنتظر ⇒ السلسلة الجديدة تكمل وحدها
+    if (!_running || gen != _gen) return;
     _timer = Timer(gap, _tick);
   }
 }

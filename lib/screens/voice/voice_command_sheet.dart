@@ -92,6 +92,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
 
   /// «افحص سكتر فلان» يمسك قسم الأجهزة ما دام يجري — كالفحص الشامل (المراجعة).
   CheckSectionHold? _devHold;
+
+  /// جولة «افحص سكتر» — طلبٌ ثانٍ للجهاز نفسه وهو ينتظر الطريق لا يترك فاحصين (الأوّل يتيمٌ يمسك القسم) — المراجعة الثانية.
+  int _devGen = 0;
   String? _devNote;
   bool _devViaVpn = false;
 
@@ -126,6 +129,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   }
 
   void _clearChecks() {
+    _devGen++;
     _subCheck?.removeListener(_changed);
     _subCheck?.dispose();
     _subCheck = null;
@@ -160,6 +164,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   /// «افحص سكتر فلان»: فحص هذا الجهاز وحده بطريقه — المفتوحة من شبكتك (أو عبر VPN بوضعه/خارج شبكتك)، وجهاز شركةٍ أخرى عبر
   /// VPN شركته (كـ«الفحص الشامل» بـ«كل الشركات»).
   Future<void> _startDeviceCheck(NetworkDevice d) async {
+    final token = ++_devGen;
     _devHold?.dispose();
     _devHold = null;
     _devRun?.removeListener(_changed);
@@ -191,7 +196,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       } catch (_) {
         viaVpn = VpnNow.mode.value;
       }
-      if (!mounted || _dev?.id != d.id) return;
+      if (!mounted || token != _devGen || _dev?.id != d.id) return;
       if (!viaVpn && AgentNetPresence.isOff) {
         setState(() => _devNote = 'خارج شبكتك — اربط VPN حتى يُفحص الجهاز عن بُعد');
         return;

@@ -21,6 +21,8 @@ import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
+import 'package:rad_mysvcs/services/device_warm_service.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:rad_mysvcs/services/merged_devices_check.dart';
@@ -575,6 +577,36 @@ void main() {
       await again;
       expect(run.reports[91]!.readMs, greaterThanOrEqualTo(took), reason: 'من بدء القراءة الجارية (≥ ${took}ms)');
       run.dispose();
+    });
+
+    test('🚨 بعد السقف: قراءة الجهاز المسقوف «جارية» للقسم (بطاقته والتسخين والبرج لا يفتحون عليه جلسةً) حتى تنتهي', () async {
+      DeviceSweep.resetBusyForTest();
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) => late.future;
+      final run = DevicesCheckRunner([dev(92)], viaVpn: false);
+      final hold = CheckSectionHold(run);
+      await run.run();
+      expect(run.running, isFalse);
+      expect(DeviceSweep.suspended, isFalse, reason: 'الإمساك انتهى بانتهاء الجولة');
+      expect(DeviceSweep.busy(92), isTrue, reason: 'وقراءته ما زالت جارية');
+      late.complete(const ProbeResult(vitals: [], counters: {}, detail: DeviceDetail(glance: DeviceGlance(cpu: 3, uptimeSec: 86400))));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(DeviceSweep.busy(92), isFalse);
+      hold.dispose();
+      run.dispose();
+    });
+  });
+
+  group('٩ فحص أجهزة المشتركين بالخلفيّة', () {
+    test('يتنحّى ما دام «الفحص الشامل» يجري (موجته بعمّالها الـ١٢ وإعادة القياس) ويعود بعده', () {
+      expect(DeviceWarmService.debugPaused, isFalse);
+      DeviceSweep.acquire();
+      addTearDown(() {
+        if (DeviceSweep.suspended) DeviceSweep.release();
+      });
+      expect(DeviceWarmService.debugPaused, isTrue);
+      DeviceSweep.release();
+      expect(DeviceWarmService.debugPaused, isFalse);
     });
   });
 }
