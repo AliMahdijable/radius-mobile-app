@@ -16,8 +16,12 @@ import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_live_card.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
+import 'package:rad_mysvcs/services/device_stats_cache.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
+import 'package:rad_mysvcs/services/device_warmup.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 
@@ -147,6 +151,69 @@ void main() {
       await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, lightsUntil: DateTime.now().add(const Duration(milliseconds: 120)));
       final asked2 = agent.gets.expand((g) => g).toSet();
       expect(asked2.intersection(asked1), isEmpty, reason: 'الشريحة التالية');
+    });
+
+    testWidgets('٩ نوفمبر: الفحص الشامل مفتوح ⇒ البطاقة الكبيرة لا تقرأ جهازها؛ وبخروجه تعود بنبضتها', (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 2);
+      };
+      DeviceStatsCache.instance.clear();
+      final vitals = ValueNotifier(VitalsState.idle);
+      DeviceSweep.acquire();
+      addTearDown(() {
+        if (DeviceSweep.suspended) DeviceSweep.release();
+      });
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DeviceLiveCard(
+              device: dev(915, 'sector', 'mikrotik'),
+              vitals: vitals,
+              onVitals: (v) => vitals.value = v,
+              medianMs: null,
+              prevSample: () => null,
+              onSample: (_) {},
+              onOpen: () {},
+            ),
+          ),
+        ),
+      ));
+      await t.pump(const Duration(seconds: 40));
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0, reason: 'لا جلسة بطاقة تزاحم الفحص');
+      DeviceSweep.release();
+      await t.pump(const Duration(seconds: 16));
+      await _drain(t, () => fetches > 0);
+      expect(fetches, 1, reason: 'النبضة التالية بعد الخروج تقرأ');
+      await t.pumpWidget(const SizedBox());
+      DeviceStatsCache.instance.clear();
+    });
+
+    testWidgets('٩ نوفمبر: التسخين ينتظر ما دام الفحص الشامل مفتوحاً، ثمّ يكمل', (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 0);
+      };
+      DeviceStatsCache.instance.clear();
+      DeviceWarmup.instance.reset();
+      DeviceSweep.acquire();
+      addTearDown(() {
+        if (DeviceSweep.suspended) DeviceSweep.release();
+        DeviceWarmup.instance.reset();
+      });
+      DeviceWarmup.instance.start([dev(916, 'router', 'mikrotik')]);
+      await t.pump(const Duration(seconds: 10));
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0);
+      DeviceSweep.release();
+      await t.pump(const Duration(seconds: 4));
+      await _drain(t, () => fetches > 0);
+      expect(fetches, 1);
+      DeviceWarmup.instance.reset(); // مؤقّت الفاصل التالي — لا يبقى بعد الاختبار
+      DeviceStatsCache.instance.clear();
     });
 
     test('ميكروتك بلا مجسّ حرارة ولا SwOS معالج: «—» لا صفر', () async {
@@ -612,5 +679,13 @@ class _SlowAgent extends FakeSnmpAgent {
   Future<List<Varbind>> get(List<String> oids) async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return super.get(oids);
+  }
+}
+
+/// يدير الزمنين معاً (الوهميّ للمؤقّتات والحقيقيّ لسلسلة الطلب) حتى يتحقّق [done] أو ثانيتان.
+Future<void> _drain(WidgetTester t, bool Function() done, {int rounds = 100}) async {
+  for (var i = 0; i < rounds && !done(); i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await t.pump(const Duration(milliseconds: 20));
   }
 }

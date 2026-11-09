@@ -357,6 +357,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.isActive?.addListener(_onActiveChanged);
+    // «الفحص الشامل» فوقنا يمسك القسم ([DeviceSweep]) — نقف ونعود فور خروجه (٩ نوفمبر)
+    DeviceSweep.holders.addListener(_onActiveChanged);
     // تحديثٌ فوريّ حين يتغيّر أيّ جهازٍ من أيّ شاشة (تعديل/حذف/إضافة/منطقة).
     DeviceEvents.changes.addListener(_onDevicesChanged);
     // ٥ نوفمبر: «خارج شبكتك» مشتركٌ مع المشتركين، ونتائج «فحص عبر VPN» تلوّن حال الأجهزة
@@ -401,6 +403,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
     WidgetsBinding.instance.removeObserver(this);
     widget.isActive?.removeListener(_onActiveChanged);
+    DeviceSweep.holders.removeListener(_onActiveChanged);
     DeviceEvents.changes.removeListener(_onDevicesChanged);
     _probeTimer?.cancel();
     _vitalsTimer?.cancel();

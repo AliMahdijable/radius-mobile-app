@@ -7,6 +7,7 @@ import '../../services/vpn_now.dart';
 import '../../services/deep_probe_scheduler.dart';
 import '../../services/device_read_health.dart';
 import '../../services/device_stats_cache.dart';
+import '../../services/device_sweep_coordinator.dart';
 import 'device_vitals.dart';
 import 'widgets/device_big_card.dart';
 
@@ -223,6 +224,8 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
 
   void _kick({bool urgent = false, bool force = false}) {
     if (!mounted) return;
+    // «الفحص الشامل» مفتوحٌ فوق القسم ([DeviceSweep]) — لا جلسة بطاقةٍ تزاحمه على الجهاز نفسه؛ النبضة التالية بعد خروجه تقرأ (٩ نوفمبر)
+    if (DeviceSweep.suspended) return;
     final st = widget.vitals.value;
     final blocked = widget.blocked;
     if (blocked != null) {

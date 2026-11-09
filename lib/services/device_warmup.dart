@@ -4,6 +4,7 @@ import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
 import 'deep_probe_scheduler.dart';
 import 'device_stats_cache.dart';
+import 'device_sweep_coordinator.dart';
 
 /// تسخينٌ في الخلفيّة — يملأ [DeviceStatsCache] ما دام المدير في قسم
 /// الأجهزة، فيكون فتحُ أيّ جهازٍ فوريّاً.
@@ -122,7 +123,8 @@ class DeviceWarmup {
     //
     // الاستئذان يمنع البدء أصلاً: لا نُسخّن لجهازٍ قد يُفتح غداً بينما
     // بطاقةٌ أمام العين تنتظر رقمها الأوّل.
-    if (DeepProbeScheduler.instance.hasFirstPending) {
+    // و«الفحص الشامل» مفتوحٌ فوق القسم ([DeviceSweep]) ⇒ ننتظره — لا جلسةٌ صامتة تزاحمه (٩ نوفمبر)
+    if (DeepProbeScheduler.instance.hasFirstPending || DeviceSweep.suspended) {
       _timer = Timer(gap, _tick);
       return;
     }

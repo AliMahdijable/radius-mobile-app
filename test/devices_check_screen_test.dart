@@ -1,11 +1,14 @@
 // شاشة «الفحص الشامل» (٦ نوفمبر): تقريرٌ منفصل لكلّ جهاز — الطافي أوّلاً، والسكتر بمشتركيه، والسويج بمنافذه، والأعداد فلاتر،
 // والنقر يفتح الكلّ؛ واللقطة تُحفظ للفحص التالي. الشبكة بدائل (debugProbe/debugFetch/debugLimits).
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -171,5 +174,20 @@ void main() {
     await settle(t);
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('٩ نوفمبر: الفحص يمسك قسم الأجهزة ما دام مفتوحاً، ويفلته بالخروج (لا تزاحم على الجهاز نفسه)', (t) async {
+    expect(DeviceSweep.suspended, isFalse);
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    await settle(t);
+    expect(DeviceSweep.suspended, isTrue, reason: 'جولة الحال والبطاقات والتسخين تقف');
+    await t.pumpWidget(const SizedBox());
+    expect(DeviceSweep.suspended, isFalse, reason: 'تعود فور الخروج');
+    // وقسم الأجهزة يقف بإمساكه ويعود فور فلته (جولةٌ فوريّة لا انتظار ٢٠ث) — حارس المصدر
+    final screen = File('lib/screens/network_devices/network_devices_screen.dart').readAsStringSync();
+    expect(screen, contains('DeviceSweep.holders.addListener(_onActiveChanged)'));
+    expect(screen, contains('DeviceSweep.holders.removeListener(_onActiveChanged)'));
+    expect(screen, contains('!DeviceSweep.suspended'));
   });
 }
