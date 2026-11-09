@@ -284,6 +284,12 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
       // منها يُعيد التجمّد كاملاً. و`!mounted` داخله لا قبله للسبب نفسه.
       try {
         if (!mounted) return;
+        // مهمّةٌ انتظرت دورها والفحص الشامل بدأ بعدها ([DeviceSweep]) — لا جلسة تزاحمه؛ ولا تبقى البطاقة باهتة (المراجعة)
+        if (DeviceSweep.suspended) {
+          final cur = widget.vitals.value;
+          widget.onVitals(VitalsState(vitals: cur.vitals, detail: cur.detail, error: cur.error, at: cur.at));
+          return;
+        }
         final r = await DeviceVitals.fetch(
           widget.device,
           prev: widget.prevSample(),

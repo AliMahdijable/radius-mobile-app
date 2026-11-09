@@ -141,6 +141,12 @@ class DeviceWarmup {
     final done = Completer<void>();
     DeepProbeScheduler.instance.submit(_WarmOwner(d.id), () async {
       try {
+        // انتظرت دورها والفحص الشامل بدأ بعدها — تعود للطابور بلا جلسة (المراجعة)
+        if (DeviceSweep.suspended) {
+          _done.remove(d.id);
+          _queue.insert(0, d);
+          return;
+        }
         // ⚠️ **خفيف** لا كامل.
         //
         // 🐛 انحدارٌ أدخلتُه ٢٠٢٦-٠٩-٠٢ ثمّ كشفه سجلّ المستخدم: جعلتُ

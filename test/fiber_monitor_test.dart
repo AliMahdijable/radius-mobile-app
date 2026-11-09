@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/bdcom_epon.dart';
 import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
@@ -188,6 +189,26 @@ void main() {
   });
 
   tearDown(FiberMonitor.debugReset);
+
+  testWidgets('المراجعة: مراقبة الخلفيّة (FiberWatch بالحاسبة) تتنحّى ما دام الفحص الشامل يجري، وتعود بعده', (t) async {
+    final m = FiberMonitor.of(_dev());
+    DeviceSweep.acquire();
+    addTearDown(() {
+      if (DeviceSweep.suspended) DeviceSweep.release();
+    });
+    m.acquire(background: true);
+    for (var i = 0; i < 8; i++) {
+      await t.pump(const Duration(seconds: 10));
+    }
+    expect(m.lastOkAt, isNull, reason: 'لا قراءة للأولت والفحص يجري');
+    expect(olt.agent.gets, isEmpty);
+    DeviceSweep.release();
+    for (var i = 0; i < 4 && m.lastOkAt == null; i++) {
+      await t.pump(const Duration(seconds: 10));
+    }
+    expect(m.lastOkAt, isNotNull, reason: 'عادت بعد انتهائه');
+    m.release(background: true);
+  });
 
   test('صندوقٌ يسقط كلّه ⇒ عطلٌ واحد يُبلَّغ مرّةً بمكانه وسببه، ورجوعه ⇒ «رجع» مرّةً واحدة', () async {
     final m = FiberMonitor.of(_dev());

@@ -24,6 +24,7 @@ import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
 import 'connection_alerts.dart';
 import 'device_stats_cache.dart';
+import 'device_sweep_coordinator.dart';
 import 'devices_check.dart';
 import 'vpn_now.dart';
 
@@ -315,7 +316,8 @@ class DevicesCheckRunner extends ChangeNotifier {
     final skip = DeviceVitals.skipReason(d);
     final hard = skip == null || skip == DeviceVitals.offNetworkReason || skip == 'غير متّصل' ? null : skip;
     if (hard != null) {
-      // «الحال فقط» (٩ نوفمبر): قسمٌ وحده لا «لم يُقرأ» — لا يُقرأ أصلاً بإعداده، والسبب سطره
+      // «الحال فقط» (٩ نوفمبر): قسمٌ وحده لا «لم يُقرأ» — لا يُقرأ أصلاً بإعداده، والسبب سطره. وحاله نفسه لم يُعرف (البنك ما ردّ)
+      // ⇒ «لم يُقرأ» بسببيه — «الحال فقط» تعني حالاً معروفة (المراجعة)
       return _final(
           d,
           DevicesCheck.evaluate(
@@ -323,8 +325,8 @@ class DevicesCheckRunner extends ChangeNotifier {
               alive: alive,
               ms: probe?.responseMs,
               loss: probe?.packetLoss,
-              unreadReason: hard,
-              statusOnly: true,
+              unreadReason: alive == null ? '$hard — وحاله لم يُعرف' : hard,
+              statusOnly: alive != null,
               limits: limits,
               prev: prev),
           gen);
@@ -625,4 +627,34 @@ class _Slow {
 class _Read {
   late Future<Object> outcome;
   ProbeResult? partial;
+}
+
+/// يمسك قسم الأجهزة ([DeviceSweep]) ما دام الفحص **يجري** — لا ما دام تقريره مفتوحاً (المراجعة): بعد انتهائه تعود جولة الحال
+/// (رفع النتائج للخادم وتنبيهات الهاتف) ولو بقي المالك يقرأ التقرير؛ و«أعد قراءة غير المقروء» يمسكه من جديد. يُتخلَّص منه قبل فاحصه.
+class CheckSectionHold {
+  CheckSectionHold(this.run) {
+    run.addListener(_sync);
+    _sync();
+  }
+
+  final DevicesCheckRunner run;
+  bool _held = false;
+
+  void _sync() {
+    if (run.running && !_held) {
+      _held = true;
+      DeviceSweep.acquire();
+    } else if (!run.running && _held) {
+      _held = false;
+      DeviceSweep.release();
+    }
+  }
+
+  void dispose() {
+    run.removeListener(_sync);
+    if (_held) {
+      _held = false;
+      DeviceSweep.release();
+    }
+  }
 }

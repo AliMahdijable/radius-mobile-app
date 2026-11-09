@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -19,6 +20,7 @@ import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_live_card.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
+import 'package:rad_mysvcs/services/deep_probe_scheduler.dart';
 import 'package:rad_mysvcs/services/device_stats_cache.dart';
 import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/services/device_warmup.dart';
@@ -216,6 +218,50 @@ void main() {
       await t.pump(const Duration(seconds: 16));
       await _drain(t, () => fetches > 0);
       expect(fetches, 1, reason: 'النبضة التالية بعد الخروج تقرأ');
+      await t.pumpWidget(const SizedBox());
+      DeviceStatsCache.instance.clear();
+    });
+
+    testWidgets('المراجعة: جلسة بطاقةٍ كانت تنتظر دورها في المجدول والفحص بدأ بعدها ⇒ لا تُفتح', (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 2);
+      };
+      DeviceStatsCache.instance.clear();
+      // الخانات الستّ مشغولة ⇒ مهمّة البطاقة تنتظر
+      final block = Completer<void>();
+      for (var i = 0; i < DeepProbeScheduler.maxConcurrent; i++) {
+        DeepProbeScheduler.instance.submit(Object(), () => block.future);
+      }
+      final vitals = ValueNotifier(VitalsState.idle);
+      addTearDown(() {
+        if (!block.isCompleted) block.complete();
+        if (DeviceSweep.suspended) DeviceSweep.release();
+      });
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DeviceLiveCard(
+              device: dev(917, 'sector', 'mikrotik'),
+              vitals: vitals,
+              onVitals: (v) => vitals.value = v,
+              medianMs: null,
+              prevSample: () => null,
+              onSample: (_) {},
+              onOpen: () {},
+            ),
+          ),
+        ),
+      ));
+      await t.pump();
+      expect(vitals.value.loading, isTrue, reason: 'أُرسلت للمجدول وتنتظر');
+      DeviceSweep.acquire(); // الفحص الشامل بدأ
+      block.complete();
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0, reason: 'بدأت بعد الإمساك ⇒ لا جلسة');
+      expect(vitals.value.loading, isFalse, reason: 'ولا تبقى باهتة');
+      DeviceSweep.release();
       await t.pumpWidget(const SizedBox());
       DeviceStatsCache.instance.clear();
     });

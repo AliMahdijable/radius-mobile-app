@@ -6,7 +6,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/util/clipboard_helper.dart';
 import '../../../models/network_device.dart';
-import '../../../services/device_sweep_coordinator.dart';
 import '../../../services/devices_check.dart';
 import '../../../services/devices_check_runner.dart';
 import '../../../services/merged_devices_check.dart';
@@ -72,22 +71,24 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
 
   void _toggle(String key) => setState(() => _open.contains(key) ? _open.remove(key) : _open.add(key));
 
+  /// ٩ نوفمبر (التحقيق R3): قسم الأجهزة تحت الفحص يتوقّف **ما دام الفحص يجري** — جولة الحال وتجديد البطاقات (١٥ث) والتسخين
+  /// كانت تقرأ الأجهزة نفسها بالوقت نفسه (حتى ستّ جلسات بطاقات + ستّ للفحص على جهازٍ ضعيف) فيبطؤ ويُقال «لم يُقرأ»؛ ويعود
+  /// يتحدّث فور انتهائه ولو بقي التقرير مفتوحاً (المراجعة).
+  late final CheckSectionHold _hold;
+
   @override
   void initState() {
     super.initState();
-    // ٩ نوفمبر (التحقيق R3): قسم الأجهزة تحت الفحص يتوقّف ما دام مفتوحاً — جولة الحال وتجديد البطاقات (١٥ث) والتسخين كانت
-    // تقرأ الأجهزة نفسها بالوقت نفسه (حتى ستّ جلسات بطاقات + ستّ للفحص على جهازٍ ضعيف) فيبطؤ الجهاز ويُقال «لم يُقرأ»؛ ويعود
-    // يتحدّث فور الخروج.
-    DeviceSweep.acquire();
     // جهازٌ واحد: أقسامه مفتوحة (لا قائمة أجهزةٍ يُختصر لها)
     if (widget.single) _open.addAll(['${widget.devices.first.id}:subs', '${widget.devices.first.id}:ports']);
     _run.run();
+    _hold = CheckSectionHold(_run);
   }
 
   @override
   void dispose() {
+    _hold.dispose();
     _run.dispose();
-    DeviceSweep.release();
     super.dispose();
   }
 

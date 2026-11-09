@@ -179,19 +179,34 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('٩ نوفمبر: الفحص يمسك قسم الأجهزة ما دام مفتوحاً، ويفلته بالخروج (لا تزاحم على الجهاز نفسه)', (t) async {
+  testWidgets('المراجعة: الفحص يمسك قسم الأجهزة ما دام **يجري** — يفلته بانتهائه والتقرير مفتوح، ويمسكه ثانيةً بالإعادة', (t) async {
     expect(DeviceSweep.suspended, isFalse);
+    final slow = Completer<ProbeResult>();
+    final slow2 = Completer<ProbeResult>();
+    final base = DevicesCheckRunner.debugFetch!;
+    var failSix = true;
+    DevicesCheckRunner.debugFetch = (d) => d.id == 6 ? (failSix ? slow.future : slow2.future) : base(d);
+    addTearDown(() {
+      if (!slow.isCompleted) slow.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+      if (!slow2.isCompleted) slow2.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+    });
     await pumpSim(t, const SimVariant(390, dark: false), settle: false,
         home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
     await settle(t);
-    expect(DeviceSweep.suspended, isTrue, reason: 'جولة الحال والبطاقات والتسخين تقف');
+    expect(DeviceSweep.suspended, isTrue, reason: 'الفحص جارٍ (جهازٌ بطيء) — جولة الحال والبطاقات والتسخين تقف');
+    slow.completeError(const SocketException('Connection refused'));
+    await settle(t);
+    expect(find.text('فُحصت 6 أجهزة'), findsOneWidget);
+    expect(DeviceSweep.suspended, isFalse, reason: 'انتهى والتقرير مفتوح ⇒ القسم يعود (رفع النتائج والتنبيهات)');
+    failSix = false;
+    await t.tap(find.byKey(const ValueKey('check-rerun-unread')));
+    await t.pump();
+    expect(DeviceSweep.suspended, isTrue, reason: 'الإعادة تجري ⇒ يُمسك ثانيةً');
+    slow2.complete(_r(const DeviceDetail(glance: DeviceGlance(cpu: 5, uptimeSec: 86400))));
+    await settle(t);
+    expect(DeviceSweep.suspended, isFalse);
     await t.pumpWidget(const SizedBox());
-    expect(DeviceSweep.suspended, isFalse, reason: 'تعود فور الخروج');
-    // وقسم الأجهزة يقف بإمساكه ويعود فور فلته (جولةٌ فوريّة لا انتظار ٢٠ث) — حارس المصدر
-    final screen = File('lib/screens/network_devices/network_devices_screen.dart').readAsStringSync();
-    expect(screen, contains('DeviceSweep.holders.addListener(_onActiveChanged)'));
-    expect(screen, contains('DeviceSweep.holders.removeListener(_onActiveChanged)'));
-    expect(screen, contains('!DeviceSweep.suspended'));
+    expect(DeviceSweep.suspended, isFalse);
   });
 
   testWidgets('٩ نوفمبر: الجهاز البطيء «يقرأ…» بسطره، والرأس «بانتظار 1 جهاز بطيء…»، والنسخ متاحٌ أثناءه — ثمّ تقريره', (t) async {

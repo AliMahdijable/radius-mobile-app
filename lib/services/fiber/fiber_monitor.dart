@@ -16,6 +16,7 @@ import '../../api/vsol_olt_api.dart';
 import '../../models/fiber_network.dart';
 import '../../models/network_device.dart';
 import '../device_stats_cache.dart';
+import '../device_sweep_coordinator.dart';
 import '../olt_name_cache.dart';
 import 'fiber_band.dart';
 import 'fiber_onu.dart';
@@ -210,7 +211,8 @@ class FiberMonitor extends ChangeNotifier {
     _timer?.cancel();
     if (!running) return;
     _timer = Timer(d, () async {
-      await tick();
+      // مراقبة الخلفيّة (FiberWatch بالحاسبة) تتنحّى ما دام الفحص الشامل يجري — يقرأ الأولت نفسه وضوءه (المراجعة)؛ الشاشة الظاهرة لا
+      if (!(background && DeviceSweep.suspended)) await tick();
       if (!running) return;
       final base = background ? _bgStatusEvery : _statusEvery;
       final paced = _cost * 2;

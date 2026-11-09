@@ -967,6 +967,18 @@ void main() {
       run.dispose();
     });
 
+    test('المراجعة: بلا بيانات دخول والبنك نفسه ما ردّ ⇒ «لم يُقرأ — وحاله لم يُعرف» لا «الحال فقط»', () async {
+      DevicesCheckRunner.debugProbe = (d) async => throw const SocketException('pipe busy');
+      final noCreds = NetworkDevice(
+          id: 23, adminId: '2', name: 'كاميرا', type: 'camera', brand: 'other', ip: '10.0.0.23', port: 80,
+          hasCredentials: false, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+      final run = DevicesCheckRunner([noCreds], viaVpn: false);
+      await run.run();
+      expect(run.reports[23]!.state, CheckState.unread);
+      expect(texts(run.reports[23]!), ['بلا بيانات دخول — وحاله لم يُعرف']);
+      run.dispose();
+    });
+
     test('«أعد قراءة غير المقروء» يقرأ ما لم يُقرأ وحده — والباقي بتقريره بلا جلسةٍ ثانية', () async {
       final calls = <int, int>{};
       var fail = true;

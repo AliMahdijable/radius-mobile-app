@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/agent_alerts_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
 import 'package:rad_mysvcs/screens/network_devices/agent_alerts_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_alerts_screen.dart';
@@ -13,6 +16,7 @@ import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart'
 import 'package:rad_mysvcs/screens/top_actions.dart';
 import 'package:rad_mysvcs/services/ai_assistant_state.dart';
 import 'package:rad_mysvcs/services/device_alerts_service.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 
 import 'sim_el/sim_harness.dart';
 import 'support/ai_status_overlay.dart';
@@ -301,4 +305,72 @@ void main() {
     }
     await finish(t);
   });
+
+  testWidgets('المراجعة: الفحص الجاري يوقف جولة الحال وانتهاؤه يستأنفها فوراً؛ وإغلاقه وهو يجري لا يكسر الشجرة', (t) async {
+    var probes = 0;
+    NetworkDevicesApi.debugService = (d) async {
+      probes++;
+      return (status: 'online', responseMs: 3, packetLoss: 0.0);
+    };
+    addTearDown(() => NetworkDevicesApi.debugService = null);
+    await open(t, s1bSasOwner, routes: {
+      'GET $devicesPath': {
+        'success': true,
+        'data': [
+          {'id': 1, 'admin_id': 2, 'name': 'راوتر التوزيع', 'type': 'router', 'brand': 'mikrotik', 'ip': '10.0.0.1',
+            'port': 8728, 'has_credentials': 1, 'last_status': 'online', 'created_at': '2026-11-01T10:00:00Z'},
+        ],
+      },
+    });
+    expect(probes, greaterThan(0), reason: 'جولة الفتح');
+    final before = probes;
+    DeviceSweep.acquire(); // فحصٌ شامل بدأ فوق القسم
+    for (var i = 0; i < 7; i++) {
+      await t.pump(const Duration(seconds: 10));
+    }
+    expect(probes, before, reason: '٧٠ث بلا جولة حال والفحص يجري');
+    DeviceSweep.release(); // انتهى
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(probes, greaterThan(before), reason: 'جولةٌ فوريّة لا انتظار ٢٠ث');
+    // فاحصٌ يُغلق وهو يجري (يُفلت الإمساك من dispose والشجرة مقفلة) ⇒ لا setState داخلها
+    for (var i = 0; i < 3; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    final nav = Navigator.of(t.element(find.byType(NetworkDevicesScreen)));
+    unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const _HoldWhileShown())));
+    await t.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 5));
+    expect(DeviceSweep.suspended, isTrue);
+    nav.pop();
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(t.takeException(), isNull, reason: 'setState() داخل شجرةٍ مقفلة');
+    expect(DeviceSweep.suspended, isFalse);
+    await finish(t);
+  });
+}
+
+/// صفحةٌ تمسك القسم ما دامت ظاهرة وتفلته من dispose — كفاحصٍ أُغلق وهو يجري.
+class _HoldWhileShown extends StatefulWidget {
+  const _HoldWhileShown();
+  @override
+  State<_HoldWhileShown> createState() => _HoldWhileShownState();
+}
+
+class _HoldWhileShownState extends State<_HoldWhileShown> {
+  @override
+  void initState() {
+    super.initState();
+    DeviceSweep.acquire();
+  }
+
+  @override
+  void dispose() {
+    DeviceSweep.release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(body: SizedBox());
 }
