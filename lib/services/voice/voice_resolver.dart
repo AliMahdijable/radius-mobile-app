@@ -18,11 +18,15 @@ class VoiceMatch<T> {
 
 /// نتيجة البحث عن اسم الأمر: الأفضل أوّلاً، و[sure] حين يكون واحدٌ واضحاً بلا منافس.
 class VoiceMatches<T> {
-  const VoiceMatches(this.items, {this.error});
+  const VoiceMatches(this.items, {this.error, this.stale = false});
   final List<VoiceMatch<T>> items;
 
   /// تعذّر جلب القائمة (شبكة) — رسالةٌ للوكيل لا «ما لكيت».
   final String? error;
+
+  /// المطابقة ممّا في الذاكرة (بلا انتظار الشبكة): تُعرض فوراً، ومن عرضها يطلب الطازجة بعدها ([VoiceResolver.subscribers]
+  /// بـ`fresh`) — و«لا أحد» من قائمةٍ قديمة ليست جواباً حتى تُسأل الطازجة.
+  final bool stale;
 
   bool get isEmpty => items.isEmpty;
 
@@ -45,6 +49,23 @@ class VoiceResolver {
 
   /// بدائل الاختبار.
   static Future<List<Subscriber>?> Function() loadSubscribers = SubscribersApi.loadAllWithOnline;
+
+  /// ١١ نوفمبر (المالك: «الاوامر الصوتيه صار يتاخر هواي»): كلّ مطابقةٍ كانت تنتظر القائمة **و«المتّصلين»** معاً (المتّصلون
+  /// طلبٌ ثقيل بلا مخبأ: ثوانٍ)، وتُعاد لكلّ بديلٍ ممّا سمعه المحرّك — حتى أربع مرّات للأمر الواحد. المطابقة بالاسم لا تحتاج
+  /// حال الاتّصال: تؤخذ ممّا في الذاكرة فوراً ([knownSubscribers])، وإلّا القائمة وحدها ([loadList])، والطازجة بحال اتّصالها
+  /// تُطلب بعد عرض الكرت (`fresh`).
+  static const snapshotAge = Duration(minutes: 15);
+
+  /// «افحص المشترك»: جوابه حال اتّصاله الآن — لا يُقبل ما في الذاكرة إلّا طازجاً.
+  static const liveAge = Duration(seconds: 20);
+
+  /// آخر قائمةٍ في الذاكرة بلا طلب (≤ المهلة) — وبديل الاختبار.
+  static List<Subscriber>? Function(Duration maxAge) knownSubscribers = _known;
+  static List<Subscriber>? _known(Duration maxAge) => SubscribersApi.knownList(maxAge: maxAge);
+
+  /// القائمة وحدها بلا «المتّصلين» (مخبّأة ٤٥ث). null ⇒ قائمة الإنتاج، ومن بدّل [loadSubscribers] (اختبار) فهي قائمته.
+  static Future<List<Subscriber>?> Function()? loadList;
+  static const Future<List<Subscriber>?> Function() _prodLoad = SubscribersApi.loadAllWithOnline;
   static Future<int> Function() bigProbe = BigSubscribersApi.probe;
   static Future<List<Subscriber>> Function(String q) bigSearch = _bigSearch;
   static Future<List<NetworkDevice>> Function() loadDevices = () => NetworkDevicesApi.list();
@@ -53,7 +74,8 @@ class VoiceResolver {
   static bool Function() mergedOn = () => MergedMode.active.value;
 
   /// «كل الشركات»: مشتركو كلّ الشركات لهذا الاسم (الصغيرة من قوائمها، والكبيرة ببحثها) — كلٌّ بمفتاح شركته.
-  static Future<List<Subscriber>> Function(String q) mergedSubscribers = _mergedSubscribers;
+  static Future<List<Subscriber>> Function(String q) mergedSubscribers = _mergedDefault;
+  static const Future<List<Subscriber>> Function(String q) _mergedDefault = _mergedSubscribers;
 
   /// «كل الشركات»: أجهزة كلّ شركة بشركتها.
   static Future<List<({NetworkDevice device, VoiceDeviceCompany company})>> Function() mergedDevices = _mergedDevices;
@@ -66,6 +88,22 @@ class VoiceResolver {
   static Future<List<Subscriber>> _bigSearch(String q) async =>
       (await BigSubscribersApi.page(page: 1, size: 30, tab: 'all', query: q)).rows;
 
+  /// بحث الشركات الكبيرة لدقيقة: الأمر نفسه يُسأل مرّتين (الفوريّ ثمّ الطازج) وبدائله تتكرّر — بحثٌ واحد للاسم الواحد.
+  static final Map<String, ({DateTime at, List<Subscriber> rows})> _bigHits = {};
+  static const _bigHitsFor = Duration(seconds: 60);
+
+  static void clearCaches() => _bigHits.clear();
+
+  static Future<List<Subscriber>> _bigCached(String scope, String q, Future<List<Subscriber>> Function() search) async {
+    final key = '$scope|$q';
+    final hit = _bigHits[key];
+    if (hit != null && DateTime.now().difference(hit.at) < _bigHitsFor) return hit.rows;
+    final rows = await search();
+    if (_bigHits.length > 40) _bigHits.remove(_bigHits.keys.first);
+    _bigHits[key] = (at: DateTime.now(), rows: rows);
+    return rows;
+  }
+
   /// بحث الحساب الكبير بالنصّ كما هو ثمّ بأطول كلمة (الاسم الكامل قد لا يُطابَق حرفيّاً هناك).
   static Future<List<Subscriber>> _bigWithFallback(String q, Future<List<Subscriber>> Function(String q) search) async {
     var pool = await search(q);
@@ -76,17 +114,42 @@ class VoiceResolver {
     return pool;
   }
 
-  static Future<List<Subscriber>> _mergedSubscribers(String q) async {
-    final r = await MergedSubscribers.withSessions(await MergedSubscribers.load());
-    final pool = <Subscriber>[...r.rows];
-    // الكبيرة: لا قائمة كاملة لها هنا — بحثها الموجَّه بمفتاحها
-    for (final p in r.big) {
-      try {
-        final rows = await CompanyRoute.run(p.company.key, () => _bigWithFallback(q, _bigSearch));
-        pool.addAll(rows.map((s) => s.withCompany(p.company.key)));
-      } catch (_) {}
+  static Future<List<Subscriber>> _mergedSubscribers(String q) async => (await _mergedPool(q, fresh: true)).rows;
+
+  /// مشتركو كلّ الشركات للمطابقة. الفوريّ: آخر دمجٍ في الذاكرة (≤ [maxAge]) أو القوائم وحدها (٤٥ث لكلّ شركة، بلا جلسات
+  /// «المتّصلين» — ثقيلةٌ لكلّ شركة)؛ والطازج ([fresh]) بجلساتها كما كان. والشركات الكبيرة ببحثها الموجَّه — اثنتان معاً (كانت
+  /// واحدةً بعد واحدة)، والاسم نفسه لا يُبحث مرّتين خلال دقيقة.
+  static Future<({List<Subscriber> rows, bool stale})> _mergedPool(String q,
+      {required bool fresh, Duration maxAge = snapshotAge}) async {
+    MergedListResult r;
+    var stale = false;
+    final snap = MergedSubscribers.last.value;
+    final at = MergedSubscribers.lastAt;
+    if (fresh) {
+      r = await MergedSubscribers.withSessions(await MergedSubscribers.load());
+    } else if (snap != null && at != null && DateTime.now().difference(at) <= maxAge) {
+      r = snap;
+      stale = true;
+    } else {
+      r = await MergedSubscribers.load();
+      stale = true;
     }
-    return pool;
+    final pool = <Subscriber>[...r.rows];
+    final big = r.big;
+    var next = 0;
+    Future<void> worker() async {
+      while (next < big.length) {
+        final p = big[next++];
+        try {
+          final rows = await _bigCached(
+              p.company.key, q, () => CompanyRoute.run(p.company.key, () => _bigWithFallback(q, _bigSearch)));
+          pool.addAll(rows.map((s) => s.withCompany(p.company.key)));
+        } catch (_) {}
+      }
+    }
+
+    await Future.wait([for (var w = 0; w < MergedSubscribers.concurrency && w < big.length; w++) worker()]);
+    return (rows: pool, stale: stale);
   }
 
   static Future<List<({NetworkDevice device, VoiceDeviceCompany company})>> _mergedDevices() async {
@@ -104,21 +167,51 @@ class VoiceResolver {
     ];
   }
 
-  static Future<VoiceMatches<Subscriber>> subscribers(String query, {int limit = 6}) async {
+  /// مطابقة [query] بمشتركي الوكيل.
+  ///   • الافتراضيّ **فوريّ**: ممّا في الذاكرة (≤ [snapshotAge]) أو القائمة وحدها — والنتيجة [VoiceMatches.stale] فيطلب عارضها
+  ///     الطازجة بعدها.
+  ///   • [live] («افحص المشترك» — جوابه حال اتّصاله الآن): ما في الذاكرة إن كان طازجاً (≤ [liveAge])، وإلّا من الشبكة.
+  ///   • [fresh]: القائمة بحال اتّصالها من الشبكة (كما كان كلّ نداء).
+  /// الحساب الكبير بحثُ شركته دائماً (والاسم نفسه لا يُبحث مرّتين خلال دقيقة).
+  static Future<VoiceMatches<Subscriber>> subscribers(String query,
+      {int limit = 6, bool fresh = false, bool live = false}) async {
     final q = query.trim();
     if (q.isEmpty) return const VoiceMatches([]);
+    const failed = VoiceMatches<Subscriber>([], error: 'تعذّر جلب المشتركين الآن — حاول بعد قليل');
     try {
-      List<Subscriber> pool;
+      List<Subscriber>? pool;
+      var stale = false;
       if (mergedOn()) {
-        pool = await mergedSubscribers(q);
+        if (identical(mergedSubscribers, _mergedDefault)) {
+          final at = MergedSubscribers.lastAt;
+          final liveNow = live && at != null && DateTime.now().difference(at) <= liveAge;
+          final r = await _mergedPool(q, fresh: fresh || (live && !liveNow), maxAge: live ? liveAge : snapshotAge);
+          pool = r.rows;
+          stale = r.stale && !live;
+        } else {
+          pool = await mergedSubscribers(q); // بديل اختبار
+        }
       } else if (await bigProbe() > 0) {
-        pool = await _bigWithFallback(q, bigSearch);
+        final search = bigSearch;
+        pool = await _bigCached('', q, () => _bigWithFallback(q, search));
       } else {
-        pool = await loadSubscribers() ?? const [];
+        final known = fresh ? null : knownSubscribers(live ? liveAge : snapshotAge);
+        final quick = loadList ?? (identical(loadSubscribers, _prodLoad) ? SubscribersApi.loadAll : null);
+        if (known != null) {
+          pool = known;
+          stale = !live;
+        } else if (!fresh && !live && quick != null) {
+          pool = await quick();
+          stale = true;
+        } else {
+          pool = await loadSubscribers();
+        }
+        // القائمة لم تُجلب (شبكة) ليست «لا أحد بهذا الاسم»
+        if (pool == null) return failed;
       }
-      return VoiceMatches(rank(pool, q, limit: limit));
+      return VoiceMatches(rank(pool, q, limit: limit), stale: stale);
     } catch (_) {
-      return const VoiceMatches([], error: 'تعذّر جلب المشتركين الآن — حاول بعد قليل');
+      return failed;
     }
   }
 
@@ -233,7 +326,9 @@ class VoiceResolver {
               if (g == 2) break;
             }
           }
-          if (grade == 2 && _longVowelAgree(w, nameWords[at0])) bonus = 3;
+          // لكلّ كلمةٍ يتّفق مدّها نقطتان (كانت ٣ مرّةً واحدة لأيّ كلمة: «ali hussein» تعادل عندها «علي حسن» و«علي حسين» —
+          // مدّ «علي» وحده يكفي — فيتقدّم الخطأ بترتيب القائمة. قياس ١١ نوفمبر: activate Ali Hussein ⇒ علي حسن.)
+          if (grade == 2 && _longVowelAgree(w, nameWords[at0])) bonus += 2;
         }
         if (grade == 0) continue;
         crossHit++;
@@ -244,7 +339,7 @@ class VoiceResolver {
       if (q.digits.isEmpty) {
         if (crossHit == q.letters.length) {
           // التقريبيّ (حرفٌ مختلف) لا يُجزم به وحده
-          at((ordered ? 84 : 78) - 6 * fuzzy + bonus);
+          at((ordered ? 84 : 78) - 6 * fuzzy + (bonus > 4 ? 4 : bonus));
         } else if (crossHit > 0) {
           at(40 + 15 * crossHit ~/ q.letters.length);
         }

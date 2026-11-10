@@ -42,6 +42,7 @@ import 'provider_service.dart';
 import 'saved_profiles_store.dart';
 import 'subscriber_usage_store.dart';
 import 'vpn_now.dart';
+import 'voice/voice_resolver.dart';
 import 'agent_net_presence.dart';
 
 /// Central place that wipes every in-memory + persistent cache tied to
@@ -93,6 +94,8 @@ class SessionManager {
     // استهلاك المشتركين (القائمة) — أرقام حساب المدير السابق.
     _guardSync('SubscriberUsageStore.reset', () => SubscriberUsageStore.reset());
     _guardSync('VpnNow.reset', () => VpnNow.reset());
+    // الأمر الصوتيّ: نتائج بحث الحساب الكبير (دقيقة) — لا يُطابَق اسمٌ بمشتركي الشركة السابقة.
+    _guardSync('VoiceResolver.clearCaches', () => VoiceResolver.clearCaches());
     _guardSync('AgentNetPresence.reset', () => AgentNetPresence.reset());
     // «شحن رصيد الصفحة» — وسائل الدفع ورصيد صفحة المدير السابق. (عمليّات زين
     // كاش المعلّقة **لا** تُمسح هنا: خروجٌ وسط الدفع لا يمحو ماله —

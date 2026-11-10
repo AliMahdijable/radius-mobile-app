@@ -204,6 +204,11 @@ class _SubsListCache {
 
   static bool get isFresh => _list != null && _at != null && DateTime.now().difference(_at!) < _ttl;
 
+  /// قائمة الشبكة كما هي في الذاكرة إن لم تكن أقدم من [maxAge] — بلا أيّ طلب. نسخة القرص (بلا `_at`) لا تُعدّ.
+  static List<Subscriber>? known(Duration maxAge) =>
+      _list != null && _at != null && DateTime.now().difference(_at!) <= maxAge ? _list : null;
+  static DateTime? get at => _at;
+
   static Future<List<Subscriber>?> get() {
     final now = DateTime.now();
     // ⚠️ `_at != null` يُقصي نسخة القرص من هذا الاختصار عمداً — فهي
@@ -506,6 +511,16 @@ class SubscribersApi {
     final at = _lastWithOnlineAt;
     if (_lastWithOnline == null || at == null || DateTime.now().difference(at) > maxAge) return null;
     return _lastWithOnline;
+  }
+
+  /// أحدث قائمةٍ كاملة في الذاكرة **بلا أيّ طلب** (≤ [maxAge]) — لمن يطابق اسماً ولا ينتظر الشبكة (الأمر الصوتيّ، ١١ نوفمبر:
+  /// «الاوامر الصوتيه صار يتاخر»): آخر قائمةٍ بحال اتّصالها أو قائمة الشبكة المخبّأة، أيّهما أحدث. null: لا شيء صالح (أوّل
+  /// فتح، حسابٌ كبير، أو أقدم من المهلة).
+  static List<Subscriber>? knownList({Duration maxAge = const Duration(minutes: 15)}) {
+    final a = lastWithOnline(maxAge: maxAge);
+    final b = _SubsListCache.known(maxAge);
+    if (a == null || b == null) return a ?? b;
+    return _SubsListCache.at!.isAfter(_lastWithOnlineAt!) ? b : a;
   }
 
   /// [base] بجلسات المتّصلين [onlineMap] (null/فارغة ⇒ كما هي). تحفظ النتيجة لـ[lastWithOnline] حين تحمل حال الاتّصال.

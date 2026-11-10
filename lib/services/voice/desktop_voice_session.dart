@@ -76,6 +76,15 @@ class DesktopVoiceSession extends ChangeNotifier {
         _scope = scope ?? _currentScope;
 
   static const maxBytes = 16000 * 2 * 15;
+
+  /// سكوتٌ ينهي التسجيل (١١ نوفمبر — المالك: «الاوامر الصوتيه صار يتاخر هواي… بالأخص بوضع التلقائي»): كان ١٫٥ث دائماً. بعد جملةٍ
+  /// قيلت (≥ ثانية كلام) يكفي ١٫١ث؛ ومن قال كلمةً وسكت يفكّر بالاسم يُمهَل ١٫٥ث كما كان.
+  static const hangAfterPhrase = 35200; // ١٫١ث
+  static const hangAfterWord = 48000; // ١٫٥ث
+  static const _phraseBytes = 32000; // ثانية كلام
+
+  /// ما يُرسل: الكلام بهامش ٠٫٣٥ث قبله وبعده — انتظار البداية وسكوت النهاية لا يُرفعان (الرفع بشبكة الهاتف هو الأبطأ).
+  static const _trimMargin = 11200;
   final VoiceCapture Function() _captureFactory;
   final VoiceTranscribeFull _transcribe;
   final Future<String> Function() _scope;
@@ -100,6 +109,11 @@ class DesktopVoiceSession extends ChangeNotifier {
   bool _disposed = false;
   bool _heardSpeech = false;
   int _silentBytes = 0;
+  int _speechBytes = 0;
+
+  /// حدّا الكلام بما جُمع (بايت): بداية أوّل قطعةٍ فوق العتبة ونهاية آخرها.
+  int _speechFrom = -1;
+  int _speechTo = 0;
 
   /// شدّة كلّ قطعةٍ سُمعت — منها عتبة الصمت في الضجيج ([_quietBelow]).
   final List<double> _levels = [];
@@ -148,11 +162,15 @@ class DesktopVoiceSession extends ChangeNotifier {
     _audio = BytesBuilder(copy: true);
     _heardSpeech = false;
     _silentBytes = 0;
+    _speechBytes = 0;
+    _speechFrom = -1;
+    _speechTo = 0;
     _levels.clear();
     _phase(DesktopVoicePhase.starting);
     try {
-      _startedScope = await _scope();
-      if (_disposed || gen != _generation) return;
+      // هويّة الجلسة تُقرأ والمايك يفتح معاً: كانت قبله (ثلاث قراءاتٍ من التخزين الآمن) والوكيل يبدأ الكلام قبل أن يسمعه شيء
+      final scope = _scope();
+      unawaited(scope.catchError((Object _) => ''));
       final capture = _capture ??= _captureFactory();
       if (!await capture.hasPermission()) {
         throw VoiceInputException(
@@ -160,6 +178,7 @@ class DesktopVoiceSession extends ChangeNotifier {
       }
       if (_disposed || gen != _generation) return;
       final stream = await capture.start();
+      _startedScope = await scope;
       if (_disposed || gen != _generation) {
         try {
           await capture.stop();
@@ -196,6 +215,7 @@ class DesktopVoiceSession extends ChangeNotifier {
     }
     final available = maxBytes - _audio.length;
     final n = math.min(chunk.length, available);
+    final at = _audio.length;
     if (n > 0) _audio.add(Uint8List.sublistView(chunk, 0, n));
     final data = ByteData.sublistView(chunk);
     var squareSum = 0.0;
@@ -208,12 +228,30 @@ class DesktopVoiceSession extends ChangeNotifier {
     if (rms >= _quietBelow()) {
       _heardSpeech = true;
       _silentBytes = 0;
+      _speechBytes += chunk.length;
+      if (_speechFrom < 0) _speechFrom = at;
+      _speechTo = at + n;
     } else if (_heardSpeech) {
       _silentBytes += chunk.length;
     }
-    if (_audio.length >= maxBytes || (_heardSpeech && _silentBytes >= 48000)) {
+    final hang = _speechBytes >= _phraseBytes ? hangAfterPhrase : hangAfterWord;
+    if (_audio.length >= maxBytes) {
       unawaited(stop());
+    } else if (_heardSpeech && _silentBytes >= hang) {
+      // السكوت أنهاه ⇒ ما بقي بالمسجّل صمت: لا يُنتظر إغلاقه قبل الإرسال
+      unawaited(stop(drain: false));
     }
+  }
+
+  /// [pcm] مقصوصاً على الكلام بهامشه — وكما هو إن لم يُعرف حدّاه أو كان القصّ لا يستحقّ (أقلّ من ربع ثانية).
+  Uint8List _trimmed(Uint8List pcm) {
+    if (_speechFrom < 0 || _speechTo <= _speechFrom) return pcm;
+    var from = math.max(0, _speechFrom - _trimMargin);
+    var to = math.min(pcm.length, _speechTo + _trimMargin);
+    from -= from % 2;
+    to -= to % 2;
+    if (to - from < 3200 || pcm.length - (to - from) < 8000) return pcm;
+    return Uint8List.sublistView(pcm, from, to);
   }
 
   /// ما دونه صمت. بمكانٍ هادئ ٢٥٠ كما كان؛ وفي الضجيج (محلّ، شارع — الهاتف بوضع «تلقائي») ضجيج المكان نفسه فوقها فلا ينتهي
@@ -228,25 +266,40 @@ class DesktopVoiceSession extends ChangeNotifier {
     return math.max(250, math.sqrt(low * high));
   }
 
-  Future<void> stop() async {
+  /// ينهي التسجيل ويرسله. [drain]: يُنتظر إغلاق المسجّل أوّلاً فيصل آخر ما فيه (إنهاءٌ باليد أو بالسقف — المتكلّم قد يكون
+  /// ما زال يتكلّم)؛ وبلاه (السكوت أنهاه) يُرسل ما جُمع فوراً والمسجّل يُغلق معه — لا شيء فيه غير الصمت.
+  Future<void> stop({bool drain = true}) async {
     if (_disposed || phase != DesktopVoicePhase.listening) return;
     final gen = _generation;
     _limit?.cancel();
     _phase(DesktopVoicePhase.transcribing);
-    try {
-      await _capture?.stop();
+    final scopeNow = _scope();
+    unawaited(scopeNow.catchError((Object _) => ''));
+    Future<void> close() async {
+      try {
+        await _capture?.stop();
+      } catch (_) {/* ما جُمع يكفي */}
       await _subscription?.cancel();
       _subscription = null;
+    }
+
+    Future<void>? closing;
+    try {
+      if (drain) {
+        await close();
+      } else {
+        closing = close();
+      }
       if (_disposed || gen != _generation) return;
       final pcm = _audio.takeBytes();
       if (!_heardSpeech || pcm.length < 3200) {
         throw const VoiceInputException('لم يُلتقط كلام — حاول مجدّداً');
       }
-      if (await _scope() != _startedScope || _disposed || gen != _generation) {
+      if (await scopeNow != _startedScope || _disposed || gen != _generation) {
         return;
       }
       final cancel = _cancel = CancelToken();
-      final heard = await _transcribe(pcmWave(pcm), cancel, language);
+      final heard = await _transcribe(pcmWave(_trimmed(pcm)), cancel, language);
       if (_disposed || gen != _generation || await _scope() != _startedScope) {
         return;
       }
@@ -276,6 +329,8 @@ class DesktopVoiceSession extends ChangeNotifier {
             : 'تعذّر تحويل الصوت — تأكد من الإنترنت أو اكتب الأمر');
       }
     } finally {
+      // المسجّل يُغلق قبل أن يُسمح بتسجيلٍ جديد
+      if (closing != null) await closing;
       if (gen == _generation) {
         _audio.clear();
         if (!_disposed) _phase(DesktopVoicePhase.idle);

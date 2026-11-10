@@ -111,7 +111,9 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
       final key = 'windows.voice.v1.${await AiConsent.currentKey()}';
       final prefs = await SharedPreferences.getInstance();
       if (!mounted || !_foreground) return;
+      var asked = false;
       if (prefs.getBool(key) != true) {
+        asked = true;
         final accepted = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -130,10 +132,15 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
         if (accepted != true || !mounted || !_foreground) return;
         await prefs.setBool(key, true);
       }
-      // Consent belongs to the person who saw the dialog. Awaiting preferences
-      // must not start a microphone after backgrounding or changing accounts.
-      final currentKey = 'windows.voice.v1.${await AiConsent.currentKey()}';
-      if (mounted && _foreground && currentKey == key) await _session.start();
+      // Consent belongs to the person who saw the dialog: after it was shown (the person may have changed meanwhile)
+      // the identity is read again. Already consented ⇒ nothing was awaited but preferences, and re-reading the identity
+      // (secure storage) only delayed the microphone while the agent was already speaking — the session itself drops a
+      // result that arrives for another account.
+      if (asked) {
+        final currentKey = 'windows.voice.v1.${await AiConsent.currentKey()}';
+        if (currentKey != key) return;
+      }
+      if (mounted && _foreground) await _session.start();
     } catch (_) {
       if (mounted && _foreground) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

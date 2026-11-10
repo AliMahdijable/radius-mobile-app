@@ -56,6 +56,16 @@ void main() {
     expect(top('ali hassan').take(2).toSet(), {'07701', '07702'});
   });
 
+  test('١١ نوفمبر: التقديم بمدّ كلّ كلمةٍ لا بترتيب القائمة — «حسن» قبل «حسين» بالقائمة و"ali hussein" يقدّم «حسين»، و"ali hassan" «حسن»', () {
+    // (كان مدّ «علي» وحده يعطي الاثنين الدرجة نفسها فيتقدّم الأوّل بالقائمة — قياس الخادم: activate Ali Hussein ⇒ علي حسن)
+    final pool = [_s('2', '07702', 'علي', 'حسن'), _s('1', '07701', 'علي', 'حسين'), _s('4', '07704', 'حسين', 'علي')];
+    List<String> first(String q) => VoiceResolver.rank(pool, q).map((m) => m.item.username).toList();
+    expect(first('ali hussein').first, '07701');
+    expect(first('ali hassan').first, '07702');
+    expect(first('hussein ali').first, '07704', reason: 'والترتيب يحسم');
+    expect(VoiceMatches(VoiceResolver.rank(pool, 'ali hussein')).sure, isFalse, reason: 'ما زال الوكيل يختار بين حسن وحسين');
+  });
+
   test('الهيكل القصير لا يطابق كلّ شيء: «ali» ⇔ «علي» لا «ليلى» ولا «علا»', () {
     final ali = top('ali');
     expect(ali, containsAll(['07701', '07702', '07704']));

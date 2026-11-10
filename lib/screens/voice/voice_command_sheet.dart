@@ -304,7 +304,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       if (!mounted || gen != _gen) return;
       // لا جهاز بهذا الاسم ⇒ لعلّه مشترك («افحص جهاز علي») — فحصه هو
       VoiceMatches<Subscriber>? s;
-      if (d.isEmpty && d.error == null && intent.query.isNotEmpty) s = await VoiceResolver.subscribers(intent.query);
+      if (d.isEmpty && d.error == null && intent.query.isNotEmpty) {
+        s = await VoiceResolver.subscribers(intent.query, live: true);
+      }
       if (!mounted || gen != _gen) return;
       setState(() {
         _busy = false;
@@ -322,7 +324,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       // «افحص فلان» بلا نوع: الأجهزة والمشتركون معاً، والأوضح يُفحص (والتعادل للمشترك — الأكثر سؤالاً)
       final r = await Future.wait([
         VoiceResolver.devices(intent.query),
-        VoiceResolver.subscribers(intent.query),
+        VoiceResolver.subscribers(intent.query, live: true),
       ]);
       if (!mounted || gen != _gen) return;
       final d = r[0] as VoiceMatches<NetworkDevice>;
@@ -341,25 +343,19 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       }
       return;
     }
-    var m = await VoiceResolver.subscribers(intent.query);
+    // ١١ نوفمبر («الاوامر الصوتيه صار يتاخر هواي»): المطابقة ممّا في الذاكرة فوراً، والبدائل على القائمة نفسها؛ الطازجة بحال
+    // الاتّصال بعد ظهور الكرت. «افحص المشترك» جوابه حال اتّصاله الآن ⇒ لا يُقبل من الذاكرة إلّا الطازج.
+    final live = intent.action == VoiceAction.checkSubscriber;
+    var r = await _resolve(intent, alts, live: live);
     if (!mounted || gen != _gen) return;
-    // لا مشترك واضح لما كُتب ⇒ بدائل ما سُمع: «حسن/حسين» يحسمها وجود المشترك لا أذن المحرّك
-    if (!m.sure && m.error == null) {
-      for (final a in alts.take(3)) {
-        final x = VoiceCommand.parse(a);
-        if (x.action != intent.action || x.query.isEmpty || x.query == intent.query) continue;
-        final xm = await VoiceResolver.subscribers(x.query);
-        if (!mounted || gen != _gen) return;
-        if (xm.sure || (m.isEmpty && !xm.isEmpty)) {
-          intent = x;
-          m = xm;
-          _ctrl.text = a;
-          if (xm.sure) break;
-        }
-      }
+    // «لا أحد» ممّا في الذاكرة ليست جواباً — القائمة الطازجة قبل أن نقولها (مشتركٌ أُضيف للتوّ)
+    if (r.matches.stale && r.matches.isEmpty && r.matches.error == null) {
+      r = await _resolve(intent, alts, fresh: true);
+      if (!mounted || gen != _gen) return;
     }
-    final found = m;
-    final act = intent;
+    final found = r.matches;
+    final act = r.intent;
+    if (r.text != null) _ctrl.text = r.text!;
     setState(() {
       _busy = false;
       _intent = act;
@@ -367,6 +363,69 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       if (found.sure && act.action != VoiceAction.checkSubscriber) _sub = found.items.first.item;
     });
     if (found.sure && act.action == VoiceAction.checkSubscriber) _startSubCheck(found.items.first.item);
+    if (found.stale && !found.isEmpty) unawaited(_freshen(gen, act));
+  }
+
+  /// المطابقة ببدائل ما سُمع: ما كُتب أوّلاً، وحين لا يطابق أحداً بجزم فأوّل بديلٍ يطابق («حسن/حسين» يحسمها وجود المشترك لا
+  /// أذن المحرّك). البدائل تُسأل **معاً** وعلى القائمة التي جُلبت للأوّل (في الذاكرة) — كانت طلباً كاملاً لكلّ بديلٍ بالتتابع.
+  /// [text]: ما يُكتب بالخانة حين أُخذ بديل.
+  Future<({VoiceIntent intent, VoiceMatches<Subscriber> matches, String? text})> _resolve(
+      VoiceIntent intent, List<String> alts,
+      {bool fresh = false, bool live = false}) async {
+    var m = await VoiceResolver.subscribers(intent.query, fresh: fresh, live: live);
+    String? text;
+    if (m.sure || m.error != null) return (intent: intent, matches: m, text: text);
+    final others = <(String, VoiceIntent)>[];
+    for (final a in alts.take(3)) {
+      final x = VoiceCommand.parse(a);
+      if (x.action != intent.action || x.query.isEmpty || x.query == intent.query) continue;
+      if (others.any((o) => o.$2.query == x.query)) continue;
+      others.add((a, x));
+    }
+    if (others.isEmpty) return (intent: intent, matches: m, text: text);
+    // القائمة الطازجة صارت في الذاكرة بالنداء الأوّل ⇒ البدائل منها (live يقبلها)؛ والحساب الكبير بحوثه معاً
+    final found = await Future.wait([
+      for (final o in others) VoiceResolver.subscribers(o.$2.query, live: live || fresh),
+    ]);
+    final stale = m.stale;
+    for (var i = 0; i < others.length; i++) {
+      final xm = found[i];
+      if (xm.error != null) continue;
+      if (xm.sure || (m.isEmpty && !xm.isEmpty)) {
+        intent = others[i].$2;
+        m = xm;
+        text = others[i].$1;
+        if (xm.sure) break;
+      }
+    }
+    // «قديمة» إن كان الأوّل قديماً — البدائل من القائمة نفسها
+    if (stale && !m.stale) m = VoiceMatches(m.items, error: m.error, stale: true);
+    return (intent: intent, matches: m, text: text);
+  }
+
+  static bool _sameSub(Subscriber a, Subscriber b) =>
+      a.companyKey == b.companyKey && (a.idx != null && b.idx != null ? a.idx == b.idx : a.username == b.username);
+
+  /// الكرت ظهر ممّا في الذاكرة ⇒ القائمة الطازجة (بحال اتّصالها) بالخلفيّة تحدّث **بيانات الصفوف المعروضة** بأماكنها — لا
+  /// تبديل للمطابقة ولا لترتيبها تحت إصبع الوكيل. أُغلقت الورقة أو جاء أمرٌ آخر ⇒ لا شيء.
+  Future<void> _freshen(int gen, VoiceIntent act) async {
+    final fresh = await VoiceResolver.subscribers(act.query, fresh: true, limit: 12);
+    if (!mounted || gen != _gen || fresh.error != null || fresh.isEmpty) return;
+    Subscriber now(Subscriber old) {
+      for (final x in fresh.items) {
+        if (_sameSub(x.item, old)) return x.item;
+      }
+      return old;
+    }
+
+    final shown = _subs;
+    setState(() {
+      if (shown != null) {
+        _subs = VoiceMatches([for (final x in shown.items) VoiceMatch(now(x.item), x.score)], error: shown.error);
+      }
+      final cur = _sub;
+      if (cur != null && _subCheck == null) _sub = now(cur);
+    });
   }
 
   // ───────────────────────── التنفيذ (شاشة العمليّة نفسها) ─────────────────────────

@@ -30,6 +30,22 @@ class Capture implements VoiceCapture {
   Future<void> dispose() async { disposed = true; await stop(); }
 }
 
+/// مسجّلٌ إغلاقه يتأخّر (كأندرويد) — ويسلّم [tail] عند الإغلاق.
+class _SlowStop extends Capture {
+  final gate = Completer<void>();
+  bool stopping = false;
+  Uint8List? tail;
+  @override
+  Future<void> stop() async {
+    stopping = true;
+    if (!gate.isCompleted) await gate.future;
+    final t = tail;
+    if (t != null && !stream.isClosed) stream.add(t);
+    tail = null;
+    await super.stop();
+  }
+}
+
 Uint8List speech([int length = 6400]) {
   final bytes = Uint8List(length);
   final data = ByteData.sublistView(bytes);
@@ -198,6 +214,101 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(sent, greaterThan(0));
     s.dispose();
+  });
+
+  group('١١ نوفمبر — «الاوامر الصوتيه صار يتاخر هواي… بالأخص بوضع التلقائي»', () {
+    Uint8List level(int amplitude) {
+      final bytes = Uint8List(640); // ٢٠ مث
+      final data = ByteData.sublistView(bytes);
+      for (var i = 0; i + 1 < 640; i += 2) data.setInt16(i, i % 4 == 0 ? amplitude : -amplitude, Endian.little);
+      return bytes;
+    }
+
+    /// كم قطعة صمتٍ (٢٠ مث) بعد [speechChunks] قطعة كلام حتى يُنهى التسجيل.
+    Future<int> silenceUntilStop(int speechChunks) async {
+      final c = Capture();
+      final s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+        transcribe: (wav, _) async => 'فعل علي حسين');
+      await s.start();
+      for (var i = 0; i < speechChunks; i++) c.stream.add(level(3000));
+      var n = 0;
+      while (s.phase == DesktopVoicePhase.listening && n < 400) { c.stream.add(level(0)); n++; }
+      await Future<void>.delayed(Duration.zero);
+      s.dispose();
+      return n;
+    }
+
+    test('بعد جملةٍ قيلت (≥ ثانية كلام) يكفي ١٫١ث سكوت — ومن قال كلمةً وسكت يُمهَل ١٫٥ث كما كان', () async {
+      expect(await silenceUntilStop(60), 55, reason: '١٫٢ث كلام ⇒ ١٫١ث (٥٥ × ٢٠ مث)');
+      expect(await silenceUntilStop(20), 75, reason: '٠٫٤ث كلام («فعّل…» ويفكّر بالاسم) ⇒ ١٫٥ث');
+      expect(DesktopVoiceSession.hangAfterPhrase, lessThan(DesktopVoiceSession.hangAfterWord));
+    });
+
+    test('ما يُرفع هو الكلام بهامشه — انتظار البداية وسكوت النهاية لا يُرسلان', () async {
+      final c = Capture();
+      var sent = 0;
+      final s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+        transcribe: (wav, _) async {
+          sent = wav.length;
+          expect(ByteData.sublistView(wav).getUint32(40, Endian.little), wav.length - 44, reason: 'ترويسة WAV بطول المقصوص');
+          return 'فعل علي حسين';
+        });
+      await s.start();
+      for (var i = 0; i < 50; i++) c.stream.add(level(0)); // ثانية انتظار قبل الكلام
+      for (var i = 0; i < 100; i++) c.stream.add(level(3000)); // ثانيتا كلام
+      while (s.phase == DesktopVoicePhase.listening) c.stream.add(level(0));
+      await Future<void>.delayed(Duration.zero);
+      // ٦٤٠٠٠ كلام + ٠٫٣٥ث قبله وبعده (١١٢٠٠ × ٢) — لا الـ١٣١٢٠٠ كلّها
+      expect(sent, 44 + 64000 + 22400);
+      s.dispose();
+    });
+
+    test('تسجيلٌ قصير كلّه كلام لا يُقصّ (لا شيء يُكسب)', () async {
+      final c = Capture();
+      var sent = 0;
+      final s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+        transcribe: (wav, _) async { sent = wav.length; return 'فعل علي حسين'; });
+      await s.start();
+      for (var i = 0; i < 40; i++) c.stream.add(level(3000));
+      await s.stop();
+      expect(sent, 44 + 40 * 640);
+      s.dispose();
+    });
+
+    test('السكوت أنهاه ⇒ يُرسل فوراً والمسجّل يُغلق معه؛ إنهاءٌ باليد ينتظر آخر ما بالمسجّل', () async {
+      // السكوت: الإرسال لا ينتظر إغلاق المسجّل
+      var c = _SlowStop();
+      var sent = 0;
+      var s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+        transcribe: (wav, _) async { sent = wav.length; return 'فعل علي حسين'; });
+      await s.start();
+      for (var i = 0; i < 60; i++) c.stream.add(level(3000));
+      while (s.phase == DesktopVoicePhase.listening) c.stream.add(level(0));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(c.stopping, isTrue);
+      expect(sent, greaterThan(0), reason: 'أُرسل والمسجّل لم يُغلق بعد');
+      expect(s.phase, DesktopVoicePhase.transcribing, reason: 'لا تسجيل جديد قبل إغلاق المسجّل');
+      c.gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(s.phase, DesktopVoicePhase.idle);
+      s.dispose();
+
+      // باليد: ينتظر الإغلاق ليصل آخر ما قيل
+      c = _SlowStop();
+      sent = 0;
+      s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+        transcribe: (wav, _) async { sent = wav.length; return 'فعل علي حسين'; });
+      await s.start();
+      for (var i = 0; i < 30; i++) c.stream.add(level(3000));
+      final stopping = s.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(sent, 0, reason: 'لم يُرسل قبل أن يسلّم المسجّل آخر ما فيه');
+      c.tail = level(3000); // آخر ما بالمسجّل يصل عند الإغلاق
+      c.gate.complete();
+      await stopping;
+      expect(sent, 44 + 31 * 640);
+      s.dispose();
+    });
   });
 
   test('ردّ الخادم: الجديد بلغته وبدائله، والأقدم (نصٌّ وحده) كما كان', () {

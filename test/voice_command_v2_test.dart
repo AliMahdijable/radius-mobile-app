@@ -442,4 +442,13 @@ void main() {
       expect(p('07701234567').lang, isNull);
     });
   });
+  test('١١ نوفمبر (قياس محرّك الخادم على ٦٨ أمراً): المبلغ برمز العملة مبلغ، و«فعلاً حسين علي بالدين» تفعيلٌ بالدين', () {
+    final a = VoiceCommand.parse(r'Add debt to Zainab, $10,000');
+    expect([a.action, a.amount, a.query], [VoiceAction.addDebt, 10000, 'zainab']);
+    final b = VoiceCommand.parse('فعلاً حسين علي بالدين');
+    expect([b.action, b.payment, b.query], [VoiceAction.activate, VoicePayment.debt, 'حسين علي']);
+    expect(VoiceCommand.parse('فعلا علي حسين').action, VoiceAction.activate);
+    // والفعل الأوّل بالجملة يبقى الحاكم
+    expect(VoiceCommand.parse('سدد دين علي فعلا').action, VoiceAction.payDebt);
+  });
 }

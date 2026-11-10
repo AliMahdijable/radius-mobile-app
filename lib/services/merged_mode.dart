@@ -490,6 +490,14 @@ class MergedSubscribers {
   /// آخر دمجٍ (للشاشات التي تقرأ بلا طلب: الرئيسية بعد المشتركين).
   static final ValueNotifier<MergedListResult?> last = ValueNotifier<MergedListResult?>(null);
 
+  /// متى كُتب [last] — من يطابق اسماً بلا انتظار الشبكة (الأمر الصوتيّ) يأخذه إن لم يكن قديماً.
+  static DateTime? lastAt;
+
+  static void _setLast(MergedListResult out) {
+    last.value = out;
+    lastAt = DateTime.now();
+  }
+
   /// بعد كتابةٍ موجَّهة: قائمة شركتها تُجلب من جديد عند الطلب التالي.
   static void install() => CompanyRoute.onWrite ??= invalidate;
 
@@ -500,6 +508,7 @@ class MergedSubscribers {
     _online.clear();
     _onlineFlight.clear();
     last.value = null;
+    lastAt = null;
   }
 
   /// يُسقط قائمة شركةٍ بعد عمليّةٍ عليها فتُجلب من جديد.
@@ -619,7 +628,7 @@ class MergedSubscribers {
       if (hit != null && identical(hit.value, r.parts[i])) _cache[k] = (at: hit.at, value: parts[i]);
     }
     final out = _combine(parts, r.missing);
-    if (gen == _generation) last.value = out;
+    if (gen == _generation) _setLast(out);
     return out;
   }
 
@@ -684,7 +693,7 @@ class MergedSubscribers {
     await Future.wait([for (var w = 0; w < concurrency && w < usable.length; w++) worker()]);
     final parts = results.whereType<MergedCompanyList>().toList();
     final out = _combine(parts, missing);
-    if (gen == _generation) last.value = out;
+    if (gen == _generation) _setLast(out);
     return out;
   }
 }
