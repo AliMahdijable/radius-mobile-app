@@ -103,10 +103,12 @@ Future<void> showConnectionAlertFlow(
   final named = body.replaceAll('{subscriber_name}',
       thresholds.subscriberName(name: sub.fullName, username: sub.username));
   // رمز وكيل شركة المشترك صراحةً (بلا مفتاح ⇒ المفتوحة) — لا رمز قسم «بوابة المشترك» الظاهر لشركةٍ أخرى (مراجعة 179)
-  final message = await MergedOps.run(
+  final base = await MergedOps.run(
       sub,
       () async => PortalSettingsApi.fillAgentCode(
           WhatsAppApi.renderForSubscriber(named, sub, names: await WhatsAppApi.packageNamesFor(sub))));
+  // {password}: المعاينة واليدويّ بالكلمة نفسها (بصلاحيّة المدير)؛ والتلقائيّ يرسل المتغيّر فيقرؤها الخادم لحظة الإرسال ولا تُخزَّن
+  final message = await WhatsAppApi.fillPassword(base, sub);
   if (!context.mounted) return;
 
   // ── ٤. المعاينة ──────────────────────────────────────────────
@@ -141,7 +143,7 @@ Future<void> showConnectionAlertFlow(
   }
   final result = await WhatsAppApi.sendMessage(
     to: phone,
-    message: message,
+    message: base,
     intent: 'connection_alert',
     sas4Idx: sub.idx,
     forceChannel: 'whatsapp',

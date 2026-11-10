@@ -23,6 +23,9 @@ const Map<String, String> _kVariableLabels = {
   // وسيط البوّابة §10: الخادم يملؤه برمز وكيل المُرسِل في كلّ قالب — يدخل به
   // المشترك تطبيق MyServices مع يوزره (يُعرض في «بوابة المشترك»).
   '{agent_code}': 'رمز الوكيل',
+  // «كلمة سر المشترك» (١٠ نوفمبر): الخادم يقرؤها من الشركة لحظة الإرسال وتصل رقم المشترك وحده (لا تُخزَّن)؛
+  // شركةٌ تمنع قراءتها ⇒ يُحذف سطرها من الرسالة. مع {username} و{agent_code} = بيانات دخوله لتطبيق MyServices.
+  '{password}': 'كلمة سر المشترك',
   '{phone}': 'رقم الهاتف',
   // اسمها في «بوابة المشترك» إن كتبه الحساب، وإلّا اسم الساس (الخادم: server/packageNames.js)؛ والأصل بـ{sas_package_name}
   '{package_name}': 'اسم الباقة',
@@ -75,6 +78,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     '{firstname}',
     '{subscriber_name}',
     '{username}',
+    '{password}',
     '{agent_code}',
     '{phone}',
     '{package_name}',
