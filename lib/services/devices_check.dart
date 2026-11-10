@@ -813,7 +813,9 @@ class DevicesCheck {
           : CheckMemo(
               // قراءةٌ بلا منافذ (طبقة SNMP الأولى مثلاً) لا تمحو منافذ اللقطة — «طفى» التالية تبقى ممكنة
               ports: countsOnly || phys.isEmpty ? (prev?.ports ?? const {}) : memoPorts,
-              peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,
+              // وراديوٌ مقروءٌ لا يعمل لا عملاء عليه ولو لم يُقرأ جدوله (الخادم reg_ok:false مع ru:false) — صفرٌ لا
+              // «كانوا 7 بالفحص السابق» في كلّ فحص (مراجعة 180، الجولة ٣)
+              peers: role == CheckRole.sector && (subsKnown || g.linkDown) ? subs.length : prev?.peers,
               // الدور يُحفظ حين قُرئ لاسلكيّه (أو لا راديو له) — لا من نوع السجلّ وقت الجهل
               role: (g.radioUnread || g.apUnknown || g.linkDown) && g.isAp == null ? prev?.role : role,
             ),

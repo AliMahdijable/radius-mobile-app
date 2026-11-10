@@ -14,6 +14,7 @@
 //       إشارة mca-status (أرضيّة الضجيج، واجهة الإدارة) ليست وصلته؛ ميموزا وحدها تُحكم بإشارتها (F10).
 //   R3-1 (الجولة ٣) وإشارته نفسها: «الإشارة» من صفّ محطّته الوحيدة (ما يستقبله) و«الطرف الثاني» tx صفّها، وبلا محطّةٍ
 //       فارغة كالخادم — لا «-96» في السطر، ولا «ضعيفة» من آخر قراءةٍ أو قائمةٍ لم تُقرأ.
+//   R3-2 (الجولة ٣) الخادم بـreg_ok:false وru:false: راديوٌ لا يعمل لا عملاء عليه ⇒ اللقطة صفر، و«كانوا 7» مرّةً واحدة.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -479,6 +480,19 @@ void main() {
       final phone = await judgeRos(d, dfs, prev: const CheckMemo(peers: 7));
       expect(texts(phone), ['الراديو لا يعمل — كانوا 7 بالفحص السابق']);
       expect(texts(await judgeRos(d, dfs, prev: phone.memo)), ['الراديو لا يعمل']);
+    });
+
+    test('🚨 R3-2 وجدوله لم يقرأه الخادم (reg_ok:false — w60g، wifiwave2 7.1–7.12) وراديوه لا يعمل (ru:false): '
+        '«كانوا 7» مرّةً ثمّ «الراديو لا يعمل» — راديوٌ لا يعمل لا عملاء عليه', () {
+      final d = dev(50, brand: 'mikrotik', protocol: 'api');
+      final down = ros({'ap': null, 'radio': true, 'reg_ok': false, 'ru': false, 'peers': const <Map>[]});
+      final first = remote(d, down, prev: const CheckMemo(peers: 7));
+      expect(texts(first), ['الراديو لا يعمل — كانوا 7 بالفحص السابق']);
+      expect(first.memo!.peers, 0);
+      final next = remote(d, down, prev: first.memo);
+      expect(next.role, CheckRole.sector);
+      expect(texts(next), ['الراديو لا يعمل']);
+      expect(next.state, CheckState.warn);
     });
 
     test('ويعمل (ru:true) بلا عملاء ⇒ «ما عليه أحد الآن» صادقة؛ وap:true كما كانت؛ وصفوفٌ مقروءة لا «مقطوعة»', () {
