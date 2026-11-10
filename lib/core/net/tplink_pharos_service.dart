@@ -61,6 +61,16 @@ class TplinkPharosService {
   @visibleForTesting
   static DateTime Function() clock = DateTime.now;
 
+  /// كم مرّةً يُعاد الدخول حين يردّ الجهاز «nonce قديم» (الردّ نفسه يحمل الجديد، ولا يُحسب محاولةً غلط).
+  ///
+  /// الجهاز يحفظ آخر nonce طلبه **أيّ** عميلٍ وحده: هاتفان يفحصان الجهاز نفسه باللحظة نفسها يُبطل كلٌّ منهما nonce الآخر.
+  /// قِيس حيّاً (١٠ نوفمبر): إعادةٌ واحدة لم تكفِ حين تداخل فحصان — فثلاث محاولات بينها مهلةٌ عشوائيّة قصيرة تكسر التناوب.
+  static const _staleRounds = 3;
+  static final _rng = math.Random();
+
+  @visibleForTesting
+  static Duration Function() staleBackoff = () => Duration(milliseconds: 150 + _rng.nextInt(450));
+
   static Future<T> _serial<T>(String host, Future<T> Function() fn) {
     final prev = _locks[host] ?? Future<void>.value();
     final done = Completer<void>();
@@ -155,7 +165,7 @@ class TplinkPharosService {
     }
     var nonce = h.cookie;
     if (nonce.isEmpty) return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: 'hello:no-nonce');
-    for (var round = 0; round < 2; round++) {
+    for (var round = 0; round < _staleRounds; round++) {
       final _Reply r;
       try {
         r = await _send(
@@ -199,11 +209,12 @@ class TplinkPharosService {
         case -1 || 2:
           // الـnonce قديم: عميلٌ آخر (هاتفٌ أو متصفّح) طلب واحداً بيننا — الجهاز لا يعدّها محاولة، والردّ يحمل الجديد.
           final fresh = r.cookie;
-          if (round == 0 && fresh != null && fresh.isNotEmpty && fresh != nonce) {
+          if (round < _staleRounds - 1 && fresh != null && fresh.isNotEmpty && fresh != nonce) {
             nonce = fresh;
+            await Future<void>.delayed(staleBackoff());
             continue;
           }
-          return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: '$trace stale');
+          return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: '$trace stale x${round + 1}');
         default:
           return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: trace);
       }

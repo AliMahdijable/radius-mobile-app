@@ -190,6 +190,7 @@ void main() {
     setUp(() async {
       TplinkPharosService.reset();
       TplinkPharosService.clock = DateTime.now;
+      TplinkPharosService.staleBackoff = () => Duration.zero;
       d = _FakePharos();
       await d.start();
     });
@@ -294,6 +295,21 @@ void main() {
       expect(u, isNotNull);
       expect(d.logins, hasLength(2), reason: 'إرسالٌ بالقديم ثمّ بالجديد من الردّ نفسه');
       expect(d.failed, 0);
+    });
+
+    test('هاتفان يفحصان الجهاز باللحظة نفسها: nonce يبطل مرّتين ⇒ الثالثة تدخل؛ وثلاثٌ ⇒ «ما يجاوب» بلا أيّ محاولةٍ غلط', () async {
+      d.staleNext = 2;
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull);
+      expect(d.logins, hasLength(3));
+      expect(d.failed, 0);
+      await d.idle();
+      d.logins.clear();
+      d.staleNext = 3;
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNull);
+      expect(TplinkPharosService.lastIssue(d.host)?.issue, PharosLoginIssue.unreachable);
+      expect(d.logins, hasLength(3), reason: 'لا إعادة بلا نهاية');
+      expect(d.failed, 0, reason: 'الـnonce القديم لا يُحسب على عدّاد الجهاز');
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull, reason: 'لا يُحفظ رفضاً');
     });
 
     test('دخلنا وطُردت الجلسة قبل القراءة ⇒ «ما رجعت القراءات» لا رفض', () async {
@@ -406,6 +422,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await DeviceProbeApi.clearAllCaches();
       TplinkPharosService.clock = DateTime.now;
+      TplinkPharosService.staleBackoff = () => Duration.zero;
       d = _FakePharos();
       await d.start();
       api = _FakeApi();
@@ -683,6 +700,9 @@ class _FakePharos {
   bool dropLogin = false;
   bool dropLive = false;
 
+  /// عدد محاولات الدخول التالية التي يردّها الجهاز «nonce قديم» (عميلٌ آخر تعرّف بينها).
+  int staleNext = 0;
+
   String? session;
   String? _nonce;
   int _seq = 0x06107906;
@@ -768,7 +788,8 @@ class _FakePharos {
           return;
         }
         // nonce قديم: لا تُحسب محاولة، والردّ يحمل الجديد
-        if (f['nonce'] != _nonce || cookie != _nonce) {
+        if (staleNext > 0 || f['nonce'] != _nonce || cookie != _nonce) {
+          if (staleNext > 0) staleNext--;
           return _json(res, _hello(status: -1, failed: failed, lock: lock), setCookie: _newNonce());
         }
         final nonce = _nonce!;
