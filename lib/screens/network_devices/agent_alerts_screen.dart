@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -26,6 +28,9 @@ Future<bool> openAgentAlertPush(NavigatorState nav, Map<String, String> data) as
 class AgentAlertsScreen extends StatefulWidget {
   const AgentAlertsScreen({super.key});
 
+  /// الحال تتحدّث وحدها والشاشة مفتوحة — بإيقاع جولة قسم الأجهزة.
+  static const refreshEvery = Duration(seconds: 20);
+
   @override
   State<AgentAlertsScreen> createState() => _AgentAlertsScreenState();
 }
@@ -44,6 +49,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     keyOf: (e) => e.id,
   );
   final _downMore = AlertsReveal();
+  final _staleMore = AlertsReveal();
   final _quietMore = AlertsReveal();
   final _vitalsMore = AlertsReveal();
   final _powerMore = AlertsReveal();
@@ -52,18 +58,38 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   bool _powerOpen = false;
   bool _howOpen = false;
 
+  /// الحال تتحدّث وحدها والشاشة مفتوحة (١١ نوفمبر — المالك: «تنبيهات الاجهزه كذلك غير دقيقه»): جولة قسم الأجهزة تجري تحتها كلّ
+  /// ٢٠ث وتغيّر الحال بالخادم، وكانت الشاشة تبقى على ما جلبته أوّل مرّة حتى يسحبها الوكيل.
+  Timer? _refresh;
+
   @override
   void initState() {
     super.initState();
     _log.addListener(_onLog);
     _load();
+    _refresh = Timer.periodic(AgentAlertsScreen.refreshEvery, (_) {
+      if (mounted && !_loading && _busy == null) unawaited(_reloadStatus());
+    });
   }
 
   @override
   void dispose() {
+    _refresh?.cancel();
     _log.removeListener(_onLog);
     _log.dispose();
     super.dispose();
+  }
+
+  /// الحال وحدها (بلا السجلّ ولا القراءات الحسّاسة — خفيفة)؛ فشلها لا يمسح المعروض.
+  Future<void> _reloadStatus() async {
+    final st = await AgentAlertsApi.status();
+    if (!mounted || st == null || _busy != null) return;
+    final before = _st;
+    setState(() => _st = st);
+    // تغيّر ما طفى ⇒ السجلّ فيه سطرٌ جديد
+    if (before != null && st.available && st.canUse && before.down.length != st.down.length) {
+      unawaited(_log.reload(keepDepth: true));
+    }
   }
 
   void _onLog() {
@@ -187,6 +213,18 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         for (final d in _downMore.take(st.down)) _deviceRow(d, quiet: false),
         if (_downMore.hasMore(st.down)) _revealMore('aa-more-down', _downMore),
       ],
+      // لم يقسها أحدٌ منذ مدّة: ليست «الآن» — تُقال بوقت آخر فحصها، وتُحسم أوّل ما يُفتح قسم الأجهزة على شبكته
+      if (st.downStale.isNotEmpty) ...[
+        const SizedBox(height: Sp.lg),
+        _section('كانت طافية عند آخر فحص'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: Sp.xs),
+          child: Text('لم تُفحص بعدها — افتح قسم الأجهزة وأنت على شبكتك لتُعرف حالها الآن',
+              style: AppType.micro(color: AppColors.textMid)),
+        ),
+        for (final d in _staleMore.take(st.downStale)) _deviceRow(d, quiet: false, stale: true),
+        if (_staleMore.hasMore(st.downStale)) _revealMore('aa-more-stale', _staleMore),
+      ],
       if (st.quiet.isNotEmpty) ...[
         const SizedBox(height: Sp.lg),
         _section('تطفي وتشتغل — مسكوتٌ عنها ساعة'),
@@ -238,6 +276,9 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       };
     } else if (st.monitored == 0) {
       head = 'لم تُرَ أجهزتك بعد — افتح قسم الأجهزة وأنت على شبكتك';
+    } else if (st.downStale.isNotEmpty) {
+      // لا «كلّ أجهزتك تعمل» وبعضها لم يُعرف حاله منذ آخر فحص
+      head = 'لا شيء طافٍ الآن ممّا فُحص — ${countDevices(st.downStale.length)} لم ${st.downStale.length == 1 ? 'يُفحص' : 'تُفحص'} منذ مدّة';
     } else {
       head = 'كلّ أجهزتك تعمل';
     }
@@ -272,15 +313,20 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     );
   }
 
-  Widget _deviceRow(AgentAlertDevice d, {required bool quiet}) {
+  Widget _deviceRow(AgentAlertDevice d, {required bool quiet, bool stale = false}) {
     final when = quiet
         ? (d.untilMs != null ? 'حتى ${_clock(d.untilMs!)}' : null)
-        : (d.sinceMs != null ? 'منذ ${_dur(DateTime.now().millisecondsSinceEpoch - d.sinceMs!)}' : null);
+        : stale
+            ? (d.checkedMs != null
+                ? 'آخر فحص ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(d.checkedMs!))}'
+                : (d.sinceMs != null ? 'طفى ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(d.sinceMs!))}' : null))
+            : (d.sinceMs != null ? 'منذ ${_dur(DateTime.now().millisecondsSinceEpoch - d.sinceMs!)}' : null);
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.xs),
       child: _box(
         child: Row(children: [
-          Icon(quiet ? LucideIcons.activity : LucideIcons.wifiOff, size: 18, color: quiet ? AppColors.warning : AppColors.error),
+          Icon(quiet ? LucideIcons.activity : (stale ? LucideIcons.circleHelp : LucideIcons.wifiOff),
+              size: 18, color: quiet ? AppColors.warning : (stale ? AppColors.textMid : AppColors.error)),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

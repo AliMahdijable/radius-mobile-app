@@ -19,6 +19,7 @@ Map<String, dynamic> _status({
   bool enabled = true,
   Map<String, dynamic>? remote,
   List<Map<String, dynamic>> down = const [],
+  List<Map<String, dynamic>>? downStale,
   List<Map<String, dynamic>> quiet = const [],
 }) =>
     {
@@ -29,6 +30,7 @@ Map<String, dynamic> _status({
               'remote': remote,
               if (canUse) ...{
                 'devices': 14, 'monitored': 14, 'down': down, 'quiet': quiet, 'network_down': false,
+                if (downStale != null) 'down_stale': downStale,
                 'last_app_ms': _ago(const Duration(minutes: 2)), 'last_vpn_ms': null,
               },
             }
@@ -47,6 +49,12 @@ void main() {
     expect(st.available, true);
     expect(st.down.single.place, 'برج «النصر»');
     expect(st.quiet.single.untilMs, 9);
+    expect(st.downStale, isEmpty, reason: 'خادمٌ أقدم لا يرسلها');
+    final stale = AgentAlertsStatus.fromJson(Map<String, dynamic>.from(_status(
+      downStale: [{'id': 9, 'name': 'لنك', 'since_ms': 5, 'checked_ms': 7}, {'id': 10, 'name': 'سويج', 'since_ms': 5, 'checked_ms': null}],
+    )['data'] as Map));
+    expect(stale.down, isEmpty);
+    expect(stale.downStale.map((d) => [d.id, d.checkedMs]), [[9, 7], [10, null]]);
     expect(st.remote!.fixableInVpn, true);
     expect(st.remote!.text, contains('«الاتصال العكسي»'));
     expect(const AgentAlertRemote(on: false, why: 'template').text, contains('يقفل دخولك أنت'));
@@ -143,6 +151,49 @@ void main() {
       await t.pumpAndSettle();
       expect(server.bodies('PUT', '/api/v2/agent-alerts/settings').single, {'enabled': false});
       expect(find.text('التنبيه مطفأ — لا يُقال لك شيء'), findsOneWidget);
+      await simDrain(t);
+    });
+
+    testWidgets('١١ نوفمبر («غير دقيقه»): ما لم يُفحص منذ مدّة ليس «طافياً الآن» — بقسمه ووقت آخر فحصه؛ والشاشة تتحدّث وحدها كلّ ٢٠ث',
+        (t) async {
+      // حال المالك: التنبيه مطفأ، وصفّان «طافيان» منذ يومين لم يقسهما أحد — وقائمته ١٤ متّصلاً
+      server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(
+        enabled: false,
+        downStale: [
+          {'id': 1514, 'name': 'سيرفر التوزيع', 'place': 'برج «برجي»', 'since_ms': _ago(const Duration(days: 2, hours: 18)), 'checked_ms': null},
+          {'id': 5308, 'name': 'AirFiber 60LR', 'place': 'برج «برجي»', 'since_ms': _ago(const Duration(days: 2)), 'checked_ms': _ago(const Duration(hours: 3))},
+        ],
+      ));
+      server.reply('GET', '/api/v2/agent-alerts/log', 200, _log([]));
+      await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
+      await t.pumpAndSettle();
+      expect(find.text('طافية الآن'), findsNothing, reason: 'لا دعوى عن «الآن» بلا فحصٍ حديث');
+      expect(find.text('كانت طافية عند آخر فحص'), findsOneWidget);
+      expect(find.textContaining('افتح قسم الأجهزة وأنت على شبكتك لتُعرف حالها الآن'), findsOneWidget);
+      expect(find.text('سيرفر التوزيع'), findsOneWidget);
+      expect(find.textContaining('آخر فحص'), findsWidgets);
+      expect(find.text('التنبيه مطفأ — لا يُقال لك شيء'), findsOneWidget);
+      // مفعّلاً: لا «كلّ أجهزتك تعمل» وبعضها لم يُعرف حاله
+      server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(
+        downStale: [{'id': 1514, 'name': 'سيرفر التوزيع', 'since_ms': _ago(const Duration(hours: 5)), 'checked_ms': _ago(const Duration(hours: 4))}],
+      ));
+      final before = server.calls('GET', '/api/v2/agent-alerts/status').length;
+      await t.pump(AgentAlertsScreen.refreshEvery + const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '/api/v2/agent-alerts/status').length, before + 1, reason: 'تحدّثت وحدها');
+      expect(find.textContaining('لا شيء طافٍ الآن ممّا فُحص — جهازٌ واحد لم يُفحص منذ مدّة'), findsOneWidget);
+      expect(find.text('كلّ أجهزتك تعمل'), findsNothing);
+      // جولة قسم الأجهزة حسمته: يعمل ⇒ يختفي بلا سحب
+      server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(downStale: []));
+      await t.pump(AgentAlertsScreen.refreshEvery + const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(find.text('كلّ أجهزتك تعمل'), findsOneWidget);
+      expect(find.text('كانت طافية عند آخر فحص'), findsNothing);
+      // تحديثٌ فاشل لا يمسح المعروض
+      server.reply('GET', '/api/v2/agent-alerts/status', 500, {'success': false});
+      await t.pump(AgentAlertsScreen.refreshEvery + const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(find.text('كلّ أجهزتك تعمل'), findsOneWidget);
       await simDrain(t);
     });
 

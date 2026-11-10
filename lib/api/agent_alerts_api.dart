@@ -9,7 +9,8 @@ import 'api_client.dart';
 /// حين يعمل الخادم لهذه الشركة يسكت تنبيه الهاتف المحلّيّ ([shouldFireLocalAlerts]) — لا إشعاران للانطفاء نفسه.
 
 class AgentAlertDevice {
-  const AgentAlertDevice({required this.id, required this.name, this.type, this.place, this.sinceMs, this.untilMs});
+  const AgentAlertDevice(
+      {required this.id, required this.name, this.type, this.place, this.sinceMs, this.untilMs, this.checkedMs});
   final int id;
   final String name;
   final String? type;
@@ -20,6 +21,9 @@ class AgentAlertDevice {
 
   /// المتذبذب: مسكوتٌ عنه حتى
   final int? untilMs;
+
+  /// «طافٍ عند آخر فحص»: متى رُصد طافياً آخر مرّة — null: لا يُعرف (الخادم أُعيد تشغيله بعدها)
+  final int? checkedMs;
 
   static AgentAlertDevice? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -32,6 +36,7 @@ class AgentAlertDevice {
       place: j['place']?.toString(),
       sinceMs: (j['since_ms'] as num?)?.toInt(),
       untilMs: (j['until_ms'] as num?)?.toInt(),
+      checkedMs: (j['checked_ms'] as num?)?.toInt(),
     );
   }
 }
@@ -90,6 +95,7 @@ class AgentAlertsStatus {
     this.devices = 0,
     this.monitored = 0,
     this.down = const [],
+    this.downStale = const [],
     this.quiet = const [],
     this.networkDown = false,
     this.lastAppMs,
@@ -105,7 +111,12 @@ class AgentAlertsStatus {
   final AgentAlertRemote? remote;
   final int devices;
   final int monitored;
+  /// طافيةٌ **الآن**: رُصد فشلها خلال ربع ساعة (الخادم — ١١ نوفمبر)
   final List<AgentAlertDevice> down;
+
+  /// كانت طافيةً عند آخر فحص ولم يقسها أحدٌ بعدها (الوكيل خارج شبكته والخادم لا يفحصها) — ليست دعوى عن الآن. خادمٌ أقدم لا
+  /// يرسلها (كلّها في [down]).
+  final List<AgentAlertDevice> downStale;
   final List<AgentAlertDevice> quiet;
   final bool networkDown;
   final int? lastAppMs;
@@ -128,6 +139,7 @@ class AgentAlertsStatus {
       devices: n(j['devices']),
       monitored: n(j['monitored']),
       down: list(j['down']),
+      downStale: list(j['down_stale']),
       quiet: list(j['quiet']),
       networkDown: j['network_down'] == true,
       lastAppMs: (j['last_app_ms'] as num?)?.toInt(),

@@ -885,8 +885,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // طلب واحد لكلّ الجولة. fire-and-forget مقصود: الفحص المحلّيّ
       // انتهى وحالة الشاشة تُحدَّث من `updates` أدناه بلا انتظار الخادم.
       if (probed.isNotEmpty) {
-        unawaited(
-            NetworkDevicesApi.saveProbeResults(probed).catchError((_) => false));
+        unawaited(NetworkDevicesApi.saveProbeResults(probed)
+            .catchError((_) => false)
+            .then((_) => _afterRoundSaved()));
       }
 
       // شركةٌ أخرى ردّ منها عنوانٌ خاصّ ⇒ الموبايل على شبكتها، فمن سكت من عناوينها «مفصول» فعلاً
@@ -1069,6 +1070,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (st != null) setState(() => _agentAlerts = st);
     await AgentAlertsApi.vitalsStatus();
     if (mounted) _syncVitalsTimer();
+  }
+
+  /// الجولة وصلت الخادم ⇒ حاله تغيّرت بها، فعدّاد الصفّارة («الطافية الآن») يُحدَّث معها (١١ نوفمبر — المالك: «تنبيهات الاجهزه
+  /// كذلك غير دقيقه»: كان يُجلب عند فتح القسم وحده فيبقى على رقمٍ قديم والقائمة كلّها متّصلة). ما دام فيه طافٍ أو ما لم يُفحص: مع
+  /// كلّ جولة حتى يُحسم؛ وإلّا كلّ ثالث جولة (دقيقة) ليُرى ما طفى.
+  int _roundsSinceAlerts = 0;
+  void _afterRoundSaved() {
+    final st = _agentAlerts;
+    if (!mounted || st == null || !st.available || !st.canUse) return;
+    _roundsSinceAlerts++;
+    final open = st.down.isNotEmpty || st.downStale.isNotEmpty;
+    if (!open && _roundsSinceAlerts < 3) return;
+    _roundsSinceAlerts = 0;
+    unawaited(AgentAlertsApi.status().then((v) {
+      if (mounted && v != null) setState(() => _agentAlerts = v);
+    }));
   }
 
   /// «القراءات الحسّاسة» مفتوحةٌ لهذه الشركة ⇒ إعادة قراءة الأجهزة كلّ ١٠ د ما دام القسم ظاهراً ([DeviceWarmup.refresh] — خفيفةٌ واحداً
