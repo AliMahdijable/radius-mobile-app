@@ -15,6 +15,19 @@ import '../../core/widgets/app_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 
+/// نموذج المنطقة (الاسم واللون) من خارج شاشة المناطق — «برج جديد» في «أبراجي» يفتحه نفسه ([title] عنوانه هناك).
+/// يُرجع المنطقة المحفوظة، أو null إن أُغلق.
+Future<DeviceRegion?> showRegionForm(BuildContext context, {DeviceRegion? initial, String? title}) => showAppSheet<DeviceRegion>(
+      barrierColor: AppColors.scrim,
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
+      ),
+      builder: (_) => _RegionFormSheet(initial: initial, title: title),
+    );
+
 /// شاشة إدارة مناطق الأجهزة — قائمة + إضافة + تعديل + حذف.
 /// راجع [[project_devices_monitoring_plan]].
 class RegionsScreen extends StatefulWidget {
@@ -60,16 +73,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
   }
 
   Future<void> _openForm({DeviceRegion? initial}) async {
-    final result = await showAppSheet<DeviceRegion>(
-      barrierColor: AppColors.scrim,
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
-      ),
-      builder: (_) => _RegionFormSheet(initial: initial),
-    );
+    final result = await showRegionForm(context, initial: initial);
     if (result != null && mounted) {
       _mutated = true;
       await _load();
@@ -296,7 +300,10 @@ Color? _parseColor(String? hex) {
 
 // ─────────────────────────────────────────────────────────────
 class _RegionFormSheet extends StatefulWidget {
-  const _RegionFormSheet({this.initial});
+  const _RegionFormSheet({this.initial, this.title});
+
+  /// عنوانٌ مكان «إضافة منطقة» (من يفتحه من «أبراجي»).
+  final String? title;
   final DeviceRegion? initial;
 
   @override
@@ -368,7 +375,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.mapPin,
-        title: isEdit ? 'تعديل منطقة' : 'إضافة منطقة',
+        title: widget.title ?? (isEdit ? 'تعديل منطقة' : 'إضافة منطقة'),
         subtitle: '',
         onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),

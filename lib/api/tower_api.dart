@@ -84,4 +84,70 @@ class TowerApi {
       return (ok: false, saved: 0, message: humanError(e, fallback: 'تعذّر حفظ الترتيب'));
     }
   }
+
+  // ── ترابط الأبراج (١١ نوفمبر — الهجرة 086) ───────────────────────────────────────────────────
+
+  /// `POST /towers/links` — لنكٌ من جهاز البرج الرئيسيّ [aDeviceId] إلى جهاز الفرعيّ [bDeviceId].
+  static Future<({bool ok, TowerLink? link, String? message})> addLink(int aDeviceId, int bDeviceId, {String? label}) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/towers/links', data: {
+        'a_device_id': aDeviceId,
+        'b_device_id': bDeviceId,
+        if (label != null && label.trim().isNotEmpty) 'label': label.trim(),
+      });
+      final link = TowerLink.fromJson(r.data?['link']);
+      if (r.statusCode != 200 || r.data?['success'] != true || link == null) {
+        return (ok: false, link: null, message: _msg(r, 'تعذّر حفظ الربط'));
+      }
+      return (ok: true, link: link, message: null);
+    } catch (e) {
+      _log('addLink', e);
+      return (ok: false, link: null, message: humanError(e, fallback: 'تعذّر حفظ الربط'));
+    }
+  }
+
+  /// `PUT /towers/links/:id` — قلب الاتّجاه ([flip]) و/أو الاسم ([label]؛ نصٌّ فارغ يمسحه).
+  static Future<({bool ok, TowerLink? link, String? message})> updateLink(int id, {bool flip = false, String? label}) async {
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>('$_base/towers/links/$id', data: {
+        if (flip) 'flip': true,
+        if (label != null) 'label': label.trim().isEmpty ? null : label.trim(),
+      });
+      final link = TowerLink.fromJson(r.data?['link']);
+      if (r.statusCode != 200 || r.data?['success'] != true || link == null) {
+        return (ok: false, link: null, message: _msg(r, 'تعذّر تعديل الربط'));
+      }
+      return (ok: true, link: link, message: null);
+    } catch (e) {
+      _log('updateLink', e);
+      return (ok: false, link: null, message: humanError(e, fallback: 'تعذّر تعديل الربط'));
+    }
+  }
+
+  /// `DELETE /towers/links/:id`.
+  static Future<({bool ok, String? message})> deleteLink(int id) async {
+    try {
+      final r = await ApiClient.dio.delete<Map<String, dynamic>>('$_base/towers/links/$id');
+      if (r.statusCode != 200 || r.data?['success'] != true) return (ok: false, message: _msg(r, 'تعذّر حذف الربط'));
+      return (ok: true, message: null);
+    } catch (e) {
+      _log('deleteLink', e);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر حذف الربط'));
+    }
+  }
+
+  /// `POST /regions/:id/assign` — أجهزةٌ لبرج (منطقة) دفعةً؛ [regionId] 0 = بلا منطقة.
+  static Future<({bool ok, int moved, String? message})> assignDevices(int regionId, Iterable<int> deviceIds) async {
+    final ids = deviceIds.toSet().toList();
+    if (ids.isEmpty) return (ok: true, moved: 0, message: null);
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/regions/$regionId/assign', data: {'device_ids': ids});
+      if (r.statusCode != 200 || r.data?['success'] != true) return (ok: false, moved: 0, message: _msg(r, 'تعذّر نقل الأجهزة'));
+      final n = r.data?['moved'];
+      return (ok: true, moved: n is int ? n : ids.length, message: null);
+    } catch (e) {
+      _log('assignDevices', e);
+      return (ok: false, moved: 0, message: humanError(e, fallback: 'تعذّر نقل الأجهزة'));
+    }
+  }
 }

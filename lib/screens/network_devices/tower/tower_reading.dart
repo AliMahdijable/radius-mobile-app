@@ -20,6 +20,8 @@ class TowerReading {
     this.signal,
     this.downBps,
     this.upBps,
+    this.radioRxBps,
+    this.radioTxBps,
     this.frequency,
     this.channelWidth,
     this.noise,
@@ -56,6 +58,11 @@ class TowerReading {
   /// التنزيل نحو المشتركين والرفع منهم (بت/ثانية) على الواجهة اللاسلكيّة، وإلّا أنشط منفذ.
   final int? downBps;
   final int? upBps;
+
+  /// ما تستقبله الواجهة اللاسلكيّة وما ترسله كما قرأهما الجهاز (بلا تفسير «تنزيل/رفع») — «الترابط» يحسب بهما سير الترافيك
+  /// من البرج الرئيسيّ للفرعيّ: ما يرسله طرف الرئيسيّ = ما يستقبله طرف الفرعيّ. null بلا واجهةٍ لاسلكيّة مقروءة.
+  final int? radioRxBps;
+  final int? radioTxBps;
 
   final int? frequency;
   final int? channelWidth;
@@ -238,6 +245,8 @@ class TowerReading {
       signal: (station || !probeAp) ? (ownSignal ?? peerSignal) : (peerSignal ?? ownSignal),
       downBps: down,
       upBps: up,
+      radioRxBps: radioPort?.rxBps,
+      radioTxBps: radioPort?.txBps,
       frequency: frequency,
       channelWidth: channelWidth,
       noise: noise,

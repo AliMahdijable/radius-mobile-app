@@ -34,7 +34,7 @@ import 'fiber/fiber_home_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'regions_screen.dart';
-import 'tower/tower_screen.dart';
+import 'tower/towers_screen.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/device_image.dart';
 import 'widgets/devices_filter_bar.dart';
@@ -1164,64 +1164,16 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     await openFiberHome(context, olts);
   }
 
-  /// «عرض البرج» (المالك ٢٧ أكتوبر) — كلّ منطقةٍ برج. المنطقة المصفّاة تُفتح مباشرةً، وإلّا تُختار من قائمة.
+  /// «عرض البرج» (المالك ٢٧ أكتوبر) — كلّ منطقةٍ برج. ١١ نوفمبر: «النظرة ع البرج رح تصير ٤ ابراج القسم ينتقل بينهم» +
+  /// «الترابط» ⇒ يفتح «أبراجي» ([TowersScreen]): شريطٌ يتنقّل بين الأبراج والترابط. المنطقة المصفّاة تُفتح مباشرةً.
   Future<void> _openTower() async {
-    var id = _regionFilter;
-    if (id == null) {
-      final regions = [
-        for (final r in _regionsById.values)
-          if (_countByRegion(r.id) > 0) r,
-      ]..sort((a, b) => a.name.compareTo(b.name));
-      final orphans = _countByRegion(_kNoRegion);
-      if (regions.isEmpty && orphans == 0) return;
-      if (regions.length + (orphans > 0 ? 1 : 0) == 1) {
-        id = regions.isEmpty ? _kNoRegion : regions.first.id;
-      } else {
-        id = await showAppSheet<int>(
-          context: context,
-          barrierColor: AppColors.scrim,
-          backgroundColor: AppColors.surface,
-          builder: (ctx) => SafeArea(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.sm),
-                child: Text('أيّ برج؟', style: AppType.cardTitleBold(color: AppColors.textHi)),
-              ),
-              Flexible(
-                child: ListView(shrinkWrap: true, children: [
-                  for (final r in regions)
-                    ListTile(
-                      leading: Icon(LucideIcons.radioTower, color: _parseRegionColor(r.color) ?? AppColors.brand),
-                      title: Text(r.name),
-                      trailing: Text('${_countByRegion(r.id)} جهاز', style: AppType.muted(color: AppColors.textMid)),
-                      onTap: () => Navigator.pop(ctx, r.id),
-                    ),
-                  if (orphans > 0)
-                    ListTile(
-                      leading: Icon(LucideIcons.mapPinOff, color: AppColors.textMid),
-                      title: const Text('بلا منطقة'),
-                      trailing: Text('$orphans جهاز', style: AppType.muted(color: AppColors.textMid)),
-                      onTap: () => Navigator.pop(ctx, _kNoRegion),
-                    ),
-                ]),
-              ),
-              const SizedBox(height: Sp.sm),
-            ]),
-          ),
-        );
-        if (id == null || !mounted) return;
-      }
-    }
-    final none = id == _kNoRegion;
-    final devices = [
-      for (final d in _mine)
-        if (none ? d.regionId == null : d.regionId == id) d,
-    ];
+    if (_mine.isEmpty) return;
+    final id = _regionFilter;
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => TowerScreen(
-        regionId: none ? 0 : id!,
-        regionName: none ? 'بلا منطقة' : (_regionsById[id]?.name ?? 'البرج'),
-        devices: devices,
+      builder: (_) => TowersScreen(
+        devices: _mine,
+        regions: _regionsById.values.toList(),
+        openRegionId: id == null ? null : (id == _kNoRegion ? 0 : id),
       ),
     ));
   }

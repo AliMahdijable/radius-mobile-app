@@ -48,12 +48,21 @@ class TowerScreen extends StatefulWidget {
     required this.regionId,
     required this.regionName,
     required this.devices,
+    this.switcher,
+    this.onAssign,
   });
 
   /// المنطقة = البرج، و`0` لأجهزةٍ بلا منطقة.
   final int regionId;
   final String regionName;
   final List<NetworkDevice> devices;
+
+  /// شريط التنقّل بين الأبراج و«الترابط» (من «أبراجي» — المالك ١١ نوفمبر: «النظرة ع البرج رح تصير ٤ ابراج القسم ينتقل بينهم»)
+  /// تحت العنوان؛ null: برجٌ مفتوحٌ وحده كما كان.
+  final PreferredSizeWidget? switcher;
+
+  /// «أجهزة البرج» — إسناد الأجهزة لهذا البرج (المالك: «الوكيل يسند الاجهزه للمنطقة معينه»)؛ null: لا يُعرض («بلا منطقة»).
+  final VoidCallback? onAssign;
 
   @override
   State<TowerScreen> createState() => _TowerScreenState();
@@ -476,6 +485,12 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
             onPressed: () => Navigator.pop(context),
           ),
           actions: [
+            if (widget.onAssign != null)
+              IconButton(
+                tooltip: 'أجهزة هذا البرج',
+                icon: Icon(_canEdit ? LucideIcons.listChecks : LucideIcons.lock, size: 20),
+                onPressed: widget.onAssign,
+              ),
             IconButton(
               tooltip: 'بناء البرج وترتيب الأجهزة',
               icon: const Icon(LucideIcons.slidersHorizontal, size: 20),
@@ -483,6 +498,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
             ),
             const SizedBox(width: 4),
           ],
+          bottom: widget.switcher,
         ),
       ),
       body: _arranged.isEmpty
@@ -517,10 +533,30 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(LucideIcons.radioTower, size: 40, color: AppColors.textLow),
             const SizedBox(height: Sp.md),
-            Text('لا أجهزة في هذه المنطقة بعد', style: AppType.cardTitle(color: AppColors.textHi)),
+            Text(widget.onAssign != null ? 'لا أجهزة على هذا البرج بعد' : 'لا أجهزة في هذه المنطقة بعد',
+                style: AppType.cardTitle(color: AppColors.textHi)),
             const SizedBox(height: Sp.xs),
-            Text('أضف أجهزتك من قسم الأجهزة وتظهر على البرج تلقائيّاً.',
-                textAlign: TextAlign.center, style: AppType.body(color: AppColors.textMid)),
+            Text(
+                widget.onAssign != null
+                    ? 'أسند لهذا البرج أجهزته — من أجهزتك المضافة، وتُنقل له بنقرة.'
+                    : 'أضف أجهزتك من قسم الأجهزة وتظهر على البرج تلقائيّاً.',
+                textAlign: TextAlign.center,
+                style: AppType.body(color: AppColors.textMid)),
+            if (widget.onAssign != null) ...[
+              const SizedBox(height: Sp.lg),
+              FilledButton.icon(
+                key: const ValueKey('tower-assign-empty'),
+                onPressed: widget.onAssign,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: AppColors.onBrand,
+                  minimumSize: const Size(180, 46),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
+                ),
+                icon: Icon(_canEdit ? LucideIcons.listChecks : LucideIcons.lock, size: 18),
+                label: Text('أسند أجهزة', style: AppType.buttonBold(color: AppColors.onBrand)),
+              ),
+            ],
           ]),
         ),
       );

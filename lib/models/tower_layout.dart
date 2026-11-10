@@ -171,15 +171,53 @@ class TowerPlacement {
   int get hashCode => Object.hash(deviceId, level, azimuth, beamwidth, fixed, shape);
 }
 
-/// ما رجع من الخادم: أبراج الحساب (بالمنطقة) ومواقع أجهزته (بالجهاز).
+/// لنكٌ بين برجين («الترابط» — المالك ١١ نوفمبر: «برج a منطي ٣ لنكات ماستر والابراج الفرعي سليف وياه»).
+/// [aDeviceId] طرف البرج الرئيسيّ (الماستر — منه يخرج الترافيك) و[bDeviceId] طرف الفرعيّ (السليف). البرجان يُعرفان من
+/// منطقة كلٍّ من الجهازين الآن، فنقل جهازٍ لبرجٍ آخر ينقل لنكه معه.
+@immutable
+class TowerLink {
+  const TowerLink({required this.id, required this.aDeviceId, required this.bDeviceId, this.label});
+
+  final int id;
+  final int aDeviceId;
+  final int bDeviceId;
+  final String? label;
+
+  static TowerLink? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final id = _int(j['id']);
+    final a = _int(j['a_device_id']);
+    final b = _int(j['b_device_id']);
+    if (id == null || id <= 0 || a == null || a <= 0 || b == null || b <= 0 || a == b) return null;
+    final label = j['label'];
+    return TowerLink(id: id, aDeviceId: a, bDeviceId: b, label: label is String && label.trim().isNotEmpty ? label.trim() : null);
+  }
+
+  TowerLink flipped() => TowerLink(id: id, aDeviceId: bDeviceId, bDeviceId: aDeviceId, label: label);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TowerLink && other.id == id && other.aDeviceId == aDeviceId && other.bDeviceId == bDeviceId && other.label == label;
+
+  @override
+  int get hashCode => Object.hash(id, aDeviceId, bDeviceId, label);
+}
+
+/// ما رجع من الخادم: أبراج الحساب (بالمنطقة) ومواقع أجهزته (بالجهاز) واللنكات بين أبراجه.
 @immutable
 class TowerLayouts {
-  const TowerLayouts({this.towers = const {}, this.placements = const {}});
+  const TowerLayouts({this.towers = const {}, this.placements = const {}, this.links = const [], this.linksReady = false});
 
   static const empty = TowerLayouts();
 
   final Map<int, TowerSettings> towers;
   final Map<int, TowerPlacement> placements;
+
+  /// اللنكات بين الأبراج — فارغةٌ من خادمٍ أقدم.
+  final List<TowerLink> links;
+
+  /// الخادم يحفظ الترابط (الهجرة 086) — false: خادمٌ أقدم أو تعذّر، فيُعرض بلا ربط ولا تعديل.
+  final bool linksReady;
 
   static TowerLayouts fromJson(Object? body) {
     if (body is! Map || body['success'] != true) return empty;
@@ -193,6 +231,16 @@ class TowerLayouts {
       final v = TowerPlacement.fromJson(p);
       if (v != null) places[v.deviceId] = v;
     }
-    return TowerLayouts(towers: Map.unmodifiable(towers), placements: Map.unmodifiable(places));
+    final links = <TowerLink>[];
+    for (final l in (body['links'] is List ? body['links'] as List : const [])) {
+      final v = TowerLink.fromJson(l);
+      if (v != null) links.add(v);
+    }
+    return TowerLayouts(
+      towers: Map.unmodifiable(towers),
+      placements: Map.unmodifiable(places),
+      links: List.unmodifiable(links),
+      linksReady: body['links_ready'] == true,
+    );
   }
 }
