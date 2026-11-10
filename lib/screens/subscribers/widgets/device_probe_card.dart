@@ -691,8 +691,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final k = _snap?.kind;
     // ZTE (٢٥ أكتوبر): مسار إعادة تشغيله لم يُفحص على جهازٍ حقيقيّ — لا زرّ يَعِد بما لم يُجرَّب.
     if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return false;
-    // TP-Link (١٠ نوفمبر): كذلك — لم يُجرَّب أمر إعادة تشغيله على جهازٍ حقيقيّ.
-    if (_isTplink) return false;
+    // TP-Link (١٠ نوفمبر): بأمر صفحته نفسها ([TplinkPharosService.reboot]).
     return k == DeviceKind.ubiquiti || k == DeviceKind.ont;
   }
 
@@ -728,6 +727,18 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     HapticFeedback.mediumImpact();
     String text;
     Color color;
+    if (_isTplink) {
+      final done = await _rebootTplink();
+      if (!mounted) return;
+      setState(() => _rebooting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(done.text),
+        backgroundColor: done.ok ? AppColors.success : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ));
+      return;
+    }
     try {
       final creds = isOnt
           ? await DeviceProbeApi.resolveOntCreds(
@@ -777,6 +788,34 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 4),
     ));
+  }
+
+  /// إعادة تشغيل TP-Link بأمر صفحته نفسها (مُجرَّب حيّاً على CPE610، ١٠ نوفمبر).
+  Future<({bool ok, String text})> _rebootTplink() async {
+    final creds = await DeviceProbeApi.resolveTplinkCreds(
+      fallbackIp: widget.ip,
+      subscriberUsername: widget.username,
+      company: widget.company,
+    );
+    if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وباسورد للجهاز — اكتبهن من «الاعتمادات»');
+    final r = await TplinkPharosService.reboot(creds.ip, creds.user, creds.pass);
+    if (r.sent) {
+      // الجهاز يقلع: جلسة الترافيك ماتت معه — لا نطرقه وهو يقلع. قِيس: الجهاز يقول ٨٠ث، انطفأ بعد ١٣ث ورجع يجاوب على الشبكة
+      // بعد ~دقيقتين (إقلاعٌ + ارتباط اللاسلكيّ + PPPoE) — فمهلته + نصف دقيقة قبل أوّل محاولة.
+      _closeTplink();
+      _tpRetryAt = DateTime.now().add(Duration(seconds: ((r.seconds ?? 80) + 30).clamp(60, 240)));
+      _loseTraffic();
+      return (ok: true, text: 'أُرسل أمر إعادة التشغيل — الجهاز يقلع الآن ويرجع خلال دقيقتين تقريباً');
+    }
+    final why = switch (r.issue) {
+      PharosLoginIssue.rejected => 'الجهاز رفض اليوزر أو الباسورد',
+      PharosLoginIssue.busy => 'صفحة الجهاز مفتوحة بمكانٍ ثاني',
+      PharosLoginIssue.locked || PharosLoginIssue.tooManyFails => 'الجهاز قافل الدخول',
+      PharosLoginIssue.needsSetup => 'الجهاز يطلب ضبط كلمة سرّه من صفحته أوّلاً',
+      PharosLoginIssue.readFailed => 'الجهاز ما قبل الأمر',
+      _ => 'الجهاز ما يجاوب',
+    };
+    return (ok: false, text: 'تعذّرت إعادة التشغيل: $why');
   }
 
   Future<void> _openConfig() async {

@@ -436,6 +436,52 @@ class TplinkPharosService {
     return out.future;
   }
 
+  /// إعادة تشغيل الجهاز — الأمر الذي ترسله صفحته نفسها: `GET /data/configReboot.json` (يردّ `wholeTime` ثواني الإقلاع).
+  /// ⚠️ جاره `/data/configReset.json` **إعادة ضبط مصنع** — لا يُلمس أبداً.
+  ///
+  /// مُجرَّب حيّاً على CPE610 v2.0 بإذن المالك (١٠ نوفمبر): الجهاز ردّ `wholeTime: 80`، انطفأ بعد ~١٣ث، ورجع يجاوب على الشبكة
+  /// بعد ~دقيقتين بمدّة تشغيلٍ مصفَّرة. وكصفحة الجهاز لا نفحص `configState.json` قبله: علم «تعديلات غير محفوظة» كان `true`
+  /// قبل الإقلاع **وبقي `true` بعده** على ذلك الجهاز — لا يدلّ على شيءٍ يُبنى عليه تحذير.
+  ///
+  /// جلسة الكرت الحيّة إن كانت قائمة تُستعمل (لا دخول ثانٍ)، وتموت مع إقلاع الجهاز بلا أن تُحسب «طرداً».
+  static Future<PharosRebootOutcome> reboot(String host, String user, String pass) => _serial(host, () async {
+        final live = _active[host];
+        final reuse = live != null && !live.lost;
+        final s = reuse ? live : await loginConfigured(host, user, pass);
+        if (s == null) {
+          final why = _issues[host];
+          return (sent: false, seconds: null, issue: why?.issue ?? PharosLoginIssue.unreachable, trace: why?.trace ?? 'login');
+        }
+        try {
+          int? seconds;
+          try {
+            final r = await _send(s.base, 'GET', '/data/configReboot.json', cookie: s.cookie);
+            final j = TplinkPharosParse.json(r.body);
+            if (j != null && j['timeout'] == true && j['success'] == true && j['wholeTime'] == null && j['data'] == null) {
+              // الجلسة انتهت بين الدخول والأمر (دخل غيرنا): لم يُنفَّذ.
+              s._lost = true;
+              return (sent: false, seconds: null, issue: PharosLoginIssue.busy, trace: 'reboot:${r.status} session-timeout');
+            }
+            if (j == null || j['success'] != true) {
+              return (sent: false, seconds: null, issue: PharosLoginIssue.readFailed, trace: 'reboot:${r.status} len:${r.body.length}');
+            }
+            final data = j['data'];
+            seconds = TplinkPharosParse.intOf(j['wholeTime']) ?? (data is Map ? TplinkPharosParse.intOf(data['wholeTime']) : null);
+          } on _NoConnection catch (e) {
+            return (sent: false, seconds: null, issue: PharosLoginIssue.unreachable, trace: 'reboot:${_errName(e)}');
+          } catch (_) {
+            // أُرسل الأمر وانقطع الاتّصال قبل الردّ: الجهاز بدأ يقلع غالباً — أُرسل، بلا مدّة.
+          }
+          // الجهاز يقلع: جلستنا تموت معه — ليست «طرداً» ولا مهلة عليها.
+          s._lost = true;
+          s._kickNoted = true;
+          if (identical(_active[host], s)) _active.remove(host);
+          return (sent: true, seconds: seconds, issue: null, trace: 'reboot:sent');
+        } finally {
+          if (!reuse && !s.lost) await logout(s);
+        }
+      });
+
   static Future<PharosSession?> _openLive(String host, String user, String pass) => _serial(host, () async {
         final cur = _active[host];
         if (cur != null && !cur.lost) {
@@ -549,6 +595,9 @@ enum PharosLoginIssue {
 }
 
 typedef PharosLoginOutcome = ({PharosSession? session, PharosLoginIssue? issue, int? lockLeft, String trace});
+
+/// نتيجة طلب إعادة التشغيل: [sent] أُرسل الأمر (و[seconds] مدّة الإقلاع كما يقولها الجهاز)؛ وإلّا [issue] لماذا لم يُرسل.
+typedef PharosRebootOutcome = ({bool sent, int? seconds, PharosLoginIssue? issue, String trace});
 
 /// قراءةٌ حيّة واحدة: ترافيك المشترك الآن (بت/ث) وما يتغيّر من حال الوصلة.
 class PharosLive {

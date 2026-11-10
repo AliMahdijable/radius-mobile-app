@@ -449,6 +449,46 @@ void main() {
       expect(TplinkPharosService.defaultSecureBase('10.0.0.5:8080'), isNull);
     });
 
+    test('إعادة التشغيل: أمر صفحة الجهاز مرّةً واحدة، بمدّة الإقلاع — ولا يُلمس أمر ضبط المصنع أبداً', () async {
+      final r = await TplinkPharosService.reboot(d.host, 'agent', 'secret-1');
+      expect([r.sent, r.seconds, r.issue], [true, 75, null]);
+      expect([d.reboots, d.resets], [1, 0]);
+      expect(d.paths.where((p) => p.contains('config')), ['GET /data/configReboot.json'], reason: 'أمرٌ واحد — كصفحة الجهاز');
+      await d.idle();
+      expect(d.logouts, 0, reason: 'الجهاز يقلع — لا خروج من جلسةٍ ماتت معه');
+      // بعد الإقلاع: الدخول فوراً بلا مهلة «مشغول» (لم نُطرد — نحن من أقلعه)
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull);
+    });
+
+    test('إعادة التشغيل وجلسة الكرت قائمة ⇒ بها بلا دخولٍ ثانٍ، وتموت مع الإقلاع بلا أن تُحسب طرداً', () async {
+      final live = await PharosLiveSession.open(ip: d.host, user: 'agent', pass: 'secret-1');
+      final r = await TplinkPharosService.reboot(d.host, 'agent', 'secret-1');
+      expect(r.sent, isTrue);
+      expect(d.logins, hasLength(1));
+      expect(live!.lost, isTrue);
+      expect(await live.sample(), isNull);
+      await live.close();
+      expect(TplinkPharosService.hasLive(d.host), isFalse);
+      expect(await PharosLiveSession.open(ip: d.host, user: 'agent', pass: 'secret-1'), isNotNull,
+          reason: 'لا مهلة «طُردنا» بعد إقلاعٍ طلبناه نحن');
+    });
+
+    test('إعادة التشغيل لا تُرسل: اعتمادٌ مرفوض، أو دخل غيرنا قبل الأمر (جلستنا انتهت) — ولا إقلاع', () async {
+      final bad = await TplinkPharosService.reboot(d.host, 'agent', 'wrong');
+      expect([bad.sent, bad.issue], [false, PharosLoginIssue.rejected]);
+      d.kickAfterLogin = true;
+      final kicked = await TplinkPharosService.reboot(d.host, 'agent', 'secret-1');
+      expect([kicked.sent, kicked.issue], [false, PharosLoginIssue.busy]);
+      expect([d.reboots, d.resets], [0, 0]);
+    });
+
+    test('أُرسل أمر الإقلاع وانقطع الاتّصال قبل الردّ ⇒ أُرسل (الجهاز بدأ يقلع)، بلا مدّة', () async {
+      d.dropReboot = true;
+      final r = await TplinkPharosService.reboot(d.host, 'agent', 'secret-1');
+      expect([r.sent, r.seconds], [true, null]);
+      expect(d.reboots, 1);
+    });
+
     test('دخولان متزامنان من التطبيق نفسه يتسلسلان (لا يطرد أحدهما الآخر قبل قراءته)', () async {
       final r = await Future.wait([
         TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'),
@@ -747,6 +787,11 @@ class _FakePharos {
   /// عدد محاولات الدخول التالية التي يردّها الجهاز «nonce قديم» (عميلٌ آخر تعرّف بينها).
   int staleNext = 0;
 
+  /// إعادة التشغيل: كم مرّةً وصل أمر الإقلاع وأمر ضبط المصنع (يجب أن يبقى صفراً دائماً).
+  bool dropReboot = false;
+  int reboots = 0;
+  int resets = 0;
+
   String? session;
   String? _nonce;
   int _seq = 0x06107906;
@@ -877,6 +922,19 @@ class _FakePharos {
       }
       if (!mine) return _json(res, {'success': true, 'timeout': true}, setCookie: _newNonce());
       if (req.uri.path == '/data/info.json') return _json(res, {'success': true, 'data': _info()});
+      if (req.uri.path == '/data/configReset.json') {
+        resets++;
+        return _json(res, {'success': true});
+      }
+      if (req.uri.path == '/data/configReboot.json') {
+        reboots++;
+        session = null; // الجهاز يقلع: كلّ الجلسات تموت
+        if (dropReboot) {
+          (await res.detachSocket(writeHeaders: false)).destroy();
+          return;
+        }
+        return _json(res, {'success': true, 'wholeTime': 75});
+      }
       if (req.uri.path == '/data/progressBar.json') {
         if (dropLive) {
           (await res.detachSocket(writeHeaders: false)).destroy();
