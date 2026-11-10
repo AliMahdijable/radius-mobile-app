@@ -669,11 +669,16 @@ class DevicesCheck {
             ),
         ]..sort((a, b) => a.light!.compareTo(b.light!));
         final w = subs.where((x) => x.weak).length;
-        // المقطوعة: الضعيف كلّه فيها ما دام فيها غير ضعيف؛ وكلّها ضعيفة ⇒ قد يكون غيرها («300+»)
+        // المقطوعة: الضعيف كلّه فيها ما دام فيها غير ضعيف؛ وكلّها ضعيفة ⇒ قد يكون غيرها: «300 أو أكثر — أضعف 300 كلّها
+        // ضعيفة» لا «300+ — من أضعف 300» (أكثر من 300 من 300 — المراجعة)
         if (w > 0) {
-          final n = cut && w == subs.length ? '$w+' : '$w';
-          f.add(CheckFinding(CheckLevel.warn,
-              cut ? 'ضوء ضعيف: $n — من أضعف ${subs.length}' : 'ضوء ضعيف: $w — من ${subs.length} مشترك'));
+          f.add(CheckFinding(
+              CheckLevel.warn,
+              !cut
+                  ? 'ضوء ضعيف: $w — من ${subs.length} مشترك'
+                  : w == subs.length
+                      ? 'ضوء ضعيف: $w أو أكثر — أضعف ${subs.length} كلّها ضعيفة'
+                      : 'ضوء ضعيف: $w — من أضعف ${subs.length}'));
         }
       }
     }

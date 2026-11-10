@@ -683,7 +683,7 @@ class DeviceVitals {
         try {
           return await _ubnt(d, creds, prev);
         } catch (_) {
-          // airOS لم يقرأه: لعلّه EdgeSwitch بلا طرازٍ محفوظ (صفحة الجهاز تكشفه وتقرؤه بـREST) — مرّةً لكلّ عنوان
+          // airOS لم يقرأه: لعلّه EdgeSwitch بلا طرازٍ محفوظ (صفحة الجهاز تكشفه وتقرؤه بـREST) — مرّةً لكلّ جهاز
           final es = await _edgeSwitchTry(d, creds);
           if (es != null) return es;
           rethrow;
@@ -1587,11 +1587,11 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
 
 // ── سويتش EdgeSwitch (علامة ubnt): REST كصفحته — المعالج · الذاكرة · المنافذ ───────────────────────────────
 
-/// سويتش EdgeSwitch: من طرازه (‏ES-8-150W · «EdgeSwitch 24» — كاشف الطُرُز يكتبه)، أو عنوانٌ قُرئ بـREST قبلاً. الاسم
+/// سويتش EdgeSwitch: من طرازه (‏ES-8-150W · «EdgeSwitch 24» — كاشف الطُرُز يكتبه)، أو جهازٌ قُرئ بـREST قبلاً. الاسم
 /// وحده لا (سكتر «Tower-ES-1» راديو airOS) — اسمٌ بلا طراز يُكشف بـREST حين لا تقرؤه جلسة airOS.
 bool isEdgeSwitch(NetworkDevice d) {
   if (d.brand.toLowerCase() != 'ubnt') return false;
-  return _edgeSwitchName(d.model ?? '') || _edgeSwitchHosts.contains(d.ip);
+  return _edgeSwitchName(d.model ?? '') || _edgeSwitchHosts.contains(_esKey(d));
 }
 
 bool _edgeSwitchName(String s) {
@@ -1599,10 +1599,14 @@ bool _edgeSwitchName(String s) {
   return c.contains('edgeswitch') || RegExp(r'\bes-\d').hasMatch(c);
 }
 
-/// عناوين قُرئت بـREST وطرازها غير محفوظ — تُقرأ بعدها بـREST مباشرة (كـ`_udapiHosts` في UbntApi).
+/// ذاكرتا REST بالجهاز لا بالعنوان: معرّفه (فريدٌ بين الشركات) وعنوانه ومنفذه — جهازان خلف IP واحد (توجيه منافذ، أو
+/// عنوانٌ خاصّ مكرّر بين شركتين) لا يأخذ أحدهما حكم الآخر، وتعديل عنوانه أو منفذه يبدأ من جديد (المراجعة).
+String _esKey(NetworkDevice d) => '${d.id}@${d.ip}:${d.apiPort}';
+
+/// أجهزةٌ قُرئت بـREST وطرازها غير محفوظ — تُقرأ بعدها بـREST مباشرة (كـ`_udapiHosts` في UbntApi).
 final Set<String> _edgeSwitchHosts = {};
 
-/// عناوين لم تُجب REST (ليست EdgeSwitch) ولحظتها — لا تُسأل ثانيةً قبل [_edgeSwitchRetry]: فشل راديو airOS لا يدفع
+/// أجهزةٌ لم تُجب REST (ليست EdgeSwitch) ولحظتها — لا تُسأل ثانيةً قبل [_edgeSwitchRetry]: فشل راديو airOS لا يدفع
 /// طلباً كلّ نبضة.
 final Map<String, DateTime> _notEdgeSwitchAt = {};
 const _edgeSwitchRetry = Duration(minutes: 10);
@@ -1611,7 +1615,7 @@ const _edgeSwitchRetry = Duration(minutes: 10);
 class EdgeSwitchUnread implements Exception {
   const EdgeSwitchUnread();
   @override
-  String toString() => 'EdgeSwitch: صفحة السويتش ما فتحت';
+  String toString() => 'EdgeSwitch: صفحة السويج ما فتحت';
 }
 
 /// لقطة REST كلوحته — والمنفذ كلوحته: ٢٢ (منفذ SSH الذي يقترحه نموذج الإضافة لكلّ UBNT) ليس منفذ REST ⇒ ٤٤٣.
@@ -1635,16 +1639,17 @@ Future<ProbeResult> _edgeSwitch(NetworkDevice d, Map<String, dynamic> creds) asy
 /// جهاز ubnt بلا طرازٍ يقول EdgeSwitch: REST نفسه (طلب دخولٍ واحد يُرفض على غيره) — أجاب بهويّة EdgeSwitch ⇒ يُتذكّر
 /// ويُقرأ به؛ وإلّا null. الهويّة شرط: راديوات UISP (‏Wave · LTU) تجيب `/api/v1.0` نفسه وليست سويتشات.
 Future<ProbeResult?> _edgeSwitchTry(NetworkDevice d, Map<String, dynamic> creds) async {
-  final no = _notEdgeSwitchAt[d.ip];
+  final k = _esKey(d);
+  final no = _notEdgeSwitchAt[k];
   if (no != null && DateTime.now().difference(no) < _edgeSwitchRetry) return null;
   if ((creds['user'] ?? '').toString().isEmpty) return null;
   final s = await _edgeSwitchRead(d, creds);
   if (s == null || !_edgeSwitchName('${s.model ?? ''} ${s.product ?? ''}')) {
-    _notEdgeSwitchAt[d.ip] = DateTime.now();
+    _notEdgeSwitchAt[k] = DateTime.now();
     return null;
   }
-  _notEdgeSwitchAt.remove(d.ip);
-  _edgeSwitchHosts.add(d.ip);
+  _notEdgeSwitchAt.remove(k);
+  _edgeSwitchHosts.add(k);
   return _edgeSwitchResult(s);
 }
 
