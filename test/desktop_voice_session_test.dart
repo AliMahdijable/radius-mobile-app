@@ -161,6 +161,45 @@ void main() {
     s.dispose();
   });
 
+  test('في الضجيج ينتهي التسجيل بسكوت المتكلّم لا بسقفه — وفرقعةٌ واحدة لا تقطع كلاماً عاديّاً', () async {
+    Uint8List level(int amplitude) {
+      final bytes = Uint8List(640); // ٢٠ مث
+      final data = ByteData.sublistView(bytes);
+      for (var i = 0; i + 1 < 640; i += 2) data.setInt16(i, i % 4 == 0 ? amplitude : -amplitude, Endian.little);
+      return bytes;
+    }
+
+    // محلٌّ صاخب: ضجيج ٦٠٠ (فوق عتبة الهدوء ٢٥٠) ثمّ كلام ٦٠٠٠ ثمّ الضجيج نفسه
+    var c = Capture();
+    var sent = 0;
+    var s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+      transcribe: (wav, _) async { sent = wav.length; return 'فعل علي حسين'; });
+    await s.start();
+    for (var i = 0; i < 25; i++) c.stream.add(level(600));
+    for (var i = 0; i < 100; i++) c.stream.add(level(6000));
+    expect(s.phase, DesktopVoicePhase.listening);
+    for (var i = 0; i < 90 && s.phase == DesktopVoicePhase.listening; i++) c.stream.add(level(600));
+    await Future<void>.delayed(Duration.zero);
+    expect(sent, greaterThan(0), reason: 'سكت المتكلّم ⇒ أُرسل بعد ثانيةٍ ونصف من ضجيج المكان');
+    expect(sent, lessThan(DesktopVoiceSession.maxBytes), reason: 'لا انتظار للسقف (١٥ث)');
+    s.dispose();
+
+    // فرقعةٌ عالية أوّل التسجيل ثمّ كلامٌ عاديّ طويل: لا يُقطع
+    c = Capture();
+    sent = 0;
+    s = DesktopVoiceSession(captureFactory: () => c, scope: () async => '1', onText: (_) {}, onError: (e) => fail(e),
+      transcribe: (wav, _) async { sent = wav.length; return 'فعل علي حسين'; });
+    await s.start();
+    c.stream.add(level(20000));
+    for (var i = 0; i < 200; i++) c.stream.add(level(3000)); // ٤ث كلام
+    expect(s.phase, DesktopVoicePhase.listening, reason: 'الكلام ليس «صمتاً» لأنّ فرقعةً سبقته');
+    expect(sent, 0);
+    for (var i = 0; i < 80 && s.phase == DesktopVoicePhase.listening; i++) c.stream.add(level(0));
+    await Future<void>.delayed(Duration.zero);
+    expect(sent, greaterThan(0));
+    s.dispose();
+  });
+
   test('ردّ الخادم: الجديد بلغته وبدائله، والأقدم (نصٌّ وحده) كما كان', () {
     final now = transcriptOf({
       'success': true, 'text': ' فعّل علي حسين ', 'lang': 'ar',

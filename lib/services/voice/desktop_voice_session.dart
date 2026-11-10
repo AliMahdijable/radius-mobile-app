@@ -24,7 +24,11 @@ class RecordVoiceCapture implements VoiceCapture {
   Future<bool> hasPermission() => _recorder.hasPermission();
   @override
   Future<Stream<Uint8List>> start() => _recorder.startStream(const RecordConfig(
-      encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1));
+      encoder: AudioEncoder.pcm16bits,
+      sampleRate: 16000,
+      numChannels: 1,
+      // الهاتف (وضع «تلقائي»): مايك الجهاز نفسه — بلا توجيه سمّاعة البلوتوث (يحتاج إذناً لا نطلبه). ويندوز لا يقرؤه.
+      androidConfig: AndroidRecordConfig(manageBluetooth: false)));
   @override
   Future<void> stop() async {
     await _recorder.stop();
@@ -96,6 +100,9 @@ class DesktopVoiceSession extends ChangeNotifier {
   bool _disposed = false;
   bool _heardSpeech = false;
   int _silentBytes = 0;
+
+  /// شدّة كلّ قطعةٍ سُمعت — منها عتبة الصمت في الضجيج ([_quietBelow]).
+  final List<double> _levels = [];
   String _startedScope = '';
 
   static Future<String> _currentScope() async =>
@@ -141,6 +148,7 @@ class DesktopVoiceSession extends ChangeNotifier {
     _audio = BytesBuilder(copy: true);
     _heardSpeech = false;
     _silentBytes = 0;
+    _levels.clear();
     _phase(DesktopVoicePhase.starting);
     try {
       _startedScope = await _scope();
@@ -196,7 +204,8 @@ class DesktopVoiceSession extends ChangeNotifier {
       squareSum += sample * sample;
     }
     final rms = math.sqrt(squareSum / math.max(1, chunk.length ~/ 2));
-    if (rms >= 250) {
+    _levels.add(rms);
+    if (rms >= _quietBelow()) {
       _heardSpeech = true;
       _silentBytes = 0;
     } else if (_heardSpeech) {
@@ -205,6 +214,18 @@ class DesktopVoiceSession extends ChangeNotifier {
     if (_audio.length >= maxBytes || (_heardSpeech && _silentBytes >= 48000)) {
       unawaited(stop());
     }
+  }
+
+  /// ما دونه صمت. بمكانٍ هادئ ٢٥٠ كما كان؛ وفي الضجيج (محلّ، شارع — الهاتف بوضع «تلقائي») ضجيج المكان نفسه فوقها فلا ينتهي
+  /// التسجيل إلّا بسقفه: حين يتّضح فرقٌ بين أهدأ عُشرٍ وأعلى عُشرٍ ممّا سُمع فالعتبة بينهما (وسطهما الهندسيّ). فرقعةٌ واحدة لا
+  /// تحرّك العُشر الأعلى، وصوتٌ بمستوىً واحد (لا فرق) يبقى على ٢٥٠.
+  double _quietBelow() {
+    if (_levels.length < 12) return 250;
+    final sorted = [..._levels]..sort();
+    final low = sorted[(sorted.length * 0.1).floor()];
+    final high = sorted[(sorted.length * 0.9).floor()];
+    if (high < 250 || high < low * 2) return 250;
+    return math.max(250, math.sqrt(low * high));
   }
 
   Future<void> stop() async {

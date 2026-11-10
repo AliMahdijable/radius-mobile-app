@@ -264,7 +264,8 @@ const reviewedMoneyKeys = <String, int>{
   'lib/screens/settlements/sheets/settle_sheet.dart _SettleSheet companyKey: companyKey': 1,
   'lib/screens/settlements/sheets/settlement_detail_sheet.dart SettlementsApi.voidSettlement companyKey: widget.companyKey': 1,
   'lib/screens/settlements/sheets/settlement_detail_sheet.dart _DetailSheet companyKey: companyKey': 1,
-  'lib/screens/subscribers/subscriber_detail_screen.dart showSellToSubscriber companyKey: sub.companyKey': 1,
+  // زرّ «بيع مادّة» + «بيع لفلان» بالأمر الصوتيّ (١٠ نوفمبر، _runAutoAction) — كلاهما شركة صفّ الصفحة نفسه
+  'lib/screens/subscribers/subscriber_detail_screen.dart showSellToSubscriber companyKey: sub.companyKey': 2,
 };
 
 /// كاتبات المال وشيتاته كما رُوجعت، وكلّ نداءٍ لها في الشاشات (المجلّدات كلّها) بمصدر شركةٍ مراجَع — لا من الشريط، وnull في موضعٍ
