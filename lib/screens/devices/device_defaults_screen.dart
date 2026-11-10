@@ -211,6 +211,8 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     extras: _tplinkExtra,
                     onAdd: () => _addExtra(_tplinkExtra),
                     onRemove: (i) => _removeExtra(_tplinkExtra, i),
+                    // جملة الإضافيّ العامّة تتكلّم عن ZTE — هنا بكلمات TP-Link.
+                    extraHint: 'devices.tplink_extra_hint'.tr(),
                   ),
                   const SizedBox(height: Sp.lg),
                   SizedBox(
@@ -278,6 +280,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     required List<_ExtraField> extras,
     required VoidCallback onAdd,
     required ValueChanged<int> onRemove,
+    String? extraHint,
   }) =>
       Container(
         key: key,
@@ -374,7 +377,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
             if (extras.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(
-                'devices.extra_hint'.tr(),
+                extraHint ?? 'devices.extra_hint'.tr(),
                 style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
               ),
             ],

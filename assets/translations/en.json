@@ -875,6 +875,7 @@
     "ont_default_hint": "System default: telecomadmin / admintelecom. Leave empty to use it.",
     "ubnt_default_hint": "System default: ubnt / ubnt. Leave empty to use it.",
     "tplink_default_hint": "For TP-Link (CPE) devices. No built-in default: enter your devices' login — the device locks its page after ten wrong tries, so nothing is ever guessed on it.",
+    "tplink_extra_hint": "If the first is rejected, the next ones are tried in order and the one that works is remembered per device. A rejected login is never retried on a device, so it does not lock.",
     "save_creds": "Save credentials",
     "add_cred": "Add another login",
     "extra_cred": "Login {}",
