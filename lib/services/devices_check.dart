@@ -562,8 +562,15 @@ class DevicesCheck {
       if (g.linkDown) {
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة مقطوعة — لا إشارة'));
         linkJudged = true;
-      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && ownRx == null && g.signalPct == null) {
-        // وطرفٌ يقرأ إشارة وصلته هو (ميموزا PtP: قدرة استقباله، ولا جدول محطّاتٍ له) يُحكم بها أدناه (مراجعة 180)
+      } else if (g.peersKnown &&
+          !stale &&
+          detail.peers.isEmpty &&
+          (linkAp ? ownRx == null : here == null) &&
+          g.signalPct == null &&
+          g.hasRadio != false) {
+        // وطرفٌ يقرأ إشارة وصلته هو (ميموزا PtP: قدرة استقباله، ولا جدول محطّاتٍ له) يُحكم بها أدناه (مراجعة 180).
+        // ١٠ نوفمبر (قرار المالك «سويها الافضل حسب مقترحك»): جدوله قُرئ فارغاً ولا إشارة — وضعه مقروءاً كان أو لا ⇒ لا طرف
+        // ثانٍ، صادقةٌ سقط الطرف أو راديونا؛ والراديو الطافي (ru:false) «الوصلة مقطوعة» أعلاه. لا «إشارة الوصلة ما انقرت».
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة بلا طرفٍ ثانٍ'));
         linkJudged = true;
       } else {
@@ -780,7 +787,9 @@ class DevicesCheck {
       }
     } else if (g.radioUnread && role != CheckRole.sector && role != CheckRole.olt && role != CheckRole.switcher) {
       // السويج يُحكم بمنافذه — جدولٌ لم يُقرأ يقوله «المنافذ ما انقرت» أدناه، لا «وضعه اللاسلكيّ»
-      f.add(const CheckFinding(CheckLevel.info, 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+      // ١٠ نوفمبر (قرار المالك): قائمته قُرئت (reg_ok) ووضعه وحده مجهول ⇒ لا «ومشتركوه»
+      f.add(CheckFinding(
+          CheckLevel.info, g.peersKnown ? 'وضعه اللاسلكيّ ما انقرأ' : 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
       radioGap = true;
     }
     // جدول المنافذ لم يُقرأ (المراجعة الثانية): صريحاً من القارئ، أو سويج/راوتر كانت له منافذ وقراءته الجديدة بلا منفذٍ واحد —

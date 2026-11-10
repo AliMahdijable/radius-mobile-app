@@ -540,7 +540,11 @@ class DeviceVitals {
       uptimeSec: up,
       peersKnown: v['peers'] is List && (!ros || peerRows.isNotEmpty || v['reg_ok'] == true),
       radioRunUnread: ros && isAp == null && radioFlag == true && radioUp == null && peerRows.isEmpty,
-      radioUnread: ros && isAp == null && (radioFlag == true || peerRows.isNotEmpty),
+      // ١٠ نوفمبر (قرار المالك): جدوله قُرئ (reg_ok) وراديوه يعمل (ru) ⇒ لاسلكيّه مقروء كقراءة موبايلك — «راوتر · سليم»
+      radioUnread: ros &&
+          isAp == null &&
+          (radioFlag == true || peerRows.isNotEmpty) &&
+          !(v['reg_ok'] == true && radioUp == true),
       apUnknown: ros && isAp == null && radioFlag != false,
       portsUnread: cut,
       // محطّة airOS: إشارة 0 = غير مرتبطة (لا «0 dBm» ممتازة) — الوصلة مقطوعة؛ وRouterOS: راديوٌ مفعّل لا يعمل

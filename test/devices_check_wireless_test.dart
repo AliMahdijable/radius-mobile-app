@@ -416,10 +416,11 @@ void main() {
       expect(r.signal, -61);
     });
 
-    test('بلا صفٍّ أو بإشارةٍ غير مقروءة (0) ⇒ «إشارة الوصلة ما انقرت» كما هي — لا «0 dBm»', () {
+    test('جدولها قُرئ فارغاً ⇒ «الوصلة بلا طرفٍ ثانٍ» (قرار المالك ١٠ نوفمبر)؛ وبإشارةٍ غير مقروءة (0) ⇒ «إشارة الوصلة ما انقرت» — لا «0 dBm»', () {
       final d = dev(33, type: 'link', brand: 'mikrotik', protocol: 'api');
       final none = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': const []}));
-      expect(texts(none), ['إشارة الوصلة ما انقرت']);
+      expect(texts(none), ['الوصلة بلا طرفٍ ثانٍ']);
+      expect(none.state, CheckState.warn);
       final zero = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': [
         {'n': 'TWR-AP', 's': 0}
       ]}));
@@ -524,6 +525,55 @@ void main() {
       final live = remote(dev(49, brand: 'mikrotik', protocol: 'api'), v('$head$tail'));
       expect(texts(live), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
       expect(live.state, CheckState.unread);
+    });
+  });
+
+  group('١٠ نوفمبر (قرار المالك «سويها الافضل حسب مقترحك»): وصلةٌ قُرئ جدولها فارغاً، وراوترٌ قُرئ لاسلكيّه', () {
+    test('🚨 وصلة RouterOS جدولها قُرئ فارغاً بلا إشارة ⇒ «الوصلة بلا طرفٍ ثانٍ» (مشكلة) لا «إشارة الوصلة ما انقرت · لم يُقرأ» — '
+        'وراديوها يعمل (ru:true) أو لا يُعرف؛ والطافي (ru:false) «الوصلة مقطوعة»', () {
+      final d = dev(70, type: 'link', brand: 'mikrotik', protocol: 'api');
+      for (final ru in [true, null]) {
+        final r = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, if (ru != null) 'ru': ru, 'peers': const <Map>[]}));
+        expect(texts(r), ['الوصلة بلا طرفٍ ثانٍ'], reason: 'ru=$ru');
+        expect(r.state, CheckState.warn, reason: 'ru=$ru');
+      }
+      final down = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'ru': false, 'peers': const <Map>[]}));
+      expect(texts(down), ['الوصلة مقطوعة — لا إشارة']);
+      // جدولها لم يقرأه الخادم (reg_ok:false) ⇒ لا يُدّعى «بلا طرف» — «ما انقرت» كما كانت
+      final unread = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': false, 'peers': const <Map>[]}));
+      expect(texts(unread), ['إشارة الوصلة ما انقرت']);
+    });
+
+    test('🚨 قراءة موبايلك للوصلة نفسها (محطّةٌ شغّالة وجدولها فارغ) ⇒ «الوصلة بلا طرفٍ ثانٍ» كقراءة الخادم', () async {
+      final d = dev(71, type: 'link', brand: 'mikrotik', protocol: 'api');
+      final replies = <String, Object>{
+        '/interface/print': [
+          {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+          {'name': 'wlan1', 'type': 'wlan', 'running': 'true', 'disabled': 'false'},
+        ],
+        '/interface/wireless/print': [
+          {'name': 'wlan1', 'mode': 'station-bridge', 'ssid': 'TWR', 'running': 'true', 'disabled': 'false'}
+        ],
+        '/interface/wireless/registration-table/print': <Map<String, String>>[],
+      };
+      final r = await judgeRos(d, replies);
+      expect(texts(r), contains('الوصلة بلا طرفٍ ثانٍ'));
+      expect(texts(r), isNot(contains('إشارة الوصلة ما انقرت')));
+    });
+
+    test('🚨 «كل الشركات»: راوترٌ (نقطة وصول بحزمة wifi) قرأ الخادم جدوله (reg_ok) وراديوه يعمل (ru:true) ⇒ «راوتر · سليم» '
+        'كموبايلك؛ وبلا ru ⇒ «وضعه اللاسلكيّ ما انقرأ» (بلا «ومشتركوه»)؛ وجدولٌ لم يُقرأ كما كان', () {
+      final d = dev(72, type: 'router', brand: 'mikrotik', protocol: 'api');
+      final ok = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'ru': true, 'peers': const <Map>[]}));
+      expect(ok.state, CheckState.ok);
+      expect(texts(ok), isNot(contains('وضعه اللاسلكيّ ما انقرأ')));
+      expect(texts(ok), isNot(contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا')));
+      final noRu = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': const <Map>[]}));
+      expect(texts(noRu), contains('وضعه اللاسلكيّ ما انقرأ'));
+      expect(noRu.state, CheckState.unread);
+      final unread = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': false, 'peers': const <Map>[]}));
+      expect(texts(unread), contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+      expect(unread.state, CheckState.unread);
     });
   });
 

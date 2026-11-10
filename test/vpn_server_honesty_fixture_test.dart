@@ -74,7 +74,8 @@ void main() {
     final r = judge(raw);
     expect(r[62]!.state, isNot(CheckState.ok));
     expect(r[62]!.state, CheckState.unread);
-    expect(texts(r[62]!), contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+    // ١٠ نوفمبر (قرار المالك): قائمته قُرئت (reg_ok) ووضعه وحده مجهول ⇒ بلا «ومشتركوه»، و«لم يُقرأ» ما لم يقل الخادم إنّ راديوه يعمل
+    expect(texts(r[62]!), contains('وضعه اللاسلكيّ ما انقرأ'));
     expect(r[63]!.state, CheckState.ok);
   });
 
