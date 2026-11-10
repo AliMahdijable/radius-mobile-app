@@ -99,7 +99,7 @@ void main() {
       expect(server.calls('GET', statusPath).length, greaterThan(after));
     });
 
-    test('🚨 ١٠ نوفمبر (الزرّ يختفي): «لا نعرف بعد» (503 — الخادم لم يثبت الجلسة لحظتها) لا يُخفي ما نعرفه، ويُسأل ثانيةً وحده',
+    test('🚨 ١٠ نوفمبر (الزرّ يختفي): «لا نعرف بعد» (409 — الخادم لم يثبت الجلسة لحظتها) لا يُخفي ما نعرفه، ويُسأل ثانيةً وحده',
         () async {
       final timers = <(Duration, void Function())>[];
       AiAssistantState.retryTimer = (wait, run) {
@@ -110,7 +110,8 @@ void main() {
       AiAssistantState.debugSet(AiStatus.fromJson({...on, 'voice': true}, mode: AiMode.company));
       expect(AiAssistantState.voice, isTrue);
       clock = clock.add(const Duration(minutes: 6)); // المهلة انتهت ⇒ يُسأل
-      server.reply('GET', statusPath, 503, {'success': false, 'code': 'AI_IDENTITY_RETRY', 'message': 'أعد المحاولة'});
+      server.reply('GET', statusPath, 409,
+          {'success': false, 'code': 'AI_IDENTITY_RETRY', 'message': 'تعذّر التعرّف على حسابك — أعد المحاولة'});
       await AiAssistantState.ensureFresh();
       expect(AiAssistantState.voice, isTrue, reason: 'زرّ «أمر صوتي» باقٍ — «لا نعرف» ليست «مطفأ»');
       expect(AiAssistantState.canAsk, isTrue);
@@ -130,6 +131,54 @@ void main() {
       expect(AiAssistantState.voice, isTrue);
       expect(server.calls('GET', statusPath).last.extra['companyOpen'], isTrue,
           reason: 'حال الجلسة المفتوحة صراحةً — لا وجهة شركةٍ أخرى من «كل الشركات»');
+    });
+
+    test('أوّل سؤالٍ بالجلسة وجاء «لا نعرف بعد»: الزرّ غائب ⇒ محاولتان قريبتان (٣ث، ٨ث) تتخطّيان التبريد، ثمّ التباعد المعتاد',
+        () async {
+      final timers = <(Duration, void Function())>[];
+      AiAssistantState.retryTimer = (wait, run) {
+        timers.add((wait, run));
+        return null;
+      };
+      addTearDown(() => AiAssistantState.retryTimer = null);
+      expect(AiAssistantState.gate.value, isNull);
+      server.reply('GET', statusPath, 409, {'success': false, 'code': 'AI_IDENTITY_RETRY', 'message': 'أعد المحاولة'});
+      await AiAssistantState.ensureFresh();
+      expect(AiAssistantState.voice, isFalse, reason: 'ما لم يقله الخادم لا يظهر');
+      expect(timers.map((t) => t.$1), [const Duration(seconds: 3)]);
+      // بعد ٣ث (داخل التبريد) يُسأل فعلاً — التوكن لم يُجدَّد بعد
+      clock = clock.add(const Duration(seconds: 3));
+      timers.last.$2();
+      await AiAssistantState.ensureFresh();
+      expect(server.calls('GET', statusPath), hasLength(2), reason: 'القريبة تتخطّى تبريد ٣٠ث');
+      expect(timers.map((t) => t.$1), [const Duration(seconds: 3), const Duration(seconds: 8)]);
+      // ما زال ⇒ الثالثة بالتباعد المعتاد لا أقرب
+      clock = clock.add(const Duration(seconds: 8));
+      timers.last.$2();
+      await AiAssistantState.ensureFresh();
+      expect(server.calls('GET', statusPath), hasLength(3));
+      expect(timers.last.$1, const Duration(seconds: 31));
+      // سؤالٌ من بناءٍ داخل التبريد لا يُرسل شيئاً
+      await AiAssistantState.ensureFresh();
+      expect(server.calls('GET', statusPath), hasLength(3));
+      // جُدّد التوكن ⇒ يظهر الزرّ ولا مؤقّت بعده
+      server.reply('GET', statusPath, 200, {...on, 'voice': true, 'mode': 'company'});
+      clock = clock.add(const Duration(seconds: 31));
+      timers.last.$2();
+      await AiAssistantState.ensureFresh();
+      expect(AiAssistantState.voice, isTrue);
+      expect(timers, hasLength(3));
+    });
+
+    test('رموز الحالة: 404/501/401/403 = مطفأ · 409/429/503 وأيّ جسمٍ بلا success = لا نعرف', () {
+      for (final c in [404, 501, 401, 403]) {
+        expect(AiApi.statusFrom(c, const {}, AiMode.company)?.enabled, isFalse, reason: '$c');
+      }
+      for (final c in [409, 429, 503, 500, 0]) {
+        expect(AiApi.statusFrom(c, const {'success': false, 'code': 'AI_IDENTITY_RETRY'}, AiMode.company), isNull, reason: '$c');
+      }
+      expect(AiApi.statusFrom(200, const {'enabled': true}, AiMode.company), isNull);
+      expect(AiApi.statusFrom(200, {...on, 'voice': true}, AiMode.company)?.voice, isTrue);
     });
 
     test('ردٌّ بحال «الحساب وحده» لسؤالٍ بجلسة شركة ليس جوابه — ما نعرفه باقٍ (كان يُخفي الصوت و«كيف أسوّي؟»)', () async {

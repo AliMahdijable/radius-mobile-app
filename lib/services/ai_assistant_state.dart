@@ -32,11 +32,15 @@ class AiAssistantState {
   static const offTtl = Duration(seconds: 60);
   static const _cooldown = Duration(seconds: 30);
 
-  /// «لا نعرف بعد» (شبكة، أو الخادم لم يستطع إثبات الجلسة لحظتها — 503) يُسأل ثانيةً **وحده**: كان ينتظر بناءً يطلبه، والتنقّل
+  /// «لا نعرف بعد» (شبكة، أو الخادم لم يستطع إثبات الجلسة لحظتها — 409) يُسأل ثانيةً **وحده**: كان ينتظر بناءً يطلبه، والتنقّل
   /// بين التبويبات لا يبني. محاولاتٌ معدودة بتباعدٍ يتضاعف (٣١ث، ٦١ث، ٢ د…)، والنجاح يصفّرها.
   static const maxRetries = 6;
   static Timer? _retry;
   static int _retries = 0;
+
+  /// ولا شيء نعرفه بعد (أوّل سؤالٍ بالجلسة) ⇒ الزرّ غائبٌ الآن، فلا ننتظر التبريد: سجلّ الخادم يُظهر أنّ التوكن المنتهي يُجدَّد
+  /// خلال ثانيةٍ أو ثانيتين بطلبٍ آخر من الدفعة نفسها — محاولتان قريبتان ثمّ التباعد المعتاد.
+  static const quickRetries = [Duration(seconds: 3), Duration(seconds: 8)];
 
   /// مؤقّت إعادة السؤال — يُستبدل في الاختبارات (وبلا مؤقّتٍ فيها ما لم تطلبه: مؤقّتٌ معلَّق يُفشل اختبار الواجهة).
   @visibleForTesting
@@ -47,10 +51,14 @@ class AiAssistantState {
     final make = retryTimer ?? (AppPlatform.isUnderTest ? null : Timer.new);
     if (make == null) return;
     _retry?.cancel();
-    final wait = _cooldown * (1 << _retries) + const Duration(seconds: 1);
+    final blind = gate.value == null;
+    final quick = blind && _retries < quickRetries.length;
+    final slow = _retries - (blind ? quickRetries.length : 0);
+    final wait = quick ? quickRetries[_retries] : _cooldown * (1 << slow) + const Duration(seconds: 1);
     _retries++;
     _retry = make(wait, () {
-      if (epoch == _epoch) unawaited(ensureFresh());
+      // القريبة أقصر من التبريد ⇒ تتخطّاه؛ والبعيدة بعده أصلاً
+      if (epoch == _epoch) unawaited(ensureFresh(force: quick));
     });
   }
 

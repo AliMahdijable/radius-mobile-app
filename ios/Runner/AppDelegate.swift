@@ -97,12 +97,17 @@ final class TechBeep {
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "TechBeep") {
       let beep = FlutterMethodChannel(name: "com.mysvcs.rad_mysvcs/beep", binaryMessenger: registrar.messenger())
       beep.setMethodCallHandler { call, result in
-        guard call.method == "beep" else {
+        let args = call.arguments as? [String: Any]
+        switch call.method {
+        case "beep":
+          result(TechBeep.shared.play(ms: (args?["ms"] as? Int) ?? 90))
+        case "keepAwake":
+          // الصفّارة شغّالة ⇒ الشاشة لا تنطفئ (القفل يعلّق التطبيق فتقف القراءة والصفّارة)؛ تُرفع بإطفائها أو الخروج
+          UIApplication.shared.isIdleTimerDisabled = (args?["on"] as? Bool) ?? false
+          result(nil)
+        default:
           result(FlutterMethodNotImplemented)
-          return
         }
-        let ms = ((call.arguments as? [String: Any])?["ms"] as? Int) ?? 90
-        result(TechBeep.shared.play(ms: ms))
       }
     }
   }

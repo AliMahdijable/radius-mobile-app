@@ -27,6 +27,7 @@ import 'package:rad_mysvcs/services/fiber/fiber_monitor.dart';
 import 'package:rad_mysvcs/services/fiber/fiber_store.dart';
 import 'package:rad_mysvcs/services/fiber/fiber_tree.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
+import 'package:rad_mysvcs/services/tech_beep.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 import 'package:rad_mysvcs/theme/typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -373,13 +374,22 @@ void main() {
       return audible as bool?;
     };
     addTearDown(() => FiberTechScreen.tick = original);
+    // الشاشة مضاءةٌ ما دامت الصفّارة شغّالة (قفل الهاتف يوقف القراءة والصفّارة)
+    final awake = <Object?>[];
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(TechBeep.channel, (call) async {
+      if (call.method == 'keepAwake') awake.add((call.arguments as Map)['on']);
+      return null;
+    });
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(TechBeep.channel, null));
     await pumpScreen(t, FiberTechScreen(monitor: FiberMonitor.of(fiberTestDevice()), onuKey: 'EPON0/3:5'));
     final tile = find.textContaining('صفّارة حسب الضوء');
     await t.scrollUntilVisible(tile, 300, scrollable: mainScroll());
     expect(find.textContaining('مطفأة'), findsOneWidget);
+    expect(awake, isEmpty, reason: 'فتح الشاشة وحده لا يمسّ قفل الهاتف');
     await t.tap(tile);
     await t.pump();
     expect(ticks, 1, reason: 'نغمة تأكيد فور التشغيل — يسمعها الفنّي');
+    expect(awake, [true]);
     expect(find.textContaining('شغّالة'), findsWidgets);
     // الضوء ‎-21 ⇒ نغمة كلّ ~٠٫٧ث
     await t.pump(const Duration(milliseconds: 800));
@@ -390,6 +400,7 @@ void main() {
     await t.pump();
     await t.pump(const Duration(seconds: 2));
     expect(ticks, before, reason: 'أُطفئت ⇒ سكتت');
+    expect(awake, [true, false], reason: 'أُطفئت ⇒ الشاشة ترجع لإعداد الهاتف');
     // صوت الوسائط على الصفر ⇒ يُقال للفنّي بدل صمتٍ لا يُفهم
     audible = false;
     await t.tap(tile);
@@ -398,7 +409,14 @@ void main() {
     expect(find.textContaining('صوت الوسائط بالهاتف على الصفر'), findsOneWidget);
     await t.tap(tile);
     await t.pump(const Duration(seconds: 4));
+    // خرج من الشاشة والصفّارة شغّالة ⇒ تُرفع معها
+    audible = true;
+    await t.tap(tile);
+    await t.pump();
+    expect(awake.last, true);
     await unmount(t);
+    await t.pump(const Duration(seconds: 2));
+    expect(awake.last, false, reason: 'الخروج يرفع إبقاء الشاشة');
   });
 
   testWidgets('«التقط بالفصل»: الفصل يكشف الجهاز ويختاره، وضوءه قبل الفصل يصير «قبل»', (t) async {

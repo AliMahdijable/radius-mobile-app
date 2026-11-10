@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -54,6 +55,19 @@ class MainActivity : FlutterFragmentActivity() {
                         releaseBeep()
                         result.success(null)
                     }
+                }
+
+                // الصفّارة شغّالة ⇒ الشاشة لا تنطفئ (الفنّي لا يلمس الهاتف)؛ تُرفع بإطفائها أو الخروج من «وضع الفنّي»
+                "keepAwake" -> {
+                    try {
+                        if (call.argument<Boolean>("on") == true) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    } catch (_: Exception) {
+                    }
+                    result.success(null)
                 }
 
                 else -> result.notImplemented()

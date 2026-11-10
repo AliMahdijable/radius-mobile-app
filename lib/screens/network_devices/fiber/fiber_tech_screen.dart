@@ -107,6 +107,7 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
   void dispose() {
     _timer?.cancel();
     _beepTimer?.cancel();
+    if (_beep) unawaited(TechBeep.keepAwake(false));
     _pulse.dispose();
     _m
       ..removeListener(_changed)
@@ -206,6 +207,8 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
   void _toggleBeep() {
     setState(() => _beep = !_beep);
     _beepTimer?.cancel();
+    // الشاشة مضاءةٌ ما دامت الصفّارة شغّالة: انطفاؤها يقفل الهاتف فتقف القراءة والصفّارة، والفنّي لا يلمس الهاتف
+    unawaited(TechBeep.keepAwake(_beep));
     if (!_beep) return;
     // نغمة تأكيدٍ فور التشغيل: يسمعها الفنّي ولو لم يُقرأ ضوءٌ بعد (بلا ضوءٍ الصفّارة صامتة حتى يرجع) — وتكشف صوتاً على الصفر
     unawaited(_confirmBeep());

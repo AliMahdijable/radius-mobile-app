@@ -54,6 +54,27 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  test('الشاشة مضاءةٌ ما دامت الصفّارة شغّالة: للهاتف وحده، وبلا القناة لا يرمي', () async {
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      debugDefaultTargetPlatformOverride = platform;
+      calls.clear();
+      await TechBeep.keepAwake(true);
+      await TechBeep.keepAwake(false);
+      expect(calls.map((c) => [c.method, c.arguments]), [
+        ['keepAwake', {'on': true}],
+        ['keepAwake', {'on': false}],
+      ]);
+    }
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    calls.clear();
+    await TechBeep.keepAwake(true);
+    expect(calls, isEmpty, reason: 'الحاسبة لا تقفل شاشتها علينا');
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(TechBeep.channel, null);
+    await TechBeep.keepAwake(true);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   test('الحاسبة: صوت تنبيه النظام (لا قناة)', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     final platform = <String>[];
