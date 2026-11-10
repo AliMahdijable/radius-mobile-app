@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 
+import '../core/util/bidi.dart';
 import '../models/merged_company.dart';
 import '../models/subscriber.dart';
 import '../services/merged_mode.dart';
 import '../services/merged_rows.dart';
+import '../services/merged_text.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 import 'dashboard_api.dart';
@@ -55,6 +57,41 @@ class MergedWhatsApp {
       if (r.company.key == k) return r;
     }
     return null;
+  }
+}
+
+/// دين شركةٍ في «المدينون» بـ«الكل»: مبلغ مدينيها وعددهم — أو سبب غيابها عن المجموع (المبلغ والعدد null).
+typedef MergedDebtLine = ({String key, int? amount, int? count, String? reason});
+
+/// «المدينون — لكلّ شركة» (١٠ نوفمبر — المالك: «فصل دين الشركه بوضع الشركات» ثمّ «وهنت بالاعلى الدين الكلي
+/// مجموعهن»): سطرٌ لكلّ شركة، والمجموع أعلاه **جمع الأسطر التي لها مبلغ** بالبناء — فلا يخالفها، ولا يدخله صفرٌ صامت
+/// لشركةٍ لم تُقرأ ديونها.
+class MergedDebts {
+  const MergedDebts(this.lines);
+
+  /// بترتيب شركات الحساب (ترتيب الشريط).
+  final List<MergedDebtLine> lines;
+
+  int get total => lines.fold(0, (n, l) => n + (l.amount ?? 0));
+  int get count => lines.fold(0, (n, l) => n + (l.count ?? 0));
+
+  /// شركةٌ واحدة دخلت المجموع على الأقلّ — وإلّا لا رقم («—» لا «٠»).
+  bool get any => lines.any((l) => l.amount != null);
+
+  /// الشركات خارج المجموع (بسبب كلٍّ منها).
+  List<MergedDebtLine> get left => [for (final l in lines) if (l.amount == null) l];
+
+  /// سطر المجموع لمن خارجه، قصيرٌ: «بلا «X» — سببها» (وشركتان بأسمائهما؛ وثلاثٌ فأكثر بعددها)، والأسباب المختلفة
+  /// «السبب بجانب كلٍّ منها». الاسم معزول الاتّجاه — «سوبرنت (SuperNet) · admin@b» لا يتفكّك في السطر العربيّ.
+  String? leftNote([String Function(String key)? nameOf]) {
+    final out = left;
+    if (out.isEmpty) return null;
+    final name = nameOf ?? (k) => MergedMode.companyOf(k)?.name ?? k;
+    final who = out.length <= 2
+        ? out.map((l) => '«${iso(name(l.key))}»').join('، ')
+        : '${out.length} ${out.length <= 10 ? mergedWord('شركات', 'صفحات') : mergedWord('شركة', 'صفحة')}';
+    final why = {for (final l in out) l.reason}.length == 1 ? out.first.reason : 'السبب بجانب كلٍّ منها';
+    return 'بلا $who — $why';
   }
 }
 
@@ -270,5 +307,61 @@ class MergedDashboardApi {
       onlineNoPlan: onlineNoPlan,
       disabled: disabled,
     );
+  }
+
+  /// «المدينون» في «الكل» مقسوماً بالشركة (١٠ نوفمبر): الصفوف المدموجة نفسها — مشتركٌ تراه صفحتان مربوطتان يُعدّ
+  /// مرّةً تحت الأقرب إليه، وربطٌ ثانٍ للمدير نفسه تحت أصله — بتعريف [debtorsFrom] حرفاً (hasDebt/debtAbs، بلا
+  /// «المهمَل»)، بلا طلب. شركةٌ لا تُعرف ديونها تُسمّى بسببها ولا تُجمع (قاعدة الويب debtStateOf/mergedListTotals):
+  /// قائمةٌ كبيرة أو تعذّرت أو ناقصة، دفترٌ تعذّر (debts_unavailable)، عملةٌ غير الدينار، شركةٌ خارج الوضع (تحتاج
+  /// دخول، من الموقع، المشروع الوطنيّ)، أو أختٌ على ساسها نفسه تعذّرت قائمتها (مشتركها قد يكون عندها — لا يُعرف لمن).
+  static MergedDebts debtsByCompany(MergedListResult r) {
+    final parts = {for (final p in r.parts) p.company.key: p};
+    final all = [for (final p in r.parts) p.company, ...r.missing]..sort((a, b) => a.index.compareTo(b.index));
+    // ربطٌ ثانٍ للمدير نفسه: قائمته قائمة أصله ⇒ لا سطر ولا «بلا». الأصل من وصلت قائمته — كدمج الصفوف (mergeRows) نفسه.
+    final same = sameManagerOf(all, prefer: (c) => parts[c.key]?.rows != null);
+    final amount = <String, int>{};
+    final count = <String, int>{};
+    for (final s in r.rows) {
+      final k = s.companyKey;
+      if (k == null || s.isAbandoned || !s.hasDebt) continue;
+      amount[k] = (amount[k] ?? 0) + s.debtAbs.round();
+      count[k] = (count[k] ?? 0) + 1;
+    }
+    // قائمةٌ تعذّرت (لا الكبيرة: أمّها كبيرةٌ مثلها، ولا المرفوضة للموظّف): ديون أخواتها على الساس نفسه خارج المجموع.
+    final failed = <String, List<MergedCompany>>{};
+    for (final p in r.parts) {
+      if (p.rows != null || p.bigTotal != null || p.denied || same.containsKey(p.company.key)) continue;
+      failed.putIfAbsent(p.company.ns, () => []).add(p.company);
+    }
+    return MergedDebts([
+      for (final c in all)
+        if (!same.containsKey(c.key))
+          if (_debtWhy(c, parts[c.key], failed[c.ns]) case final why?)
+            (key: c.key, amount: null, count: null, reason: why)
+          else
+            (key: c.key, amount: amount[c.key] ?? 0, count: count[c.key] ?? 0, reason: null),
+    ]);
+  }
+
+  /// لماذا لا تُجمع ديون [c] — null: تُجمع. نصٌّ قصير يفهمه الوكيل (يُقرأ في خانتها وبعد «بلا «X» —»).
+  static String? _debtWhy(MergedCompany c, MergedCompanyList? p, List<MergedCompany>? failedNs) {
+    if (p == null) {
+      if (c.provider == MergedProvider.ftth) return 'ديونها لا تُجمع هنا بعد';
+      if (!c.appCapable || c.reason == 'kit_web_only') return 'تُعرض من الموقع';
+      return switch (c.status) {
+        MergedStatus.needsLogin => mergedWord('تحتاج دخول', 'تحتاج دخول مديرها'),
+        MergedStatus.loading => 'تُحمَّل الآن',
+        _ => 'متوقّفة الآن',
+      };
+    }
+    if (p.bigTotal != null) return mergedWord('كبيرة، افتحها وحدها', 'كبيرة، انتقل إليها من «صفحاتي»');
+    if (p.rows == null) return p.denied ? MergedMode.noAccess('مشتركيها') : 'تعذّرت قراءة ديونها';
+    if (p.partial) return 'قائمتها ناقصة من مزوّدها';
+    if (p.debtsUnavailable) return 'تعذّرت قراءة ديونها';
+    if (!_iqd(c)) return c.currency == null ? 'عملتها غير معروفة' : 'عملتها ${c.currency}';
+    if (failedNs != null && failedNs.isNotEmpty) {
+      return 'تعذّرت قائمة ${failedNs.map((x) => '«${iso(x.name)}»').join('، ')} المرتبطة بها';
+    }
+    return null;
   }
 }

@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/cards_api.dart';
 import '../../../api/dashboard_api.dart';
+import '../../../api/merged_dashboard_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/permission_locked.dart';
@@ -35,6 +36,7 @@ class StatsGrid extends StatelessWidget {
     this.balanceLocked = false,
     this.debtLocked = false,
     this.walletLines,
+    this.debtSplit,
   });
 
   final WalletResult? wallet;
@@ -42,6 +44,10 @@ class StatsGrid extends StatelessWidget {
   /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره (لا مجموع — ٨ نوفمبر). null ⇒ الرصيد الواحد كما كان.
   final List<MergedBalanceLine>? walletLines;
   final DebtorsResult? debtors;
+
+  /// «كل الشركات» بلا شركةٍ مختارة (١٠ نوفمبر): المدينون مجموعاً أعلاه ثمّ خانةٌ لكلّ شركة. null ⇒ البطاقة كما كانت
+  /// (الوضع العاديّ، أو شركةٌ مختارة في الشريط).
+  final MergedDebts? debtSplit;
 
   /// Tapping the debt card opens the subscribers screen with the
   /// debtors filter pre-applied. No equivalent for the wallet card —
@@ -75,23 +81,31 @@ class StatsGrid extends StatelessWidget {
             footer: const _CardsBadgeLine(),
           )
         : _BalancePointsCard(wallet: wallet);
+    final split = debtSplit != null && !debtLocked;
     final debt = debtLocked
         ? LockedCard(
             title: 'dashboard.debtors'.tr(), icon: LucideIcons.creditCard)
-        : _DebtCard(debtors: debtors, onTap: onOpenDebtors);
+        : split
+            ? _MergedDebtCard(debts: debtSplit!, onTap: onOpenDebtors)
+            : _DebtCard(debtors: debtors, onTap: onOpenDebtors);
+    final tiles = walletLines != null && !balanceLocked;
     // «كل الشركات» بلا شركةٍ مختارة (٨ نوفمبر — المالك: «الرصيد شوف شون صاير! يحتاج تفكر بطريقة اخرى»): بطاقة الرصيد بعرض الصفّ،
     // خانةٌ لكلّ شركة بعمودين (علامتها وحسابها ورصيدها كبيراً)، والمدينون تحتها بعرضه — لا أسطرٌ مقصوصة في نصف بطاقة.
-    if (walletLines != null && !balanceLocked) {
+    // وخانات المدينين (١٠ نوفمبر) بعرض الصفّ مثلها ولو لم يصل الرصيد بعد.
+    if (tiles || split) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _ShellCard(
-            icon: LucideIcons.wallet,
-            iconAccent: AppColors.brand,
-            title: '${'dashboard.balance'.tr()} — ${mergedWord('لكلّ شركة', 'لكلّ صفحة')}',
-            body: MergedBalanceTiles(lines: walletLines!),
-          ),
+          if (tiles)
+            _ShellCard(
+              icon: LucideIcons.wallet,
+              iconAccent: AppColors.brand,
+              title: '${'dashboard.balance'.tr()} — ${mergedWord('لكلّ شركة', 'لكلّ صفحة')}',
+              body: MergedBalanceTiles(lines: walletLines!),
+            )
+          else
+            balance,
           const SizedBox(height: Sp.md),
           debt,
         ],
@@ -274,6 +288,65 @@ class _DebtCard extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// «المدينون — لكلّ شركة» (١٠ نوفمبر — المالك: «فصل دين الشركه بوضع الشركات» ثمّ «وهنت بالاعلى الدين الكلي
+/// مجموعهن»): المجموع كبيراً أعلاه — جمع الشركات التي قُرئت ديونها، ومن خارجه بسطرٍ واحد — ثمّ خانةٌ لكلّ شركة بشبكة
+/// خانات الرصيد فوقها (البطاقتان زوج). النقر كما كان: المشتركون بفلتر المدينين.
+class _MergedDebtCard extends StatelessWidget {
+  const _MergedDebtCard({required this.debts, this.onTap});
+  final MergedDebts debts;
+  final VoidCallback? onTap;
+
+  static Color get _accent => AppColors.warning;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return _ShellCard(
+      icon: LucideIcons.creditCard,
+      iconAccent: _accent,
+      title: '${'dashboard.debtors'.tr()} — ${mergedWord('لكلّ شركة', 'لكلّ صفحة')}',
+      onTap: onTap,
+      body: Column(
+        key: const ValueKey('merged-debt-card'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // لا شركة دخلت المجموع ⇒ «—» لا «٠ IQD» (لا صفرٌ صامت)
+          if (debts.any) ...[
+            _HeroAmount(amount: debts.total, color: _accent),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Icon(LucideIcons.users, color: AppColors.textMid, size: 12),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    '${formatIQD(debts.count)} ${'dashboard.subscriber_singular'.tr()} · '
+                    '${mergedWord('مجموع الشركات', 'مجموع الصفحات')}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ] else
+            Text(
+              '—',
+              style: AppType.title(color: _accent).copyWith(fontSize: 17, fontWeight: FontWeight.w700, height: 1.1),
+            ),
+          if (debts.left.isNotEmpty) ...[
+            const SizedBox(height: Sp.xs),
+            MergedDebtNote(debts: debts, fontSize: 11),
+          ],
+          const SizedBox(height: Sp.sm),
+          MergedDebtTiles(lines: debts.lines),
+        ],
+      ),
     );
   }
 }

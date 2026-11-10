@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/dashboard_api.dart';
+import '../../../api/merged_dashboard_api.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/desk_pressable.dart';
 import '../../../core/widgets/permission_locked.dart';
@@ -12,6 +13,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../subscribers/widgets/filter_chips_bar.dart';
+import '../../../services/merged_text.dart';
 import '../../../widgets/merged_balance_lines.dart';
 
 /// رأس الرئيسيّة على الحاسبة — أربع بطاقات أرقام: المشتركون، المتّصلون، الرصيد، ديون المشتركين.
@@ -28,6 +30,7 @@ class DesktopOverview extends StatelessWidget {
     required this.wallet,
     this.walletLines,
     required this.debtors,
+    this.debtSplit,
     required this.subsLocked,
     required this.balanceLocked,
     required this.debtLocked,
@@ -46,6 +49,9 @@ class DesktopOverview extends StatelessWidget {
   /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره (٨ نوفمبر).
   final List<MergedBalanceLine>? walletLines;
   final DebtorsResult? debtors;
+
+  /// «كل الشركات» بلا شركةٍ مختارة (١٠ نوفمبر): المدينون مجموعاً ثمّ سطرٌ لكلّ شركة — كبطاقة الهاتف. null ⇒ كما كانت.
+  final MergedDebts? debtSplit;
   final bool subsLocked;
   final bool balanceLocked;
   final bool debtLocked;
@@ -58,6 +64,7 @@ class DesktopOverview extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final s = stats;
     final d = debtors;
+    final split = debtLocked ? null : debtSplit;
     final currency = 'common.currency'.tr();
     final cards = <Widget>[
       if (showSubscribers) ...[
@@ -100,28 +107,58 @@ class DesktopOverview extends StatelessWidget {
               : '${formatIQD(wallet!.points.round())} ${'dashboard.points_singular'.tr()}',
           body: balanceLocked || walletLines == null ? null : MergedBalanceLines(lines: walletLines!, fontSize: 14),
         ),
-        _KpiCard(
-          icon: LucideIcons.creditCard,
-          accent: AppColors.error,
-          soft: AppColors.dangerSoftBg,
-          label: 'dashboard.debtors'.tr(),
-          value: debtLocked
-              ? null
-              : d == null
-                  ? '…'
-                  : d.debtsUnknown
-                      ? (d.debtsPending ? '…' : '—')
-                      : formatIQD(d.total),
-          unit: d == null || d.debtsUnknown ? null : currency,
-          locked: debtLocked,
-          caption: debtLocked || d == null
-              ? null
-              : d.debtsUnknown
-                  ? (d.debtsPending ? 'dashboard.debts_counting' : 'dashboard.debts_big_list').tr()
-                  : 'desktop.kpi_debtors_n'.tr(args: [formatIQD(d.count)]),
-          ratio: debtLocked || d == null || d.debtsUnknown ? null : _ratio(d.count, d.totalSubs),
-          onTap: () => onOpen?.call(SubscriberFilter.debtors),
-        ),
+        // «كل الشركات» بلا شركةٍ مختارة (١٠ نوفمبر): المجموع رقم البطاقة (الشركات التي قُرئت ديونها وحدها — لا شركة ⇒
+        // «—» لا «٠»)، ثمّ من خارجه بسطر وسطرٌ لكلّ شركة — كخانات الهاتف. النقر كما كان.
+        if (split != null)
+          _KpiCard(
+            icon: LucideIcons.creditCard,
+            accent: AppColors.error,
+            soft: AppColors.dangerSoftBg,
+            label: 'dashboard.debtors'.tr(),
+            value: split.any ? formatIQD(split.total) : '—',
+            unit: split.any ? currency : null,
+            locked: false,
+            caption: split.any
+                ? '${'desktop.kpi_debtors_n'.tr(args: [formatIQD(split.count)])} · '
+                    '${mergedWord('مجموع الشركات', 'مجموع الصفحات')}'
+                : null,
+            footer: Column(
+              key: const ValueKey('merged-debt-card'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (split.left.isNotEmpty) ...[
+                  MergedDebtNote(debts: split, fontSize: 12.5),
+                  const SizedBox(height: Sp.sm),
+                ],
+                MergedDebtLines(lines: split.lines, fontSize: 14, color: AppColors.error),
+              ],
+            ),
+            onTap: () => onOpen?.call(SubscriberFilter.debtors),
+          )
+        else
+          _KpiCard(
+            icon: LucideIcons.creditCard,
+            accent: AppColors.error,
+            soft: AppColors.dangerSoftBg,
+            label: 'dashboard.debtors'.tr(),
+            value: debtLocked
+                ? null
+                : d == null
+                    ? '…'
+                    : d.debtsUnknown
+                        ? (d.debtsPending ? '…' : '—')
+                        : formatIQD(d.total),
+            unit: d == null || d.debtsUnknown ? null : currency,
+            locked: debtLocked,
+            caption: debtLocked || d == null
+                ? null
+                : d.debtsUnknown
+                    ? (d.debtsPending ? 'dashboard.debts_counting' : 'dashboard.debts_big_list').tr()
+                    : 'desktop.kpi_debtors_n'.tr(args: [formatIQD(d.count)]),
+            ratio: debtLocked || d == null || d.debtsUnknown ? null : _ratio(d.count, d.totalSubs),
+            onTap: () => onOpen?.call(SubscriberFilter.debtors),
+          ),
       ],
     ];
     if (cards.isEmpty) return const SizedBox.shrink();
@@ -155,10 +192,14 @@ class _KpiCard extends StatelessWidget {
     this.live = false,
     this.onTap,
     this.body,
+    this.footer,
   });
 
   /// مكان الرقم والسطر تحته («كل الشركات»: أرصدة الشركات) — null ⇒ الرقم كما كان.
   final Widget? body;
+
+  /// تحت الرقم وسطره («كل الشركات»: دين كلّ شركةٍ تحت المجموع) — null ⇒ لا شيء.
+  final Widget? footer;
 
   final IconData icon;
   final Color accent;
@@ -302,6 +343,10 @@ class _KpiCard extends StatelessWidget {
             if (ratio != null) ...[
               const SizedBox(height: 6),
               _Bar(ratio: ratio!, color: accent),
+            ],
+            if (footer != null) ...[
+              const SizedBox(height: Sp.md),
+              footer!,
             ],
           ],
         ),

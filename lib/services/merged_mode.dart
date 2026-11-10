@@ -397,6 +397,7 @@ class MergedCompanyList {
     this.error,
     this.bigTotal,
     this.denied = false,
+    this.debtsUnavailable = false,
   });
 
   final MergedCompany company;
@@ -415,6 +416,10 @@ class MergedCompanyList {
 
   /// «كل الصفحات»: لا صلاحيّة له على مشتركي هذه الصفحة (خريطتها بلا subscribers.view) — لم تُطلب، وتُسمّى ولا تُعدّ.
   final bool denied;
+
+  /// وصلت القائمة ودفتر ديونها تعذّرت قراءته (علم الردّ نفسه `debts_unavailable` — ايرث لنك والشركات المُضافة):
+  /// دين صفوفها ٠ لم يُقرأ ⇒ «المدينون» في «الكل» يسمّيها ولا يجمعها (قاعدة الويب debtStateOf). لا طلب زائد.
+  final bool debtsUnavailable;
 }
 
 /// الصفوف المدموجة وحال قوائم الشركات تحتها.
@@ -577,6 +582,7 @@ class MergedSubscribers {
           partial: l.partial,
           error: l.error,
           bigTotal: l.bigTotal,
+          debtsUnavailable: l.debtsUnavailable,
         );
 
   /// آخر جلساتٍ معروفة لشركة (بلا طلب) — لصفٍّ يُعاد جلبه وحده بعد عمليّة.
@@ -649,7 +655,8 @@ class MergedSubscribers {
         for (final m in (b['data'] as List?) ?? const [])
           if (m is Map) Subscriber.fromJson(Map<String, dynamic>.from(m)).withCompany(c.key),
       ];
-      return MergedCompanyList(company: c, rows: rows, partial: b['partial'] == true);
+      return MergedCompanyList(
+          company: c, rows: rows, partial: b['partial'] == true, debtsUnavailable: b['debts_unavailable'] == true);
     } on DioException catch (e) {
       return MergedCompanyList(
           company: c, error: _err(c, e.response?.data, 'تعذّر الوصول لمشتركي «${c.name}» الآن', e.response?.statusCode));

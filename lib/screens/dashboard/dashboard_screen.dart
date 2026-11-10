@@ -104,6 +104,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره في بطاقة الرصيد (٨ نوفمبر — المالك: «الارصده افصلهن… رصيد كل صفحه
   /// بيبن منفصل ولكن بنفس الكارت»). null ⇒ الرصيد الواحد (الوضع العاديّ أو شركةٌ مختارة).
   List<MergedBalanceLine>? _walletLines;
+
+  /// «كل الشركات» بلا شركةٍ مختارة: المدينون مجموعاً ثمّ لكلّ شركة (١٠ نوفمبر — المالك: «فصل دين الشركه بوضع الشركات»)،
+  /// من القائمة المدموجة المحفوظة بلا طلب. null ⇒ بطاقة المدينين الواحدة (الوضع العاديّ أو شركةٌ مختارة).
+  MergedDebts? _debtSplit;
   MergedSum<DailyActivationsResult>? _mergedDaily;
   List<String> _mergedWalletExcluded = const [];
   List<String> _mergedDailyExcluded = const [];
@@ -337,6 +341,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     setState(() {
       _debtorsLive = null;
+      _debtSplit = null;
       _walletLive = null;
       _walletLines = null;
       _activationsLive = null;
@@ -363,6 +368,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // شركةٌ مختارة بلا قائمة (كبيرة، أو تعذّرت): لا أصفار — البطاقة بلا رقم والسبب في سطر الشريط
       final noList = f != null && r.partOf(f.key)?.rows == null;
       _debtorsLive = noList ? null : MergedDashboardApi.debtorsFrom(r.rowsFor(f?.key));
+      // «الكل»: دين كلّ شركةٍ تحت المجموع؛ والشركة المختارة بطاقتها الواحدة كما كانت
+      _debtSplit = f == null ? MergedDashboardApi.debtsByCompany(r) : null;
       _debtorsLoaded = true;
     }
     final w = _mergedWallet;
@@ -864,6 +871,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             wallet: _walletLoaded ? _walletLive : null,
             walletLines: _walletLoaded && MergedMode.active.value ? _walletLines : null,
             debtors: _debtorsLoaded ? _debtorsLive : null,
+            debtSplit: _debtorsLoaded && MergedMode.active.value ? _debtSplit : null,
             balanceLocked: !_canMoney,
             debtLocked: !_canSubs,
             onOpenDebtors: () => widget.onOpenSubscribers?.call(SubscriberFilter.debtors),
@@ -1093,6 +1101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         wallet: _walletLoaded ? _walletLive : null,
                         walletLines: _walletLoaded && MergedMode.active.value ? _walletLines : null,
                         debtors: _debtorsLoaded ? _debtorsLive : null,
+                        debtSplit: _debtorsLoaded && MergedMode.active.value ? _debtSplit : null,
                         subsLocked: !_canSubs,
                         balanceLocked: !_canMoney,
                         debtLocked: !_canSubs,
