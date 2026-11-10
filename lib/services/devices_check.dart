@@ -549,13 +549,17 @@ class DevicesCheck {
     // إشارتها هنا، محطّةً كان أو نقطة وصول (مراجعة 180)؛ ولا «0 dBm»
     final rx1 = g.isAp == null ? one?.signal : null;
     final here = g.signal ?? (rx1 != null && rx1 < 0 ? rx1 : null);
+    // إشارة وصلة الطرف المرسل هو: ميموزا وحدها (قدرة استقبال الـPtP). إشارة يوبيكويتي بوضع AP من mca-status
+    // أرضيّة الضجيج أو واجهة الإدارة (−96، −93) لا وصلته — طرفها الثاني سقط ⇒ «بلا طرفٍ ثانٍ» كقراءة الخادم
+    // (مراجعة 180، الجولة ٢)
+    final ownRx = d.brand.toLowerCase() == 'mimosa' ? g.signal : null;
     // حكمٌ على الوصلة نفسها (مقطوعة أو بلا طرف) — يغني عن «إشارتها ما انقرت»
     var linkJudged = false;
     if (role == CheckRole.link) {
       if (g.linkDown) {
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة مقطوعة — لا إشارة'));
         linkJudged = true;
-      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && g.signal == null && g.signalPct == null) {
+      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && ownRx == null && g.signalPct == null) {
         // وطرفٌ يقرأ إشارة وصلته هو (ميموزا PtP: قدرة استقباله، ولا جدول محطّاتٍ له) يُحكم بها أدناه (مراجعة 180)
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة بلا طرفٍ ثانٍ'));
         linkJudged = true;
@@ -574,6 +578,7 @@ class DevicesCheck {
     // ── السكتر ومشتركوه ──
     var subs = <CheckSub>[];
     var subsKnown = false;
+    var radioRunGap = false;
     if (role == CheckRole.sector) {
       // ٩ نوفمبر: الفراغ «ما عليه أحد» حين قُرئ جدوله فعلاً وحده — لا لأنّ الفحص من شبكتك: جدول تسجيلٍ انتهت مهلته كان يُعدّ
       // فارغاً فيقول «ما عليه أحد الآن — كانوا N». وقراءةٌ سابقة لا تقول «الآن».
@@ -615,6 +620,12 @@ class DevicesCheck {
         f.add(was >= 3
             ? CheckFinding(CheckLevel.warn, 'ما عليه أحد الآن — كانوا $was بالفحص السابق')
             : const CheckFinding(CheckLevel.info, 'ما عليه أحد الآن'));
+        // خادمٌ لا يرسل `ru`: قائمته قُرئت فارغة وهل يعمل راديوه لم يُقرأ — راديو طافٍ يُقرأ كذلك ⇒ لا «سليم»
+        // (مراجعة 180، الجولة ٢: لا «قائمة مشتركيه ما انقرت» وقد قُرئت)
+        if (g.radioRunUnread) {
+          f.add(const CheckFinding(CheckLevel.info, 'حال الراديو ما انقرأ'));
+          radioRunGap = true;
+        }
       } else if (!subsKnown) {
         // لا رقم ولا «لا أحد»: يُقال إنّها لم تُقرأ (والعدد السابق يبقى للمقارنة التالية)
         f.add(const CheckFinding(CheckLevel.info, 'قائمة مشتركيه ما انقرت'));
@@ -758,7 +769,7 @@ class DevicesCheck {
     // لاسلكيّه لم يُقرأ ولراديو مفعّل (٩ نوفمبر — المراجعة): الوصلة بلا إشارتها، وما لم يُعرف دوره بلا وضعه ومشتركيه — لا «سليم».
     // المراجعة الثانية: الوصلة بلا إشارةٍ ولا جودة ولا طرفٍ ثانٍ لا تكون «سليم» أبداً (لا تحت radioUnread وحده) — إلّا وصلةٌ سلكيّة
     // قُرئت واجهاتها بلا راديو
-    var radioGap = false;
+    var radioGap = radioRunGap; // والسكتر حال راديوه لم يُقرأ (أعلاه) — «لم يُقرأ» لا «سليم»
     if (role == CheckRole.link) {
       if (!linkJudged && here == null && g.signalPct == null && remote == null && g.hasRadio != false) {
         f.add(const CheckFinding(CheckLevel.info, 'إشارة الوصلة ما انقرت'));

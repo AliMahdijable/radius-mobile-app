@@ -5,8 +5,13 @@
 //   F19 وصلة RouterOS وضعها لم يُقرأ (الخادم بلا ap، حزمة wifi) بطرفٍ واحد ⇒ إشارة صفّه لا «إشارة الوصلة ما انقرت».
 //   F2  «كل الشركات»: سكتر الخادم بلا ap وradio/reg_ok وقائمةٍ فارغة ⇒ «لم يُقرأ» ما لم يقل إنّ راديوه يعمل (ru)؛
 //       و`ru:false` ⇒ «الراديو لا يعمل» / «الوصلة مقطوعة» كقراءة موبايلك.
+//   R2-2 (الجولة ٢) وتلك القائمة قُرئت: «ما عليه أحد الآن» + «حال الراديو ما انقرأ» (لا «قائمة مشتركيه
+//       ما انقرت»)، واللقطة صفرٌ قُرئ؛ و`ru:false` في الفحص التالي «الراديو لا يعمل» بلا «كانوا N» عن فحصٍ قرأه
+//       طافياً — كموبايلك.
 //   F11 مدير CAPsMAN v1 (واجهات «cap» بأسمائها الافتراضيّة) ⇒ جدوله يُسأل، وأجاب ⇒ «راوتر · سليم» بإشارات عملائه
 //       (rx-signal لا «0 dBm»)؛ ولم يُجب ⇒ «لم يُقرأ».
+//   R2-1 (الجولة ٢) طرف وصلة يوبيكويتي المرسل (AF60/airMAX بوضع AP) سقط طرفه الثاني ⇒ «الوصلة بلا طرفٍ ثانٍ» —
+//       إشارة mca-status (أرضيّة الضجيج، واجهة الإدارة) ليست وصلته؛ ميموزا وحدها تُحكم بإشارتها (F10).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -18,6 +23,7 @@ import 'package:rad_mysvcs/api/mimosa_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/routeros_channel.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
@@ -419,29 +425,58 @@ void main() {
     });
   });
 
-  group('F2 «كل الشركات»: نقطة وصولٍ بلا ap وقائمةٍ فارغة — «لا أحد» حين يعمل راديوها وحده', () {
+  group(
+      'F2/R2-2 «كل الشركات»: نقطة وصولٍ بلا ap وقائمتها قُرئت فارغة — «ما عليه أحد الآن»، '
+      'و«سليم» حين يعمل راديوها وحده', () {
     final none = {'ap': null, 'radio': true, 'reg_ok': true, 'peers': const <Map>[]};
 
-    test('🚨 سكتر والخادم (2edbcb5، بلا ru) قرأ جدوله فارغاً ووضعه مجهول ⇒ «قائمة مشتركيه ما انقرت» لا «سليم»', () {
+    test(
+        '🚨 R2-2 سكتر والخادم (2edbcb5، بلا ru) قرأ جدوله فارغاً ⇒ «ما عليه أحد الآن» + «حال الراديو ما انقرأ» '
+        'و«لم يُقرأ» — لا «سليم» ولا «قائمة مشتركيه ما انقرت»', () {
       final d = dev(41, brand: 'mikrotik', protocol: 'api');
       final r = remote(d, ros(none));
       expect(r.role, CheckRole.sector);
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(r), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
+      expect(r.subsKnown, isTrue, reason: 'قائمته قُرئت (reg_ok) — المجهول حال راديوه وحده');
+      // النصّ المنسوخ (والصوت من الأسطر نفسها) كالشاشة
+      expect(r.toText(), endsWith('— لم يُقرأ\nالمعالج 9٪ · الذاكرة 40٪ · يعمل منذ ${DeviceVitals.fmtUptime(864000)} · '
+          'المنافذ 1/1\n• ما عليه أحد الآن\n• حال الراديو ما انقرأ'));
       final was = remote(d, ros(none), prev: const CheckMemo(peers: 7));
-      expect(was.state, CheckState.unread);
-      expect(was.memo!.peers, 7, reason: 'لا صفرٌ يجعل كلّ فحصٍ بعده «سليم»');
+      expect(was.state, CheckState.warn);
+      expect(texts(was), ['ما عليه أحد الآن — كانوا 7 بالفحص السابق', 'حال الراديو ما انقرأ']);
+      expect(was.memo!.peers, 0, reason: 'صفرٌ قُرئ — لا «كانوا 7 بالفحص السابق» عن فحصٍ قرأه فارغاً');
+      final next = remote(d, ros(none), prev: was.memo);
+      expect(texts(next), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
+      expect(next.state, CheckState.unread);
     });
 
-    test('🚨 والخادم يقول راديوه لا يعمل (ru:false) ⇒ «الراديو لا يعمل» للسكتر و«الوصلة مقطوعة» للوصلة — كموبايلك', () {
+    test('🚨 والخادم يقول راديوه لا يعمل (ru:false) ⇒ «الراديو لا يعمل» للسكتر و«الوصلة مقطوعة» للوصلة — كموبايلك، '
+        'والفحص التالي لا «كانوا 7» عن فحصٍ قرأه طافياً', () async {
       final down = ros({...none, 'ru': false});
       final sec = remote(dev(42, brand: 'mikrotik', protocol: 'api'), down, prev: const CheckMemo(peers: 7));
       expect(sec.state, CheckState.warn);
       expect(texts(sec), ['الراديو لا يعمل — كانوا 7 بالفحص السابق']);
-      expect(sec.memo!.peers, 7);
+      expect(sec.memo!.peers, 0);
+      expect(texts(remote(dev(42, brand: 'mikrotik', protocol: 'api'), down, prev: sec.memo)), ['الراديو لا يعمل']);
       final link = remote(dev(43, type: 'link', brand: 'mikrotik', protocol: 'api'), down);
       expect(link.state, CheckState.warn);
       expect(texts(link), ['الوصلة مقطوعة — لا إشارة']);
+      // موبايلك للجهاز نفسه (wlan مفعّلة لا تعمل وجدولها فارغ): الفحصان بالنصّين نفسيهما
+      final d = dev(42, brand: 'mikrotik', protocol: 'api');
+      final dfs = {
+        '/interface/print': [
+          {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+          {'name': 'wlan1', 'type': 'wlan', 'running': 'false', 'disabled': 'false'},
+        ],
+        '/interface/wireless/print': [
+          {'name': 'wlan1', 'mode': 'ap-bridge', 'ssid': 'SEC', 'running': 'false', 'disabled': 'false'}
+        ],
+        '/interface/wireless/registration-table/print': <Map<String, String>>[],
+      };
+      final phone = await judgeRos(d, dfs, prev: const CheckMemo(peers: 7));
+      expect(texts(phone), ['الراديو لا يعمل — كانوا 7 بالفحص السابق']);
+      expect(texts(await judgeRos(d, dfs, prev: phone.memo)), ['الراديو لا يعمل']);
     });
 
     test('ويعمل (ru:true) بلا عملاء ⇒ «ما عليه أحد الآن» صادقة؛ وap:true كما كانت؛ وصفوفٌ مقروءة لا «مقطوعة»', () {
@@ -469,6 +504,10 @@ void main() {
       final idle = remote(dev(48, brand: 'mikrotik', protocol: 'api'), v('$head"ru":true,$tail'));
       expect(texts(idle), ['ما عليه أحد الآن']);
       expect(idle.state, CheckState.ok);
+      // والخرج نفسه من الخادم الحاليّ (بلا ru): القائمة مقروءة وحال الراديو وحده مجهول (R2-2)
+      final live = remote(dev(49, brand: 'mikrotik', protocol: 'api'), v('$head$tail'));
+      expect(texts(live), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
+      expect(live.state, CheckState.unread);
     });
   });
 
@@ -515,6 +554,52 @@ void main() {
       final c = MikrotikWirelessClient.fromApiMap(
           const {'interface': 'cap1', 'mac-address': 'AA:BB:CC:00:01:01', 'rx-signal': '-63'});
       expect(c.signalStrength, -63);
+    });
+  });
+
+  group('R2-1 طرف وصلة يوبيكويتي المرسل سقط طرفه الثاني: «الوصلة بلا طرفٍ ثانٍ» — إشارة mca ليست وصلته', () {
+    tearDown(() => UbntApi.debugFetch = null);
+
+    test('🚨 AF60/airMAX بوضع AP مسجّلٌ «وصلة» بلا محطّة وإشارة mca −96/−93/−55 ⇒ «بلا طرفٍ ثانٍ» لا «ضعيفة» ولا «سليم»',
+        () async {
+      final d = dev(61, type: 'link', brand: 'ubnt', protocol: 'ssh');
+      NetworkDevicesApi.debugSeedCredentials(d.id, {'user': 'ubnt', 'pass': 'x'}, DateTime.now());
+      for (final sig in ['-96', '-93', '-55']) {
+        UbntApi.debugFetch = () async => UbntStats.fromMcaStatus({
+              'deviceName': 'AF60-master',
+              'wlanOpmode': 'ap',
+              'essid': 'BH',
+              'signal': sig,
+              'wlanConnections': '0',
+              'cpuload': '5',
+              'uptime': '864000',
+            });
+        final p = await DeviceVitals.fetch(d, detailed: true);
+        expect([p.detail.glance.isAp, p.detail.glance.peersKnown, p.detail.peers.length], [true, true, 0], reason: sig);
+        final r = judge(d, p);
+        expect(r.role, CheckRole.link, reason: sig);
+        expect(texts(r), ['الوصلة بلا طرفٍ ثانٍ'], reason: sig);
+        expect(r.state, CheckState.warn, reason: sig);
+      }
+      // والجهاز نفسه من «كل الشركات» (الخادم: sig فارغة لنقطة وصول airOS) ⇒ الحكم نفسه
+      final srv = remote(d, {'kind': 'airos', 'cpu': 5, 'up': 864000, 'ap': true, 'mode': 'ap-ptp', 'sig': null,
+        'peers': const <Map>[]});
+      expect(texts(srv), ['الوصلة بلا طرفٍ ثانٍ']);
+    });
+
+    test('ميموزا وحدها تُحكم بإشارتها (قدرة استقبال الـPtP — F10): الحالة نفسها بعلامتين', () {
+      DeviceCheckReport link(String brand) => DevicesCheck.evaluate(
+          d: dev(62, type: 'link', brand: brand),
+          alive: true,
+          detail: const DeviceDetail(
+              glance: DeviceGlance(isAp: true, peersKnown: true, signal: -61, uptimeSec: 864000)));
+      final ubnt = link('ubnt');
+      expect(texts(ubnt), ['الوصلة بلا طرفٍ ثانٍ']);
+      expect(ubnt.state, CheckState.warn);
+      final mimosa = link('mimosa');
+      expect(mimosa.state, CheckState.ok);
+      expect(mimosa.signal, -61);
+      expect(texts(link('mikrotik')), ['الوصلة بلا طرفٍ ثانٍ']);
     });
   });
 }
