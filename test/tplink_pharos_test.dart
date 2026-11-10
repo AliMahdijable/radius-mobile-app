@@ -197,6 +197,7 @@ void main() {
 
     tearDown(() async {
       TplinkPharosService.clock = DateTime.now;
+      TplinkPharosService.secureBaseFor = TplinkPharosService.defaultSecureBase;
       await d.stop();
     });
 
@@ -403,6 +404,49 @@ void main() {
       expect(live.misses, 0);
       await live.close();
       expect(d.logouts, 1);
+    });
+
+    test('الدخول يُرسل على منفذ الجهاز المشفّر حين يجاوب — بصمة كلمة السرّ لا تمرّ مكشوفة؛ والتعرّف والقراءة على العاديّ', () async {
+      await d.startSecure();
+      TplinkPharosService.secureBaseFor = (_) => d.secureBase;
+      final u = await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1');
+      expect(u?.signalDbm, -41, reason: 'الجلسة بالكوكي: دخولٌ مشفّر ثمّ قراءةٌ على المخطّط الأوّل');
+      expect(d.secureLogins, hasLength(1));
+      expect(d.logins, hasLength(1), reason: 'لا يُرسل الدخول مرّتين');
+      await d.idle();
+      expect(d.paths.where((p) => p.startsWith('S ')), ['S POST /data/version.json'], reason: 'الدخول وحده مشفّر');
+      expect(d.paths.first, 'GET /data/version.json');
+      expect(d.session, isNull, reason: 'والخروج بعد القراءة كما كان');
+    });
+
+    test('المنفذ المشفّر لا يجاوب (HTTPS مطفأ بالجهاز) ⇒ الدخول كما تفعل صفحته، ويُتذكَّر فلا يُطرق ثانيةً حتى «حفظ وفحص»', () async {
+      TplinkPharosService.secureBaseFor = (_) => 'http://127.0.0.1:1'; // منفذٌ مغلق
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull);
+      expect(d.logins, hasLength(1));
+      await d.startSecure();
+      TplinkPharosService.secureBaseFor = (_) => d.secureBase; // صار يجاوب — لكنّنا تذكّرنا أنّه لا
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull);
+      expect(d.secureLogins, isEmpty);
+      TplinkPharosService.forget(d.host);
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull);
+      expect(d.secureLogins, hasLength(1), reason: 'بعد «حفظ وفحص» يُجرَّب من جديد');
+    });
+
+    test('دخولٌ مشفّر أُرسل ولم يُجَب ⇒ لا يُعاد على المنفذ الآخر (قد يكون الجهاز عالجه)، ولا يُحفظ رفضاً', () async {
+      await d.startSecure();
+      TplinkPharosService.secureBaseFor = (_) => d.secureBase;
+      d.dropSecureLogin = true;
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNull);
+      expect(TplinkPharosService.lastIssue(d.host)?.issue, PharosLoginIssue.unreachable);
+      expect(d.logins, hasLength(1));
+      d.dropSecureLogin = false;
+      expect(await TplinkPharosService.readOnce(d.host, 'agent', 'secret-1'), isNotNull);
+      expect(d.secureLogins, hasLength(2), reason: 'المنفذ المشفّر يجاوب — يبقى طريق الدخول');
+    });
+
+    test('عنوانٌ بمنفذٍ مكتوب (تحويل منفذ) لا يُخمَّن له منفذٌ مشفّر', () {
+      expect(TplinkPharosService.defaultSecureBase('10.0.0.5'), 'https://10.0.0.5');
+      expect(TplinkPharosService.defaultSecureBase('10.0.0.5:8080'), isNull);
     });
 
     test('دخولان متزامنان من التطبيق نفسه يتسلسلان (لا يطرد أحدهما الآخر قبل قراءته)', () async {
@@ -752,10 +796,26 @@ class _FakePharos {
     await res.close();
   }
 
+  /// منفذٌ ثانٍ يمثّل منفذ الجهاز المشفّر (الحالة نفسها: الجلسة بالكوكي لا بالمخطّط) — يُشغَّل في اختبارات الدخول المشفّر.
+  HttpServer? secure;
+  final secureLogins = <String>[];
+  bool dropSecureLogin = false;
+
+  String get secureBase => 'http://127.0.0.1:${secure!.port}';
+
+  Future<void> startSecure() async {
+    secure = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    secure!.listen((req) => _handle(req, viaSecure: true));
+  }
+
   Future<void> start() async {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    server.listen((req) async {
-      paths.add('${req.method} ${req.uri.path}');
+    server.listen(_handle);
+  }
+
+  Future<void> _handle(HttpRequest req, {bool viaSecure = false}) async {
+    {
+      paths.add('${viaSecure ? 'S ' : ''}${req.method} ${req.uri.path}');
       final res = req.response;
       final cookie = RegExp(r'COOKIE=([^;\s]+)').firstMatch(req.headers.value('cookie') ?? '')?.group(1);
       final mine = cookie != null && cookie == session;
@@ -783,7 +843,8 @@ class _FakePharos {
           return _json(res, _hello(status: -1, failed: failed, lock: lock), setCookie: _newNonce());
         }
         logins.add(body);
-        if (dropLogin) {
+        if (viaSecure) secureLogins.add(body);
+        if (dropLogin || (viaSecure && dropSecureLogin)) {
           (await res.detachSocket(writeHeaders: false)).destroy();
           return;
         }
@@ -825,13 +886,14 @@ class _FakePharos {
       }
       res.statusCode = 404;
       await res.close();
-    });
+    }
   }
 
   Future<void> stop() async {
     if (_stopped) return;
     _stopped = true;
     await server.close(force: true);
+    await secure?.close(force: true);
   }
 }
 

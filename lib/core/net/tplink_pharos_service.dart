@@ -22,12 +22,32 @@ import '../../models/device_health.dart';
 ///   جلسةٌ منتهية تردّ `{"success":true,"timeout":true}` بلا `data`.
 /// - **الخروج:** GET `/data/version.json?option=logout`.
 /// - المنفذ 80 يخدم `/data/*` ولو كان HTTPS مفعّلاً (الجذر وحده يُحوَّل 303)؛ وHTTPS بمفتاح RSA 1024 وتبادل RSA وحده —
-///   مكدّس Dart يصله (جُرِّب).
+///   مكدّس Dart يصله (جُرِّب). الجلسة بالكوكي لا بالمخطّط: nonce أُخذ بـHTTP يُقبل دخولاً بـHTTPS، والقراءة بعده بأيّهما.
+/// - كلّ طلب قراءةٍ يحتاج ترويسة `Referer` (بلاها يردّ الجهاز جسماً فارغاً والجلسة سليمة).
+///
+/// **الدخول مشفّر حين يتيحه الجهاز:** بصمة كلمة السرّ (MD5 بتحدٍّ — كلمةٌ قصيرة تُكسر منها بثوانٍ) لا تمرّ مكشوفةً على
+/// وصلة لاسلكيّة مفتوحة مع كلّ موجة فحص: طلب الدخول وحده يُرسل بـHTTPS إن جاوب منفذه (يُتذكَّر لكلّ جهاز)، وإلّا بـHTTP كما
+/// تفعل صفحة الجهاز نفسها. التعرّف والقراءات بـHTTP (لا سرّ فيها، وهي أسرع بثلاثة أرباع الثانية لكلّ طلب).
 class TplinkPharosService {
   TplinkPharosService._();
 
   static const _connect = Duration(seconds: 4);
   static const _receive = Duration(seconds: 8);
+
+  /// مهلة فتح الاتّصال المشفّر للدخول: منفذٌ مغلق يردّ فوراً، ومحجوبٌ بصمت لا يُنتظر عليه طويلاً (مرّةً لكلّ جهاز بالجلسة).
+  static const _secureConnect = Duration(seconds: 3);
+
+  /// هل جاوب منفذ الجهاز المشفّر على الدخول؟ (true يعمل · false لا يجاوب ⇒ لا يُجرَّب ثانيةً حتى [forget]/[reset]).
+  static final _secureLogin = <String, bool>{};
+
+  /// دخل [host] مشفّراً؟ (null: لم يُجرَّب بعد) — للتشخيص والاختبار.
+  @visibleForTesting
+  static bool? secureLoginWorked(String host) => _secureLogin[host];
+
+  /// عنوان الدخول المشفّر لـ[host] — null لعنوانٍ بمنفذٍ مكتوب (تحويل منفذ: لا يُعرف منفذه المشفّر). يُحقن في الاختبار.
+  @visibleForTesting
+  static String? Function(String host) secureBaseFor = defaultSecureBase;
+  static String? defaultSecureBase(String host) => RegExp(r':\d{1,5}$').hasMatch(host) ? null : 'https://$host';
 
   /// لا محاولة دخولٍ تلقائيّة والجهاز عدّ هذا القدر من المحاولات الغلط: القفل عند عشر (ساعتان بلا صفحة الجهاز للوكيل)،
   /// وعدّاد الجهاز يجمع محاولات كلّ الهواتف. فنقف عند النصف ونترك الباقي لصاحب الجهاز.
@@ -81,12 +101,18 @@ class TplinkPharosService {
     });
   }
 
-  static Future<_Reply> _send(String base, String method, String path, {String? cookie, String? form}) async {
+  static Future<_Reply> _send(String base, String method, String path, {String? cookie, String? form, Duration? connect}) async {
     final client = HttpClient()
-      ..connectionTimeout = _connect
+      ..connectionTimeout = connect ?? _connect
       ..badCertificateCallback = (_, __, ___) => true;
     try {
-      final req = await client.openUrl(method, Uri.parse('$base$path'));
+      final HttpClientRequest req;
+      try {
+        req = await client.openUrl(method, Uri.parse('$base$path'));
+      } catch (e) {
+        // لم يُفتح الاتّصال (منفذٌ مغلق، مهلة، مصافحة TLS) — لم يُرسل شيء: يفرّقه المستدعي عن طلبٍ أُرسل ولم يُجَب.
+        throw _NoConnection(e);
+      }
       req.followRedirects = false;
       // طلبٌ لكلّ اتّصال: خادم الجهاز صغير، وإعادة استعمال اتّصالٍ أغلقه تُفشل الطلب التالي بلا سبب.
       req.persistentConnection = false;
@@ -113,7 +139,9 @@ class TplinkPharosService {
     }
   }
 
-  static String _errName(Object e) => e is TimeoutException
+  static String _errName(Object e) => e is _NoConnection
+      ? 'connect:${_errName(e.cause)}'
+      : e is TimeoutException
       ? 'timeout'
       : e is SocketException
           ? 'socket'
@@ -166,23 +194,38 @@ class TplinkPharosService {
     var nonce = h.cookie;
     if (nonce.isEmpty) return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: 'hello:no-nonce');
     for (var round = 0; round < _staleRounds; round++) {
+      final form = 'encoded=${Uri.encodeQueryComponent('$user:${TplinkPharosParse.digest(pass, nonce)}')}'
+          '&nonce=${Uri.encodeQueryComponent(nonce)}';
+      _Reply? sent;
+      // الدخول مشفّراً حين يجاوب منفذه (الجلسة بالكوكي: التعرّف والقراءات تبقى على مخطّطها).
+      final secure = h.base.startsWith('http://') && _secureLogin[host] != false ? secureBaseFor(host) : null;
+      if (secure != null) {
+        try {
+          sent = await _send(secure, 'POST', '/data/version.json', cookie: nonce, form: form, connect: _secureConnect);
+          _secureLogin[host] = true;
+        } on _NoConnection {
+          // لا منفذ مشفّر (HTTPS مطفأ بالجهاز أو محجوب): لم يُرسل شيء ⇒ الدخول كما تفعل صفحة الجهاز.
+          _secureLogin[host] = false;
+        } catch (e) {
+          // أُرسل ولم يُجَب: لا نعيده على المنفذ الآخر (قد يكون الجهاز عالجه) — «ما يجاوب»، والفحص التالي يحاول.
+          return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: 'post-tls:${_errName(e)}');
+        }
+      }
       final _Reply r;
-      try {
-        r = await _send(
-          h.base,
-          'POST',
-          '/data/version.json',
-          cookie: nonce,
-          form: 'encoded=${Uri.encodeQueryComponent('$user:${TplinkPharosParse.digest(pass, nonce)}')}'
-              '&nonce=${Uri.encodeQueryComponent(nonce)}',
-        );
-      } catch (e) {
-        return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: 'post:${_errName(e)}');
+      if (sent != null) {
+        r = sent;
+      } else {
+        try {
+          r = await _send(h.base, 'POST', '/data/version.json', cookie: nonce, form: form);
+        } catch (e) {
+          return (session: null, issue: PharosLoginIssue.unreachable, lockLeft: null, trace: 'post:${_errName(e)}');
+        }
       }
       final j = TplinkPharosParse.json(r.body);
       final status = TplinkPharosParse.intOf(j?['status']);
       final lock = TplinkPharosParse.intOf(j?['lockTime']) ?? 0;
-      final trace = 'post:${r.status} st:${status ?? '-'} fc:${TplinkPharosParse.intOf(j?['failedCount']) ?? '-'} len:${r.body.length}';
+      final trace = 'post${sent != null ? '-tls' : ''}:${r.status} st:${status ?? '-'}'
+          ' fc:${TplinkPharosParse.intOf(j?['failedCount']) ?? '-'} len:${r.body.length}';
       switch (status) {
         case 0:
           return (
@@ -241,6 +284,7 @@ class TplinkPharosService {
     _busyUntil.remove(host);
     _kicks.remove(host);
     _issues.remove(host);
+    _secureLogin.remove(host);
     if (manual) _manualOnce.add(host);
   }
 
@@ -251,6 +295,7 @@ class TplinkPharosService {
     _kicks.clear();
     _manualOnce.clear();
     _issues.clear();
+    _secureLogin.clear();
     for (final s in _active.values.toList()) {
       unawaited(logout(s));
     }
@@ -417,6 +462,12 @@ class TplinkPharosService {
 }
 
 typedef _Reply = ({int status, String body, String? cookie, String? server});
+
+/// الاتّصال لم يُفتح أصلاً (لم يُرسل الطلب).
+class _NoConnection implements Exception {
+  const _NoConnection(this.cause);
+  final Object cause;
+}
 
 /// ما ردّ به الجهاز على التعرّف (بلا دخول).
 class PharosHello {
