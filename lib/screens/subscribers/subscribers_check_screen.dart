@@ -959,7 +959,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       iso(s.username),
       if (x?.device != null) iso(x!.device!),
       if (x?.via != null) 'من ${x!.via}',
-      if (!widget.viaVpn && x?.at != null) timeAgoAr(x!.at),
+      // عبر الـVPN عمر قراءة الخادم بالشريط وسطر شركتها — وقراءة الهاتف («كل الشركات») بعمرها هنا: قد تكون من ساعات
+      // (المراجعة R3)
+      if (x != null && x.at != null && (!widget.viaVpn || !x.vpn)) timeAgoAr(x.at),
     ];
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.sm),
