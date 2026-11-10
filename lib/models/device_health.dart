@@ -169,7 +169,19 @@ class UbiquitiStatus {
     required this.peerMac,
     required this.peerCount,
     required this.baseUrl,
+    this.vendor = 'ubnt',
+    this.model = '',
   });
+
+  /// المورّد: `ubnt` (الأصل — airOS) أو `tplink` (TP-Link Pharos: CPE/WBS، ١٠ نوفمبر) — نفس القراءات والبطاقات، ويحدّد
+  /// جلسة الترافيك وتوفّر إعادة التشغيل وتسمية الجهاز.
+  final String vendor;
+
+  /// الطراز كما يسمّيه الجهاز («CPE610 v2.0») — فارغٌ حين لا يُعرف (airOS يضعه في [firmware] أو لا يذكره).
+  final String model;
+
+  bool get isTplink => vendor == 'tplink';
+
   final String hostname;
   final String firmware;
   final int? uptimeSeconds;
@@ -255,6 +267,8 @@ class UbiquitiStatus {
         'pm': peerMac,
         'pc': peerCount,
         'b': baseUrl,
+        if (vendor != 'ubnt') 'vd': vendor,
+        if (model.isNotEmpty) 'md': model,
       };
 
   static UbiquitiStatus fromJson(Map<String, dynamic> j) => UbiquitiStatus(
@@ -276,6 +290,41 @@ class UbiquitiStatus {
         peerMac: j['pm']?.toString(),
         peerCount: j['pc'] is int ? j['pc'] as int : null,
         baseUrl: (j['b'] ?? '').toString(),
+        // مخزَّنٌ قبل حقل المورّد ⇒ يوبيكويتي كما كان.
+        vendor: (j['vd'] ?? 'ubnt').toString(),
+        model: (j['md'] ?? '').toString(),
+      );
+
+  /// نسخةٌ بقراءاتٍ حيّة أحدث (نبضة الكرت) — ما لم يُعطَ يبقى كما هو؛ والمنافذ تُستبدل كلّها حين تُعطى.
+  UbiquitiStatus withLive({
+    int? signalDbm,
+    int? noiseFloorDbm,
+    int? ccqPercent,
+    int? txRateKbps,
+    int? rxRateKbps,
+    int? uptimeSeconds,
+    List<LanPort>? lanPorts,
+  }) =>
+      UbiquitiStatus(
+        hostname: hostname,
+        firmware: firmware,
+        uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
+        ssid: ssid,
+        mode: mode,
+        signalDbm: signalDbm ?? this.signalDbm,
+        noiseFloorDbm: noiseFloorDbm ?? this.noiseFloorDbm,
+        ccqPercent: ccqPercent ?? this.ccqPercent,
+        distanceMeters: distanceMeters,
+        txRateKbps: txRateKbps ?? this.txRateKbps,
+        rxRateKbps: rxRateKbps ?? this.rxRateKbps,
+        rxBytes: rxBytes,
+        txBytes: txBytes,
+        lanPorts: lanPorts ?? this.lanPorts,
+        peerMac: peerMac,
+        peerCount: peerCount,
+        baseUrl: baseUrl,
+        vendor: vendor,
+        model: model,
       );
 }
 

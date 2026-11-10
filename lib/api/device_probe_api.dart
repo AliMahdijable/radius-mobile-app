@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/zte_ont_service.dart';
+import '../core/net/tplink_pharos_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../core/net/tcp_reachability.dart';
 import '../core/net/windows_icmp.dart';
@@ -35,8 +36,14 @@ enum ProbeIssue {
   /// دخلنا والصفحات تُجاب، ولا ضوء فيها بصيغةٍ نعرفها — طرازٌ جديد (أثره يُبلَّغ بلا قيم).
   unknownFormat,
 
-  /// جهاز ZTE ولا يوزر له من الوكيل — لا نجرّب افتراضاً من عندنا.
+  /// جهاز ZTE أو TP-Link ولا يوزر له من الوكيل — لا نجرّب افتراضاً من عندنا.
   needsCredentials,
+
+  /// TP-Link عدّ محاولات دخولٍ غلط كثيرة (دون القفل) — لا نزيدها حتى لا ينقفل.
+  tooManyFails,
+
+  /// TP-Link جديد لم يُضبط، أو يطلب تغيير كلمة سرّه من صفحته أوّلاً.
+  needsSetup,
 }
 
 /// Device probe API — 3-tier credential fallback (per-sub → admin → library)
@@ -70,8 +77,9 @@ class DeviceProbeApi {
   static final _inFlight = <String, Future<DeviceHealthSnapshot?>>{};
 
   /// سبب آخر فشلٍ بمفتاح العنوان وبمفتاح المشترك (العنوان الفعّال قد يكون مخصّصاً لا يعرفه الكرت).
-  static final _issueByKey = <String, ({ProbeIssue issue, int? lockLeft, DateTime at})>{};
-  static final _issueByUser = <String, ({ProbeIssue issue, int? lockLeft, DateTime at})>{};
+  /// [vendor] من سجّل السبب (`zte` · `tplink`) — الكرت يصوغ جملته بحسبه (قفل ZTE دقيقة، وTP-Link ساعتان).
+  static final _issueByKey = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String? vendor})>{};
+  static final _issueByUser = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String? vendor})>{};
 
   /// عناوين بُلِّغ أثر «دخلنا ولم نقرأ الضوء» لها في هذه الجلسة.
   static final _readReported = <String>{};
@@ -82,6 +90,9 @@ class DeviceProbeApi {
 
   /// ما سجّله فرع ZTE في الفحص الجاري (بالعنوان) — يُقرأ بعد انتهائه.
   static final _zteIssue = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String trace})>{};
+
+  /// ما سجّله فرع TP-Link في الفحص الجاري (بالعنوان) — كفرع ZTE: يُقرأ بعد انتهائه.
+  static final _tplinkIssue = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String trace})>{};
 
   /// مراحل فرع ZTE في الفحص الجاري بأوقاتها (تعرّف ← دخول ← قراءة): فحصٌ انتهت مهلته يُعرف أين وقف، ويُمدَّد ما دام ZTE
   /// في منتصف عمله (صفحاته ~١٤٠ ك.ب وواجهته بطيئة).
@@ -219,6 +230,8 @@ class DeviceProbeApi {
         if (snap == null) continue;
         _snapCache[entry.key.toString()] = _Cached(snap, at);
         _kindByIp[entry.key.toString()] = snap.kind;
+        final vendor = snap.ubnt?.vendor;
+        if (vendor != null) _radioVendorByKey[entry.key.toString()] = vendor;
         // ملاحظة: _snapByUser لا يُستعاد لأن key الـpersist بـIP فقط.
         // الجلسة الجديدة رح تُعبّئ _snapByUser مع أوّل probe.
       }
@@ -241,6 +254,10 @@ class DeviceProbeApi {
     _reachCache.clear();
     _ontWinner.clear();
     _ubntWinner.clear();
+    _tplinkWinner.clear();
+    _radioVendorByKey.clear();
+    _tplinkSeen.clear();
+    TplinkPharosService.reset();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -347,7 +364,10 @@ class DeviceProbeApi {
     final ipKey = _k(company, effectiveIp);
     // 🐛 ٢٧ أكتوبر: الحفظ يُبطل الـIP المخصّص وحده — ومشتركٌ على IP الساس (الحقل فارغ) بقي رفضه القديم محفوظاً، فـ«حفظ
     // وفحص الجهاز» لا يحاول أصلاً.
-    if (retryLogin) ZteOntService.forget(effectiveIp);
+    if (retryLogin) {
+      ZteOntService.forget(effectiveIp);
+      TplinkPharosService.forget(effectiveIp, manual: true);
+    }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
     if (!force) {
@@ -419,11 +439,14 @@ class DeviceProbeApi {
     if (userKey != null) {
       _snapByUser[userKey] = entry;
     }
-    // السبب: ما سجّله فرع ZTE في هذا الفحص نفسه، وإلّا «ما يجاوب».
+    // السبب: ما سجّله فرع ZTE أو TP-Link في هذا الفحص نفسه (الجهاز أحدهما لا كلاهما)، وإلّا «ما يجاوب».
     final z = _zteIssue[effectiveIp];
-    final fresh = z != null && !z.at.isBefore(started) ? z : null;
+    final t = _tplinkIssue[effectiveIp];
+    final freshT = t != null && !t.at.isBefore(started) ? t : null;
+    final fresh = freshT ?? (z != null && !z.at.isBefore(started) ? z : null);
+    final vendor = fresh == null ? null : (freshT != null ? 'tplink' : 'zte');
     if (snap == null) {
-      final issue = (issue: fresh?.issue ?? ProbeIssue.unreachable, lockLeft: fresh?.lockLeft, at: now);
+      final issue = (issue: fresh?.issue ?? ProbeIssue.unreachable, lockLeft: fresh?.lockLeft, at: now, vendor: vendor);
       _issueByKey[ipKey] = issue;
       if (userKey != null) _issueByUser[userKey] = issue;
     } else {
@@ -448,6 +471,8 @@ class DeviceProbeApi {
     }
     if (snap != null) {
       _kindByIp[ipKey] = snap.kind;
+      final v = snap.ubnt?.vendor;
+      if (v != null) _radioVendorByKey[ipKey] = v;
       _deadCache.remove(ipKey); // نجاح → ما هو ميت
     } else {
       // فشل — نضيف لـdead cache حتى نوفّر محاولات متكرّرة قريبة.
@@ -455,6 +480,9 @@ class DeviceProbeApi {
       // Kind cache قد يكون قديم ونحن جربنا الـkind المخزّن وفشل — نمسحه
       // حتى المحاولة القادمة تفجّر parallel وتلقّط لو الجهاز اتبدّل.
       _kindByIp.remove(ipKey);
+      // TP-Link المعروف يبقى معروفاً (فرعه يمسحه حين لا يعود الجهاز يعرّف نفسه): فشله بسببه — رفضٌ أو مشغول — لا يُرجع
+      // طلبات هواوي وUBNT إليه كلّ موجة.
+      if (_radioVendorByKey[ipKey] != 'tplink') _radioVendorByKey.remove(ipKey);
     }
     _schedulePersist();
     if (timedOut) _keepLate(run, entry, ipKey, userKey);
@@ -472,6 +500,8 @@ class DeviceProbeApi {
         _snapByUser[userKey] = e;
       }
       _kindByIp[ipKey] = late.kind;
+      final v = late.ubnt?.vendor;
+      if (v != null) _radioVendorByKey[ipKey] = v;
       _deadCache.remove(ipKey);
       _issueByKey.remove(ipKey);
       if (userKey != null) _issueByUser.remove(userKey);
@@ -490,19 +520,24 @@ class DeviceProbeApi {
     _ontVendorByKey.remove(k);
     _ontWinner.remove(k);
     _ubntWinner.remove(k);
+    _tplinkWinner.remove(k);
+    _radioVendorByKey.remove(k);
+    _tplinkSeen.remove(ip.trim());
     // اعتماداتٌ جديدة تُجرَّب: الرفض السابق على هذا العنوان يُنسى (لا يُعاد إلّا المرفوض نفسه بلا تغيير).
     ZteOntService.forget(ip.trim());
+    TplinkPharosService.forget(ip.trim());
     _schedulePersist();
   }
 
   /// Read-only peek بالـIP.
   /// لماذا فشل آخر فحصٍ لهذا المشترك (بالمشترك أوّلاً ثمّ بالعنوان) — null: نجح أو لم يُفحص. [lockLeft] ما بقي من القفل الآن.
-  static ({ProbeIssue issue, int? lockLeft})? issueFor({String? username, required String ip, String? company}) {
+  /// [vendor] من سجّل السبب (`zte` · `tplink`) أو null — لصياغة الجملة.
+  static ({ProbeIssue issue, int? lockLeft, String? vendor})? issueFor({String? username, required String ip, String? company}) {
     final byUser = username == null || username.isEmpty ? null : _issueByUser[_k(company, username)];
     final e = byUser ?? _issueByKey[_k(company, ip.trim())];
     if (e == null) return null;
     final left = e.lockLeft == null ? null : e.lockLeft! - DateTime.now().difference(e.at).inSeconds;
-    return (issue: e.issue, lockLeft: left == null || left <= 0 ? null : left);
+    return (issue: e.issue, lockLeft: left == null || left <= 0 ? null : left, vendor: e.vendor);
   }
 
   /// مراحل ZTE بأوقاتها من بدء الفحص: `detect+0 login+340 read+1200` — لتشخيصٍ بلا محتوى.
@@ -767,6 +802,7 @@ class DeviceProbeApi {
     // اعتماداتٌ جديدة ⇒ الفائز القديم قد لا يكون بينها.
     _ontWinner.clear();
     _ubntWinner.clear();
+    _tplinkWinner.clear();
     _schedulePersist();
   }
 
@@ -797,9 +833,12 @@ class DeviceProbeApi {
     // ⑦: مرشّحو الاعتماد لكلّ نوع (الأوّل ثمّ إضافيّا المدير) — بالترتيب، والفائز يُحفظ لهذا العنوان.
     final c = candidatesFor(cfg, defaults);
 
-    // Admin pinned kind → probe واحد فقط.
+    // Admin pinned kind → probe واحد فقط. «Ubiquiti» = جهاز المشترك اللاسلكيّ: يوبيكويتي أو TP-Link ([_probeRadio]).
     if (overridesOnt) return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
-    if (overridesUbnt) return _probeUbntAny(ip, c.ubnt, kindKey);
+    if (overridesUbnt) return _probeRadio(ip, c.ubnt, c.tplink, kindKey);
+
+    // جهازٌ عُرف أنّه TP-Link (ولو فشل دخوله: رفضٌ أو مشغول) ⇒ فرعه وحده — لا تطرقه طلبات هواوي وUBNT كلّ موجة.
+    if (_radioVendorByKey[kindKey] == 'tplink') return _probeTplinkAny(ip, c.tplink, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -810,13 +849,137 @@ class DeviceProbeApi {
       return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
     }
     if (knownKind == DeviceKind.ubiquiti) {
-      return _probeUbntAny(ip, c.ubnt, kindKey);
+      return _probeRadio(ip, c.ubnt, c.tplink, kindKey);
     }
 
     // First-time أو kind cache cleared — parallel race.
     final ont = _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
-    final ubnt = _probeUbntAny(ip, c.ubnt, kindKey, unlessZte: true);
-    return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
+    final ubnt = _probeUbntAny(ip, c.ubnt, kindKey, unlessOther: true);
+    final others = _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
+    // TP-Link يعرّف نفسه بطلبٍ واحد بلا دخول: إن كان هو فنتيجة فرعه هي الجواب — ولو فشلاً بسببه — ولا يُنتظر فرعا هواوي
+    // وUBNT على جهازٍ ليس لهما؛ وإن لم يكن فالجواب جوابهما كما كان. والأسبق من (نجاح أحدهما · معرفة أنّه TP-Link) يحسم.
+    final hello = _helloTplink(ip);
+    final done = Completer<DeviceHealthSnapshot?>();
+    var othersDone = false;
+    var helloDone = false;
+    others.then((snap) {
+      othersDone = true;
+      if (done.isCompleted) return;
+      if (snap != null || helloDone) done.complete(snap);
+    });
+    hello.then((h) {
+      helloDone = true;
+      if (done.isCompleted) return;
+      if (h != null) {
+        done.complete(_probeTplinkAny(ip, c.tplink, kindKey, hello: h));
+      } else if (othersDone) {
+        done.complete(null);
+      }
+    });
+    return done.future;
+  }
+
+  /// تعرّف TP-Link الجاري لكلّ عنوان — فرعه وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
+  static final _tplinkHello = <String, Future<PharosHello?>>{};
+
+  /// نتيجة آخر تعرّفٍ لكلّ عنوان، لنصف دقيقة. الجهاز يحفظ **آخر** nonce طلبه أيّ عميلٍ وحده (قِيس): تعرّفٌ ثانٍ والأوّل لم
+  /// يدخل بعدُ يُبطل nonce الأوّل — فمن يسأل «أهو TP-Link؟» فقط (فرع Ubiquiti بين مرشّحٍ وآخر) يُجاب من هنا بلا طلب.
+  static final _tplinkSeen = <String, ({bool yes, DateTime at})>{};
+  static const _tplinkSeenFor = Duration(seconds: 30);
+
+  static ({bool yes, DateTime at})? _tplinkRecent(String ip) {
+    final seen = _tplinkSeen[ip];
+    return seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor ? seen : null;
+  }
+
+  /// تعرّفٌ جديد (بـnonce دخوله). null بلا طلبٍ حين عُرف للتوّ أنّ العنوان ليس TP-Link.
+  static Future<PharosHello?> _helloTplink(String ip) {
+    final running = _tplinkHello[ip];
+    if (running != null) return running;
+    if (_tplinkRecent(ip)?.yes == false) return Future.value(null);
+    final f = TplinkPharosService.hello(ip).catchError((Object _) => null);
+    _tplinkHello[ip] = f;
+    f.then((h) => _tplinkSeen[ip] = (yes: h != null, at: DateTime.now()));
+    f.whenComplete(() => _tplinkHello.remove(ip));
+    return f;
+  }
+
+  /// أهو TP-Link؟ من آخر تعرّفٍ قريب، وإلّا تعرّفٌ واحد.
+  static Future<bool> _isTplink(String ip) async =>
+      _tplinkRecent(ip)?.yes ?? (await _helloTplink(ip)) != null;
+
+  /// آخر مورّد راديو نجح لكلّ عنوان (بمفتاح كاش النوع): `ubnt` أو `tplink` — الفحص التالي يذهب إليه وحده.
+  static final _radioVendorByKey = <String, String>{};
+
+  /// جهاز المشترك اللاسلكيّ (النوع «Ubiquiti» مثبَّتاً أو معروفاً من قبل): يوبيكويتي أو TP-Link. المورّد المحفوظ وحده —
+  /// يوبيكويتي كما كان حرفاً بلا أيّ طلبٍ زائد — وإلّا التعرّف أوّلاً (طلبٌ بلا دخول) ثمّ فرعٌ واحد.
+  static Future<DeviceHealthSnapshot?> _probeRadio(
+      String ip, List<DeviceCred> ubnt, List<DeviceCred> tplink, String kindKey) async {
+    final known = _radioVendorByKey[kindKey];
+    if (known == 'ubnt') return _probeUbntAny(ip, ubnt, kindKey);
+    if (known == 'tplink') return _probeTplinkAny(ip, tplink, kindKey);
+    final hello = await _helloTplink(ip);
+    return hello != null ? _probeTplinkAny(ip, tplink, kindKey, hello: hello) : _probeUbntAny(ip, ubnt, kindKey);
+  }
+
+  static void _tplinkNote(String ip, ProbeIssue issue, String trace, {int? lockLeft}) =>
+      _tplinkIssue[ip] = (issue: issue, lockLeft: lockLeft, at: DateTime.now(), trace: 'tplink $trace');
+
+  /// TP-Link: تعرّفٌ بلا دخول، ثمّ مرشّحو الوكيل بالترتيب (الفائز المحفوظ أوّلاً) — دخولٌ ← قراءةٌ ← خروج لكلٍّ
+  /// ([TplinkPharosService.readOnce]). لا افتراض مصنّع: الجهاز يعدّ المحاولات الغلط ويقفل صفحته عند عشر. والتالي لا
+  /// يُجرَّب إلّا بعد «رفض» صريح (مشغولٌ/قافلٌ/لا يجاوب ⇒ قف).
+  static Future<DeviceHealthSnapshot?> _probeTplinkAny(
+      String ip, List<DeviceCred> cands, String kindKey, {PharosHello? hello}) async {
+    // جلسة الكرت الحيّة قائمة ⇒ القراءة بها: لا تعرّف ولا دخول (طلبٌ واحد خفيف كلّ نبضة).
+    final live = TplinkPharosService.hasLive(ip);
+    final first = hello ?? (live ? null : await _helloTplink(ip));
+    if (first == null && !live) {
+      // لم يعد يعرّف نفسه (تبدّل الجهاز أو لا يجاوب) ⇒ الفحص التالي يبحث من جديد.
+      _radioVendorByKey.remove(kindKey);
+      return null;
+    }
+    final model = first?.model ?? '';
+    PharosHello? h = first;
+    _radioVendorByKey[kindKey] = 'tplink';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'no-creds $model');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkPharosService.readOnce(ip, list[i].username, list[i].password, hello: h);
+      } catch (_) {
+        // خطأٌ غير متوقَّع في القراءة لا يُسقط الفحص كلّه (الكرت ينتظر جوابه): «ما يجاوب» ونقف.
+        _tplinkNote(ip, ProbeIssue.unreachable, '$model error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkPharosService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          PharosLoginIssue.rejected => ProbeIssue.loginRejected,
+          PharosLoginIssue.busy => ProbeIssue.busy,
+          PharosLoginIssue.locked => ProbeIssue.locked,
+          PharosLoginIssue.tooManyFails => ProbeIssue.tooManyFails,
+          PharosLoginIssue.needsSetup => ProbeIssue.needsSetup,
+          PharosLoginIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        '$model ${why?.issue.name ?? '?'} ${why?.trace ?? ''}',
+        lockLeft: why?.lockLeft,
+      );
+      if (why?.issue != PharosLoginIssue.rejected || i == list.length - 1) break;
+      // رفضٌ ⇒ الاعتماد التالي بتعرّفٍ جديد: الـnonce استُهلك، وعدّاد الفشل زاد فيُعاد فحص حدّه.
+      h = await _helloTplink(ip);
+      if (h == null) break;
+    }
+    return null;
   }
 
   /// تعرّف ZTE الجاري لكلّ عنوان — فرع الـONT وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
@@ -863,8 +1026,11 @@ class DeviceProbeApi {
   /// المشترك ⇒ هو وحده (ضبطه الوكيل لهذا الجهاز)؛ وإلّا الخانة الأولى للمدير ثمّ إضافيّاه بلا تكرار. والخانة الأولى
   /// فارغة ⇒ افتراض المصنّع **آخراً** — هواوي وUBNT يجرّبانه كما كانا (لا يتوقّف جهازٌ يعمل به لأنّ الوكيل أضاف
   /// إضافيّاً)، و[ontFactory] يدلّ عليه فيُجرَّب بلا ontSet: جهاز ZTE لا يدخل به أبداً (افتراضٌ من عندنا يقرّب قفله).
+  ///
+  /// [tplink] (١٠ نوفمبر): اعتماد المشترك وحده، وإلّا خانة المدير الأولى ثمّ إضافيّاه — **بلا افتراض مصنّع أبداً**: جهاز
+  /// TP-Link يعدّ المحاولات الغلط من كلّ الهواتف ويقفل صفحته عند عشر.
   @visibleForTesting
-  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory}) candidatesFor(
+  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory, List<DeviceCred> tplink}) candidatesFor(
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) {
@@ -892,13 +1058,24 @@ class DeviceProbeApi {
         own: ontOwn, adminSet: defaults.ontUsername?.isNotEmpty == true, extra: defaults.ontExtra);
     final ubnt = chain(DeviceCred(c.ubntUser, c.ubntPass),
         own: ubntOwn, adminSet: defaults.ubntUsername?.isNotEmpty == true, extra: defaults.ubntExtra);
-    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory);
+    final tplink = <DeviceCred>[];
+    if (ubntOwn) {
+      tplink.add(DeviceCred(user, cfg?.password ?? ''));
+    } else {
+      final first = defaults.tplinkUsername?.trim() ?? '';
+      if (first.isNotEmpty) tplink.add(DeviceCred(first, defaults.tplinkPassword ?? ''));
+      for (final e in defaults.tplinkExtra) {
+        if (!tplink.contains(e)) tplink.add(e);
+      }
+    }
+    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory, tplink: tplink);
   }
 
   /// ⑦: الاعتماد الذي دخل على كلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يبدأ به، وجلسة الترافيك وإعادة التشغيل
   /// تستعملانه ([resolveOntCreds]/[resolveUbntCreds]).
   static final _ontWinner = <String, DeviceCred>{};
   static final _ubntWinner = <String, DeviceCred>{};
+  static final _tplinkWinner = <String, DeviceCred>{};
 
   static List<DeviceCred> _winnerFirst(List<DeviceCred> c, DeviceCred? w) =>
       (w == null || !c.contains(w)) ? c : [w, ...c.where((x) => x != w)];
@@ -922,11 +1099,11 @@ class DeviceProbeApi {
 
   /// ⑦: مثل [_probeOntAny] لـUbiquiti.
   static Future<DeviceHealthSnapshot?> _probeUbntAny(
-      String ip, List<DeviceCred> cands, String kindKey, {bool unlessZte = false}) async {
+      String ip, List<DeviceCred> cands, String kindKey, {bool unlessOther = false}) async {
     final list = _winnerFirst(cands, _ubntWinner[kindKey]);
     for (var i = 0; i < list.length; i++) {
       final started = DateTime.now();
-      final snap = await _probeUbnt(ip, list[i].username, list[i].password, unlessZte: unlessZte);
+      final snap = await _probeUbnt(ip, list[i].username, list[i].password, unlessOther: unlessOther);
       if (snap != null) {
         _ubntWinner[kindKey] = list[i];
         return snap;
@@ -1076,6 +1253,29 @@ class DeviceProbeApi {
     return (ip: effectiveIp, user: user, pass: pass);
   }
 
+  /// بيانات دخول TP-Link لجهاز مشترك + عنوانه الفعّال — لجلسة الكرت الحيّة: الاعتماد الذي دخل به الفحص على هذا العنوان،
+  /// وإلّا أوّل مرشّحي الوكيل ([candidatesFor])؛ null حين لا اعتماد له (لا افتراض من عندنا).
+  static Future<({String ip, String user, String pass})?> resolveTplinkCreds({
+    required String fallbackIp,
+    String? subscriberUsername,
+    String? company,
+  }) async {
+    final ip = fallbackIp.trim();
+    DeviceConfig? cfg;
+    String effectiveIp = ip;
+    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername, company: company);
+      final custom = cfg?.customIp?.trim();
+      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+    }
+    if (effectiveIp.isEmpty) return null;
+    final won = _tplinkWinner[_k(company, effectiveIp)];
+    if (won != null) return (ip: effectiveIp, user: won.username, pass: won.password);
+    final cands = candidatesFor(cfg, await _loadAdminDefaults(company)).tplink;
+    if (cands.isEmpty) return null;
+    return (ip: effectiveIp, user: cands.first.username, pass: cands.first.password);
+  }
+
   /// بيانات دخول ONT لجهاز مشترك + عنوانه الفعّال — بنفس ترتيب
   /// أفضليّة [resolveUbntCreds] حرفاً بحرف، كي لا يعمل الفحص ويفشل
   /// أمرُ إعادة التشغيل على الجهاز نفسه.
@@ -1113,11 +1313,14 @@ class DeviceProbeApi {
     return (ip: effectiveIp, user: user, pass: pass);
   }
 
-  /// [unlessZte]: جهازٌ نوعه غير معروف بعد — دخول Ubiquiti لا يُرسل على جهاز ZTE (اعتماداتٌ لغير جهازها، و٢٧ أكتوبر
-  /// صار يسبق فرع ZTE إليه حين طالت قراءته).
+  /// [unlessOther]: جهازٌ نوعه غير معروف بعد — دخول Ubiquiti لا يُرسل على جهاز ZTE (اعتماداتٌ لغير جهازها، و٢٧ أكتوبر
+  /// صار يسبق فرع ZTE إليه حين طالت قراءته) ولا على TP-Link (١٠ نوفمبر). التعرّفان معاً — لا يزيد الثاني انتظاراً.
   static Future<DeviceHealthSnapshot?> _probeUbnt(
-      String ip, String user, String pass, {bool unlessZte = false}) async {
-    if (unlessZte && await _isZte(ip)) return null;
+      String ip, String user, String pass, {bool unlessOther = false}) async {
+    if (unlessOther) {
+      final other = await Future.wait([_isZte(ip), _isTplink(ip)]);
+      if (other.contains(true)) return null;
+    }
     final session =
         await UbiquitiService.login(ip, user, pass, budget: _probeCap);
     if (session == null) return null;

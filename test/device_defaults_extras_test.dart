@@ -84,12 +84,12 @@ void main() {
     final popped = await open(t);
     expect(find.text('اعتماد 2'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'x-1'), findsOneWidget);
-    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(2), reason: 'ONT فيه واحد من اثنين، وUBNT فارغ');
+    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(3), reason: 'ONT فيه واحد من اثنين، وUBNT وTP-Link فارغان');
 
     await t.tap(find.text('إضافة اعتماد آخر').first);
     await t.pumpAndSettle();
     expect(find.text('اعتماد 3'), findsOneWidget);
-    expect(find.text('إضافة اعتماد آخر'), findsOneWidget, reason: 'ثلاثةٌ لـONT ⇒ لا زرّ إضافة له');
+    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(2), reason: 'ثلاثةٌ لـONT ⇒ لا زرّ إضافة له (يبقى زرّا UBNT وTP-Link)');
 
     // الخانة الجديدة: آخر حقلَي يوزر/باسورد في قسم ONT (قبل قسم UBNT).
     final fields = find.byType(TextField);
@@ -113,13 +113,15 @@ void main() {
       {'username': 'x-2', 'password': 'x-2-p'},
     ]);
     expect(body['ubntExtra'], isEmpty);
+    expect(body['tplinkExtra'], isEmpty, reason: 'قائمة TP-Link تُرسل دائماً ولو فارغة');
+    expect(body['tplinkUsername'], isNull);
     expect(popped, [true]);
     await t.pump(const Duration(seconds: 4)); // حفظ كاش الفحص المؤجَّل بعد مسحه (اعتماداتٌ جديدة)
   });
 
   testWidgets('خانةٌ إضافيّة بلا يوزر لا تُرسل', (t) async {
     await open(t);
-    await t.tap(find.text('إضافة اعتماد آخر').last);
+    await t.tap(find.text('إضافة اعتماد آخر').at(1)); // قسم UBNT
     await t.pumpAndSettle();
     expect(find.text('اعتماد 2'), findsOneWidget);
     await t.ensureVisible(find.text('حفظ الاعتمادات'));
@@ -127,6 +129,45 @@ void main() {
     await t.pumpAndSettle();
     expect(server.saved.single['ubntExtra'], isEmpty);
     expect(server.saved.single['ontExtra'], isEmpty);
+    expect(server.saved.single['tplinkExtra'], isEmpty);
+    await t.pump(const Duration(seconds: 4));
+  });
+
+  // ١٠ نوفمبر — المالك: «صنف جديد من النانوات tplink يحتاج نضيفه ضمن الاعتمادات».
+  testWidgets('قسم TP-Link: المحفوظ يظهر، والجديد وإضافيّه يُرسلان، والباقي لا يُمسّ', (t) async {
+    server.defaults = {
+      'ubntUsername': 'adm-ub',
+      'ubntPassword': 'adm-ub-p',
+      'tplinkUsername': 'tp-old',
+      'tplinkPassword': 'tp-old-p',
+    };
+    await open(t);
+    final section = find.byKey(const ValueKey('creds-tplink'));
+    expect(section, findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('TP-Link (CPE)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'tp-old')), findsOneWidget);
+
+    final fields = find.descendant(of: section, matching: find.byType(TextField));
+    await t.ensureVisible(section);
+    await t.enterText(fields.at(0), ' tp-new ');
+    await t.enterText(fields.at(1), 'tp-new-p');
+    await t.tap(find.descendant(of: section, matching: find.text('إضافة اعتماد آخر')));
+    await t.pumpAndSettle();
+    final withExtra = find.descendant(of: section, matching: find.byType(TextField));
+    expect(withExtra, findsNWidgets(4));
+    await t.enterText(withExtra.at(2), 'tp-x');
+    await t.enterText(withExtra.at(3), 'tp-x-p');
+    expect(t.takeException(), isNull);
+
+    await t.ensureVisible(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.pumpAndSettle();
+    final body = server.saved.single;
+    expect([body['tplinkUsername'], body['tplinkPassword']], ['tp-new', 'tp-new-p']);
+    expect(body['tplinkExtra'], [
+      {'username': 'tp-x', 'password': 'tp-x-p'},
+    ]);
+    expect([body['ubntUsername'], body['ubntPassword']], ['adm-ub', 'adm-ub-p'], reason: 'قسم يوبيكويتي كما كان');
     await t.pump(const Duration(seconds: 4));
   });
 }

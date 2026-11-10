@@ -9,13 +9,16 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 
-/// Admin-wide ONT + Ubiquiti credential defaults. Settings → "اعتمادات ONU/Ubiquiti".
+/// Admin-wide ONT + Ubiquiti + TP-Link credential defaults. Settings → "اعتمادات ONU / Ubiquiti / TP-Link".
 /// Empty fields fall back to the library hardcoded values
 /// (telecomadmin/admintelecom and ubnt/ubnt). This is the 2nd tier of
 /// the credential chain: per-subscriber override > these > library.
 ///
 /// ⑦ (٢٩ أكتوبر — المالك: «نضيف ٣ اختيارات بقسم اعتمادات الأجهزة… مرات عدهم أكثر من يوزر وباسورد موحّد»): لكلّ نوعٍ
 /// لحدّ اعتمادين إضافيّين فوق الأوّل؛ الفحص يجرّبها بالترتيب حين يُرفض الأوّل ويحفظ الذي يعمل لكلّ جهاز.
+///
+/// TP-Link (١٠ نوفمبر — المالك: «صنف جديد من النانوات tplink يحتاج نضيفه ضمن الاعتمادات»): قسمٌ ثالث بلا افتراض مصنّع
+/// — ما لم يُكتب هنا (أو للمشترك) لا يُجرَّب شيءٌ على الجهاز.
 class DeviceDefaultsScreen extends StatefulWidget {
   const DeviceDefaultsScreen({super.key});
 
@@ -31,12 +34,16 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   final _ontPass = TextEditingController();
   final _ubntUser = TextEditingController();
   final _ubntPass = TextEditingController();
+  final _tplinkUser = TextEditingController();
+  final _tplinkPass = TextEditingController();
   final List<_ExtraField> _ontExtra = [];
   final List<_ExtraField> _ubntExtra = [];
+  final List<_ExtraField> _tplinkExtra = [];
   bool _loading = true;
   bool _saving = false;
   bool _ontObscure = true;
   bool _ubntObscure = true;
+  bool _tplinkObscure = true;
 
   @override
   void initState() {
@@ -50,7 +57,9 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     _ontPass.dispose();
     _ubntUser.dispose();
     _ubntPass.dispose();
-    for (final f in [..._ontExtra, ..._ubntExtra]) {
+    _tplinkUser.dispose();
+    _tplinkPass.dispose();
+    for (final f in [..._ontExtra, ..._ubntExtra, ..._tplinkExtra]) {
       f.user.dispose();
       f.pass.dispose();
     }
@@ -70,8 +79,11 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
       _ontPass.text = d.ontPassword ?? '';
       _ubntUser.text = d.ubntUsername ?? '';
       _ubntPass.text = d.ubntPassword ?? '';
+      _tplinkUser.text = d.tplinkUsername ?? '';
+      _tplinkPass.text = d.tplinkPassword ?? '';
       _ontExtra.addAll(d.ontExtra.map(_field));
       _ubntExtra.addAll(d.ubntExtra.map(_field));
+      _tplinkExtra.addAll(d.tplinkExtra.map(_field));
       _loading = false;
     });
   }
@@ -106,8 +118,11 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
         ubntUsername:
             _ubntUser.text.trim().isEmpty ? null : _ubntUser.text.trim(),
         ubntPassword: _ubntPass.text.isEmpty ? null : _ubntPass.text,
+        tplinkUsername: _tplinkUser.text.trim().isEmpty ? null : _tplinkUser.text.trim(),
+        tplinkPassword: _tplinkPass.text.isEmpty ? null : _tplinkPass.text,
         ontExtra: _credsOf(_ontExtra),
         ubntExtra: _credsOf(_ubntExtra),
+        tplinkExtra: _credsOf(_tplinkExtra),
       ),
     );
     if (!mounted) return;
@@ -183,6 +198,20 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     onAdd: () => _addExtra(_ubntExtra),
                     onRemove: (i) => _removeExtra(_ubntExtra, i),
                   ),
+                  const SizedBox(height: Sp.md),
+                  _section(
+                    key: const ValueKey('creds-tplink'),
+                    icon: LucideIcons.radioTower,
+                    title: 'TP-Link (CPE)',
+                    subtitle: 'devices.tplink_default_hint'.tr(),
+                    userController: _tplinkUser,
+                    passController: _tplinkPass,
+                    obscure: _tplinkObscure,
+                    onToggle: () => setState(() => _tplinkObscure = !_tplinkObscure),
+                    extras: _tplinkExtra,
+                    onAdd: () => _addExtra(_tplinkExtra),
+                    onRemove: (i) => _removeExtra(_tplinkExtra, i),
+                  ),
                   const SizedBox(height: Sp.lg),
                   SizedBox(
                     height: 50,
@@ -238,6 +267,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
       );
 
   Widget _section({
+    Key? key,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -250,6 +280,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     required ValueChanged<int> onRemove,
   }) =>
       Container(
+        key: key,
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(
           color: AppColors.surface,

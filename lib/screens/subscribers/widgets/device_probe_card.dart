@@ -9,6 +9,7 @@ import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
+import '../../../core/net/tplink_pharos_service.dart';
 import '../../../services/agent_net_presence.dart';
 import '../../../services/subscriber_refresh_signal.dart';
 import '../../../services/vpn_now.dart';
@@ -150,6 +151,15 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   OntTrafficSession? _ontSession;
   final _ontMeter = OntTrafficMeter();
   DateTime? _ontRetryAt;
+
+  /// TP-Link (١٠ نوفمبر): جلسة ويب واحدة لعمر الكرت، وكلّ نبضةٍ قراءةٌ خفيفة فيها ترافيك الجهاز الآن **والإشارة والجودة
+  /// والمنافذ** معاً ([PharosLiveSession]). للجهاز جلسةٌ واحدة: إن طُردنا (دخل أحدٌ صفحته) نُغلق وننتظر — الخدمة نفسها
+  /// تمنع الدخول دقيقتين ثمّ عشراً — ولا نطارده.
+  static const _tpRetry = Duration(seconds: 15);
+  PharosLiveSession? _tpSession;
+  DateTime? _tpRetryAt;
+
+  bool get _isTplink => _snap?.kind == DeviceKind.ubiquiti && (_snap?.ubnt?.isTplink ?? false);
   int? _lastRx;
   int? _lastTx;
   DateTime? _lastSample;
@@ -194,6 +204,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     _session = null;
     _closeOntTraffic();
     _ontRetryAt = null;
+    _closeTplink();
+    _tpRetryAt = null;
     _rxBps = null;
     _txBps = null;
     _lastRx = null;
@@ -324,8 +336,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   void _maybeStartSignal() {
     if (_signalTimer != null) return;
     if (_snap?.kind != DeviceKind.ubiquiti) return;
-    _signalTimer =
-        Timer.periodic(_signalPulse, (_) => _refreshQuietly(force: true));
+    _signalTimer = Timer.periodic(_signalPulse, (_) {
+      // TP-Link: الفحص الدوريّ يقرأ بجلسة الكرت الحيّة (طلبٌ واحد). بلاها يكون دخولاً وخروجاً كاملين كلّ عشر ثوانٍ على
+      // معالج الجهاز — والنبضة الحيّة نفسها تعيد فتح الجلسة وتحدّث الإشارة، فلا حاجة له.
+      if (_isTplink && !TplinkPharosService.hasLive(_snap!.ip)) return;
+      _refreshQuietly(force: true);
+    });
     // عدّاد «آخر تحديث» يتقدّم بنفسه ولو لم يصل جديد — وإلّا جمد
     // النصّ على «قبل ٣ د» بينما الوقت يمضي.
     _agoTimer ??= Timer.periodic(const Duration(seconds: 20), (_) {
@@ -353,8 +369,87 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       return;
     }
     if (snap.kind != DeviceKind.ubiquiti) return;
+    if (snap.ubnt?.isTplink ?? false) {
+      // TP-Link: لا SSH — صفحة الجهاز نفسها تعطي معدّل الترافيك جاهزاً.
+      _pulseTplink();
+      _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTplink());
+      return;
+    }
     _pulseTraffic(); // نبضة فوريّة تزرع المرجع بلا انتظار 3 ثوانٍ
     _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTraffic());
+  }
+
+  /// نبضة TP-Link: الجلسة تُفتح مرّةً (بالاعتماد الذي دخل به الفحص)، ثمّ قراءةٌ خفيفة واحدة تحدّث الترافيك والإشارة معاً.
+  Future<void> _pulseTplink() async {
+    if (_pulsing || !mounted || _trafficPaused) return;
+    final epoch = _trafficEpoch;
+    final retryAt = _tpRetryAt;
+    if (_tpSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
+    _pulsing = true;
+    try {
+      if (_tpSession == null) {
+        final creds = await DeviceProbeApi.resolveTplinkCreds(
+          fallbackIp: widget.ip,
+          subscriberUsername: widget.username,
+          company: widget.company,
+        );
+        if (!_trafficCurrent(epoch)) return;
+        if (creds == null) {
+          _loseTraffic();
+          _tpRetryAt = DateTime.now().add(_tpRetry);
+          return;
+        }
+        final session = await PharosLiveSession.open(ip: creds.ip, user: creds.user, pass: creds.pass);
+        if (!_trafficCurrent(epoch)) {
+          if (session != null) unawaited(session.close());
+          return;
+        }
+        if (session == null) {
+          // مشغول/مرفوض/لا يجاوب — الخدمة تحفظ السبب ومهلته؛ نعيد السؤال بعد قليل بلا طرقٍ على الجهاز.
+          _loseTraffic();
+          _tpRetryAt = DateTime.now().add(_tpRetry);
+          return;
+        }
+        _tpSession = session;
+      }
+      final sess = _tpSession!;
+      final live = await sess.sample();
+      if (!_trafficCurrent(epoch)) return;
+      if (live == null) {
+        // طُردنا (أحدٌ دخل صفحة الجهاز) أو تعثّرت ثلاث قراءات: نُغلق ولا يبقى رقمٌ قديم معروضاً كأنّه الآن.
+        if (sess.lost || sess.misses >= 3) {
+          _closeTplink();
+          _tpRetryAt = DateTime.now().add(_tpRetry);
+        }
+        _loseTraffic();
+        return;
+      }
+      final snap = _snap;
+      final u = snap?.ubnt;
+      if (snap != null && u != null && u.isTplink) {
+        setState(() {
+          _snap = DeviceHealthSnapshot(kind: snap.kind, ip: snap.ip, ubnt: live.applyTo(u));
+          _lastAt = DateTime.now();
+        });
+      }
+      final down = live.downBps;
+      final up = live.upBps;
+      if (down != null && up != null) _recordTraffic(down, up);
+    } catch (_) {
+      if (_trafficCurrent(epoch)) {
+        _closeTplink();
+        _tpRetryAt = DateTime.now().add(_tpRetry);
+        _loseTraffic();
+      }
+    } finally {
+      _pulsing = false;
+    }
+  }
+
+  void _closeTplink() {
+    final s = _tpSession;
+    _tpSession = null;
+    if (s != null) unawaited(s.close());
   }
 
   /// نبضة ترافيك الـONU: جلسةٌ تُفتح مرّةً (باعتمادات شركة المشترك وعنوانه المثبَّت — كالفحص حرفاً)، ثمّ قراءةٌ ومعدّل.
@@ -596,6 +691,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final k = _snap?.kind;
     // ZTE (٢٥ أكتوبر): مسار إعادة تشغيله لم يُفحص على جهازٍ حقيقيّ — لا زرّ يَعِد بما لم يُجرَّب.
     if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return false;
+    // TP-Link (١٠ نوفمبر): كذلك — لم يُجرَّب أمر إعادة تشغيله على جهازٍ حقيقيّ.
+    if (_isTplink) return false;
     return k == DeviceKind.ubiquiti || k == DeviceKind.ont;
   }
 
@@ -830,7 +927,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // الفحص الكامل جاهز: واصلٌ ومقروء.
       label = switch (snap.kind) {
         DeviceKind.ont => 'ONT',
-        DeviceKind.ubiquiti => 'UBNT',
+        DeviceKind.ubiquiti => (snap.ubnt?.isTplink ?? false) ? 'TP-Link' : 'UBNT',
         _ => 'متصل',
       };
       fg = AppColors.brandOnSoft;
@@ -929,7 +1026,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
                     Text('جارٍ فحص الجهاز تلقائياً…',
                         style: AppType.rowValue()),
                     const SizedBox(height: Sp.xxs),
-                    Text('يتم تجربة Ubiquiti ثم ONT', style: AppType.muted()),
+                    Text('يتعرّف على نوعه: Ubiquiti · TP-Link · ONT', style: AppType.muted()),
                   ],
                 ),
               ),
@@ -960,6 +1057,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   ({String title, String hint}) _whyNoReading() {
     final why = DeviceProbeApi.issueFor(username: widget.username, ip: widget.ip, company: widget.company);
     final left = why?.lockLeft;
+    // TP-Link (١٠ نوفمبر): قفله عشر محاولاتٍ وساعتان (لا ثلاثٌ ودقيقة)، ولا «ضوء» فيه — فجملته بكلماته.
+    if (why?.vendor == 'tplink') {
+      final tp = _whyNoTplink(why!.issue, left);
+      if (tp != null) return tp;
+    }
     return switch (why?.issue) {
       ProbeIssue.loginRejected => (
           title: 'الجهاز رفض اليوزر أو الباسورد',
@@ -1001,6 +1103,33 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
                 ),
     };
   }
+
+  /// جملة «لا قراءة» لجهاز TP-Link — null لما يكفيه النصّ العامّ (رفضٌ، مشغول، لا يجاوب).
+  static ({String title, String hint})? _whyNoTplink(ProbeIssue issue, int? lockLeft) => switch (issue) {
+        ProbeIssue.needsCredentials => (
+            title: 'جهاز TP-Link يحتاج يوزر وباسورده',
+            hint: 'اكتبهن بقسم TP-Link من «الاعتمادات» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
+          ),
+        ProbeIssue.locked => (
+            title: lockLeft == null
+                ? 'الجهاز قافل الدخول'
+                : 'الجهاز قافل الدخول — باقي ${(lockLeft / 60).ceil()} دقيقة',
+            hint: 'صارت عشر محاولات غلط عليه — جرّب بعد ما يخلص الوقت',
+          ),
+        ProbeIssue.tooManyFails => (
+            title: 'محاولات دخول غلط كثيرة على الجهاز',
+            hint: 'ما نحاول حتى لا ينقفل — صحّح اليوزر والباسورد واضغط «حفظ وفحص الجهاز»',
+          ),
+        ProbeIssue.needsSetup => (
+            title: 'الجهاز يطلب ضبط كلمة سرّه من صفحته أوّلاً',
+            hint: 'افتح صفحة الجهاز وأكمل ضبطه، بعدها حدّث',
+          ),
+        ProbeIssue.readFailed => (
+            title: 'دخلنا للجهاز بس ما رجعت قراءاته',
+            hint: 'حدّث بعد لحظات',
+          ),
+        _ => null,
+      };
 
   /// قراءة المشترك من آخر فحصٍ عبر الـVPN: جهازه (الإشارة، CCQ، الكيبل) أو سكتره، أو الأولت (الضوء والحرارة)، أو البنگ وحده.
   Widget _vpnBody(VpnSubReading r) {
@@ -1742,10 +1871,16 @@ CopyField _ubntSignal(UbiquitiStatus u) =>
 
 CopyField _ubntCcq(UbiquitiStatus u) => CopyField('CCQ', '${u.ccqPercent}%');
 
-CopyField _ubntKind(UbiquitiStatus u) => CopyField(
-      'نوع الجهاز',
-      u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)',
-    );
+/// يوبيكويتي كما كان؛ وTP-Link بطرازه كما يسمّيه الجهاز («Emad (TP-Link CPE610 v2.0)»).
+CopyField _ubntKind(UbiquitiStatus u) {
+  final brand = u.isTplink ? (u.model.isEmpty ? 'TP-Link' : 'TP-Link ${u.model}') : null;
+  return CopyField(
+    'نوع الجهاز',
+    brand != null
+        ? (u.hostname.isEmpty ? brand : '${u.hostname} ($brand)')
+        : (u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)'),
+  );
+}
 
 CopyField _ubntFirmware(UbiquitiStatus u) => CopyField('الإصدار', u.firmware);
 

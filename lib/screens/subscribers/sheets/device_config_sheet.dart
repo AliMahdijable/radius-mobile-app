@@ -147,7 +147,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
               children: [
                 SheetSection(
                   label: 'نوع الجهاز',
-                  hint: 'تلقائي يجرب Ubiquiti ثم ONT',
+                  hint: 'تلقائي يتعرّف وحده: Ubiquiti · TP-Link · ONT',
                   gap: Sp.sm,
                   child: SheetSegmented(
                     labels: const ['تلقائي', 'ONT', 'Ubiquiti'],

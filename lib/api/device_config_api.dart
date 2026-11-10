@@ -79,24 +79,33 @@ class DeviceCred {
 
 /// Admin-wide defaults for the two protocols. Empty fields fall back
 /// to the library hard-coded values (telecomadmin/admintelecom, ubnt/ubnt).
+///
+/// TP-Link (Pharos، ١٠ نوفمبر — المالك: «صنف جديد من النانوات tplink يحتاج نضيفه ضمن الاعتمادات»): نوعٌ ثالث بلا افتراض
+/// مصنّع — الجهاز يعدّ المحاولات الغلط ويقفل صفحته عند عشر، فلا يُجرَّب عليه إلّا ما كتبه الوكيل.
 class AdminDeviceDefaults {
   const AdminDeviceDefaults({
     this.ontUsername,
     this.ontPassword,
     this.ubntUsername,
     this.ubntPassword,
+    this.tplinkUsername,
+    this.tplinkPassword,
     this.ontExtra = const [],
     this.ubntExtra = const [],
+    this.tplinkExtra = const [],
   });
   final String? ontUsername;
   final String? ontPassword;
   final String? ubntUsername;
   final String? ubntPassword;
+  final String? tplinkUsername;
+  final String? tplinkPassword;
 
   /// ⑦ (المالك ٢٩ أكتوبر: «مرات عدهم أكثر من يوزر وباسورد موحّد»): لحدّ اعتمادين إضافيّين لكلّ نوع — الفحص
   /// يجرّبهما بالترتيب بعد الأوّل ويحفظ الناجح لكلّ جهاز.
   final List<DeviceCred> ontExtra;
   final List<DeviceCred> ubntExtra;
+  final List<DeviceCred> tplinkExtra;
 
   static const int maxExtra = 2;
 
@@ -108,18 +117,26 @@ class AdminDeviceDefaults {
         ontPassword: _nullIfBlank(j['ontPassword']?.toString()),
         ubntUsername: _nullIfBlank(j['ubntUsername']?.toString()),
         ubntPassword: _nullIfBlank(j['ubntPassword']?.toString()),
+        tplinkUsername: _nullIfBlank(j['tplinkUsername']?.toString()),
+        // كلمة السرّ كما هي (لا تُقصّ): فراغٌ في أوّلها أو آخرها جزءٌ منها، وقصّه = محاولة غلط تُحسب على الجهاز.
+        tplinkPassword: (j['tplinkPassword']?.toString() ?? '').isEmpty ? null : j['tplinkPassword'].toString(),
         ontExtra: DeviceCred.listFrom(j['ontExtra']),
         ubntExtra: DeviceCred.listFrom(j['ubntExtra']),
+        tplinkExtra: DeviceCred.listFrom(j['tplinkExtra']),
       );
 
-  /// يُرسل القائمتين دائماً (ولو فارغتين): هذه النسخة تملك القائمة كاملةً — والخادم لا يلمس العمود إلّا حين يصله المفتاحان.
+  /// يُرسل القوائم دائماً (ولو فارغة): هذه النسخة تملك القائمة كاملةً — والخادم لا يلمس ما لا يصله مفتاحه (نسخةٌ أقدم لا
+  /// تعرف TP-Link لا تمسح اعتماده).
   Map<String, dynamic> toJson() => {
         'ontUsername': ontUsername,
         'ontPassword': ontPassword,
         'ubntUsername': ubntUsername,
         'ubntPassword': ubntPassword,
+        'tplinkUsername': tplinkUsername,
+        'tplinkPassword': tplinkPassword,
         'ontExtra': [for (final c in ontExtra) c.toJson()],
         'ubntExtra': [for (final c in ubntExtra) c.toJson()],
+        'tplinkExtra': [for (final c in tplinkExtra) c.toJson()],
       };
 }
 
