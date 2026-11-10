@@ -13,6 +13,7 @@ import 'api_client.dart';
 import 'company_route.dart';
 import 'package_names_api.dart';
 import 'portal_settings_api.dart';
+import 'subscribers_api.dart';
 
 /// A WhatsApp template row as the backend returns from
 /// /api/whatsapp/templates/:adminId. We only need a tiny subset of
@@ -1084,8 +1085,11 @@ class WhatsAppApi {
     // مباشرةً، والمعاينة تُري ما سيصل حرفيّاً (وسيط البوّابة §10).
     // رمز وكيل **شركة المشترك** صراحةً («كل الشركات»، مراجعة 179): بلا مفتاح ⇒ المفتوحة — لا رمز قسم «بوابة المشترك» الظاهر
     // لشركةٍ أخرى (كان يصل مشترك المفتوحة رمزُ غيرها).
-    final rendered = await CompanyRoute.pin(sub.companyKey,
+    final base = await CompanyRoute.pin(sub.companyKey,
         () async => PortalSettingsApi.fillAgentCode(_renderTemplate(active.first.messageContent, sub, await packageNamesFor(sub))));
+    // {password}: المعاينة واليدويّ بالكلمة نفسها (تُقرأ بصلاحيّة المدير — اليدويّ لا يمرّ بالخادم)؛ والتلقائيّ يُرسل المتغيّر
+    // كما هو فيقرؤها الخادم لحظة الإرسال ولا تُخزَّن في سجلّ الرسائل ([base] أدناه).
+    final rendered = await fillPassword(base, sub);
 
     if (!context.mounted) {
       return const WhatsSendResult(
@@ -1123,10 +1127,37 @@ class WhatsAppApi {
     }
     return sendMessage(
       to: phone,
-      message: rendered,
+      message: base,
       intent: templateType,
       sas4Idx: sub.idx,
     );
+  }
+
+  /// متغيّر «كلمة سر المشترك» في القوالب. الخادم يملؤه في كلّ ما يُرسَل عبره (يقرأ الكلمة من الشركة لحظة الإرسال وتصل رقم
+  /// المشترك وحده، ولا تُخزَّن)؛ والتطبيق يملؤه فيما يخرج من واتساب المدير نفسه ([fillPassword]).
+  static const kPasswordVariable = '{password}';
+
+  /// يملأ `{password}` في نصٍّ يخرج من واتساب المدير (اليدويّ) أو يُعرض له معاينةً: كلمة سرّ هذا المشترك بصلاحيّة المدير
+  /// نفسه — من شركة صفّه في «كل الشركات». تعذّرت (لا صلاحيّة، الشركة تمنعها) ⇒ يُحذف سطرها كما يفعل الخادم. نصٌّ بلاها لا يُمسّ.
+  static Future<String> fillPassword(String text, Subscriber sub) async {
+    if (!text.contains(kPasswordVariable)) return text;
+    String? pw;
+    final idx = sub.idx;
+    if (idx != null && idx.isNotEmpty) {
+      pw = await CompanyRoute.pin(sub.companyKey, () => SubscribersApi.fetchPassword(idx));
+    }
+    return applyPassword(text, pw);
+  }
+
+  /// كلمةٌ معلومة ⇒ تدخل مكان `{password}`؛ وإلّا يُحذف كلّ سطرٍ يحملها (قاعدة الخادم نفسها — لا «{password}» حرفيّاً
+  /// للمشترك ولا سطر «الباسورد:» فارغاً). دالّةٌ نقيّة.
+  static String applyPassword(String text, String? password) {
+    if (!text.contains(kPasswordVariable)) return text;
+    final pw = password?.trim() ?? '';
+    if (pw.isNotEmpty) return text.replaceAll(kPasswordVariable, pw);
+    final kept = text.split('\n').where((l) => !l.contains(kPasswordVariable)).join('\n');
+    final out = kept.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return out.trim().isEmpty ? '-' : out;
   }
 
   /// المدخل العامّ لملء متغيّرات المشترك — لقوالب تُركَّب خارج هذا
