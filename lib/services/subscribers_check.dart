@@ -678,14 +678,19 @@ class SubscribersCheck {
       final checkedAt = when(s.companyKey);
       final vAt = v == null ? null : checkedAt;
       final t = limits(s.companyKey);
+      final witness = localFails(s.companyKey);
       // الأحدث يغلب: قراءة الـVPN إن لم تكن قراءة الهاتف أو كانت أقدم منها — وبمقاييس (البنك وحده لا يغلب قراءةً حقيقيّة)
-      final useVpn = v != null && !v.dead && v.measured && (local == null || (vAt != null && vAt.isAfter(p!.at)));
+      final newer = local != null && v != null && vAt != null && vAt.isAfter(p!.at);
+      final useVpn = v != null && !v.dead && v.measured && (local == null || newer);
       if (useVpn) {
         final probs = fromVpn(v, t);
         (probs.isEmpty ? healthy : rows).add(SubsCheckRow(s, probs, reading: SubsReading.ofVpn(v, vAt)));
         continue;
       }
-      if (local != null) {
+      // …ولشركةٍ لا يشهد الهاتف على أجهزتها ولو «لا يستجيب» أو البنك وحده (المراجعة الثالثة: قراءة هاتفٍ من ساعتين كانت
+      // «سليم» وفحص VPN شركته قبل دقيقتين «لا يستجيب») — والمفتوحة على شبكتك قراءة هاتفها طريقها والموجة تعيدها
+      final vpnWins = newer && !witness && (v.dead || v.src == 'ping');
+      if (local != null && !vpnWins) {
         if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
         if (newest == null || p.at.isAfter(newest)) newest = p.at;
         final probs = ConnectionAlerts.detect(p.snap!, t);
@@ -697,14 +702,13 @@ class SubscribersCheck {
         missing.add((sub: s, why: SubsMissWhy.offline, note: null));
         continue;
       }
-      // يردّ عبر الـVPN بلا مقاييس ولا قراءة هاتف ⇒ «لم يُقرأ» بسببه
-      if (v != null && !v.dead && p?.snap == null) {
+      // يردّ عبر الـVPN بلا مقاييس ولا قراءة هاتف (أو أحدث منها) ⇒ «لم يُقرأ» بسببه
+      if (v != null && !v.dead && (p?.snap == null || vpnWins)) {
         missing.add(unmeasured(s, v));
         continue;
       }
       // موجة الهاتف طريق فحصه وفشلها شهادةٌ على جهازه لشركةٍ تُقرأ من شبكتك وحدها — غيرها طريقه VPN شركته: لا «بانتظار
       // الفحص» لموجةٍ لا يُعدّ فشلها (المراجعة الثانية)، وقراءتها الناجحة تُعدّ كما هي
-      final witness = localFails(s.companyKey);
       if ((witness && _awaitsWave(s, p, wave)) || (v == null && waits(s.companyKey))) {
         missing.add((sub: s, why: SubsMissWhy.unchecked, note: null));
         continue;

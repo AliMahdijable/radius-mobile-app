@@ -53,6 +53,58 @@ void main() {
     expect(r.missingIn(SubsCheckCat.unchecked).map((m) => m.sub.username), ['e.fail']);
   });
 
+  // المراجعة الثالثة: «كل الشركات» عبر الـVPN — قراءة هاتفٍ من ساعتين في الجلسة نفسها كانت تغلب فحص VPN شركته قبل
+  // دقيقتين إن قال «لا يستجيب» أو ردّ بالبنك وحده: «سليم» بـ-52 dBm و96% بلا عمر. الأحدث يغلب — والأقدم منها لا، وجهازٌ
+  // قرأه الخادم بلا أرقام ليس سبباً لإسقاط قراءةٍ حقيقيّة، والمفتوحة على شبكتك (الهاتف شاهدها) كما كانت.
+  test('mixed(): نتيجة VPN شركته أحدث من قراءة الهاتف تغلب ولو «لا يستجيب» أو البنك وحده', () {
+    final now = DateTime.now();
+    final old = now.subtract(const Duration(hours: 2));
+    final subs = [_s('e.dead', kE), _s('e.ping', kE), _s('e.cpe', kE), _s('e.after', kE), _s('s.dead', kS)];
+    SubsCheckReport check(bool Function(String? c) local) => SubscribersCheck.mixed(subs, (_) => limits,
+        peek: (s) => (
+              snap: _nano(),
+              stale: s.username != 'e.after' && s.username != 's.dead',
+              at: switch (s.username) {
+                'e.after' => now.subtract(const Duration(minutes: 1)), // بعد فحص الـVPN
+                's.dead' => now.subtract(const Duration(minutes: 3)), // موجة المفتوحة
+                _ => old,
+              },
+            ),
+        reading: (s) => switch (s.username) {
+              'e.ping' => const VpnSubReading(src: 'ping', ms: 7),
+              'e.cpe' => const VpnSubReading(src: 'cpe'),
+              _ => const VpnSubReading(src: 'dead'),
+            },
+        readAt: (_) => now.subtract(const Duration(minutes: 2)),
+        companyNote: (_) => null,
+        vpnWaits: (_) => false,
+        localFailsFor: local);
+    Map<String, String> cats(SubsCheckReport r) => {
+          for (final x in r.healthy) x.sub.username: SubsCheckCat.healthy.label,
+          for (final x in r.rows) x.sub.username: SubsCheckCat.problems.label,
+          for (final m in r.missing)
+            m.sub.username: '${SubscribersCheck.catOf(m.why).label} — ${SubscribersCheck.missText(m)}',
+        };
+    const dead = 'جهازه ما ردّ — لا يستجيب';
+    // عبر الـVPN: الهاتف لا يشهد على أيّ شركة
+    final viaVpn = check((_) => false);
+    expect(cats(viaVpn), {
+      'e.dead': dead,
+      'e.ping': 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه',
+      'e.cpe': 'سليم',
+      'e.after': 'سليم',
+      's.dead': dead,
+    });
+    expect(viaVpn.oldest, old, reason: 'قراءة e.cpe وحدها من ساعتين داخلة');
+    expect(
+        SubscribersCheck.reportText(viaVpn,
+            progress: SubscribersCheck.progress(subs: viaVpn.total, merged: true, at: now)),
+        contains('• e.dead (e.dead) — لا يستجيب'));
+    // على شبكة المفتوحة: قراءة هاتفها طريقها (الموجة تعيدها) — كما كانت
+    expect(cats(check((c) => c == kS))['s.dead'], 'سليم');
+    expect(cats(check((c) => c == kS))['e.dead'], dead);
+  });
+
   group('الشاشة', () {
     Future<void> open(WidgetTester t) async {
       await visualSetUp(s1bSasOwner);
