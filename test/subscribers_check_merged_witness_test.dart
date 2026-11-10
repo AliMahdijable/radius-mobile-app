@@ -7,6 +7,7 @@ import 'package:rad_mysvcs/screens/subscribers/subscribers_check_screen.dart';
 import 'package:rad_mysvcs/services/connection_alerts.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/services/subscribers_check.dart';
+import 'package:rad_mysvcs/services/voice/voice_check.dart';
 import 'package:rad_mysvcs/services/vpn_now.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -124,6 +125,47 @@ void main() {
         ..current = kX;
       await open(t);
       await expectOnlyOpenNoReply(t);
+      await t.pumpWidget(const SizedBox());
+      await visualTearDown();
+    });
+
+    // المراجعة الثانية: سببٌ واحد لـ«شركته لم تُفحص عبر VPN بعد» — كان صفّه «لم يصله الفحص» وجواب الأمر الصوتيّ «لم
+    // يُفحص — لم يُفحص عبر VPN بعد» وبطاقة الشركات «لم تُفحص بعد عبر VPN»
+    testWidgets('ايرث لنك لم يكتمل لها فحصٌ عبر VPN ⇒ صفّه وبطاقة الشركات وجواب الأمر الصوتيّ بالكلمات نفسها',
+        (t) async {
+      VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kE]
+        ..current = kE;
+      await open(t);
+      VpnNow.subscribers.cancel(); // «وضع VPN» انطفأ في دورها
+      await settle(t, seconds: 1);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('subs-check-company-$kE')),
+              matching: find.textContaining('لم تُفحص بعد عبر VPN')),
+          findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('subs-check-seg-unchecked')));
+      await settle(t, seconds: 1);
+      expect(find.descendant(of: miss(kE, 'e.fail'), matching: find.text('لم يُفحص بعد عبر VPN')), findsOneWidget);
+      // جواب «افحص المشترك e.fail» في اللحظة نفسها: الهاتف على شبكة سوبرنت سأله وما ردّ، ولا فحص عبر VPN شركته
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      SubscriberVoiceCheck.debugIsOpen = (c) async => c.key == kS;
+      SubscriberVoiceCheck.debugProbe = (_) async => null;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async {};
+      addTearDown(() {
+        SubscriberVoiceCheck.debugLocalAllowed = null;
+        SubscriberVoiceCheck.debugVpnAllowed = null;
+        SubscriberVoiceCheck.debugIsOpen = null;
+        SubscriberVoiceCheck.debugProbe = null;
+        SubscriberVoiceCheck.debugVpnRun = null;
+      });
+      final e = MergedMode.companies.firstWhere((c) => c.key == kE);
+      final voice = SubscriberVoiceCheck(_s('e.fail', kE), company: e);
+      await voice.run();
+      expect([voice.cat, voice.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص بعد عبر VPN']);
+      voice.dispose();
       await t.pumpWidget(const SizedBox());
       await visualTearDown();
     });

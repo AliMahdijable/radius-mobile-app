@@ -120,4 +120,36 @@ void main() {
     expect([viaVpn.vpn, viaVpn.at], [true, vpnAt], reason: 'قراءة الـVPN بوقتها لا بقراءة الهاتف القديمة');
     expect(SubsCheckCat.values.fold<int>(0, (n, c) => n + r.count(c)), r.total, reason: 'كلّ مشتركٍ بقسمٍ واحد');
   });
+
+  // المراجعة الثانية: موجة القائمة قرأت كيبله 10 قبل ٦ دقائق، ثمّ بدأت موجة «الفحص العامّ» قبل ٤ دقائق وتركته (طازجٌ
+  // حينها) — كان يسقط بعد ٥ دقائق إلى «غير متّصل الآن» بلا فحصٍ جديد، و«بمشكلة» تنقص والتقرير ينساه. ومن كانت قراءته
+  // قديمةً حين بدأت (أعادته الموجة ولا عنوان لها) يبقى «غير متّصل الآن».
+  test('المراجعة الثانية: قراءةٌ تركتها الموجة طازجةً تُعدّ بعد ٥ دقائق — والقديمة حين بدأت لا', () {
+    final kept = (snap: _nano(speed: '10Mbps-Full'), stale: true, at: now.subtract(const Duration(minutes: 6)));
+    final before = (snap: _nano(), stale: true, at: now.subtract(const Duration(minutes: 10)));
+    final waveStart = now.subtract(const Duration(minutes: 4));
+    final waves = {
+      'جارية': SubsWave.idle.start(const ['|other'], waveStart),
+      'انتهت': SubsWave.idle.start(const ['|other'], waveStart).finish(now.subtract(const Duration(minutes: 3))),
+    };
+    final x = _sub('off.kept', online: false, ip: '10.0.0.9'); // جهاز وصوله حيّ وخطّه مقطوع
+    final y = _sub('off.before', online: false);
+    _Peek? peek(Subscriber s) => s.username == 'off.kept' ? kept : before;
+    for (final w in waves.entries) {
+      final l = SubscribersCheck.local([x, y], limits, peek: peek, wave: w.value);
+      expect(cats(l), {'off.kept': SubsCheckCat.problems, 'off.before': SubsCheckCat.offline}, reason: w.key);
+      expect(SubscribersCheck.reportText(l, progress: SubscribersCheck.progress(subs: 2, wave: w.value, at: now)),
+          contains('• off.kept (off.kept) — '),
+          reason: 'التقرير المنسوخ يذكره');
+      final m = SubscribersCheck.mixed([x.withCompany('kS'), y.withCompany('kS')], limits,
+          peek: peek,
+          reading: (_) => null,
+          readAt: (_) => null,
+          wave: w.value,
+          vpnWaits: (_) => false,
+          localFailsFor: (c) => c == 'kS');
+      expect(cats(m), {'off.kept': SubsCheckCat.problems, 'off.before': SubsCheckCat.offline}, reason: w.key);
+    }
+    expect(SubscribersCheck.currentFor(x, kept, null), isFalse, reason: 'بلا موجةٍ معروفة: الطازجة وحدها');
+  });
 }

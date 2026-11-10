@@ -331,7 +331,7 @@ void main() {
           reason: 'نتيجة الفحص السابق تبقى؛ من لا نتيجة له لم يبلغه الفحص');
       final never = SubscribersCheck.vpn(subs, limits, reading: (_) => null, readAt: (_) => null, running: false);
       expect(never.count(SubsCheckCat.noReply), 0, reason: 'لا فحص ⇒ لا «ما ردّ» كاذبة');
-      expect(never.missing.first.note, 'لم يُفحص عبر VPN بعد');
+      expect(never.missing.first.note, 'لم يُفحص بعد عبر VPN');
       final done = SubscribersCheck.vpn(subs, limits, reading: read, readAt: (_) => at, running: false);
       expect([for (final m in done.missingIn(SubsCheckCat.noReply)) m.why], [SubsMissWhy.dead],
           reason: 'من سأله الخادم وما ردّ تأتي قراءته dead');
@@ -556,7 +556,7 @@ void main() {
       expect(lines[2], 'بمشكلة 1 · سليم 1 · جهازه ما ردّ 2 · غير متّصل الآن 1 · لم يُفحص 1');
       expect(text, contains('بمشكلة (1):\n• weak (weak) — '));
       expect(text, contains('جهازه ما ردّ (2):\n• dead (dead) — لا يستجيب\n• auth (auth) — يردّ، ما انفتح برمزه المحفوظ'));
-      expect(text, contains('لم يُفحص (1):\n• new (new) — لم يُفحص عبر VPN بعد'));
+      expect(text, contains('لم يُفحص (1):\n• new (new) — لم يُفحص بعد عبر VPN'));
       expect(text, isNot(contains('• off')), reason: 'غير المتّصل عددٌ وحده — ليس عطلاً يُتابَع');
       expect(text, isNot(contains('• fine')));
       expect(text, isNot(contains('لم يُقرأ 5')), reason: 'لا «لم يُقرأ» تخلط الأقسام');

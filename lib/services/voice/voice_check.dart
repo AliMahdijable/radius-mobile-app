@@ -127,10 +127,12 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     if (r == null) {
       final c = cat;
       final label = c?.labelFor(running: waitingVpn);
+      final n = note;
       return switch (phase) {
         VoiceCheckPhase.probing => 'يُقرأ جهازه من شبكتك…',
         VoiceCheckPhase.vpn => 'يُقرأ جهازه عبر VPN الشركة…',
-        _ => label == null ? null : (note == null ? label : '$label — $note'),
+        // سببٌ يبدأ باسم قسمه يُقال مرّةً كصفّه: «لم يُفحص بعد عبر VPN» لا «لم يُفحص — لم يُفحص…» (المراجعة الثانية)
+        _ => label == null ? null : (n == null ? label : (n.startsWith(label) ? n : '$label — $n')),
       };
     }
     if (r.problems.isNotEmpty) return '${SubsCheckCat.problems.label} — ${r.problems.map((p) => p.label).join(' · ')}';
@@ -269,8 +271,10 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   }
 
   /// الجواب بعد فحص الـVPN بقواعد «الفحص العامّ» ([SubscribersCheck.mixed]): قراءته، أو قسمه وسببه. فحص شركته لم
-  /// يكتمل (جارٍ أو بالدور) ⇒ «لم يُفحص بعد — بانتظار الفحص» لا «ما ردّ»، ويُتابَع حتى يكتمل؛ ولا فحص مكتمل لشركته
-  /// (أُلغي أو لم يجرِ) ⇒ «لم يُفحص عبر VPN بعد» لا «لم يُقرأ عبر VPN» (المراجعة ١٠ نوفمبر).
+  /// يكتمل (جارٍ أو بالدور) ⇒ «لم يُفحص بعد — بانتظار الفحص» لا «ما ردّ»؛ ولا فحص مكتمل لشركته (أُلغي أو لم يجرِ) ⇒
+  /// «لم يُفحص بعد عبر VPN» ([SubscribersCheck.vpnNotYetNote]) لا «لم يُقرأ عبر VPN» (المراجعة ١٠ نوفمبر). وما دام فحص
+  /// شركته لم يكتمل يُتابَع — والجواب من قراءةٍ سابقة («لا يستجيب»…) كصفّه الآن يُستبدل بنتيجته حين يكتمل (المراجعة
+  /// الثانية: كان يبقى «جهازه ما ردّ» والفحص قرأه سليماً).
   void _vpnAnswer() {
     row = null;
     cat = null;
@@ -278,6 +282,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     _vpnFrom = null;
     waitingVpn = false;
     final v = VpnNow.readingFor(sub.username, company: sub.companyKey);
+    final pending = _vpnPending;
     if (v != null && !v.dead && !v.measured) {
       _unmeasured(v);
     } else if (v != null && !v.dead) {
@@ -285,11 +290,10 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     } else if (v?.dead == true) {
       _miss(SubsCheckCat.noReply, 'لا يستجيب');
       _vpnFrom = _vpnAt();
-    } else if (_vpnPending) {
+    } else if (pending) {
       waitingVpn = true;
       _miss(SubsCheckCat.unchecked,
           SubscribersCheck.missText((sub: sub, why: SubsMissWhy.unchecked, note: null), running: true));
-      _followVpn();
     } else {
       // لا قراءة له بأيّ طريق: شركته بلا طريق أو الفحص تعذّر ⇒ لم يُفحص؛ وفحصٌ مكتمل بلا قراءةٍ له ⇒ الخادم لم يسأل جهازه
       // (يوبيكويتي وحدها، والمؤجَّل) ⇒ «لم يُفحص» — إلّا إن سُئل من شبكتك وما ردّ (١٠ نوفمبر: كان «لا من شبكتك ولا عبر VPN»)
@@ -302,10 +306,11 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       } else if (_localTried && _localWitness) {
         _miss(SubsCheckCat.noReply, 'من شبكتك');
       } else {
-        _miss(SubsCheckCat.unchecked,
-            VpnNow.readingsAtFor(sub.companyKey) != null ? SubscribersCheck.vpnUnreadNote : 'لم يُفحص عبر VPN بعد');
+        final checked = VpnNow.readingsAtFor(sub.companyKey) != null;
+        _miss(SubsCheckCat.unchecked, checked ? SubscribersCheck.vpnUnreadNote : SubscribersCheck.vpnNotYetNote);
       }
     }
+    if (pending) _followVpn();
   }
 
   /// فحص الـVPN لشركته لم يكتمل بعد: «كل الشركات» ⇒ شركته في الفحص الجاري ولم يُنتهَ منها (الحاليّة أو بالدور)؛ وخارجه
