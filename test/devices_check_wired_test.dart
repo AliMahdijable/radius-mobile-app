@@ -14,6 +14,8 @@
 //        كان، وراديو فاشلٌ عليه لا يحجب REST عن السويج؛ وتعديل المنفذ يُجرَّب فوراً.
 //   R2-2 كلمةٌ واحدة: «ضوء ضعيف: 300 أو أكثر — أضعف 300 كلّها ضعيفة» لا «300+ — من أضعف 300»، و«صفحة السويج» كاسم
 //        دوره «(سويج)» بالتقرير المنسوخ لا «السويتش».
+// الجولة الثالثة:
+//   R3-1 ذاكرة فشل REST ببصمة بيانات الدخول (المستخدم وhashCode الرمز): رمزٌ صُحّح يُقرأ فوراً لا «بلا صلاحيّة قراءة».
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/edgeswitch_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_snmp.dart';
@@ -320,7 +322,9 @@ void main() {
     });
 
     Future<DeviceCheckReport> check(NetworkDevice d,
-        {required Future<UbntStats> Function() viaSsh, EdgeSwitchStats? Function()? viaRest}) async {
+        {required Future<UbntStats> Function() viaSsh,
+        EdgeSwitchStats? Function()? viaRest,
+        Map<String, dynamic> creds = const {'user': 'ubnt', 'pass': 'x'}}) async {
       UbntApi.debugFetch = () {
         ssh++;
         return viaSsh();
@@ -329,7 +333,7 @@ void main() {
         rest++;
         return viaRest?.call();
       };
-      NetworkDevicesApi.debugSeedCredentials(d.id, {'user': 'ubnt', 'pass': 'x'}, DateTime.now());
+      NetworkDevicesApi.debugSeedCredentials(d.id, creds, DateTime.now());
       final run = DevicesCheckRunner([d], viaVpn: false);
       await run.run();
       run.dispose();
@@ -476,6 +480,30 @@ void main() {
       final r = await check(wrong.copyWith(apiPort: 8443), viaSsh: sshOnSwitch, viaRest: snapshot);
       expect(r.state, isNot(CheckState.unread));
       expect(rest, 2);
+    });
+
+    // ── R3-1: ذاكرة الفشل ببصمة بيانات الدخول — رمزٌ صُحّح يُجرَّب فوراً، والرمز نفسه لا يُسأل كلّ نبضة ──
+    test('🚨 R3-1 سويجٌ بلا طراز ورمزه خطأ ثمّ صُحّح: يُقرأ بـREST فوراً — لا «مستخدمه بلا صلاحيّة قراءة» ١٠ دقائق',
+        () async {
+      Future<UbntStats> refused() async => throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
+      final d = ubnt(97, type: 'switch', ip: '10.9.9.7');
+      const wrong = {'user': 'ubnt', 'pass': 'wrong'};
+      final bad = await check(d, viaSsh: refused, viaRest: () => null, creds: wrong);
+      expect(texts(bad), ['يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز']);
+      await check(d, viaSsh: refused, viaRest: () => null, creds: wrong);
+      expect([ssh, rest], [2, 1], reason: 'الرمز الخطأ نفسه لا يُسأل REST ثانيةً قبل ١٠ دقائق');
+      // صحّحه من صفحة الجهاز (حفظها يمسح بيانات دخوله المخبّأة): السجلّ والعنوان والمنفذ كما هي، وSSH يدخل CLI السويج
+      NetworkDevicesApi.invalidateCredentialsCache(d.id);
+      final r = await check(d, viaSsh: sshOnSwitch, viaRest: snapshot, creds: const {'user': 'ubnt', 'pass': 'right'});
+      expect(r.state, isNot(CheckState.unread));
+      expect(r.toText(), isNot(contains('صلاحيّة')));
+      expect(r.vitals.firstWhere((x) => x.k == 'المنافذ').v, '3/4');
+      expect([ssh, rest], [2, 2], reason: 'REST بالرمز الجديد فوراً — لا جلسة airOS');
+      // واسم المستخدم كذلك
+      final u = ubnt(98, type: 'switch', ip: '10.9.9.8');
+      await check(u, viaSsh: refused, viaRest: () => null, creds: const {'user': 'admin', 'pass': 'right'});
+      final ru = await check(u, viaSsh: sshOnSwitch, viaRest: snapshot, creds: const {'user': 'ubnt', 'pass': 'right'});
+      expect([ru.state == CheckState.unread, ssh, rest], [false, 3, 4]);
     });
   });
 }
