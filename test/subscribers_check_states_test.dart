@@ -734,4 +734,125 @@ void main() {
       await _done(t);
     });
   });
+
+  // ───────────── R3-subui-1: شركةٌ مختارة قُرئ بعضها من الهاتف ⇒ «انتهى الفحص» بوقت الهاتف ─────────────
+
+  group('R3-subui-1 — «كل الشركات»: المختارة وقد قُرئ بعضها من الهاتف ⇒ «انتهى الفحص» بوقته لا «لم يُفحص بعد»', () {
+    for (final (viaVpn, withNote) in const [(false, false), (false, true), (true, true)]) {
+      testWidgets('${viaVpn ? 'عبر الـVPN' : 'من شبكتك'} — ايرث لنك ${withNote ? 'تحتاج VPN' : 'بلا فحص VPN'} '
+          'والهاتف قرأ e.one ${viaVpn ? 'قبل ساعتين' : 'قبل دقيقة'}', (t) async {
+        await visualSetUp(s1bSasOwner);
+        _mergedTwo();
+        final at = DateTime.now().subtract(viaVpn ? const Duration(hours: 2) : const Duration(minutes: 1));
+        final subs = [
+          _s('s.ok', ip: '1').withCompany(_kS),
+          _s('e.one', ip: '5').withCompany(_kE),
+          _s('e.two', ip: '6').withCompany(_kE),
+        ];
+        // جهاز e.one يصله موبايلك فقُرئ، وe.two سُئل بلا ردّ (من شبكتك) أو لم يُسأل (عبر الـVPN)
+        SubscribersCheck.debugPeek = (s) => switch (s.username) {
+              'e.one' => _read(at),
+              'e.two' => viaVpn ? null : (snap: null, stale: false, at: at),
+              _ => viaVpn ? null : _read(at),
+            };
+        final wave = ValueNotifier(SubsWave(endedAt: at));
+        if (viaVpn) {
+          VpnNow.debugApplyCompany(_kS, const VpnNowResult(ok: true, message: 'تم', readings: {
+            's.ok': VpnSubReading(src: 'cpe', sig: -50, ccq: 95, lan: '100'),
+          }));
+          VpnNow.debugBackdateReadings(const Duration(minutes: 2), company: _kS);
+        }
+        if (withNote) VpnNow.debugNote(_kE, '«ايرث لنك» تحتاج VPN');
+        VpnNow.subscribers.phase = VpnBarPhase.running; // الفتح لا يبدأ فحصاً (لا شبكة)
+        addTearDown(() {
+          SubscribersCheck.debugPeek = null;
+          VpnNow.debugNote(_kE, null);
+          wave.dispose();
+          VpnNow.subscribers.reset();
+          VpnNow.clearCompanyReadings();
+          MergedMode.reset();
+        });
+        await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+            home: (_) => SubscribersCheckScreen(
+                subscribers: () => subs,
+                viaVpn: viaVpn,
+                wave: viaVpn ? null : wave,
+                companies: [_co(_kS), _co(_kE)],
+                openCompany: _kS));
+        await settle(t, seconds: 1);
+        VpnNow.subscribers.reset();
+        await settle(t, seconds: 1);
+        final row = 'من شبكتك · قُرئ 1 من 2${withNote ? ' · بلا VPN للباقي' : ''}';
+        expect(find.descendant(of: find.byKey(const ValueKey('subs-check-company-$_kE')), matching: find.text(row)),
+            findsOneWidget);
+
+        await t.tap(find.byKey(const ValueKey('subs-check-company-$_kE')));
+        await settle(t, seconds: 1);
+        final age = viaVpn ? 'منذ ساعتين' : 'منذ دقيقة';
+        expect(_barText(t), 'انتهى الفحص — 2 مشترك', reason: 'سطرها «قُرئ 1 من 2» من شبكتك — لا «لم يُفحص بعد»');
+        expect(t.widget<Text>(find.byKey(const ValueKey('subs-check-progress-side'))).data, age);
+        final copy = await _copy(t);
+        expect(copy.split('\n')[1], 'انتهى الفحص — 2 مشترك · $age');
+        expect(copy, contains('• ايرث لنك — $row'));
+        await _done(t);
+      });
+    }
+  });
+
+  // ───────────── R3-subui-2: «كل الشركات» عبر الـVPN — قراءة الهاتف بعمرها في صفّها ─────────────
+
+  group('R3-subui-2 — «كل الشركات» عبر الـVPN: قراءة الهاتف المعروضة بعمرها', () {
+    testWidgets('ايرث لنك بانتظار دورها ومقروؤها من الهاتف قبل ساعتين ⇒ صفّه «منذ ساعتين»؛ '
+        'قراءة الخادم بعمر سطر شركتها', (t) async {
+      await visualSetUp(s1bSasOwner);
+      _mergedTwo();
+      final twoHours = DateTime.now().subtract(const Duration(hours: 2));
+      final subs = [_s('s.ok').withCompany(_kS), _s('e.ok', ip: '2').withCompany(_kE)];
+      SubscribersCheck.debugPeek = (s) => s.username == 'e.ok' ? _read(twoHours) : null;
+      VpnNow.debugApplyCompany(_kS, const VpnNowResult(ok: true, message: 'تم', readings: {
+        's.ok': VpnSubReading(src: 'cpe', sig: -50, ccq: 95, lan: '100'),
+      }));
+      // فحص ايرث لنك قبل 20 دقيقة لم يقرأ e.ok ⇒ تُعرض قراءة الهاتف (ذاكرة الفحص بأيّ عمر)
+      VpnNow.debugApplyCompany(_kE, const VpnNowResult(ok: true, message: 'تم', readings: {}));
+      VpnNow.debugBackdateReadings(const Duration(minutes: 2), company: _kS);
+      VpnNow.debugBackdateReadings(const Duration(minutes: 20), company: _kE);
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = const [_kS, _kE]
+        ..current = _kS
+        ..done = 5
+        ..total = 22;
+      addTearDown(() {
+        SubscribersCheck.debugPeek = null;
+        job.reset();
+        VpnNow.clearCompanyReadings();
+        MergedMode.reset();
+      });
+      await pumpVisual(t, const VisualDevice('', Size(390, 1200), 3),
+          home: (_) => SubscribersCheckScreen(
+              subscribers: () => subs, viaVpn: true, companies: [_co(_kS), _co(_kE)], openCompany: _kS));
+      await settle(t, seconds: 1);
+      Finder line(String k, String text) =>
+          find.descendant(of: find.byKey(ValueKey('subs-check-company-$k')), matching: find.text(text));
+      List<String> texts(String k, String u) => [
+            for (final x in t.widgetList<Text>(
+                find.descendant(of: find.byKey(ValueKey('subs-check-row-$k|$u')), matching: find.byType(Text))))
+              if (x.data != null) x.data!,
+          ];
+      expect(line(_kS, 'يُفحص عبر VPN الشركة… · قراءات منذ دقيقتين · قُرئ 1 من 1'), findsOneWidget);
+      expect(line(_kE, 'بانتظار دورها عبر VPN · قُرئ 1 من 1'), findsOneWidget,
+          reason: 'قراءتها من الهاتف — عمرها بصفّها');
+      await _tapSeg(t, 'healthy');
+      expect(texts(_kE, 'e.ok').where((x) => x.endsWith(' · منذ ساعتين')), hasLength(1),
+          reason: 'قراءة الهاتف قبل ساعتين لا تُعرض بلا عمر');
+      final vpnRow = texts(_kS, 's.ok');
+      expect(vpnRow, isNotEmpty);
+      expect(vpnRow.where((x) => x.contains('منذ')), isEmpty, reason: 'قراءة الخادم عمرها بسطر شركتها');
+
+      job.reset();
+      await settle(t, seconds: 1);
+      expect(texts(_kE, 'e.ok').where((x) => x.endsWith(' · منذ ساعتين')), hasLength(1), reason: 'وبعد انتهاء الفحص');
+      await _done(t);
+    });
+  });
 }

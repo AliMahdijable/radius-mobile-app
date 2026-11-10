@@ -77,8 +77,9 @@ class SubscribersCheckScreen extends StatefulWidget {
   State<SubscribersCheckScreen> createState() => _SubscribersCheckScreenState();
 }
 
-/// سطر شركةٍ في بطاقة «الشركات» — والتقرير المنسوخ بكلماته؛ [at] وقت ما يقوله (عمر قراءاتها — المراجعة F15).
-typedef _CompanyLine = ({MergedCompany co, int bad, IconData icon, AppTone tone, String text, DateTime? at});
+/// سطر شركةٍ في بطاقة «الشركات» — والتقرير المنسوخ بكلماته؛ [at] وقت ما يقوله (عمر قراءاتها — المراجعة F15)،
+/// و[phone] كم من متّصليها قُرئ من الهاتف (المراجعة R3).
+typedef _CompanyLine = ({MergedCompany co, int bad, IconData icon, AppTone tone, String text, DateTime? at, int phone});
 
 /// رأس مجموعةٍ في قسم «بمشكلة».
 class _Group {
@@ -220,9 +221,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       final vpn = widget.vpnAllowed ? _vpnRun(job) : null;
       // شركةٌ مختارة: وقت سطرها في بطاقة «الشركات» — لا وقت أحدث الطرق على قراءاتها الأقدم (المراجعة F15)
       final picked = _company == null ? null : lines?.where((l) => l.co.key == _company).firstOrNull;
-      if (picked != null && !_isLocal(picked.co.key) && picked.at == null) {
-        // ...وطريقها VPN شركتها وسطرها بلا وقت (لم تُفحص عبره أو تعذّر): سؤال الهاتف ليس فحصها — لا «انتهى الفحص» بوقته
-        // (المراجعة R2): سببها كسطرها، أو «لم يُفحص بعد»
+      if (picked != null && !_isLocal(picked.co.key) && picked.at == null && picked.phone == 0) {
+        // ...وطريقها VPN شركتها وسطرها بلا وقت (لم تُفحص عبره أو تعذّر) ولم يُقرأ منها شيء: سؤال الهاتف ليس فحصها — لا
+        // «انتهى الفحص» بوقته (المراجعة R2): سببها كسطرها، أو «لم يُفحص بعد». وما قُرئ منها من الهاتف يُبقي
+        // «انتهى الفحص» بوقت الهاتف كما في الأسفل (المراجعة R3: كان «لم يُفحص بعد» وسطرها «من شبكتك · قُرئ 1 من 2»)
         final p = SubscribersCheck.progress(subs: r.total, wave: _wave, vpn: vpn, merged: true, vpnCompany: name);
         if (p.running) return p;
         final note = _companyNote(picked.co.key);
@@ -788,7 +790,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                             : (LucideIcons.circleDashed, AppTone.neutral, 'لم تُفحص بعد عبر VPN · $counts');
     // وقت ما يقوله السطر — يُختم به الشريط حين تُختار الشركة (المراجعة F15)
     final lineAt = local ? (probing || here ? null : localAt) : (here || job.waits(c.key) || note != null ? null : at);
-    return (co: c, bad: bad, icon: icon, tone: tone, text: text, at: lineAt);
+    return (co: c, bad: bad, icon: icon, tone: tone, text: text, at: lineAt, phone: read - viaVpn);
   }
 
   Widget _companyRow(_CompanyLine l) {
@@ -957,7 +959,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       iso(s.username),
       if (x?.device != null) iso(x!.device!),
       if (x?.via != null) 'من ${x!.via}',
-      if (!widget.viaVpn && x?.at != null) timeAgoAr(x!.at),
+      // عبر الـVPN عمر قراءة الخادم بالشريط وسطر شركتها — وقراءة الهاتف («كل الشركات») بعمرها هنا: قد تكون من ساعات
+      // (المراجعة R3)
+      if (x != null && x.at != null && (!widget.viaVpn || !x.vpn)) timeAgoAr(x.at),
     ];
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.sm),
