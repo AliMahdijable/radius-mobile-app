@@ -9,7 +9,9 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/merged_dashboard_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
+import 'package:rad_mysvcs/core/platform/app_platform.dart';
 import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
+import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
@@ -437,6 +439,74 @@ void main() {
     await settle(t, seconds: 1);
     expect(find.byKey(const ValueKey('merged-balance-lines')), findsNothing);
     expect(find.text('50,000'), findsWidgets);
+    await down(t);
+  });
+
+  // ١٠ نوفمبر — المالك: «حبي ضيف وياك فصل دين الشركه بوضع الشركات يعني ديون المشتركين حسب الشركه» ثمّ «وهنت بالاعلى
+  // الدين الكلي مجموعهن». ألف 5,000 (u2) وباء 2,500 (u9)؛ الكبيرة لا قائمة لها والتي تحتاج دخولاً خارج الوضع.
+  int fullLists() =>
+      srv.routed.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['page'] == null).length;
+  Finder debtTile(String k) => find.byKey(ValueKey('merged-debt-$k'));
+  final debtCard = find.byKey(const ValueKey('merged-debt-card'));
+  final debtNote = 'بلا «${iso('شركة كبيرة')}»، «${iso('شركة تحتاج دخول')}» — السبب بجانب كلٍّ منها';
+
+  testWidgets('١٠ نوفمبر: «الكل» — المدينون مجموعاً أعلاه ثمّ خانةٌ لكلّ شركة، والكبيرة والتي تحتاج دخولاً خارجه',
+      (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const DashboardScreen());
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    expect(find.text('المدينون — لكلّ شركة'), findsOneWidget);
+    expect(find.descendant(of: debtCard, matching: find.text('7,500')), findsOneWidget,
+        reason: 'المجموع = 5,000 + 2,500');
+    expect(find.descendant(of: debtCard, matching: find.text('2 مشترك · مجموع الشركات')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kA), matching: find.text('5,000')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kA), matching: find.text('1 مشترك')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kB), matching: find.text('2,500')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kB), matching: find.text('1 مشترك')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kC), matching: find.text('كبيرة، افتحها وحدها')), findsOneWidget,
+        reason: 'لا صفر لكبيرةٍ لم تُجلب قائمتها');
+    expect(find.descendant(of: debtTile('c0000000000dd'), matching: find.text('تحتاج دخول')), findsOneWidget);
+    expect(find.descendant(of: debtCard, matching: find.text(debtNote)), findsOneWidget,
+        reason: 'من خارج المجموع بسطرٍ واحد');
+    // شركةٌ مختارة: بطاقة المدينين الواحدة كما كانت — والاختيار و«الكل» بلا طلب
+    final lists = fullLists();
+    await t.tap(chip('شركة باء'));
+    await settle(t, seconds: 1);
+    expect(debtCard, findsNothing);
+    expect(find.byKey(const ValueKey('merged-debt-lines')), findsNothing);
+    expect(find.text('المدينون'), findsOneWidget);
+    expect(find.text('2,500'), findsOneWidget);
+    await t.tap(chip('الكل'));
+    await settle(t, seconds: 1);
+    expect(find.descendant(of: debtCard, matching: find.text('7,500')), findsOneWidget);
+    expect(fullLists(), lists, reason: 'من القائمة المدموجة المحفوظة — لا طلب جديد');
+    await down(t);
+  });
+
+  testWidgets('١٠ نوفمبر: الحاسبة بـ«كل الشركات» و«الكل» — المدينون مجموعاً ثمّ سطرٌ لكلّ شركة بجانب أرصدتها',
+      (t) async {
+    await up();
+    AppPlatform.debugIsDesktop = true;
+    addTearDown(() => AppPlatform.debugIsDesktop = null);
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, const VisualDevice('_desk', Size(1440, 900), 1),
+        home: (_) => const DesktopScope(child: DashboardScreen()));
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    expect(find.byKey(const ValueKey('merged-debt-lines')), findsOneWidget);
+    expect(find.text('7,500'), findsOneWidget, reason: 'المجموع رقم البطاقة');
+    expect(find.descendant(of: debtTile(_kA), matching: find.text('5,000')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kB), matching: find.text('2,500')), findsOneWidget);
+    expect(find.descendant(of: debtTile(_kC), matching: find.text('كبيرة، افتحها وحدها')), findsOneWidget);
+    expect(find.descendant(of: debtCard, matching: find.text(debtNote)), findsOneWidget);
+    expect(find.byKey(const ValueKey('merged-balance-lines')), findsOneWidget,
+        reason: 'أرصدة الشركات بجانبها كما كانت');
+    await t.tap(chip('شركة باء'));
+    await settle(t, seconds: 1);
+    expect(find.byKey(const ValueKey('merged-debt-lines')), findsNothing, reason: 'المختارة: بطاقة اليوم');
+    expect(find.text('2,500'), findsOneWidget);
     await down(t);
   });
 
