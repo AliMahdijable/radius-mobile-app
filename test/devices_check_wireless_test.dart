@@ -12,6 +12,8 @@
 //       (rx-signal لا «0 dBm»)؛ ولم يُجب ⇒ «لم يُقرأ».
 //   R2-1 (الجولة ٢) طرف وصلة يوبيكويتي المرسل (AF60/airMAX بوضع AP) سقط طرفه الثاني ⇒ «الوصلة بلا طرفٍ ثانٍ» —
 //       إشارة mca-status (أرضيّة الضجيج، واجهة الإدارة) ليست وصلته؛ ميموزا وحدها تُحكم بإشارتها (F10).
+//   R3-1 (الجولة ٣) وإشارته نفسها: «الإشارة» من صفّ محطّته الوحيدة (ما يستقبله) و«الطرف الثاني» tx صفّها، وبلا محطّةٍ
+//       فارغة كالخادم — لا «-96» في السطر، ولا «ضعيفة» من آخر قراءةٍ أو قائمةٍ لم تُقرأ.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -600,6 +602,74 @@ void main() {
       expect(mimosa.state, CheckState.ok);
       expect(mimosa.signal, -61);
       expect(texts(link('mikrotik')), ['الوصلة بلا طرفٍ ثانٍ']);
+    });
+  });
+
+  group('R3-1 طرف وصلةٍ مرسل غير ميموزا: «الإشارة» من صفّ محطّته الوحيدة لا من mca-status، وبلا محطّةٍ فارغة', () {
+    tearDown(() => UbntApi.debugFetch = null);
+
+    /// AF60/airMAX بوضع AP مسجّلٌ «وصلة»: إشارة mca [sig] ومحطّاته [sta] (wstalist)؛ [read] = قائمته قُرئت.
+    Future<ProbeResult> ubntAp(NetworkDevice d, String sig,
+        {List<Map<String, dynamic>> sta = const [], bool read = true}) {
+      NetworkDevicesApi.debugSeedCredentials(d.id, {'user': 'ubnt', 'pass': 'x'}, DateTime.now());
+      UbntApi.debugFetch = () async => UbntStats.fromMcaStatus({
+            'deviceName': 'AF60-master',
+            'wlanOpmode': 'ap',
+            'essid': 'BH',
+            'signal': sig,
+            if (read && sta.isEmpty) 'wlanConnections': '0',
+            'cpuload': '5',
+            'uptime': '864000',
+          }, wstalistStations: sta, stationsRead: read);
+      return DeviceVitals.fetch(d, detailed: true);
+    }
+
+    test('🚨 بلا محطّة: لا «الإشارة -96» في السطر ولا المنسوخ (كالخادم حرفاً)؛ وآخر قراءةٍ وقائمةٌ لم تُقرأ لا «ضعيفة»',
+        () async {
+      final d = dev(63, type: 'link', brand: 'ubnt', protocol: 'ssh');
+      final r = judge(d, await ubntAp(d, '-96'));
+      expect(r.signal, isNull);
+      expect([for (final v in r.vitals) v.k], isNot(contains('الإشارة')));
+      expect(texts(r), ['الوصلة بلا طرفٍ ثانٍ']);
+      final srv = remote(d, {'kind': 'airos', 'cpu': 5, 'up': 864000, 'ap': true, 'mode': 'ap-ptp', 'sig': null,
+        'peers': const <Map>[]});
+      expect(r.toText(), srv.toText(), reason: 'الشاشة والمنسوخ والصوت من السطر نفسه — بالطريقين');
+      // آخر قراءةٍ بعمرها (الجديدة تجاوزت مهلتها): لا حكم «ضعيفة» من إشارة mca
+      final now = DateTime(2026, 11, 10, 3);
+      final p = await ubntAp(d, '-96');
+      final old = DevicesCheck.evaluate(d: d, alive: true, detail: p.detail, raw: p.raw, now: now,
+          staleAt: now.subtract(const Duration(minutes: 3)), staleFrom: 'آخر قراءة');
+      expect(old.signal, isNull);
+      expect(texts(old), ['إشارة الوصلة ما انقرت']);
+      expect(old.stateLabel, 'لم يُقرأ · قبل 3 د');
+      // wstalist لم يُقرأ وإشارة mca −93 (واجهة الإدارة): الإشارة لم تُقرأ — لا «ضعيفة»
+      final unread = judge(d, await ubntAp(d, '-93', read: false));
+      expect(unread.signal, isNull);
+      expect(texts(unread), ['إشارة الوصلة ما انقرت']);
+      expect(unread.state, CheckState.unread);
+    });
+
+    test('🚨 بمحطّةٍ واحدة وإشارة mca −93: «الإشارة» ما يستقبله منها و«الطرف الثاني» كيف تستقبله ⇒ «سليم» لا «ضعيفة»؛ '
+        'والخادم بالأرقام نفسها، ولا رقمٌ واحد مرّتين', () async {
+      final d = dev(64, type: 'link', brand: 'ubnt', protocol: 'ssh');
+      final r = judge(d, await ubntAp(d, '-93', sta: [
+        {'mac': 'AA:BB:CC:00:00:64', 'name': 'TWR-B', 'signal': -55, 'remote': {'signal': -57}}
+      ]));
+      expect(r.role, CheckRole.link);
+      expect([r.signal, r.remoteSignal], [-55, -57]);
+      expect(texts(r), isEmpty);
+      expect(r.state, CheckState.ok);
+      final srv = remote(d, {'kind': 'airos', 'cpu': 5, 'up': 864000, 'ap': true, 'mode': 'ap-ptp', 'sig': null,
+        'peers': [
+          {'n': 'TWR-B', 's': -55, 'ts': -57}
+        ]});
+      expect([srv.signal, srv.remoteSignal], [-55, -57]);
+      // بلا tx: رقمه «الإشارة» وحدها، وضعفه عنده لا «عند الطرف الثاني»
+      final rx = judge(d, await ubntAp(d, '-93', sta: [
+        {'mac': 'AA:BB:CC:00:00:64', 'signal': -84}
+      ]));
+      expect([rx.signal, rx.remoteSignal], [-84, null]);
+      expect(texts(rx), ['إشارة الوصلة -84 dBm — ضعيفة']);
     });
   });
 }

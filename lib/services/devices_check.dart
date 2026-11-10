@@ -544,11 +544,14 @@ class DevicesCheck {
     // لا إشارة له: طرفه الثاني محطّته الوحيدة (كيف تستقبلنا، وإلّا كيف نستقبلها) — المراجعة الثانية
     final linkAp = role == CheckRole.link && g.isAp == true;
     final one = role == CheckRole.link && detail.peers.length == 1 ? detail.peers.first : null;
-    final remote = one == null ? null : (linkAp ? (one.txSignal ?? one.signal) : one.txSignal);
+    // الجولة ٣: طرفٌ مرسلٌ غير ميموزا — «الإشارة» ما يستقبله من محطّته الوحيدة (صفّها، كـreadingOf) و«الطرف الثاني» كيف
+    // تستقبله هي (tx): لا إشارة mca-status (−96، −93) ولا رقمٌ واحد مرّتين، وبلا محطّةٍ فارغة كالخادم (sig فارغة)
+    final apEnd = linkAp && d.brand.toLowerCase() != 'mimosa';
+    final remote = one == null ? null : (linkAp && !apEnd ? (one.txSignal ?? one.signal) : one.txSignal);
     // ووضعه لم يُقرأ (الخادم بلا ap، حزمة wifi) بطرفٍ واحد: إشارة صفّه بجدول التسجيل ما يستقبله هذا الجهاز من طرفه —
     // إشارتها هنا، محطّةً كان أو نقطة وصول (مراجعة 180)؛ ولا «0 dBm»
-    final rx1 = g.isAp == null ? one?.signal : null;
-    final here = g.signal ?? (rx1 != null && rx1 < 0 ? rx1 : null);
+    final rx1 = g.isAp == null || apEnd ? one?.signal : null;
+    final here = (apEnd ? null : g.signal) ?? (rx1 != null && rx1 < 0 ? rx1 : null);
     // إشارة وصلة الطرف المرسل هو: ميموزا وحدها (قدرة استقبال الـPtP). إشارة يوبيكويتي بوضع AP من mca-status
     // أرضيّة الضجيج أو واجهة الإدارة (−96، −93) لا وصلته — طرفها الثاني سقط ⇒ «بلا طرفٍ ثانٍ» كقراءة الخادم
     // (مراجعة 180، الجولة ٢)
