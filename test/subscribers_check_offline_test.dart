@@ -152,4 +152,89 @@ void main() {
     }
     expect(SubscribersCheck.currentFor(x, kept, null), isFalse, reason: 'بلا موجةٍ معروفة: الطازجة وحدها');
   });
+
+  // المراجعة الثالثة: آخر اتّصاله من المزوّد (last_online بتوقيت بغداد) — قراءةٌ أقدم منه من قبل انقطاعه يقيناً ⇒
+  // «غير متّصل الآن» ولو طازجة أو تركتها الموجة (انقطعت الكهرباء بعد قراءته بدقائق: كان «سليم» حتى «تحديث»). وبعده
+  // تبقى قاعدة الموجة: ايرث لنك تعطي آخر «دخول» (بدء جلسته) حين لا تحضر جلساتها المنتهية.
+  test('المراجعة الثالثة: قراءةٌ من قبل آخر اتّصاله ⇒ «غير متّصل الآن» ولو طازجة؛ وبعده كما كانت', () {
+    DateTime ago(int m) => now.subtract(Duration(minutes: m));
+    String sas(DateTime t) => t.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+    Subscriber off(String u, String? last, {String? ip}) => Subscriber.fromJson({
+          'username': u,
+          'firstname': u,
+          'lastname': '',
+          'online_status': 0,
+          'remaining_days': 20,
+          if (ip != null) 'ip': ip,
+          if (last != null) 'last_online': last,
+        });
+    // موجةٌ بدأت قبل ٢١ دقيقة وانتهت قبل ٢٠
+    final w = SubsWave.idle.start(const ['|other'], ago(21)).finish(ago(20));
+    final subs = [
+      off('cut.wave', sas(ago(22))), // قُرئ سليماً قبل ٢٥ د ثمّ انقطع قبل ٢٢ د — والموجة تركتها (عمرها ٤ د حين بدأت)
+      off('cut.fresh', sas(ago(1))), // قُرئ قبل ٤ د ثمّ انقطع قبل دقيقة
+      off('line.down', sas(ago(30)), ip: '10.0.0.9'), // انقطع قبل ٣٠ د وجهازه حيّ: قرأته الموجة بعدها
+      off('el.login', sas(now.subtract(const Duration(hours: 9)))), // آخر «دخول» — قراءة الصباح من أثناء جلسته
+      off('zero.last', '0000-00-00 00:00:00'), // صفر الساس غياب ⇒ قاعدة الموجة (طازجةٌ حين بدأت)
+    ];
+    final peeks = <String, _Peek>{
+      'cut.wave': (snap: _nano(), stale: true, at: ago(25)),
+      'cut.fresh': (snap: _nano(), stale: false, at: ago(4)),
+      'line.down': (snap: _nano(speed: '10Mbps-Full'), stale: true, at: ago(21)),
+      'el.login': (snap: _nano(), stale: true, at: morning),
+      'zero.last': (snap: _nano(), stale: true, at: ago(24)),
+    };
+    const expected = {
+      'cut.wave': SubsCheckCat.offline,
+      'cut.fresh': SubsCheckCat.offline,
+      'line.down': SubsCheckCat.problems,
+      'el.login': SubsCheckCat.offline,
+      'zero.last': SubsCheckCat.healthy,
+    };
+    final l = SubscribersCheck.local(subs, limits, peek: (s) => peeks[s.username], wave: w);
+    expect(cats(l), expected);
+    expect(SubscribersCheck.reportText(l, progress: SubscribersCheck.progress(subs: l.total, wave: w, at: w.endedAt)),
+        contains('بمشكلة 1 · سليم 1 · غير متّصل الآن 3'));
+    final m = SubscribersCheck.mixed([for (final s in subs) s.withCompany('kS')], limits,
+        peek: (s) => peeks[s.username],
+        reading: (_) => null,
+        readAt: (_) => null,
+        wave: w,
+        vpnWaits: (_) => false,
+        localFailsFor: (c) => c == 'kS');
+    expect(cats(m), expected);
+  });
+
+  // المراجعة الثالثة: موجةٌ جديدة تعيد قراءة غير المتّصل (قدُمت عن ٥ د) — كان يسقط إلى «غير متّصل الآن» من بدئها حتى
+  // تبلغه، و«بمشكلة» تنقص والنسخ ينساه، والمتّصل بالقراءة نفسها يبقى. تُقاس ببدء الموجة التي قبلها حتى تستبدلها.
+  test('المراجعة الثالثة: موجةٌ تغطّيه ولم تبلغه ⇒ قراءته التي عُدّت قبلها تبقى «بمشكلة» حتى تستبدلها', () {
+    final x = _sub('off.kept', online: false, ip: '10.0.0.9');
+    final y = _sub('off.before', online: false, ip: '10.0.0.8');
+    final z = _sub('on.kept', ip: '10.0.0.7'); // المتّصل بالقراءة نفسها
+    final kept = (snap: _nano(speed: '10Mbps-Full'), stale: true, at: now.subtract(const Duration(minutes: 6)));
+    final peeks = <String, _Peek>{
+      'off.kept': kept,
+      'on.kept': kept,
+      'off.before': (snap: _nano(), stale: true, at: now.subtract(const Duration(minutes: 10))),
+    };
+    // الأخيرة بدأت قبل ٤ د بلاه (طازجٌ حينها) وانتهت، والجديدة بدأت الآن تغطّي الثلاثة
+    final last = SubsWave.idle.start(const ['|other'], now.subtract(const Duration(minutes: 4))).finish(now);
+    final next = last.start([for (final u in peeks.keys) SubsWave.keyOf(null, u)], now);
+    for (final w in [last, next, next.progress(1, 3)]) {
+      final r = SubscribersCheck.local([x, y, z], limits, peek: (s) => peeks[s.username], wave: w);
+      expect(cats(r),
+          {'off.kept': SubsCheckCat.problems, 'off.before': SubsCheckCat.offline, 'on.kept': SubsCheckCat.problems},
+          reason: w.running ? 'الجديدة لم تبلغه' : 'قبلها');
+      expect(SubscribersCheck.reportText(r, progress: SubscribersCheck.progress(subs: 3, wave: w, at: now)),
+          contains('• off.kept (off.kept) — '));
+      final m = SubscribersCheck.mixed([x, y, z], limits,
+          peek: (s) => peeks[s.username],
+          reading: (_) => null,
+          readAt: (_) => null,
+          wave: w,
+          vpnWaits: (_) => false,
+          localFailsFor: (_) => true);
+      expect(cats(m)['off.kept'], SubsCheckCat.problems);
+    }
+  });
 }

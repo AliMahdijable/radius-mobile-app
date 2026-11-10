@@ -197,6 +197,7 @@ class SubsWave {
     this.total = 0,
     this.startedAt,
     this.endedAt,
+    this.prevStartedAt,
     this.keys = const {},
   });
 
@@ -215,16 +216,25 @@ class SubsWave {
   /// أهداف الموجة الجارية ([keyOf]).
   final Set<String> keys;
 
+  /// بدء الموجة التي قبل الجارية — من تغطّيه الجارية ولم تبلغه تُقاس قراءته بها ([SubscribersCheck.currentFor]).
+  final DateTime? prevStartedAt;
+
   static String keyOf(String? company, String username) => '${company ?? ''}|${username.trim().toLowerCase()}';
 
   bool covers(Subscriber s) => keys.contains(keyOf(s.companyKey, s.username));
 
-  /// موجةٌ تبدأ لهؤلاء ([keyOf]) — وآخر انتهاءٍ محفوظ.
+  /// موجةٌ تبدأ لهؤلاء ([keyOf]) — وآخر انتهاءٍ وبدء التي قبلها محفوظان.
   SubsWave start(Iterable<String> targets, DateTime at) =>
-      SubsWave(running: true, startedAt: at, endedAt: endedAt, keys: targets.toSet());
+      SubsWave(running: true, startedAt: at, endedAt: endedAt, prevStartedAt: startedAt, keys: targets.toSet());
 
-  SubsWave progress(int done, int total) =>
-      SubsWave(running: running, done: done, total: total, startedAt: startedAt, endedAt: endedAt, keys: keys);
+  SubsWave progress(int done, int total) => SubsWave(
+      running: running,
+      done: done,
+      total: total,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      prevStartedAt: prevStartedAt,
+      keys: keys);
 
   SubsWave finish(DateTime at) => SubsWave(done: done, total: total, startedAt: startedAt, endedAt: at);
 
@@ -551,10 +561,27 @@ class SubscribersCheck {
   /// تُعدّ كما هي. وإلّا فهي من قبل انقطاعه: ذاكرة الفحص لا تُمحى بانقطاعه، وبلا عنوانٍ لا تعيدها الموجة ⇒ «غير متّصل
   /// الآن» لا «سليم»/«بمشكلة» بقراءةٍ عمرها ساعات (المراجعة ١٠ نوفمبر). قراءة الـVPN لا تمرّ هنا: عمرها حدّه ٣٠ دقيقة
   /// ([VpnNow.readingFor]) للمتّصل وغيره.
+  ///
+  /// المراجعة الثالثة: قراءةٌ أقدم من آخر اتّصالٍ له ([Subscriber.lastOnline]) من قبل انقطاعه يقيناً ⇒ «غير متّصل الآن»
+  /// ولو طازجة (انقطعت الكهرباء بعد قراءته بدقائق). وبعده لا يُجزم: ايرث لنك تعطي آخر «دخول» (بدء الجلسة) حين لا
+  /// تحضر جلساتها المنتهية — فقراءةٌ من أثناء جلسته تبقى بقاعدة الموجة. ومن تغطّيه الموجة الجارية ولم تبلغه
+  /// تُقاس قراءته ببدء التي قبلها: ما عُدّ قبلها يبقى حتى تستبدله (كان يسقط إلى «غير متّصل الآن» ما دامت لم تبلغه).
   static bool currentFor(Subscriber s, ({DeviceHealthSnapshot? snap, bool stale, DateTime at}) p, SubsWave? w) {
-    if (s.isOnline || !p.stale) return true;
-    final from = w?.startedAt;
+    if (s.isOnline) return true;
+    final off = _lastOnlineOf(s);
+    if (off != null && p.at.isBefore(off.subtract(_clockSkew))) return false;
+    if (!p.stale) return true;
+    final from = _awaitsWave(s, p, w) ? w!.prevStartedAt : w?.startedAt;
     return from != null && from.difference(p.at) < DeviceProbeApi.ttl;
+  }
+
+  /// فرق ساعة الهاتف عن ساعة المزوّد.
+  static const _clockSkew = Duration(minutes: 2);
+
+  /// آخر اتّصالٍ له كما يعطيه المزوّد — بتوقيت بغداد ([parseSasLocal])؛ «0000-…» غياب.
+  static DateTime? _lastOnlineOf(Subscriber s) {
+    final raw = s.lastOnline?.trim() ?? '';
+    return raw.isEmpty || raw.startsWith('0000') ? null : parseSasLocal(raw);
   }
 
   /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار، و[wave] الموجة الجارية (من لم تبلغه «لم يُفحص بعد»)؛ وغير
