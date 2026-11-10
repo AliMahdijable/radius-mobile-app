@@ -202,6 +202,9 @@ class _MainShellState extends State<MainShell> {
     _devicesActive.value = !_devicesLocked && i == _devicesTab;
     _subsActive.value = i == _subsTab;
     _dashActive.value = i == _dashTab;
+    // التبويبات لا تُبنى من جديد عند التنقّل (IndexedStack) فلا يسأل رأسها عن حال المساعد/«أمر صوتي» — التنقّل نفسه يسأل
+    // (بمهلتها: لا طلب إن كانت طازجة). بلاغ المالك ١٠ نوفمبر: الزرّ يختفي ولا يعود إلّا بالخروج والرجوع.
+    unawaited(AiAssistantState.ensureFresh());
   }
   // Filter command channel for the subscribers screen. Updating this
   // notifier from a dashboard KPI tap pushes the new filter into the

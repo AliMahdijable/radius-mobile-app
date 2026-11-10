@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../api/ai_api.dart';
 import '../api/api_error_tap.dart';
+import '../core/platform/app_platform.dart';
 
 /// حال المساعد الذكيّ في هذه الجلسة — آخر ردّ `GET /api/v2/ai/status`.
 ///
@@ -26,7 +27,38 @@ class AiAssistantState {
   static Future<void>? _inflight;
 
   static const ttl = Duration(minutes: 5);
+
+  /// حالٌ «مطفأة» تُسأل أبكر (كالموقع): إن كانت عابرة — خادمٌ لم يثبت الجلسة لحظتها — لا تبقى الأزرار مخفيّةً خمس دقائق.
+  static const offTtl = Duration(seconds: 60);
   static const _cooldown = Duration(seconds: 30);
+
+  /// «لا نعرف بعد» (شبكة، أو الخادم لم يستطع إثبات الجلسة لحظتها — 503) يُسأل ثانيةً **وحده**: كان ينتظر بناءً يطلبه، والتنقّل
+  /// بين التبويبات لا يبني. محاولاتٌ معدودة بتباعدٍ يتضاعف (٣١ث، ٦١ث، ٢ د…)، والنجاح يصفّرها.
+  static const maxRetries = 6;
+  static Timer? _retry;
+  static int _retries = 0;
+
+  /// مؤقّت إعادة السؤال — يُستبدل في الاختبارات (وبلا مؤقّتٍ فيها ما لم تطلبه: مؤقّتٌ معلَّق يُفشل اختبار الواجهة).
+  @visibleForTesting
+  static Timer? Function(Duration wait, void Function() run)? retryTimer;
+
+  static void _scheduleRetry(int epoch) {
+    if (_retries >= maxRetries) return;
+    final make = retryTimer ?? (AppPlatform.isUnderTest ? null : Timer.new);
+    if (make == null) return;
+    _retry?.cancel();
+    final wait = _cooldown * (1 << _retries) + const Duration(seconds: 1);
+    _retries++;
+    _retry = make(wait, () {
+      if (epoch == _epoch) unawaited(ensureFresh());
+    });
+  }
+
+  static void _clearRetry() {
+    _retry?.cancel();
+    _retry = null;
+    _retries = 0;
+  }
 
   /// مراجع الأجوبة التي قيّمها المدير («مفيد»/«الجواب غلط») في هذه الجلسة —
   /// رأيٌ واحد للجواب حتى لو أُعيد بناء سطره.
@@ -84,7 +116,8 @@ class AiAssistantState {
       if (!force && !modeChanged) {
         final t = now();
         final at = _fetchedAt;
-        if (at != null && t.difference(at) < ttl) return;
+        final keep = cur != null && cur.enabled ? ttl : offTtl;
+        if (at != null && t.difference(at) < keep) return;
         final failed = _failedAt;
         if (failed != null && t.difference(failed) < _cooldown) return;
       }
@@ -96,6 +129,7 @@ class AiAssistantState {
       if (epoch != _epoch) return;
       if (s == null) {
         _failedAt = now();
+        _scheduleRetry(epoch);
         return;
       }
       apply(s, epoch: epoch);
@@ -112,6 +146,7 @@ class AiAssistantState {
     if (epoch != null && epoch != _epoch) return;
     _fetchedAt = now();
     _failedAt = null;
+    _clearRetry();
     gate.value = s;
   }
 
@@ -136,6 +171,7 @@ class AiAssistantState {
     _fetchedAt = null;
     _failedAt = null;
     _inflight = null;
+    _clearRetry();
     gate.value = null;
     ratedRefs.clear();
     ApiErrorTap.clear();
@@ -146,6 +182,7 @@ class AiAssistantState {
     _epoch++;
     _inflight = null;
     _failedAt = null;
+    _clearRetry();
     _fetchedAt = s == null ? null : now();
     gate.value = s;
   }

@@ -19,6 +19,7 @@ import '../../../services/fiber/fiber_monitor.dart';
 import '../../../services/fiber/fiber_onu.dart';
 import '../../../services/fiber/fiber_store.dart';
 import '../../../services/fiber/fiber_text.dart';
+import '../../../services/tech_beep.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -35,13 +36,14 @@ class FiberTechScreen extends StatefulWidget {
   final FiberMonitor monitor;
   final String? onuKey;
 
-  /// للاختبار: صوت/اهتزاز الصفّارة.
+  /// صوت/اهتزاز الصفّارة (يُستبدل في الاختبار). ⇒ false حين صوت الوسائط على الصفر (تشتغل ولا تُسمع).
   @visibleForTesting
-  static void Function() tick = _systemTick;
+  static Future<bool?> Function() tick = _systemTick;
 
-  static void _systemTick() {
-    SystemSound.play(SystemSoundType.click);
+  /// نغمةٌ حقيقيّة بصوت الوسائط ([TechBeep]) — كانت «صوت اللمس» للنظام، وهو مطفأٌ بأغلب الهواتف فلا يُسمع شيء.
+  static Future<bool?> _systemTick() {
     HapticFeedback.selectionClick();
+    return TechBeep.play();
   }
 
   /// للاختبار: المشاركة (لا قناة منصّة في `flutter test`). [origin] لآيباد.
@@ -204,7 +206,17 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
   void _toggleBeep() {
     setState(() => _beep = !_beep);
     _beepTimer?.cancel();
-    if (_beep) _beepLoop();
+    if (!_beep) return;
+    // نغمة تأكيدٍ فور التشغيل: يسمعها الفنّي ولو لم يُقرأ ضوءٌ بعد (بلا ضوءٍ الصفّارة صامتة حتى يرجع) — وتكشف صوتاً على الصفر
+    unawaited(_confirmBeep());
+    final v = _now;
+    _beepTimer = Timer(v == null ? const Duration(seconds: 1) : FiberTechScreen.beepGap(v), _beepLoop);
+  }
+
+  Future<void> _confirmBeep() async {
+    final audible = await FiberTechScreen.tick();
+    if (!mounted || !_beep || audible != false) return;
+    showSheetSnack(context, 'صوت الوسائط بالهاتف على الصفر — ارفعه حتى تسمع الصفّارة', isError: true);
   }
 
   void _beepLoop() {
@@ -216,7 +228,7 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
       _beepTimer = Timer(const Duration(seconds: 1), _beepLoop);
       return;
     }
-    FiberTechScreen.tick();
+    unawaited(FiberTechScreen.tick());
     _beepTimer = Timer(FiberTechScreen.beepGap(v), _beepLoop);
   }
 
@@ -718,7 +730,11 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text('صفّارة حسب الضوء · ${_beep ? 'شغّالة' : 'مطفأة'}', style: AppType.rowValue(color: AppColors.textHi)),
-                        Text('تسرع كلّما قوي الضوء، تشتغل وعينك على الوصلة', style: AppType.muted(color: AppColors.textMid)),
+                        Text(
+                            _beep && _now == null
+                                ? 'شغّالة — تنتظر قراءة ضوء الجهاز وتصفّر أوّل ما يوصل'
+                                : 'تسرع كلّما قوي الضوء، تشتغل وعينك على الوصلة',
+                            style: AppType.muted(color: AppColors.textMid)),
                       ]),
                     ),
                   ]),

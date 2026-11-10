@@ -1,6 +1,9 @@
 package com.mysvcs.rad_mysvcs
 
+import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -13,11 +16,49 @@ class MainActivity : FlutterFragmentActivity() {
     // «طابعة الوصولات» (٩ نوفمبر): بلوتوث SPP + طابعة الجهاز (SUNMI) — lib/services/receipt_printer/.
     private var receiptPrinter: ReceiptPrinterChannel? = null
 
+    // «صفّارة وضع الفنّي» (شبكة الألياف، ١٠ نوفمبر): نغمةٌ بصوت الوسائط — «صوت اللمس» (SystemSound.click) مطفأٌ بأغلب الهواتف
+    // فكانت الصفّارة بلا صوت. lib/services/tech_beep.dart.
+    private var beepTone: ToneGenerator? = null
+
+    private fun releaseBeep() {
+        try {
+            beepTone?.release()
+        } catch (_: Exception) {
+        }
+        beepTone = null
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         receiptPrinter?.dispose()
         receiptPrinter = ReceiptPrinterChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.mysvcs.rad_mysvcs/beep"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "beep" -> {
+                    val ms = (call.argument<Int>("ms") ?: 90).coerceIn(20, 500)
+                    try {
+                        // 2600 هرتز: واضحةٌ بسمّاعة الهاتف وخارج المبنى. المولّد يُنشأ مرّةً ويُعاد استعماله.
+                        val tone = beepTone
+                            ?: ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME).also { beepTone = it }
+                        tone.startTone(ToneGenerator.TONE_CDMA_MED_L, ms)
+                        val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                        // false = صوت الوسائط صفر: تشتغل ولا تُسمع — التطبيق يقولها للفنّي
+                        result.success(audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0)
+                    } catch (_: Exception) {
+                        // مسارات الصوت مستنفدة أو المولّد مات ⇒ يُعاد إنشاؤه في النغمة التالية
+                        releaseBeep()
+                        result.success(null)
+                    }
+                }
+
+                else -> result.notImplemented()
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -95,6 +136,7 @@ class MainActivity : FlutterFragmentActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         receiptPrinter?.dispose()
         receiptPrinter = null
+        releaseBeep()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

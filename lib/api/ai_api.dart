@@ -10,6 +10,7 @@ import '../services/account_service.dart';
 import '../services/auth_storage.dart';
 import '../services/device_id.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// المساعد الذكيّ — المرحلة ١: «اشرحلي» عند الخطأ و«كيف أسوّي؟».
 ///
@@ -834,13 +835,15 @@ class AiApi {
     String path, {
     Object? data,
     bool forceToken = false,
+    bool open = false,
   }) async {
     if (mode == AiMode.company) {
+      final options = Options(
+          method: method, receiveTimeout: _receive, sendTimeout: _sendT);
       return ApiClient.dio.request<Object?>(
         path,
         data: data,
-        options: Options(
-            method: method, receiveTimeout: _receive, sendTimeout: _sendT),
+        options: open ? CompanyRoute.explicit(null, options) : options,
       );
     }
     final token = await accountTokenSource(force: forceToken);
@@ -874,7 +877,8 @@ class AiApi {
     final mode = await currentMode();
     if (mode == AiMode.none) return AiStatus.off;
     try {
-      final r = await _send(mode, 'GET', '$_base/status');
+      // حال الجلسة المفتوحة صراحةً: لا يأخذ وجهة شركةٍ من نطاقٍ جارٍ في «كل الشركات» (حال غيرها يُخفي أزرار هذه)
+      final r = await _send(mode, 'GET', '$_base/status', open: true);
       return statusFrom(r.statusCode ?? 0, _map(r.data), mode);
     } on _NoSession {
       return const AiStatus(enabled: false, mode: AiMode.none);
@@ -895,6 +899,9 @@ class AiApi {
       return AiStatus(enabled: false, mode: mode);
     }
     if (code != 200 || body['success'] != true) return null;
+    // سألنا بجلسة شركة فجاء حال «الحساب وحده» (خادمٌ لم يستطع إثبات توكن الشركة لحظتها): ليس جواب سؤالنا — «لا نعرف بعد»،
+    // وإلّا اختفى زرّ «أمر صوتي» و«كيف أسوّي؟» حتى تنتهي المهلة (بلاغ المالك ١٠ نوفمبر).
+    if (mode == AiMode.company && body['mode'] == 'account') return null;
     return AiStatus.fromJson(body, mode: mode);
   }
 

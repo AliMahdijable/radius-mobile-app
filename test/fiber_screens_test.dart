@@ -363,6 +363,44 @@ void main() {
     await unmount(t);
   });
 
+  testWidgets('وضع الفنّي — الصفّارة (١٠ نوفمبر «مابيها صوت»): نغمة تأكيدٍ فور التشغيل، ثمّ تصفّر بإيقاع الضوء، وتسكت بإطفائها',
+      (t) async {
+    var ticks = 0;
+    Object? audible = true;
+    final original = FiberTechScreen.tick;
+    FiberTechScreen.tick = () async {
+      ticks++;
+      return audible as bool?;
+    };
+    addTearDown(() => FiberTechScreen.tick = original);
+    await pumpScreen(t, FiberTechScreen(monitor: FiberMonitor.of(fiberTestDevice()), onuKey: 'EPON0/3:5'));
+    final tile = find.textContaining('صفّارة حسب الضوء');
+    await t.scrollUntilVisible(tile, 300, scrollable: mainScroll());
+    expect(find.textContaining('مطفأة'), findsOneWidget);
+    await t.tap(tile);
+    await t.pump();
+    expect(ticks, 1, reason: 'نغمة تأكيد فور التشغيل — يسمعها الفنّي');
+    expect(find.textContaining('شغّالة'), findsWidgets);
+    // الضوء ‎-21 ⇒ نغمة كلّ ~٠٫٧ث
+    await t.pump(const Duration(milliseconds: 800));
+    await t.pump(const Duration(milliseconds: 800));
+    expect(ticks, greaterThanOrEqualTo(3), reason: 'تصفّر بإيقاع الضوء');
+    final before = ticks;
+    await t.tap(tile);
+    await t.pump();
+    await t.pump(const Duration(seconds: 2));
+    expect(ticks, before, reason: 'أُطفئت ⇒ سكتت');
+    // صوت الوسائط على الصفر ⇒ يُقال للفنّي بدل صمتٍ لا يُفهم
+    audible = false;
+    await t.tap(tile);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('صوت الوسائط بالهاتف على الصفر'), findsOneWidget);
+    await t.tap(tile);
+    await t.pump(const Duration(seconds: 4));
+    await unmount(t);
+  });
+
   testWidgets('«التقط بالفصل»: الفصل يكشف الجهاز ويختاره، وضوءه قبل الفصل يصير «قبل»', (t) async {
     final m = FiberMonitor.of(fiberTestDevice());
     await pumpScreen(t, FiberTechScreen(monitor: m));

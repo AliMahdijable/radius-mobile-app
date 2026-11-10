@@ -99,6 +99,66 @@ void main() {
       expect(server.calls('GET', statusPath).length, greaterThan(after));
     });
 
+    test('🚨 ١٠ نوفمبر (الزرّ يختفي): «لا نعرف بعد» (503 — الخادم لم يثبت الجلسة لحظتها) لا يُخفي ما نعرفه، ويُسأل ثانيةً وحده',
+        () async {
+      final timers = <(Duration, void Function())>[];
+      AiAssistantState.retryTimer = (wait, run) {
+        timers.add((wait, run));
+        return null;
+      };
+      addTearDown(() => AiAssistantState.retryTimer = null);
+      AiAssistantState.debugSet(AiStatus.fromJson({...on, 'voice': true}, mode: AiMode.company));
+      expect(AiAssistantState.voice, isTrue);
+      clock = clock.add(const Duration(minutes: 6)); // المهلة انتهت ⇒ يُسأل
+      server.reply('GET', statusPath, 503, {'success': false, 'code': 'AI_IDENTITY_RETRY', 'message': 'أعد المحاولة'});
+      await AiAssistantState.ensureFresh();
+      expect(AiAssistantState.voice, isTrue, reason: 'زرّ «أمر صوتي» باقٍ — «لا نعرف» ليست «مطفأ»');
+      expect(AiAssistantState.canAsk, isTrue);
+      expect(timers.map((t) => t.$1), [const Duration(seconds: 31)], reason: 'إعادة السؤال وحده بعد التبريد');
+      // ما زال لا يعرف ⇒ تباعدٌ أطول
+      clock = clock.add(const Duration(seconds: 31));
+      timers.last.$2();
+      await AiAssistantState.ensureFresh();
+      expect(timers.map((t) => t.$1), [const Duration(seconds: 31), const Duration(seconds: 61)]);
+      expect(AiAssistantState.voice, isTrue);
+      // عرف ⇒ يُكتب، ولا مؤقّت بعده
+      server.reply('GET', statusPath, 200, {...on, 'voice': true, 'mode': 'company'});
+      clock = clock.add(const Duration(seconds: 61));
+      timers.last.$2();
+      await AiAssistantState.ensureFresh();
+      expect(timers, hasLength(2));
+      expect(AiAssistantState.voice, isTrue);
+      expect(server.calls('GET', statusPath).last.extra['companyOpen'], isTrue,
+          reason: 'حال الجلسة المفتوحة صراحةً — لا وجهة شركةٍ أخرى من «كل الشركات»');
+    });
+
+    test('ردٌّ بحال «الحساب وحده» لسؤالٍ بجلسة شركة ليس جوابه — ما نعرفه باقٍ (كان يُخفي الصوت و«كيف أسوّي؟»)', () async {
+      AiAssistantState.debugSet(AiStatus.fromJson({...on, 'voice': true}, mode: AiMode.company));
+      server.reply('GET', statusPath, 200, {...on, 'ask': false, 'mode': 'account'});
+      await AiAssistantState.ensureFresh(force: true);
+      expect(AiAssistantState.voice, isTrue);
+      expect(AiAssistantState.canAsk, isTrue);
+      // والردّ لما سألنا عنه يُكتب كما هو
+      server.reply('GET', statusPath, 200, {...on, 'voice': false, 'mode': 'company'});
+      clock = clock.add(const Duration(seconds: 31));
+      await AiAssistantState.ensureFresh(force: true);
+      expect(AiAssistantState.voice, isFalse, reason: 'الخادم أطفأ الصوت فعلاً ⇒ يختفي');
+    });
+
+    test('حالٌ «مطفأة» تُسأل بعد دقيقة لا خمس — إن كانت عابرة لا تبقى الأزرار مخفيّة', () async {
+      server.reply('GET', statusPath, 200, {'success': true, 'enabled': false});
+      await AiAssistantState.ensureFresh();
+      expect(AiAssistantState.gate.value?.enabled, isFalse);
+      clock = clock.add(const Duration(seconds: 50));
+      await AiAssistantState.ensureFresh();
+      expect(server.calls('GET', statusPath), hasLength(1), reason: 'خلال الدقيقة لا طلب');
+      server.reply('GET', statusPath, 200, {...on, 'voice': true});
+      clock = clock.add(const Duration(seconds: 15));
+      await AiAssistantState.ensureFresh();
+      expect(server.calls('GET', statusPath), hasLength(2));
+      expect(AiAssistantState.voice, isTrue);
+    });
+
     test('🚨 ردٌّ يصل بعد تبديل الجلسة لا يُكتب', () async {
       server.hold('GET', statusPath);
       server.reply('GET', statusPath, 200, on);
