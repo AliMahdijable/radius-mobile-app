@@ -236,15 +236,20 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       // ردّ جهازه بلا مقاييس (ليس نانو ولا ضوئيّاً) — يُقال إن لم يُقرأ عبر الـVPN
       _localNoMetrics = snap != null;
     }
-    // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر)
+    // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر). وشركته ما
+    //    زالت تُفحص ⇒ الجواب منها يتحدّث حين يكتمل دورها (المراجعة الثالثة: كان يبقى «سليمة» وصفّه «لا يستجيب»)
     final v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead) {
       if (!v.measured) {
         _unmeasured(v);
+        if (_vpnPending) _followVpn();
         return _set(VoiceCheckPhase.done);
       }
       _apply(vpn: v, vpnAt: _vpnAt());
-      if (row != null) return _set(VoiceCheckPhase.done);
+      if (row != null) {
+        if (_vpnPending) _followVpn();
+        return _set(VoiceCheckPhase.done);
+      }
     }
     // ٣) فحصٌ عبر VPN شركته الآن
     if (!_vpnAllowed) {

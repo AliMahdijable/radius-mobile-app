@@ -609,5 +609,54 @@ void main() {
       expect([one.deviceLine, SubscribersCheck.missText(v.missing.single)],
           ['لم يُفحص بعد عبر VPN', 'لم يُفحص بعد عبر VPN']);
     });
+
+    // المراجعة الثالثة: «الفحص العامّ» أعاد فحص ايرث لنك (قراءاتها فوق ١٠ د) ودورها بعد شركةٍ أخرى، والجواب من آخر
+    // قراءةٍ عبر الـVPN (مقيسةً أو البنك وحده) — كان يبقى «سليمة» بعمرٍ يكبر وصفّه صار «لا يستجيب»
+    test('المراجعة الثالثة: جوابٌ من قراءة VPN سابقة وشركته بالدور ⇒ يتحدّث من نتيجة دورها كصفّه', () async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      var runs = 0;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => runs++;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'm.u': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+            'p.u': VpnSubReading(src: 'ping', ms: 7),
+          }));
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kX, b.key]
+        ..current = kX;
+      final m = SubscriberVoiceCheck(_sub('m.u', company: b.key), company: b);
+      final p = SubscriberVoiceCheck(_sub('p.u', company: b.key), company: b);
+      var told = 0;
+      m.addListener(() => told++);
+      p.addListener(() => told++);
+      await m.run();
+      await p.run();
+      expect(runs, 0, reason: 'آخر قراءةٍ تكفي — لا فحص جديد');
+      expect([m.deviceLine, p.deviceLine], ['الإشارة، CCQ والكيبل سليمة', 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه']);
+      // دور ايرث لنك يكتمل: الاثنان «لا يستجيب» ⇒ الجوابان يتحدّثان وحدهما كصفّيهما
+      final before = told;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'm.u': VpnSubReading(src: 'dead'),
+            'p.u': VpnSubReading(src: 'dead'),
+          }));
+      finish(job);
+      expect(told, before + 2, reason: 'الجوابان يتحدّثان وحدهما');
+      for (final c in [m, p]) {
+        final r = SubscribersCheck.mixed([c.sub], (_) => c.limits, peek: (_) => null, localFailsFor: (_) => false);
+        final row = r.missing.single;
+        expect([c.row, c.cat, c.deviceLine],
+            [null, SubscribersCheck.catOf(row.why), 'جهازه ما ردّ — ${SubscribersCheck.missText(row)}']);
+        expect(c.deviceLine, 'جهازه ما ردّ — لا يستجيب');
+      }
+      expect([runs, job.busy], [0, false], reason: 'بلا فحصٍ جديد');
+      m.dispose();
+      p.dispose();
+    });
   });
 }
