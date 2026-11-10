@@ -97,6 +97,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   /// «كل الشركات»: شركةٌ مختارة من بطاقة «الشركات» ⇒ مشتركوها وحدهم (والضغط ثانيةً يعيد الكلّ).
   String? _company;
 
+  /// الفحوص المتروكة عند الفتح ([VpnNowJob.stops]) — «توقّف الفحص» لما تُرك والشاشة مفتوحة وحده (المراجعة R2).
+  late final int _stopsAtOpen;
+
   bool get _merged => (widget.companies ?? const []).isNotEmpty;
 
   /// الشركة المفتوحة تُقرأ من شبكتك (الموجة) ما لم يكن الفحص عبر الـVPN.
@@ -132,6 +135,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   @override
   void initState() {
     super.initState();
+    _stopsAtOpen = VpnNow.subscribers.stops;
     DeviceProbeBus.tick.addListener(_changed);
     VpnNow.subscribers.addListener(_changed);
     ConnectionAlertSettings.current.addListener(_changed);
@@ -213,27 +217,43 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     if (_merged) {
       final cur = job.current;
       final name = cur == null ? null : widget.companies!.where((c) => c.key == cur).firstOrNull?.name;
+      final vpn = widget.vpnAllowed ? _vpnRun(job) : null;
+      // شركةٌ مختارة: وقت سطرها في بطاقة «الشركات» — لا وقت أحدث الطرق على قراءاتها الأقدم (المراجعة F15)
+      final picked = _company == null ? null : lines?.where((l) => l.co.key == _company).firstOrNull;
+      if (picked != null && !_isLocal(picked.co.key) && picked.at == null) {
+        // ...وطريقها VPN شركتها وسطرها بلا وقت (لم تُفحص عبره أو تعذّر): سؤال الهاتف ليس فحصها — لا «انتهى الفحص» بوقته
+        // (المراجعة R2): سببها كسطرها، أو «لم يُفحص بعد»
+        final p = SubscribersCheck.progress(subs: r.total, wave: _wave, vpn: vpn, merged: true, vpnCompany: name);
+        if (p.running) return p;
+        final note = _companyNote(picked.co.key);
+        if (note != null) return SubsCheckProgress(SubsRunState.failed, note);
+        return p.state == SubsRunState.stopped ? p : const SubsCheckProgress(SubsRunState.idle, 'لم يُفحص بعد');
+      }
       DateTime? at = _wave?.endedAt;
       for (final c in _vpnCompanies) {
         final t = VpnNow.readingsAtFor(c.key);
         if (t != null && (at == null || t.isAfter(at))) at = t;
       }
-      // شركةٌ مختارة: وقت سطرها في بطاقة «الشركات» — لا وقت أحدث الطرق على قراءاتها الأقدم (المراجعة F15)
-      final picked = _company == null ? null : lines?.where((l) => l.co.key == _company).firstOrNull;
       if (picked != null) at = picked.at;
       return SubscribersCheck.progress(
         subs: r.total,
         wave: _wave,
-        vpn: widget.vpnAllowed ? SubscribersCheck.vpnRunOf(job) : null,
+        vpn: vpn,
         merged: true,
         vpnCompany: name,
         at: at ?? (widget.viaVpn ? r.newest : asked()),
       );
     }
-    if (widget.viaVpn) {
-      return SubscribersCheck.progress(subs: r.total, vpn: SubscribersCheck.vpnRunOf(job), at: VpnNow.readingsAt);
-    }
+    if (widget.viaVpn) return SubscribersCheck.progress(subs: r.total, vpn: _vpnRun(job), at: VpnNow.readingsAt);
     return SubscribersCheck.progress(subs: r.total, wave: _wave ?? SubsWave.idle, at: _wave?.endedAt ?? asked());
+  }
+
+  /// فحص الخادم كما يقرؤه الشريط — و«توقّف الفحص» لفحصٍ تُرك والشاشة مفتوحة وحده: سببٌ باقٍ من فحصٍ تُرك قبل فتحها ليس
+  /// فحصها، فيُعرض آخر فحصٍ اكتمل بعمره (المراجعة R2: كان «توقّف الفحص — رجعت لشبكتك» بلا وقتٍ على فتحٍ جديد).
+  SubsVpnRun _vpnRun(VpnNowJob job) {
+    final v = SubscribersCheck.vpnRunOf(job);
+    if (v.stopped == null || job.stops != _stopsAtOpen) return v;
+    return (busy: v.busy, failed: v.failed, line: v.line, done: v.done, total: v.total, value: v.value, stopped: null);
   }
 
   /// مصدر الفحص — وعبر الـVPN عمر المعروض ما لم يقله الشريط (فحصٌ يُعاد أو تعذّر): قراءات الخادم تبقى ٣٠ دقيقة فلا
@@ -243,9 +263,13 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     if (!widget.viaVpn) return 'من موبايلك على الشبكة';
     final at = VpnNow.readingsAt;
     if (at == null || p.state == SubsRunState.finished) return 'عبر VPN';
+    return 'عبر VPN · ${_readingsAge(at)}';
+  }
+
+  /// عمر قراءات الخادم المعروضة ما لم يقله الشريط: «قراءات منذ 15 دقيقة» — قصيرةٌ تُقرأ كاملةً على ٣٢٠.
+  static String _readingsAge(DateTime at) {
     final age = timeAgoAr(at);
-    // «قراءات منذ 15 دقيقة» — قصيرةٌ تُقرأ كاملةً على ٣٢٠
-    return 'عبر VPN · قراءات ${age == 'الآن' ? 'قبل لحظات' : age}';
+    return 'قراءات ${age == 'الآن' ? 'قبل لحظات' : age}';
   }
 
   Future<void> _copy(SubsCheckReport r, SubsCheckProgress p, List<_CompanyLine>? lines) async {
@@ -634,25 +658,24 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   // ─────────────────── «كل الشركات»: الشركات ───────────────────
 
   /// سطرٌ لكلّ شركة كـ«الفحص الشامل»: طريقها (من شبكتك / عبر VPN الشركة / لماذا لم تُفحص) وكم قُرئ من متّصلي مشتركيها وكم
-  /// بمشكلة — والضغط يعرض مشتركيها وحدهم. ١٠ نوفمبر: غير المتّصل بلا قراءة خارج العدد (لا يُقرأ أصلاً — «قُرئ» لا يكتمل معه).
-  /// والتقرير المنسوخ بالأسطر نفسها (المراجعة F15).
+  /// بمشكلة — والضغط يعرض مشتركيها وحدهم. ١٠ نوفمبر: غير المتّصل خارج العدد (لا يُقرأ أصلاً — «قُرئ» لا يكتمل معه)،
+  /// و«قُرئ» من المتّصلين وحدهم — قراءةٌ سابقة لغير المتّصل لا تُعدّ متّصلاً (المراجعة R2: كان «قُرئ 3 من 3 متّصل»
+  /// والمتّصلون 2). والتقرير المنسوخ بالأسطر نفسها (المراجعة F15).
   List<_CompanyLine> _companyLines(List<Subscriber> all, SubsCheckReport full) {
     final total = <String, int>{};
+    final online = <String, int>{};
     for (final x in all) {
       final k = x.companyKey;
-      if (k != null) total[k] = (total[k] ?? 0) + 1;
-    }
-    final offline = <String, int>{};
-    for (final m in full.missingIn(SubsCheckCat.offline)) {
-      final k = m.sub.companyKey;
-      if (k != null) offline[k] = (offline[k] ?? 0) + 1;
+      if (k == null) continue;
+      total[k] = (total[k] ?? 0) + 1;
+      if (x.isOnline) online[k] = (online[k] ?? 0) + 1;
     }
     final read = <String, int>{};
     final viaVpn = <String, int>{};
     final bad = <String, int>{};
     for (final row in [...full.healthy, ...full.rows]) {
       final k = row.sub.companyKey;
-      if (k == null) continue;
+      if (k == null || !row.sub.isOnline) continue;
       read[k] = (read[k] ?? 0) + 1;
       if (row.reading?.vpn ?? false) viaVpn[k] = (viaVpn[k] ?? 0) + 1;
     }
@@ -665,7 +688,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         if ((total[c.key] ?? 0) > 0)
           _companyLine(c,
               total: total[c.key] ?? 0,
-              offline: offline[c.key] ?? 0,
+              online: online[c.key] ?? 0,
               read: read[c.key] ?? 0,
               viaVpn: viaVpn[c.key] ?? 0,
               bad: bad[c.key] ?? 0),
@@ -708,18 +731,21 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   }
 
   _CompanyLine _companyLine(MergedCompany c,
-      {required int total, required int offline, required int read, required int viaVpn, required int bad}) {
-    final counts = offline <= 0
+      {required int total, required int online, required int read, required int viaVpn, required int bad}) {
+    final counts = online >= total
         ? 'قُرئ ${formatIQD(read)} من ${formatIQD(total)}'
-        : total - offline > 0
-            ? 'قُرئ ${formatIQD(read)} من ${formatIQD(total - offline)} متّصل'
-            : '${formatIQD(offline)} غير متّصل الآن';
+        : online > 0
+            ? 'قُرئ ${formatIQD(read)} من ${formatIQD(online)} متّصل'
+            : '${formatIQD(total)} غير متّصل الآن';
     final job = VpnNow.subscribers;
     final local = _isLocal(c.key);
     final note = _companyNote(c.key);
     final at = VpnNow.readingsAtFor(c.key);
     final probing = _waveRunning;
     final here = job.busy && job.current == c.key;
+    // يُعاد فحصها أو بانتظار دورها: المعروض من فحصها السابق ⇒ بعمره (المراجعة R2: «قُرئ 2 من 2» بلا عمرٍ في أيّ مكان) —
+    // إلّا أن يكون كلّ مقروئها من شبكتك (صفوفه بأعمارها)
+    final prior = at != null && (viaVpn > 0 || read == 0) ? ' · ${_readingsAge(at)}' : '';
     // المفتوحة: من الهاتف أوّلاً، وما قُرئ عبر VPN شركتها (ضوء الأولت) يُقال — وبعمره كغيرها (المراجعة F15): انتهاء
     // موجة الهاتف لما قُرئ من شبكتك، ووقت فحص VPN شركتها لما قُرئ عبره
     final localWay = viaVpn == 0 ? 'من شبكتك' : (viaVpn == read ? 'عبر VPN الشركة' : 'من شبكتك وعبر VPN الشركة');
@@ -735,10 +761,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                     '$localWay${localAt == null ? '' : ' · ${timeAgoAr(localAt)}'} · $counts'
                   ))
         : here
-            ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة… · $counts')
+            ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة…$prior · $counts')
             // ما قبل الحاليّة فُحص في هذا الفحص نفسه — لا «بانتظار دورها»
             : job.waits(c.key)
-                ? (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها عبر VPN · $counts')
+                ? (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها عبر VPN$prior · $counts')
                 // شركةٌ غير المفتوحة قُرئ بعض مشتركيها من شبكتك (أجهزتهم يصلها موبايلك) — يُقال ذلك قبل حال الـVPN
                 : read > viaVpn && (note != null || at == null)
                     ? (
@@ -804,8 +830,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                     style:
                         AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
+                // ثلاثة أسطر على ٣٢٠ مع شارة «بمشكلة» (عمر قراءاتها، أو أعدادٌ كبيرة) — لا تُقصّ الأعداد ولا العمر
                 Text(text,
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.muted(color: tone == AppTone.warning ? tone.onSoft : AppColors.textMid)
                         .copyWith(fontSize: 11.5)),

@@ -47,6 +47,10 @@ class VpnNowJob extends ChangeNotifier {
   /// (المراجعة F14/F22) — null إن لم يُترك، ويُمسح ببدء فحصٍ جديد.
   String? stopped;
 
+  /// كم فحصاً تُرك ([stopped]) منذ بدء التطبيق — يزيد ولا يُصفَّر: «الفحص العامّ» يقول «توقّف الفحص» لما تُرك وهو مفتوح
+  /// وحده، وسببٌ باقٍ من فحصٍ تُرك قبل فتحه ليس فحصه (المراجعة R2).
+  int stops = 0;
+
   /// بدء آخر فحص — «وضع VPN» يعيده بعد [VpnNow.intervalOf].
   DateTime? startedAt;
   int _gen = 0;
@@ -343,6 +347,7 @@ class VpnNowJob extends ChangeNotifier {
   /// كان جارياً.
   void cancel({String? why}) {
     stopped = phase == VpnBarPhase.running ? why : null;
+    if (stopped != null) stops++;
     _gen++;
     _checking = false;
     queue = const [];
