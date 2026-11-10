@@ -232,7 +232,8 @@ void main() {
       final c = SubscriberVoiceCheck(_sub('x', company: b.key), company: b);
       await c.run();
       expect(c.row, isNull);
-      expect(c.deviceLine, 'لم يُفحص — «ايرث لنك» تحتاج VPN');
+      // المراجعة الثالثة: بكلمات صفّه في «الفحص العامّ» (كان «لم يُفحص — «ايرث لنك» تحتاج VPN»)
+      expect(c.deviceLine, 'لم يُفحص — شركته تحتاج VPN');
       expect(c.cat, SubsCheckCat.unchecked);
       VpnNow.debugNote(b.key, null);
 
@@ -657,6 +658,71 @@ void main() {
       expect([runs, job.busy], [0, false], reason: 'بلا فحصٍ جديد');
       m.dispose();
       p.dispose();
+    });
+
+    // المراجعة الثالثة: سبب شركته (بلا طريق، نفقٌ لم يتّصل، بلا مفتاح الـVPN) في الجواب بكلمات صفّه والتقرير المنسوخ —
+    // كان ««ايرث لنك» تحتاج VPN» في الجواب و«شركته تحتاج VPN» في صفّه
+    test('المراجعة الثالثة: «كل الشركات» — سبب شركته في الجواب بكلمات صفّه في «الفحص العامّ»', () async {
+      final a = _co('c0000000000a1', 'سوبرنت');
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      // صفّه كما تبنيه الشاشة: سبب الشركة لغير المفتوحة على شبكتك ([_companyNote])
+      SubsMissing rowOf(Subscriber s, {String? note, bool local = false, bool phoneAsked = false}) =>
+          SubscribersCheck.mixed([s], (_) => const ConnectionAlertThresholds(signalDbm: -70, ccqPct: 60),
+                  peek: (_) => phoneAsked ? (snap: null, stale: false, at: DateTime.now()) : null,
+                  companyNote: (k) => local ? null : (note ?? VpnNow.noteOf(k!)),
+                  localFailsFor: (k) => local)
+              .missing
+              .single;
+      Future<SubscriberVoiceCheck> ask(String u, MergedCompany co) async {
+        final c = SubscriberVoiceCheck(_sub(u, company: co.key), company: co);
+        await c.run();
+        return c;
+      }
+
+      for (final (n, words) in [
+        ('«ايرث لنك» تحتاج VPN', 'شركته تحتاج VPN'),
+        ('«ايرث لنك»: نفق الـVPN لم يتّصل', 'لم تُفحص شركته'),
+      ]) {
+        SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.debugNote(b.key, n);
+        final c = await ask('n.u', b);
+        final row = rowOf(c.sub);
+        expect([c.cat, c.note], [SubscribersCheck.catOf(row.why), SubscribersCheck.missText(row)]);
+        expect(c.deviceLine, 'لم يُفحص — $words');
+        expect(SubscribersCheck.reportText(SubsCheckReport(total: 1, read: 0, rows: const [], missing: [row]),
+                progress: const SubsCheckProgress(SubsRunState.finished, 'انتهى الفحص')),
+            contains('• n.u (n.u) — $words'));
+      }
+      VpnNow.debugNote(b.key, null);
+
+      // الموظّف بلا مفتاح الـVPN: صفّه «لم تُفحص …» بسبب الشاشة نفسه
+      SubscriberVoiceCheck.debugVpnAllowed = () => false;
+      final e = await ask('e.u', b);
+      final eRow = rowOf(e.sub, note: 'الفحص عبر VPN غير مفعّل لك');
+      expect([e.cat, e.note], [SubscribersCheck.catOf(eRow.why), SubscribersCheck.missText(eRow)]);
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+
+      // فحصٌ متعذّر لغير شركته (لا سبب لها): سطره لا يخصّه ⇒ «لم يُفحص بعد عبر VPN» كصفّه
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.subscribers
+        ..phase = VpnBarPhase.failed
+        ..line = '«ثالثة» تحتاج VPN';
+      final f = await ask('f.u', b);
+      final fRow = rowOf(f.sub);
+      expect([f.cat, f.deviceLine], [SubscribersCheck.catOf(fRow.why), SubscribersCheck.missText(fRow)]);
+      expect(f.deviceLine, 'لم يُفحص بعد عبر VPN');
+      VpnNow.reset();
+
+      // المفتوحة: سُئل جهازه من شبكتها وما ردّ — سبب شركتها (لا VPN مربوط لها) ليس سببه، كصفّه «ما ردّ من شبكتك»
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+      SubscriberVoiceCheck.debugIsOpen = (c) async => c.key == a.key;
+      SubscriberVoiceCheck.debugProbe = (_) async => null;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.debugNote(a.key, '«سوبرنت» تحتاج VPN');
+      final o = await ask('o.u', a);
+      final oRow = rowOf(o.sub, local: true, phoneAsked: true);
+      expect([o.cat, SubscribersCheck.missText(oRow)], [SubscribersCheck.catOf(oRow.why), 'ما ردّ من شبكتك']);
+      expect(o.deviceLine, 'جهازه ما ردّ — من شبكتك');
+      VpnNow.debugNote(a.key, null);
     });
   });
 }
