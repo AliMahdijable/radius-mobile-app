@@ -1590,8 +1590,12 @@ String _esKey(NetworkDevice d) => '${d.id}@${d.ip}:${d.apiPort}';
 final Set<String> _edgeSwitchHosts = {};
 
 /// أجهزةٌ لم تُجب REST (ليست EdgeSwitch) ولحظتها — لا تُسأل ثانيةً قبل [_edgeSwitchRetry]: فشل راديو airOS لا يدفع
-/// طلباً كلّ نبضة.
+/// طلباً كلّ نبضة. مفتاحها الجهاز وبصمة بيانات دخوله ([_esFailKey]): رمزٌ صُحّح يُجرَّب فوراً (المراجعة).
 final Map<String, DateTime> _notEdgeSwitchAt = {};
+
+/// الجهاز + المستخدم + hashCode الرمز — لا الرمز نفسه (المفتاح لا يُطبع، ومع ذلك لا يحمله).
+String _esFailKey(String k, Map<String, dynamic> creds) =>
+    '$k|${creds['user'] ?? ''}|${(creds['pass'] ?? '').toString().hashCode}';
 const _edgeSwitchRetry = Duration(minutes: 10);
 
 /// قراءة EdgeSwitch بـREST لم تتمّ — رُفض الدخول أو صفحته لا تجيب (REST لا يقول أيّهما).
@@ -1623,15 +1627,16 @@ Future<ProbeResult> _edgeSwitch(NetworkDevice d, Map<String, dynamic> creds) asy
 /// ويُقرأ به؛ وإلّا null. الهويّة شرط: راديوات UISP (‏Wave · LTU) تجيب `/api/v1.0` نفسه وليست سويتشات.
 Future<ProbeResult?> _edgeSwitchTry(NetworkDevice d, Map<String, dynamic> creds) async {
   final k = _esKey(d);
-  final no = _notEdgeSwitchAt[k];
+  final nk = _esFailKey(k, creds);
+  final no = _notEdgeSwitchAt[nk];
   if (no != null && DateTime.now().difference(no) < _edgeSwitchRetry) return null;
   if ((creds['user'] ?? '').toString().isEmpty) return null;
   final s = await _edgeSwitchRead(d, creds);
   if (s == null || !_edgeSwitchName('${s.model ?? ''} ${s.product ?? ''}')) {
-    _notEdgeSwitchAt[k] = DateTime.now();
+    _notEdgeSwitchAt[nk] = DateTime.now();
     return null;
   }
-  _notEdgeSwitchAt.remove(k);
+  _notEdgeSwitchAt.remove(nk);
   _edgeSwitchHosts.add(k);
   return _edgeSwitchResult(s);
 }
