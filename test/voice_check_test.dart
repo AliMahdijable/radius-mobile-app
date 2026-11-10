@@ -232,7 +232,8 @@ void main() {
       final c = SubscriberVoiceCheck(_sub('x', company: b.key), company: b);
       await c.run();
       expect(c.row, isNull);
-      expect(c.deviceLine, 'لم يُفحص — «ايرث لنك» تحتاج VPN');
+      // المراجعة الثالثة: بكلمات صفّه في «الفحص العامّ» (كان «لم يُفحص — «ايرث لنك» تحتاج VPN»)
+      expect(c.deviceLine, 'لم يُفحص — شركته تحتاج VPN');
       expect(c.cat, SubsCheckCat.unchecked);
       VpnNow.debugNote(b.key, null);
 
@@ -608,6 +609,120 @@ void main() {
           SubscribersCheck.vpn([one.sub], (_) => one.limits, reading: (_) => null, readAt: (_) => null, running: false);
       expect([one.deviceLine, SubscribersCheck.missText(v.missing.single)],
           ['لم يُفحص بعد عبر VPN', 'لم يُفحص بعد عبر VPN']);
+    });
+
+    // المراجعة الثالثة: «الفحص العامّ» أعاد فحص ايرث لنك (قراءاتها فوق ١٠ د) ودورها بعد شركةٍ أخرى، والجواب من آخر
+    // قراءةٍ عبر الـVPN (مقيسةً أو البنك وحده) — كان يبقى «سليمة» بعمرٍ يكبر وصفّه صار «لا يستجيب»
+    test('المراجعة الثالثة: جوابٌ من قراءة VPN سابقة وشركته بالدور ⇒ يتحدّث من نتيجة دورها كصفّه', () async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      var runs = 0;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => runs++;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'm.u': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+            'p.u': VpnSubReading(src: 'ping', ms: 7),
+          }));
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kX, b.key]
+        ..current = kX;
+      final m = SubscriberVoiceCheck(_sub('m.u', company: b.key), company: b);
+      final p = SubscriberVoiceCheck(_sub('p.u', company: b.key), company: b);
+      var told = 0;
+      m.addListener(() => told++);
+      p.addListener(() => told++);
+      await m.run();
+      await p.run();
+      expect(runs, 0, reason: 'آخر قراءةٍ تكفي — لا فحص جديد');
+      expect([m.deviceLine, p.deviceLine], ['الإشارة، CCQ والكيبل سليمة', 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه']);
+      // دور ايرث لنك يكتمل: الاثنان «لا يستجيب» ⇒ الجوابان يتحدّثان وحدهما كصفّيهما
+      final before = told;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'm.u': VpnSubReading(src: 'dead'),
+            'p.u': VpnSubReading(src: 'dead'),
+          }));
+      finish(job);
+      expect(told, before + 2, reason: 'الجوابان يتحدّثان وحدهما');
+      for (final c in [m, p]) {
+        final r = SubscribersCheck.mixed([c.sub], (_) => c.limits, peek: (_) => null, localFailsFor: (_) => false);
+        final row = r.missing.single;
+        expect([c.row, c.cat, c.deviceLine],
+            [null, SubscribersCheck.catOf(row.why), 'جهازه ما ردّ — ${SubscribersCheck.missText(row)}']);
+        expect(c.deviceLine, 'جهازه ما ردّ — لا يستجيب');
+      }
+      expect([runs, job.busy], [0, false], reason: 'بلا فحصٍ جديد');
+      m.dispose();
+      p.dispose();
+    });
+
+    // المراجعة الثالثة: سبب شركته (بلا طريق، نفقٌ لم يتّصل، بلا مفتاح الـVPN) في الجواب بكلمات صفّه والتقرير المنسوخ —
+    // كان ««ايرث لنك» تحتاج VPN» في الجواب و«شركته تحتاج VPN» في صفّه
+    test('المراجعة الثالثة: «كل الشركات» — سبب شركته في الجواب بكلمات صفّه في «الفحص العامّ»', () async {
+      final a = _co('c0000000000a1', 'سوبرنت');
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      // صفّه كما تبنيه الشاشة: سبب الشركة لغير المفتوحة على شبكتك ([_companyNote])
+      SubsMissing rowOf(Subscriber s, {String? note, bool local = false, bool phoneAsked = false}) =>
+          SubscribersCheck.mixed([s], (_) => const ConnectionAlertThresholds(signalDbm: -70, ccqPct: 60),
+                  peek: (_) => phoneAsked ? (snap: null, stale: false, at: DateTime.now()) : null,
+                  companyNote: (k) => local ? null : (note ?? VpnNow.noteOf(k!)),
+                  localFailsFor: (k) => local)
+              .missing
+              .single;
+      Future<SubscriberVoiceCheck> ask(String u, MergedCompany co) async {
+        final c = SubscriberVoiceCheck(_sub(u, company: co.key), company: co);
+        await c.run();
+        return c;
+      }
+
+      for (final (n, words) in [
+        ('«ايرث لنك» تحتاج VPN', 'شركته تحتاج VPN'),
+        ('«ايرث لنك»: نفق الـVPN لم يتّصل', 'لم تُفحص شركته'),
+      ]) {
+        SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.debugNote(b.key, n);
+        final c = await ask('n.u', b);
+        final row = rowOf(c.sub);
+        expect([c.cat, c.note], [SubscribersCheck.catOf(row.why), SubscribersCheck.missText(row)]);
+        expect(c.deviceLine, 'لم يُفحص — $words');
+        expect(SubscribersCheck.reportText(SubsCheckReport(total: 1, read: 0, rows: const [], missing: [row]),
+                progress: const SubsCheckProgress(SubsRunState.finished, 'انتهى الفحص')),
+            contains('• n.u (n.u) — $words'));
+      }
+      VpnNow.debugNote(b.key, null);
+
+      // الموظّف بلا مفتاح الـVPN: صفّه «لم تُفحص …» بسبب الشاشة نفسه
+      SubscriberVoiceCheck.debugVpnAllowed = () => false;
+      final e = await ask('e.u', b);
+      final eRow = rowOf(e.sub, note: 'الفحص عبر VPN غير مفعّل لك');
+      expect([e.cat, e.note], [SubscribersCheck.catOf(eRow.why), SubscribersCheck.missText(eRow)]);
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+
+      // فحصٌ متعذّر لغير شركته (لا سبب لها): سطره لا يخصّه ⇒ «لم يُفحص بعد عبر VPN» كصفّه
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.subscribers
+        ..phase = VpnBarPhase.failed
+        ..line = '«ثالثة» تحتاج VPN';
+      final f = await ask('f.u', b);
+      final fRow = rowOf(f.sub);
+      expect([f.cat, f.deviceLine], [SubscribersCheck.catOf(fRow.why), SubscribersCheck.missText(fRow)]);
+      expect(f.deviceLine, 'لم يُفحص بعد عبر VPN');
+      VpnNow.reset();
+
+      // المفتوحة: سُئل جهازه من شبكتها وما ردّ — سبب شركتها (لا VPN مربوط لها) ليس سببه، كصفّه «ما ردّ من شبكتك»
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+      SubscriberVoiceCheck.debugIsOpen = (c) async => c.key == a.key;
+      SubscriberVoiceCheck.debugProbe = (_) async => null;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => VpnNow.debugNote(a.key, '«سوبرنت» تحتاج VPN');
+      final o = await ask('o.u', a);
+      final oRow = rowOf(o.sub, local: true, phoneAsked: true);
+      expect([o.cat, SubscribersCheck.missText(oRow)], [SubscribersCheck.catOf(oRow.why), 'ما ردّ من شبكتك']);
+      expect(o.deviceLine, 'جهازه ما ردّ — من شبكتك');
+      VpnNow.debugNote(a.key, null);
     });
   });
 }

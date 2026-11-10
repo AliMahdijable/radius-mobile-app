@@ -182,6 +182,11 @@ class SubscriberVoiceCheck extends ChangeNotifier {
 
   static const _noMetricsWhy = 'جهازه ليس نانو ولا وحدةً ضوئيّة';
 
+  /// «كل الشركات»: سبب شركته بكلمات صفّه في «الفحص العامّ» ([SubscribersCheck.missText]: «شركته تحتاج VPN»، «لم تُفحص
+  /// شركته») — المراجعة الثالثة: كان ««ايرث لنك» تحتاج VPN» في الجواب. وخارجه السبب كما هو.
+  String _companyWhy(String why) =>
+      company == null ? why : SubscribersCheck.missText((sub: sub, why: SubsMissWhy.company, note: why));
+
   void _set(VoiceCheckPhase p) {
     if (_disposed) return;
     phase = p;
@@ -236,26 +241,31 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       // ردّ جهازه بلا مقاييس (ليس نانو ولا ضوئيّاً) — يُقال إن لم يُقرأ عبر الـVPN
       _localNoMetrics = snap != null;
     }
-    // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر)
+    // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر). وشركته ما
+    //    زالت تُفحص ⇒ الجواب منها يتحدّث حين يكتمل دورها (المراجعة الثالثة: كان يبقى «سليمة» وصفّه «لا يستجيب»)
     final v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead) {
       if (!v.measured) {
         _unmeasured(v);
+        if (_vpnPending) _followVpn();
         return _set(VoiceCheckPhase.done);
       }
       _apply(vpn: v, vpnAt: _vpnAt());
-      if (row != null) return _set(VoiceCheckPhase.done);
+      if (row != null) {
+        if (_vpnPending) _followVpn();
+        return _set(VoiceCheckPhase.done);
+      }
     }
     // ٣) فحصٌ عبر VPN شركته الآن
     if (!_vpnAllowed) {
       if (!_localTried) {
-        _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
+        _miss(SubsCheckCat.unchecked, _companyWhy('الفحص عبر VPN غير مفعّل لك'));
       } else if (_localNoMetrics) {
         _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
       } else if (_localWitness) {
         _miss(SubsCheckCat.noReply, 'من شبكتك');
       } else {
-        _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
+        _miss(SubsCheckCat.unchecked, _companyWhy('الفحص عبر VPN غير مفعّل لك'));
       }
       return _set(VoiceCheckPhase.done);
     }
@@ -297,8 +307,11 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     } else {
       // لا قراءة له بأيّ طريق: شركته بلا طريق أو الفحص تعذّر ⇒ لم يُفحص؛ وفحصٌ مكتمل بلا قراءةٍ له ⇒ الخادم لم يسأل جهازه
       // (يوبيكويتي وحدها، والمؤجَّل) ⇒ «لم يُفحص» — إلّا إن سُئل من شبكتك وما ردّ (١٠ نوفمبر: كان «لا من شبكتك ولا عبر VPN»)
-      final why = (company != null ? VpnNow.noteOf(company!.key) : null) ??
-          (VpnNow.subscribers.phase == VpnBarPhase.failed ? VpnNow.subscribers.line : null);
+      // «كل الشركات»: سبب شركته كصفّه — والمفتوحة سُئل جهازها من شبكتها فلا سبب شركةٍ لها، وسطر الفحص المتعذّر لا يخصّه
+      final cn = company == null || (_localTried && _localWitness) ? null : VpnNow.noteOf(company!.key);
+      final why = cn != null
+          ? _companyWhy(cn)
+          : (company == null && VpnNow.subscribers.phase == VpnBarPhase.failed ? VpnNow.subscribers.line : null);
       if (why != null) {
         _miss(SubsCheckCat.unchecked, why);
       } else if (_localNoMetrics) {
