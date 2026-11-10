@@ -81,8 +81,33 @@ import '../national/national_subscriber_extras.dart';
 /// ما يفتحه الأمر الصوتيّ فور فتح الصفحة — نافذة العمليّة نفسها بأقفالها (٦–٧ نوفمبر).
 enum SubscriberAutoAction {
   activate,
+
+  /// «مدّد فلان» — شاشة التمديد (ومن لا تمديد عنده ⇒ شاشة التجديد، ويُقال).
+  extend,
+
+  /// «غيّر باقة فلان» — شاشة التعديل وما قيل تذكيرٌ أعلاها (ومن باقته تُغيَّر من التجديد ⇒ شاشته).
+  changePackage,
+  edit,
   disable,
   enable,
+
+  /// «افصل فلان» — تأكيد فصل جلسته.
+  disconnect,
+  usage,
+  location,
+  sessions,
+
+  /// «سعر فلان» — نافذة السعر الثابت.
+  price,
+
+  /// «بيع لفلان» — «بيع مادّة» والمشترك مختار.
+  sell,
+
+  /// «ملاحظة على فلان» — ملاحظته الخاصّة.
+  note,
+
+  /// «احذف فلان» — لا نافذة حذف بالصوت: سطرٌ يدلّ على مكانه بالصفحة.
+  deleteHint,
   payDebt,
   addDebt,
   addCredit,
@@ -99,8 +124,22 @@ enum SubscriberAutoAction {
 }
 
 class SubscriberDetailScreen extends StatefulWidget {
-  const SubscriberDetailScreen({super.key, required this.sub, this.autoAction, this.autoAmount, this.autoFullDebt = false});
+  const SubscriberDetailScreen({
+    super.key,
+    required this.sub,
+    this.autoAction,
+    this.autoAmount,
+    this.autoFullDebt = false,
+    this.autoPrefill,
+    this.autoHint,
+  });
   final Subscriber sub;
+
+  /// «فعّل علي جزئي ١٠ الاف» — ما قيل عن الدفع والمدّة والطريقة يظهر مختاراً بشاشة التفعيل (التنفيذ بضغطته هناك).
+  final ActivatePrefill? autoPrefill;
+
+  /// «غيّر باقة علي الى فايبر ٥٠» — الباقة كما قيلت، تذكيراً بشاشة التعديل.
+  final String? autoHint;
 
   /// «فعّل/طفّي/شغّل/سدّد… فلان» من الأمر الصوتيّ ⇒ الصفحة تُفتح ثمّ نافذة العمليّة كما لو ضغط زرّها.
   final SubscriberAutoAction? autoAction;
@@ -677,15 +716,156 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   Future<void> _runAutoAction(SubscriberAutoAction a) async {
     switch (a) {
       case SubscriberAutoAction.activate:
-        if (!permShown(const ['subscribers.activate']) || _providerHides('subscribers.activate')) {
-          showSheetSnack(context, 'التجديد غير متاح لهذا المشترك من حسابك', isError: true);
+        await _autoActivate(prefill: widget.autoPrefill);
+      case SubscriberAutoAction.extend:
+        // فايبر اكس: «تمديد» رسالةٌ منهم للمشترك بمفتاحه — كزرّه
+        if (sessionIsFiberx && sub.companyKey == null && _shows('fiberx.extend')) {
+          if (_locked('fiberx.extend')) {
+            showSheetSnack(context, 'ما عندك صلاحيّة التمديد — اطلبها من مديرك', isError: true);
+            return;
+          }
+          await showFiberxExtendFlow(context, sub);
           return;
         }
-        if (_locked('subscribers.activate')) {
-          showSheetSnack(context, 'ما عندك صلاحيّة التجديد — اطلبها من مديرك', isError: true);
+        if (_shows('subscribers.extend')) {
+          if (_locked('subscribers.extend')) {
+            showSheetSnack(context, 'ما عندك صلاحيّة التمديد — اطلبها من مديرك', isError: true);
+            return;
+          }
+          await showExtendSheet(context, sub);
           return;
         }
-        await showActivateSheet(context, sub);
+        // لا «تمديد» عند شركته ⇒ التجديد هو ما يمدّ اشتراكه — يُفتح ويُقال
+        if (_activateShown) {
+          showSheetSnack(context, 'لا تمديد عند هذه الشركة — هذه شاشة التجديد');
+          await _autoActivate(prefill: widget.autoPrefill);
+          return;
+        }
+        showSheetSnack(context, 'التمديد غير متاح لهذا المشترك من حسابك', isError: true);
+      case SubscriberAutoAction.edit:
+      case SubscriberAutoAction.changePackage:
+        final pkg = a == SubscriberAutoAction.changePackage;
+        if (_shows('subscribers.edit')) {
+          if (_locked('subscribers.edit')) {
+            showSheetSnack(context, 'ما عندك صلاحيّة التعديل — اطلبها من مديرك', isError: true);
+            return;
+          }
+          final want = (widget.autoHint ?? '').trim();
+          await showEditSubscriberSheet(
+            context,
+            sub,
+            voiceNote: !pkg
+                ? null
+                : want.isEmpty
+                    ? 'من الأمر الصوتي: تغيير الباقة — اخترها من حقل «الباقة»'
+                    : 'من الأمر الصوتي: الباقة «$want» — اخترها من حقل «الباقة»',
+          );
+          return;
+        }
+        // شركاتٌ تُغيَّر باقتها من شاشة التجديد (فايبر اكس والمُضافة)
+        if (pkg && _activateShown) {
+          showSheetSnack(context, 'الباقة عند هذه الشركة تُغيَّر من شاشة التجديد — اخترها فيها');
+          await _autoActivate();
+          return;
+        }
+        showSheetSnack(context, '${pkg ? 'تغيير الباقة' : 'التعديل'} غير متاح لهذا المشترك من حسابك', isError: true);
+      case SubscriberAutoAction.disconnect:
+        if (sub.idx == null ||
+            !_shows('subscribers.toggle') ||
+            (sub.companyKey == null && subscriberDisconnectHidden())) {
+          showSheetSnack(context, 'الفصل غير متاح لهذا المشترك من حسابك', isError: true);
+          return;
+        }
+        if (_locked('subscribers.toggle')) {
+          showSheetSnack(context, 'ما عندك صلاحيّة الفصل — اطلبها من مديرك', isError: true);
+          return;
+        }
+        if (!sub.isOnline) {
+          showSheetSnack(context, 'المشترك غير متّصل الآن — لا جلسة تُفصل');
+          return;
+        }
+        if (_autoPageLocked()) return;
+        await _confirmDisconnect();
+      case SubscriberAutoAction.usage:
+        await showConsumptionSheet(context, sub);
+      case SubscriberAutoAction.location:
+        if (sub.hasLocation) {
+          await showLocationSheet(context, sub: sub);
+          return;
+        }
+        if (!_has('subscribers.edit_location')) {
+          showSheetSnack(
+              context,
+              _locked('subscribers.edit_location')
+                  ? 'ما له موقع مسجّل — وما عندك صلاحيّة إضافته'
+                  : 'ما له موقع مسجّل');
+          return;
+        }
+        if (_autoPageLocked()) return;
+        showSheetSnack(context, 'ما له موقع مسجّل — أضِفه من هنا');
+        await showLocationEditSheet(context, sub: sub);
+      case SubscriberAutoAction.sessions:
+        if (!_autoAllowed('reports.sessions', 'سجلّ الجلسات')) return;
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SessionsReportScreen(initialUsername: sub.username, companyKey: sub.companyKey),
+        ));
+      case SubscriberAutoAction.price:
+        if (sub.idx == null) {
+          showSheetSnack(context, 'السعر الثابت غير متاح لهذا المشترك', isError: true);
+          return;
+        }
+        if (!_autoAllowed('subscriber_prices.manage', 'السعر الثابت')) return;
+        if (_autoPageLocked()) return;
+        await showSubscriberPriceSheet(
+          context,
+          idx: sub.idx!,
+          name: sub.fullName.trim().isNotEmpty ? sub.fullName : sub.username,
+          companyKey: sub.companyKey,
+        );
+      case SubscriberAutoAction.sell:
+        // «المبيعات» مفتاحٌ بالخادم — حالها قد لم تُسأل بعد إن فُتح المشترك أوّلاً
+        await SalesState.ensureFresh();
+        if (!mounted) return;
+        if (!SalesState.visible || sub.idx == null || !_shows('sales.sell')) {
+          showSheetSnack(context, 'البيع غير متاح لهذا المشترك من حسابك', isError: true);
+          return;
+        }
+        if (_locked('sales.sell') || SalesState.gate.value!.scoped) {
+          showSheetSnack(context, 'ما عندك صلاحيّة البيع — اطلبها من مديرك', isError: true);
+          return;
+        }
+        if (_autoPageLocked()) return;
+        await showSellToSubscriber(
+          context,
+          idx: sub.idx!,
+          username: sub.username,
+          name: sub.fullName.trim(),
+          phone: sub.displayPhone.isEmpty ? null : sub.displayPhone,
+          companyKey: sub.companyKey,
+        );
+      case SubscriberAutoAction.note:
+        if (sub.idx == null || !_shows('subscribers.private_note')) {
+          showSheetSnack(context, 'الملاحظة غير متاحة لهذا المشترك من حسابك', isError: true);
+          return;
+        }
+        if (_locked('subscribers.private_note')) {
+          showSheetSnack(context, 'ما عندك صلاحيّة الملاحظة — اطلبها من مديرك', isError: true);
+          return;
+        }
+        if (_autoPageLocked()) return;
+        // تُجلب أوّلاً: حفظٌ على ملاحظةٍ لم تُقرأ قد يمحوها (كزرّها المعطَّل حتى تجهز)
+        final note = _privateNote;
+        for (var i = 0; i < 40 && mounted && !note.loaded && !note.failed; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+        }
+        if (!mounted) return;
+        if (!note.ready) {
+          showSheetSnack(context, 'الملاحظة غير متاحة الآن — حاول بعد قليل', isError: true);
+          return;
+        }
+        await note.edit(context);
+      case SubscriberAutoAction.deleteHint:
+        showSheetSnack(context, 'الحذف نهائيّ — يبقى بيدك من «المزيد» أسفل الصفحة');
       case SubscriberAutoAction.disable:
       case SubscriberAutoAction.enable:
         final wantEnable = a == SubscriberAutoAction.enable;
@@ -701,6 +881,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           showSheetSnack(context, wantEnable ? 'المشترك شغّال أصلاً' : 'المشترك مطفي أصلاً');
           return;
         }
+        if (_autoPageLocked()) return;
         await _confirmToggleEnabled();
       case SubscriberAutoAction.payDebt:
         if (!_autoAllowed('subscribers.pay_debt', 'التسديد')) return;
@@ -766,6 +947,30 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             ? Uri.parse('tel:${localPhone(phone)}')
             : Uri.parse('https://wa.me/${_digits(phone)}'));
     }
+  }
+
+  /// زرّ «تجديد» ظاهرٌ لهذا المشترك (حيّاً أو مقفلاً)؟
+  bool get _activateShown => permShown(const ['subscribers.activate']) && !_providerHides('subscribers.activate');
+
+  /// «فعّل فلان» بالأمر الصوتيّ: شاشة التفعيل بشروط زرّها، وما قيل عن الدفع مختارٌ فيها ([ActivatePrefill]).
+  Future<void> _autoActivate({ActivatePrefill? prefill}) async {
+    if (!_activateShown) {
+      showSheetSnack(context, 'التجديد غير متاح لهذا المشترك من حسابك', isError: true);
+      return;
+    }
+    if (_locked('subscribers.activate')) {
+      showSheetSnack(context, 'ما عندك صلاحيّة التجديد — اطلبها من مديرك', isError: true);
+      return;
+    }
+    await showActivateSheet(context, sub, prefill: prefill);
+  }
+
+  /// «كل الصفحات» للموظّف: مشترك صفحةٍ كتابتها مغلقةٌ من هنا ⇒ سببه بسطرٍ ولا نافذة — كزرّها المقفل (شيتات المال تحرس نفسها).
+  bool _autoPageLocked() {
+    final lock = _pageLock;
+    if (lock == null) return false;
+    showSheetSnack(context, lock, isError: true);
+    return true;
   }
 
   /// العمليّة متاحةٌ له (كظهورها بـ«المزيد») ⇒ true؛ وإلّا سطرٌ بالسبب.

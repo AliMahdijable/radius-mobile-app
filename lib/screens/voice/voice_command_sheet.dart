@@ -25,7 +25,9 @@ import '../../services/merged_mode.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscribers_check.dart';
 import '../../services/voice/voice_check.dart';
+import '../../services/provider_limits.dart';
 import '../../services/voice/voice_command.dart';
+import '../../services/voice/voice_lang_pref.dart';
 import '../../services/voice/voice_resolver.dart';
 import '../../services/vpn_now.dart';
 import '../../widgets/company_tag.dart';
@@ -37,6 +39,12 @@ import '../assistant/assistant_sheet.dart';
 import '../network_devices/check/devices_check_screen.dart';
 import '../network_devices/network_device_details_screen.dart';
 import '../subscribers/subscriber_detail_screen.dart';
+import '../subscribers/sheets/activate_sheet.dart';
+import '../subscribers/sheets/add_subscriber_sheet.dart';
+import '../subscribers/widgets/filter_chips_bar.dart';
+import '../app_modules.dart';
+import '../settings_screen.dart';
+import '../shell_nav.dart';
 import '../../services/merged_text.dart';
 
 /// «أمر صوتي» (٧ نوفمبر — المالك: «المساعد الصوتي… وكيل يامره يفعل مشترك يطفي مشترك يفحص جهاز»).
@@ -48,9 +56,12 @@ import '../../services/merged_text.dart';
 ///
 /// ٧ نوفمبر (المالك: «لوتخلي الامر الصوتي مجرد نقر والمساعد الذكاء نخلي هو الثانوي»): تُفتح بنقرةٍ من رأس كلّ تبويب، و«المساعد
 /// الذكي» صفٌّ ثانويٌّ أسفلها ([_assistantRow]) — قبل الأمر وحين لا يُفهم.
-Future<void> showVoiceCommandSheet(BuildContext context) {
+Future<void> showVoiceCommandSheet(BuildContext context) async {
   HapticFeedback.selectionClick();
   final root = context;
+  // لغة الكلام المحفوظة — المايك يبدأ بنفسه فيجب أن يعرفها قبل أوّل إطار
+  await VoiceLangPref.load();
+  if (!root.mounted) return;
   return showAppSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -98,27 +109,55 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   String? _devNote;
   bool _devViaVpn = false;
 
-  static const _examples = [
+  /// لغة الكلام كما اختارها ([VoiceLangPref]): auto «تلقائي» (خادمنا يتعرّف العربيّة والإنكليزيّة من النطق) أو ar/en.
+  String _pickedLang = VoiceLangPref.current;
+
+  /// اللغة السارية: المختارة ما دامت متاحة — «تلقائي» يُفتح ويُغلق من الخادم (حاله تتحدّث والورقة مفتوحة)، فإن أُغلق عادت للعربيّ.
+  String get _lang => VoiceLangPref.options.contains(_pickedLang) ? _pickedLang : VoiceLangPref.current;
+
+  /// بدّل اللغة بنفسه ⇒ المايك يبدأ بها فوراً (نقرته هي الطلب).
+  bool _langPicked = false;
+
+  static const _examplesAr = [
     'افحص المشترك علي حسين',
     'فعّل علي حسين',
+    'فعّل علي حسين جزئي ١٠ آلاف',
     'طفّي محمد كاظم',
     'سدّد دين أحمد ٢٥ ألف',
     'ضيف دين على زينب ١٠ آلاف',
-    'ذكّر علي بالدين',
-    'اطبع وصل حسين',
+    'غيّر باقة علي الى فايبر ٥٠',
+    'افصل علي حسين',
+    'المشتركين المنتهين',
     'افحص سكتر الشمال',
     'فحص شامل',
   ];
+  static const _examplesEn = [
+    'check subscriber Ali Hussein',
+    'activate Ali Hussein',
+    'activate Ali Hussein partial 10 thousand',
+    'disable Mohammed Kadhim',
+    'pay debt Ahmed 25 thousand',
+    'add debt to Zainab 10 thousand',
+    'disconnect Ali Hussein',
+    'expired subscribers',
+    'check sector north',
+    'full check',
+  ];
+
+  List<String> get _examples => _lang == VoiceLangPref.en ? _examplesEn : _examplesAr;
 
   @override
   void initState() {
     super.initState();
     VpnNow.subscribers.addListener(_changed);
+    // «تلقائي» يتبع حال الخادم — خياراته والمايك معاً
+    AiAssistantState.gate.addListener(_changed);
   }
 
   @override
   void dispose() {
     VpnNow.subscribers.removeListener(_changed);
+    AiAssistantState.gate.removeListener(_changed);
     _clearChecks();
     _ctrl.dispose();
     super.dispose();
@@ -214,11 +253,37 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     _devHold = CheckSectionHold(runner);
   }
 
-  Future<void> _run(String text) async {
+  /// المايك أعطى ما سمع ببدائله (الأوّل ما كُتب) — يُفهم الأوّل، والبدائل تحسم الاسم حين لا يطابق أحداً بجزم.
+  void _runHeard(List<String> heard) {
+    if (heard.isEmpty) return;
+    unawaited(_run(heard.first, alts: heard.skip(1).toList()));
+  }
+
+  Future<void> _run(String text, {List<String> alts = const []}) async {
     final t = text.trim();
     if (t.isEmpty) return;
+    // جواب «كم دفع؟»: جملةٌ هي مبلغٌ وحده تكمّل الأمر الظاهر (الجزئيّ بلا مبلغ، والتسديد/الدين بلا مبلغه) — لا أمرٌ جديد
+    final pending = _intent;
+    if (pending != null && pending.needsAmount && (_sub != null || (_subs?.items.isNotEmpty ?? false))) {
+      final amount = VoiceCommand.parseBareAmount(t);
+      if (amount != null) {
+        setState(() => _intent = pending.withAmount(amount));
+        return;
+      }
+    }
     final gen = ++_gen;
-    final intent = VoiceCommand.parse(t);
+    var intent = VoiceCommand.parse(t);
+    // الأوّل لم يُفهم ⇒ أوّل بديلٍ يُفهم
+    if (intent.action == VoiceAction.unknown) {
+      for (final a in alts) {
+        final x = VoiceCommand.parse(a);
+        if (x.action != VoiceAction.unknown) {
+          intent = x;
+          _ctrl.text = a;
+          break;
+        }
+      }
+    }
     _clearChecks();
     setState(() {
       _intent = intent;
@@ -271,14 +336,32 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       }
       return;
     }
-    final m = await VoiceResolver.subscribers(intent.query);
+    var m = await VoiceResolver.subscribers(intent.query);
     if (!mounted || gen != _gen) return;
+    // لا مشترك واضح لما كُتب ⇒ بدائل ما سُمع: «حسن/حسين» يحسمها وجود المشترك لا أذن المحرّك
+    if (!m.sure && m.error == null) {
+      for (final a in alts.take(3)) {
+        final x = VoiceCommand.parse(a);
+        if (x.action != intent.action || x.query.isEmpty || x.query == intent.query) continue;
+        final xm = await VoiceResolver.subscribers(x.query);
+        if (!mounted || gen != _gen) return;
+        if (xm.sure || (m.isEmpty && !xm.isEmpty)) {
+          intent = x;
+          m = xm;
+          _ctrl.text = a;
+          if (xm.sure) break;
+        }
+      }
+    }
+    final found = m;
+    final act = intent;
     setState(() {
       _busy = false;
-      _subs = m;
-      if (m.sure && intent.action != VoiceAction.checkSubscriber) _sub = m.items.first.item;
+      _intent = act;
+      _subs = found;
+      if (found.sure && act.action != VoiceAction.checkSubscriber) _sub = found.items.first.item;
     });
-    if (m.sure && intent.action == VoiceAction.checkSubscriber) _startSubCheck(m.items.first.item);
+    if (found.sure && act.action == VoiceAction.checkSubscriber) _startSubCheck(found.items.first.item);
   }
 
   // ───────────────────────── التنفيذ (شاشة العمليّة نفسها) ─────────────────────────
@@ -302,6 +385,17 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       VoiceAction.movements => SubscriberAutoAction.movements,
       VoiceAction.call => SubscriberAutoAction.call,
       VoiceAction.whatsapp => SubscriberAutoAction.whatsapp,
+      VoiceAction.extend => SubscriberAutoAction.extend,
+      VoiceAction.changePackage => SubscriberAutoAction.changePackage,
+      VoiceAction.edit => SubscriberAutoAction.edit,
+      VoiceAction.disconnect => SubscriberAutoAction.disconnect,
+      VoiceAction.usage => SubscriberAutoAction.usage,
+      VoiceAction.location => SubscriberAutoAction.location,
+      VoiceAction.sessions => SubscriberAutoAction.sessions,
+      VoiceAction.price => SubscriberAutoAction.price,
+      VoiceAction.sell => SubscriberAutoAction.sell,
+      VoiceAction.note => SubscriberAutoAction.note,
+      VoiceAction.delete => SubscriberAutoAction.deleteHint,
       _ => null,
     };
     Navigator.of(context).pop();
@@ -311,8 +405,173 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         autoAction: auto,
         autoAmount: voiceMoneyActions.contains(intent.action) ? intent.amount : null,
         autoFullDebt: intent.action == VoiceAction.payDebt && intent.fullAmount,
+        autoPrefill: _prefillOf(intent),
+        autoHint: intent.action == VoiceAction.changePackage ? intent.package : null,
       ),
     ));
+  }
+
+  /// ما قيل عن الدفع والمدّة والطريقة ⇒ اختياراتٌ بشاشة التفعيل (يراجعها ويضغط بنفسه). null = لم يُقل شيء.
+  static ActivatePrefill? _prefillOf(VoiceIntent i) {
+    if (i.action != VoiceAction.activate && i.action != VoiceAction.extend) return null;
+    final p = ActivatePrefill(
+      pay: switch (i.payment) {
+        VoicePayment.cash => ActivatePrefillPay.cash,
+        VoicePayment.debt => ActivatePrefillPay.debt,
+        VoicePayment.partial => ActivatePrefillPay.partial,
+        null => null,
+      },
+      paid: i.paid,
+      months: i.months,
+      method: switch (i.method) {
+        VoiceMethod.balance => ActivatePrefillMethod.balance,
+        VoiceMethod.card => ActivatePrefillMethod.card,
+        VoiceMethod.bankCard => ActivatePrefillMethod.bankCard,
+        null => null,
+      },
+    );
+    return p.isEmpty ? null : p;
+  }
+
+  // ───────────────────────── أوامر بلا مشترك ─────────────────────────
+
+  /// «مشترك جديد» — شاشة الإضافة بشروط بندها في «+» (ما لا يخدمه المزوّد لا يُفتح، وبلا صلاحيّته رسالتها).
+  Future<void> _addSubscriber() async {
+    const keys = ['subscribers.add'];
+    if (!permShown(keys) || keys.every(providerHidesAction)) {
+      ScaffoldMessenger.maybeOf(widget.rootContext)
+          ?.showSnackBar(const SnackBar(content: Text('إضافة المشترك غير متاحة لحسابك')));
+      return;
+    }
+    if (!Perms.hasAny(keys)) return showNoPermission(context);
+    final root = widget.rootContext;
+    Navigator.of(context).pop();
+    await showAddSubscriberSheet(root);
+  }
+
+  static const _filterNames = {
+    VoiceListFilter.all: 'كلّ المشتركين',
+    VoiceListFilter.active: 'الفعّالون',
+    VoiceListFilter.online: 'المتّصلون',
+    VoiceListFilter.offline: 'غير المتّصلين',
+    VoiceListFilter.disabled: 'المعطّلون',
+    VoiceListFilter.expired: 'المنتهون',
+    VoiceListFilter.debtors: 'المديونون',
+    VoiceListFilter.nearExpiry: 'قريبو الانتهاء',
+  };
+
+  void _openList(VoiceListFilter f) {
+    final filter = switch (f) {
+      VoiceListFilter.all => SubscriberFilter.all,
+      VoiceListFilter.active => SubscriberFilter.active,
+      VoiceListFilter.online => SubscriberFilter.online,
+      VoiceListFilter.offline => SubscriberFilter.offline,
+      VoiceListFilter.disabled => SubscriberFilter.disabled,
+      VoiceListFilter.expired => SubscriberFilter.expired,
+      VoiceListFilter.debtors => SubscriberFilter.debtors,
+      VoiceListFilter.nearExpiry => SubscriberFilter.nearExpiry,
+    };
+    if (!ShellNav.ready) {
+      ScaffoldMessenger.maybeOf(widget.rootContext)
+          ?.showSnackBar(const SnackBar(content: Text('افتح تبويب «المشتركون» واختر الفلتر من أعلاه')));
+      return;
+    }
+    Navigator.of(context).pop();
+    // فوق صفحةٍ مفتوحة (مشترك، قسم) ⇒ يُرجع للغلاف أوّلاً — التبويب تحتها
+    Navigator.of(widget.rootContext).popUntil((r) => r.isFirst);
+    ShellNav.openSubscribers(filter);
+  }
+
+  /// القسم كما قيل ⇒ (اسمه، وصفه أو سبب قفله، مقفل؟، فتحه). null = لا قسم بهذا الاسم لحسابك.
+  ({String title, String? note, bool locked, String? unavailable, Future<void> Function() open})? _sectionOf(String id) {
+    final root = widget.rootContext;
+    Future<void> tab(int i) async {
+      Navigator.of(context).pop();
+      Navigator.of(root).popUntil((r) => r.isFirst);
+      ShellNav.openTab(i);
+    }
+
+    switch (id) {
+      case 'tab:home':
+        return ShellNav.ready ? (title: 'nav.home'.tr(), note: null, locked: false, unavailable: null, open: () => tab(ShellNav.tabHome)) : null;
+      case 'tab:devices':
+        return ShellNav.ready
+            ? (title: 'nav.devices'.tr(), note: null, locked: false, unavailable: null, open: () => tab(ShellNav.tabDevices))
+            : null;
+      case 'tab:more':
+        return ShellNav.ready ? (title: 'nav.more'.tr(), note: null, locked: false, unavailable: null, open: () => tab(ShellNav.tabMore)) : null;
+      case 'settings':
+        return (
+          title: 'common.settings'.tr(),
+          note: null,
+          locked: false,
+          unavailable: null,
+          open: () async {
+            Navigator.of(context).pop();
+            await Navigator.of(root)
+                .push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen(), fullscreenDialog: true));
+          },
+        );
+    }
+    // قسمٌ من «قوائم أخرى» — بقفله وسببه كبطاقته هناك. الاسم نفسه قد يكون قسم بوّابة الشركة (تذاكر الوطنيّ…)
+    const same = {
+      'tickets': ['tickets', 'national_tickets'],
+      'reports': ['reports', 'national_reports'],
+      'topup': ['topup', 'jtpay'],
+    };
+    final ids = same[id] ?? [id];
+    final modules = buildAppModules();
+    for (final want in ids) {
+      for (final m in modules) {
+        if (m.id != want) continue;
+        return (
+          title: m.title,
+          note: m.subtitle,
+          locked: m.locked,
+          unavailable: m.unavailable,
+          open: () async {
+            Navigator.of(context).pop();
+            await Navigator.of(root).push(MaterialPageRoute<void>(builder: (_) => m.page()));
+          },
+        );
+      }
+    }
+    return null;
+  }
+
+  List<Widget> _sectionResult(VoiceIntent intent) {
+    final sec = _sectionOf(intent.section ?? '');
+    if (sec == null) {
+      return [_box(Text('هذا القسم غير متاح لحسابك', style: AppType.body(color: AppColors.textMid)))];
+    }
+    final off = sec.locked || sec.unavailable != null;
+    return [
+      _actionCard(
+        key: const ValueKey('voice-section'),
+        icon: off ? LucideIcons.lock : LucideIcons.layoutGrid,
+        title: sec.title,
+        lines: [
+          if (sec.unavailable != null)
+            sec.unavailable!
+          else if (sec.locked)
+            'لا صلاحيّة — اطلبها من مديرك'
+          else if ((sec.note ?? '').isNotEmpty)
+            sec.note!,
+        ],
+        button: 'افتح',
+        onTap: off ? () => showNoPermission(context, message: sec.unavailable) : () => unawaited(sec.open()),
+      ),
+    ];
+  }
+
+  void _pickLang(String value) {
+    if (value == _lang) return;
+    unawaited(VoiceLangPref.set(value));
+    setState(() {
+      _pickedLang = value;
+      _langPicked = true;
+      _listening = false;
+    });
   }
 
   Future<void> _openDevice(NetworkDevice d) async {
@@ -372,6 +631,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _input(),
+          _langRow(),
           const SizedBox(height: Sp.md),
           ..._result(),
           // المساعد ثانويّ: قبل الأمر وحين لا يُفهم — لا بجانب كرت تأكيد. حاله من الخادم كزرّه القديم بالرأس.
@@ -450,6 +710,83 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     );
   }
 
+  /// «لغة الكلام»: عربي · English — و«تلقائي» حين يتاح (خادمنا يتعرّفها من النطق). سطرٌ صغير تحت الإدخال؛ النقر يبدأ الاستماع بها.
+  Widget _langRow() {
+    final lang = _lang;
+    return Padding(
+      padding: const EdgeInsets.only(top: Sp.xs),
+      child: Row(children: [
+        Text('لغة الكلام', style: AppType.micro(color: AppColors.textLow)),
+        const SizedBox(width: Sp.sm),
+        for (final o in VoiceLangPref.options)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: Sp.x6),
+            child: Semantics(
+              button: true,
+              selected: o == lang,
+              label: 'لغة الكلام: ${VoiceLangPref.label(o)}',
+              excludeSemantics: true,
+              child: InkWell(
+                key: ValueKey('voice-lang-$o'),
+                onTap: () => _pickLang(o),
+                borderRadius: BorderRadius.circular(R.pill),
+                child: Container(
+                  // ارتفاع اللمس ٣٦: الشريط صغيرٌ بالعين لا بالإصبع
+                  constraints: const BoxConstraints(minHeight: 36),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+                  decoration: BoxDecoration(
+                    color: o == lang ? AppColors.brandSoftBg : Colors.transparent,
+                    borderRadius: BorderRadius.circular(R.pill),
+                    border: Border.all(color: o == lang ? AppColors.brandSoftBorder : AppColors.border),
+                  ),
+                  child: Text(
+                    VoiceLangPref.label(o),
+                    style: AppType.label(color: o == lang ? AppColors.brandOnSoft : AppColors.textMid)
+                        .copyWith(fontSize: 12.5, fontWeight: o == lang ? FontWeight.w700 : FontWeight.w500),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  /// المايك بوضعه: خادمنا (ويندوز دائماً، والهاتف بـ«تلقائي») أو محرّك الهاتف بلغته.
+  Widget _mic() {
+    final lang = _lang;
+    final start = widget.autoListen && (_langPicked || _intent == null);
+    final server = VoiceLangPref.serverOnly || lang == VoiceLangPref.auto;
+    if (server) {
+      return WindowsVoiceButton(
+        key: ValueKey('voice-mic-server-$lang'),
+        controller: _ctrl,
+        autoStart: start,
+        language: lang,
+        settingsName: AppPlatform.isWindows ? 'ويندوز' : 'الهاتف',
+        onListening: (v) {
+          if (mounted) setState(() => _listening = v);
+        },
+        onFinal: _run,
+        onFinalAlts: _runHeard,
+      );
+    }
+    return VoiceSearchButton(
+      key: ValueKey('voice-mic-device-$lang'),
+      controller: _ctrl,
+      size: 24,
+      autoStart: start,
+      language: lang,
+      idleColor: AppColors.brandOnSoft,
+      onListening: (v) {
+        if (mounted) setState(() => _listening = v);
+      },
+      onFinal: _run,
+      onFinalAlts: _runHeard,
+    );
+  }
+
   Widget _input() {
     return Container(
       key: const ValueKey('voice-input'),
@@ -470,7 +807,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             decoration: InputDecoration(
               isDense: true,
               border: InputBorder.none,
-              hintText: _listening ? 'أسمعك…' : 'مثلاً: فعّل علي حسين',
+              hintText: _listening
+                  ? 'أسمعك…'
+                  : (_lang == VoiceLangPref.en ? 'e.g. activate Ali Hussein' : 'مثلاً: فعّل علي حسين'),
               hintStyle: AppType.body(color: AppColors.textLow),
             ),
           ),
@@ -489,25 +828,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             color: _listening ? AppColors.dangerSoftBg : AppColors.brandSoftBg,
           ),
           alignment: Alignment.center,
-          child: AppPlatform.isWindows
-              ? WindowsVoiceButton(
-                  controller: _ctrl,
-                  autoStart: widget.autoListen,
-                  onListening: (v) {
-                    if (mounted) setState(() => _listening = v);
-                  },
-                  onFinal: _run,
-                )
-              : VoiceSearchButton(
-                  controller: _ctrl,
-                  size: 24,
-                  autoStart: widget.autoListen,
-                  idleColor: AppColors.brandOnSoft,
-                  onListening: (v) {
-                    if (mounted) setState(() => _listening = v);
-                  },
-                  onFinal: _run,
-                ),
+          child: _mic(),
         ),
       ]),
     );
@@ -549,6 +870,31 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             lines: const ['تقريرٌ لكلّ جهاز — والسكتر بمشتركيه'],
             button: 'ابدأ الفحص',
             onTap: _checkAll,
+          ),
+        ];
+      case VoiceAction.addSubscriber:
+        return [
+          _actionCard(
+            key: const ValueKey('voice-add-sub'),
+            icon: LucideIcons.userPlus,
+            title: 'dashboard.add_subscriber'.tr(),
+            lines: const ['تُفتح شاشة إضافة المشترك — تملؤها وتحفظ بنفسك'],
+            button: 'افتح',
+            onTap: () => unawaited(_addSubscriber()),
+          ),
+        ];
+      case VoiceAction.openSection:
+        return _sectionResult(intent);
+      case VoiceAction.listSubscribers:
+        final f = intent.filter ?? VoiceListFilter.all;
+        return [
+          _actionCard(
+            key: const ValueKey('voice-list'),
+            icon: LucideIcons.users,
+            title: _filterNames[f]!,
+            lines: const ['قائمة المشتركين بهذا الفلتر'],
+            button: 'افتح القائمة',
+            onTap: () => _openList(f),
           ),
         ];
       case VoiceAction.checkDevice:
@@ -960,24 +1306,51 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       debt,
       if (co != null) 'الشركة: ${co.name}',
     ];
-    final reminder = <String>[
+    // ما قيل عن الدفع والمدّة والطريقة — يظهر مختاراً بشاشة التفعيل (١٠ نوفمبر: «تفعيل جزئي»)، ويُراجَع هناك قبل الضغط
+    final said = <String>[
+      if (intent.payment == VoicePayment.partial)
+        intent.paid != null ? 'جزئي — دفع ${formatIQD(intent.paid!)} والباقي دين' : 'جزئي',
+      if (intent.payment == VoicePayment.debt) 'دين',
+      if (intent.payment == VoicePayment.cash) 'نقدي',
       if (intent.months != null)
         intent.months == 1
             ? 'شهر'
             : intent.months == 2
                 ? 'شهرين'
                 : '${intent.months} اشهر',
-      if (intent.payment == VoicePayment.debt) 'بالدين',
-      if (intent.payment == VoicePayment.cash) 'نقد',
+      if (intent.method == VoiceMethod.card) 'بالكارت',
+      if (intent.method == VoiceMethod.bankCard) 'بالبطاقة',
+      if (intent.method == VoiceMethod.balance) 'بالرصيد',
     ];
-    if (reminder.isNotEmpty) lines.add('قلت: ${reminder.join(' ')} — تختارها بشاشة التفعيل');
+    if (said.isNotEmpty) {
+      lines.add(intent.action == VoiceAction.extend
+          ? 'قلت: ${said.join(' · ')} — تختارها بشاشة التمديد'
+          : 'قلت: ${said.join(' · ')} — تظهر مختارةً بشاشة التفعيل');
+    }
+    if (intent.needsPaid) lines.add('كم دفع؟ قل المبلغ أو اكتبه هنا — أو أكمِله بشاشة التفعيل');
+    if (intent.looseAmount != null) {
+      lines.add('المبلغ ${formatIQD(intent.looseAmount!)} ما انربط بشي — قل «دفع …» إن كان مدفوعاً');
+    }
+    if (intent.action == VoiceAction.changePackage) {
+      lines.add(intent.package.isEmpty
+          ? 'الباقة تختارها بشاشة التعديل'
+          : 'الباقة المطلوبة: «${intent.package}» — تختارها بشاشة التعديل');
+    }
+    if (intent.action == VoiceAction.price && intent.amount != null) {
+      lines.add('قلت: ${formatIQD(intent.amount!)} — تكتبه بنافذة السعر');
+    }
+    if (intent.action == VoiceAction.delete) lines.add('الحذف نهائيّ — يبقى بيدك من «المزيد» بصفحته');
     // المبلغ كما فُهم — بخانة النافذة ويُصحَّح هناك (٧ نوفمبر: «العمليات المهمه كلها»)
     final amount = intent.amount;
     if (voiceMoneyActions.contains(intent.action)) {
-      if (intent.action == VoiceAction.payDebt && intent.fullAmount && s.hasDebt) {
+      if (intent.action == VoiceAction.payDebt && !s.hasDebt) {
+        // «ما عليه دين» قيلت أعلاه — لا مبلغ يُسأل عنه
+      } else if (intent.action == VoiceAction.payDebt && intent.fullAmount && s.hasDebt) {
         lines.add('المبلغ: الدين كلّه ${formatIQD(s.debtAbs.round())}');
       } else if (amount != null) {
         lines.add('المبلغ: ${formatIQD(amount)}');
+      } else if (intent.needsAmount) {
+        lines.add('المبلغ؟ قله أو اكتبه هنا — أو اكتبه بالنافذة');
       } else {
         lines.add('المبلغ تكتبه بالنافذة');
       }
@@ -1000,6 +1373,16 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       VoiceAction.movements => ('سجل الحركات', LucideIcons.history),
       VoiceAction.call => ('اتّصل', LucideIcons.phone),
       VoiceAction.whatsapp => ('واتساب', LucideIcons.messageCircle),
+      VoiceAction.extend => ('مدّد', LucideIcons.calendarPlus),
+      VoiceAction.changePackage => ('غيّر الباقة', LucideIcons.package),
+      VoiceAction.edit => ('عدّل', LucideIcons.pencil),
+      VoiceAction.disconnect => ('افصل', LucideIcons.power),
+      VoiceAction.usage => ('الاستهلاك', LucideIcons.chartLine),
+      VoiceAction.location => ('الموقع', LucideIcons.mapPin),
+      VoiceAction.sessions => ('سجلّ الجلسات', LucideIcons.wifi),
+      VoiceAction.price => ('السعر الثابت', LucideIcons.banknote),
+      VoiceAction.sell => ('بيع مادّة', LucideIcons.shoppingCart),
+      VoiceAction.note => ('الملاحظة', LucideIcons.notebookPen),
       _ => ('افتح المشترك', LucideIcons.userRound),
     };
     return _actionCard(
@@ -1008,7 +1391,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       title: name,
       lines: lines,
       button: button,
-      warn: intent.action == VoiceAction.disable,
+      warn: intent.action == VoiceAction.disable || intent.action == VoiceAction.disconnect,
       onTap: () => _openSubscriber(s, intent),
     );
   }

@@ -53,6 +53,12 @@ class AiAssistantState {
     return s != null && s.enabled && s.voice && s.mode == AiMode.company;
   }
 
+  /// وضع «تلقائي» للأمر الصوتيّ على الهاتف (التسجيل لخادمنا) مفتوحٌ لهذه المنصّة.
+  static bool get voiceAuto {
+    final s = gate.value;
+    return voice && s != null && s.voiceAuto;
+  }
+
   /// زرّ «اشرحلي» يظهر.
   static bool get canExplain => gate.value?.canExplain ?? false;
 

@@ -36,6 +36,7 @@ import '../services/notification_router.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
 import 'top_actions.dart';
+import 'shell_nav.dart';
 import '../core/platform/desktop_layout.dart';
 import 'desktop/desktop_shell.dart';
 import '../core/widgets/app_sheet.dart';
@@ -354,6 +355,8 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     NotificationRouter.onDestination = _handleNotificationDestination;
+    // «الأمر الصوتي ٢»: «المشتركين المنتهين» / «افتح الأجهزة» — التبويب من ورقته
+    ShellNav.attach(this, subscribers: _openSubscribers, tab: _setTab);
     // الشاشة الأولى بُنيت والجلسة قائمة — نفّذ نقرةً محفوظة إن وُجدت.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationRouter.markReady();
@@ -389,6 +392,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    ShellNav.detach(this);
     DeviceWarmService.stop(this);
     authExpiredSignal.removeListener(_onAuthExpired);
     accessBlockedSignal.removeListener(_onAccessBlocked);

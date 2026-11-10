@@ -120,8 +120,9 @@ bool sendsExpiration({
 /// sheet pops + notifyChange so the open detail screen re-fetches.
 Future<bool?> showEditSubscriberSheet(
   BuildContext context,
-  Subscriber sub,
-) {
+  Subscriber sub, {
+  String? voiceNote,
+}) {
   if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
@@ -129,13 +130,17 @@ Future<bool?> showEditSubscriberSheet(
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _EditSheet(sub: sub),
+    builder: (_) => _EditSheet(sub: sub, voiceNote: voiceNote),
   );
 }
 
 class _EditSheet extends StatefulWidget {
-  const _EditSheet({required this.sub});
+  const _EditSheet({required this.sub, this.voiceNote});
   final Subscriber sub;
+
+  /// «الأمر الصوتي ٢» (١٠ نوفمبر): ما قيل («غيّر باقة علي الى فايبر ٥٠») سطراً أعلى الشاشة — تذكيرٌ وحده؛ الباقة يختارها الوكيل
+  /// بيده من حقلها (أسماء الباقات لا تُخمَّن من النطق).
+  final String? voiceNote;
 
   @override
   State<_EditSheet> createState() => _EditSheetState();
@@ -995,6 +1000,26 @@ class _EditSheetState extends State<_EditSheet> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
         children: [
+          if (widget.voiceNote != null) ...[
+            Container(
+              key: const ValueKey('edit-voice-note'),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: AppTone.brand.softBg,
+                borderRadius: BorderRadius.circular(R.lg),
+                border: Border.all(color: AppTone.brand.softBorder),
+              ),
+              child: Row(children: [
+                Icon(LucideIcons.mic, size: 16, color: AppTone.brand.fill),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(widget.voiceNote!,
+                      maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppTone.brand.onSoft)),
+                ),
+              ]),
+            ),
+            const SizedBox(height: Sp.md),
+          ],
           const _FieldLabel(label: 'اسم المستخدم'),
           _Field(
             controller: _username,

@@ -152,7 +152,7 @@ void main() {
     await settle(t, ms: 300);
     expect(find.byKey(const ValueKey('voice-sub-card')), findsOneWidget);
     expect(find.text('فعّل'), findsOneWidget);
-    expect(find.textContaining('قلت: شهرين بالدين'), findsOneWidget, reason: 'المدّة والدفع تذكيرٌ — تُختار بشاشة التفعيل');
+    expect(find.textContaining('قلت: دين · شهرين'), findsOneWidget, reason: 'ما قيل عن الدفع والمدّة — يظهر مختاراً بشاشة التفعيل (١٠ نوفمبر)');
     // اسمٌ لا يُعرف
     await say(t, 'طفي سجاد الموسوي');
     expect(find.textContaining('ما لكيت مشترك باسم «سجاد الموسوي»'), findsOneWidget);
@@ -185,11 +185,12 @@ void main() {
     await open(t);
     await say(t, 'سدد دين علي حسين');
     expect(find.text('سدّد الدين'), findsOneWidget);
-    expect(find.text('المبلغ تكتبه بالنافذة'), findsOneWidget);
+    expect(find.text('ما عليه دين'), findsOneWidget, reason: 'الكرت يقولها قبل الفتح — ولا مبلغ يُسأل عنه');
+    expect(find.textContaining('المبلغ'), findsNothing);
     await t.tap(find.byKey(const ValueKey('voice-confirm')));
     await settle(t, ms: 2500);
     expect(t.widget<SubscriberDetailScreen>(find.byType(SubscriberDetailScreen)).autoAction, SubscriberAutoAction.payDebt);
-    expect(find.text('ما عليه دين'), findsOneWidget);
+    expect(find.text('ما عليه دين'), findsWidgets);
     await close(t);
   });
 

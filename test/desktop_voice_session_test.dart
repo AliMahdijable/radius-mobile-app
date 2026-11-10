@@ -136,6 +136,42 @@ void main() {
     await Future<void>.delayed(Duration.zero); s.dispose();
   });
 
+  test('١٠ نوفمبر: اللغة المطلوبة تُرسل، ولغة ما فُهم وبدائله تصل نظيفةً بلا تكرار — والأوّل ما يُكتب', () async {
+    final c = Capture();
+    final heard = <VoiceTranscript>[];
+    final asked = <String>[];
+    final s = DesktopVoiceSession(captureFactory: () => c, scope: () async => 'owner:1', language: 'auto',
+      onText: (_) => fail('onTranscript يُنادى بدله'), onTranscript: heard.add, onError: (e) => fail(e),
+      transcribeFull: (wav, cancel, language) async {
+        asked.add(language);
+        return const VoiceTranscript('Activate Ali Hassan.', lang: 'en',
+            alts: ['Activate Ali Hassan.', 'Activate Ali Hussein', '  ', 'Activate Ali Hussein.']);
+      });
+    await s.start(); c.stream.add(speech()); await s.stop();
+    expect(asked, ['auto']);
+    expect(heard.single.text, 'Activate Ali Hassan');
+    expect(heard.single.lang, 'en');
+    expect(heard.single.alts, ['Activate Ali Hassan', 'Activate Ali Hussein']);
+    final intent = VoiceCommand.parse(heard.single.alts.last);
+    expect([intent.action, intent.query, intent.lang], [VoiceAction.activate, 'ali hussein', 'en']);
+    // اللغة تُقرأ لحظة الإرسال — تبديلها بين تسجيلين يسري على التالي
+    s.language = 'ar';
+    await s.start(); c.stream.add(speech()); await s.stop();
+    expect(asked, ['auto', 'ar']);
+    s.dispose();
+  });
+
+  test('ردّ الخادم: الجديد بلغته وبدائله، والأقدم (نصٌّ وحده) كما كان', () {
+    final now = transcriptOf({
+      'success': true, 'text': ' فعّل علي حسين ', 'lang': 'ar',
+      'alts': [{'lang': 'ar', 'text': 'فعّل علي حسين'}, {'lang': 'en', 'text': 'Fail Ali Hussein'}, {'lang': 'ar', 'text': ''}, 7],
+    });
+    expect([now.text, now.lang, now.alts], ['فعّل علي حسين', 'ar', ['فعّل علي حسين', 'Fail Ali Hussein']]);
+    final old = transcriptOf({'success': true, 'text': 'فعّل علي حسين'});
+    expect([old.text, old.lang, old.alts], ['فعّل علي حسين', null, <String>[]]);
+    expect(transcriptOf({'success': true, 'text': 'x', 'lang': 'fr'}).lang, isNull, reason: 'لغةٌ غير العربيّة والإنكليزيّة لا تُعتمد');
+  });
+
   test('typed Arabic and ASR Arabic use the same parser', () {
     for (final phrase in ['فعّل علي حسين', 'فعل علي حسين', 'فعّل، علي، حسين.']) {
       final intent = VoiceCommand.parse(phrase);

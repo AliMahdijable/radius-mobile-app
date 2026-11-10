@@ -171,6 +171,27 @@ class VoiceResolver {
     if (user == compact || user == q.text) at(100);
     if (compact.length >= 3 && user.startsWith(compact)) at(72);
     if (compact.length >= 3 && user.contains(compact)) at(55);
+    // اليوزر بكلماته («ali hussein» ⇔ ali.hussein — الفهم يحوّل نقطته مسافة)
+    final userWords = user.split(_userSplit).where((w) => w.isNotEmpty).toList();
+    if (userWords.length > 1 && compact.length >= 3) {
+      final flat = userWords.join();
+      if (flat == compact) at(98);
+      if (flat.startsWith(compact)) at(72);
+    }
+    if (q.digits.isEmpty && q.letters.isNotEmpty && userWords.isNotEmpty) {
+      final parts = [for (final w in userWords) w.replaceAll(RegExp(r'\d+'), '')].where((w) => w.isNotEmpty).toList();
+      var hit = 0;
+      var ordered = true;
+      var lastAt = -1;
+      for (final w in q.letters) {
+        final i = _wordIndex(parts, w, from: 0);
+        if (i < 0) continue;
+        hit++;
+        if (i < lastAt) ordered = false;
+        lastAt = i;
+      }
+      if (hit == q.letters.length) at(ordered ? 86 : 80);
+    }
     // الاسم: كامله، ثمّ كلّ كلمة بداية كلمةٍ منه (بالترتيب أعلى)
     if (full.isNotEmpty && _bare(full) == _bare(q.text)) at(95);
     // كلمات الحروف وحدها تُطابَق بالاسم (الأرقام لليوزر)
@@ -193,6 +214,43 @@ class VoiceResolver {
         }
       }
     }
+    // الاسم بلغةٍ والمنطوق بأخرى: «ali hussein» ⇔ «علي حسين» كلمةً كلمة بالهيكل الصوتيّ (١٠ نوفمبر — الأمر بالإنكليزيّة)
+    var crossHit = 0;
+    if (nameWords.isNotEmpty && q.letters.isNotEmpty && letterHit < q.letters.length) {
+      var fuzzy = 0;
+      var bonus = 0;
+      var ordered = true;
+      var lastAt = -1;
+      for (final w in q.letters) {
+        var at0 = _wordIndex(nameWords, w, from: 0);
+        var grade = at0 >= 0 ? 2 : 0;
+        if (grade == 0) {
+          for (var i = 0; i < nameWords.length; i++) {
+            final g = phoneticMatch(w, nameWords[i]);
+            if (g > grade) {
+              grade = g;
+              at0 = i;
+              if (g == 2) break;
+            }
+          }
+          if (grade == 2 && _longVowelAgree(w, nameWords[at0])) bonus = 3;
+        }
+        if (grade == 0) continue;
+        crossHit++;
+        if (grade == 1) fuzzy++;
+        if (at0 < lastAt) ordered = false;
+        lastAt = at0;
+      }
+      if (q.digits.isEmpty) {
+        if (crossHit == q.letters.length) {
+          // التقريبيّ (حرفٌ مختلف) لا يُجزم به وحده
+          at((ordered ? 84 : 78) - 6 * fuzzy + bonus);
+        } else if (crossHit > 0) {
+          at(40 + 15 * crossHit ~/ q.letters.length);
+        }
+      }
+    }
+    if (crossHit > letterHit) letterHit = crossHit;
     // الأرقام في الجملة («علي 77») يجب أن تكون في اليوزر — وتحسم بين «علي»ات
     if (q.digits.isNotEmpty) {
       final hasAll = q.digits.every(user.contains);
@@ -251,13 +309,20 @@ class VoiceResolver {
         if (sc < 90 && d.ip == query.trim()) sc = 100;
         if (q.words.isNotEmpty) {
           var hit = 0;
+          var cross = 0;
           for (final w in q.words) {
-            if (_wordIndex(words, w, from: 0) >= 0 || name.contains(w)) hit++;
+            if (_wordIndex(words, w, from: 0) >= 0 || name.contains(w)) {
+              hit++;
+            } else if (_crossDeviceWord(words, w)) {
+              // "check sector north" ⇔ «سكتر الشمال»، "karrada" ⇔ «الكرادة»
+              cross++;
+            }
           }
-          if (hit == q.words.length) {
-            sc = sc < 85 ? 85 : sc;
-          } else if (hit > 0 && sc < 50) {
-            sc = 40 + 20 * hit ~/ q.words.length;
+          if (hit + cross == q.words.length) {
+            final full = cross > 0 ? 80 : 85;
+            sc = sc < full ? full : sc;
+          } else if (hit + cross > 0 && sc < 50) {
+            sc = 40 + 20 * (hit + cross) ~/ q.words.length;
           }
         }
         if (q.digits.isNotEmpty && !q.digits.every((x) => name.contains(x) || d.ip.endsWith(x))) sc = sc ~/ 2;
@@ -286,9 +351,126 @@ class VoiceResolver {
     return -1;
   }
 
+  static final _userSplit = RegExp('[^a-z0-9\u0621-\u064A]+');
+  static final _arabicLetter = RegExp('[\u0621-\u064A\u067E\u0686\u06A4\u06AF]');
+  static final _latinLetter = RegExp('[a-z]');
+
+  /// اتّجاهاتٌ وصفاتٌ تُسمّى بها الأجهزة — المنطوق الإنكليزيّ يطابق الاسم العربيّ.
+  static const _deviceTerms = {
+    'north': 'شمال', 'northern': 'شمال', 'south': 'جنوب', 'southern': 'جنوب', 'east': 'شرق', 'eastern': 'شرق',
+    'west': 'غرب', 'western': 'غرب', 'center': 'مركز', 'centre': 'مركز', 'central': 'مركز', 'middle': 'وسط',
+    'main': 'رييسي', 'old': 'قديم', 'new': 'جديد', 'tower': 'برج', 'first': 'اول', 'second': 'ثاني', 'third': 'ثالث',
+  };
+
+  static bool _crossDeviceWord(List<String> nameWords, String w) {
+    final b = _bare(w);
+    final ar = _deviceTerms[b];
+    for (final x in nameWords) {
+      if (ar != null && x.startsWith(ar)) return true;
+      final back = _deviceTerms[x];
+      if (back != null && b.startsWith(back)) return true;
+      if (phoneticMatch(b, x) == 2) return true;
+    }
+    return false;
+  }
+
+  /// كلمتان بلغتين (عربيّة ولاتينيّة) تُنطقان واحدة؟ ٢ = مطابقة، ١ = تقريبيّة (حرفٌ ساكن مختلف — «kazem» ⇔ «كاظم»)، ٠ = لا.
+  /// الهيكل القصير (ساكنٌ أو اثنان: «علي» = L) يُشترط له اتّفاق أوّل الكلمة وآخرها — وإلّا طابق «ali» «ليلى» و«علا».
+  static int phoneticMatch(String a, String b) {
+    final aAr = _arabicLetter.hasMatch(a);
+    final bAr = _arabicLetter.hasMatch(b);
+    if (aAr == bAr) return 0;
+    final ar = _bare(aAr ? a : b);
+    final la = (aAr ? b : a).toLowerCase().replaceAll(RegExp('[^a-z]'), '');
+    if (ar.isEmpty || la.isEmpty) return 0;
+    final ska = wordSkeleton(ar);
+    if (ska.isEmpty) return 0;
+    var best = 0;
+    // «alhilli» ⇔ «الحلي»: أداة التعريف ملصوقةً باللاتينيّة
+    final forms = [la, if (la.length > 4 && (la.startsWith('al') || la.startsWith('el'))) la.substring(2)];
+    for (final f in forms) {
+      final skl = wordSkeleton(f);
+      if (skl.isEmpty) continue;
+      if (ska == skl) {
+        if (ska.length >= 3 || _edgesAgree(ar, f)) return 2;
+      } else if (ska.length >= 3 && skl.length >= 3 && _oneEdit(ska, skl)) {
+        best = 1;
+      }
+    }
+    return best;
+  }
+
+  /// هيكل كلمةٍ واحدة — كـ[arabicSkeleton]/[latinSkeleton] مع إسقاط التاء المربوطة/الهاء الأخيرة (تُكتب a/ah باللاتينيّة).
+  static String wordSkeleton(String w) {
+    if (_arabicLetter.hasMatch(w)) {
+      final x = w.length > 2 && w.endsWith('ه') ? w.substring(0, w.length - 1) : w;
+      return arabicSkeleton(x);
+    }
+    var x = w.toLowerCase().replaceAll(RegExp('[^a-z]'), '').replaceAll('ph', 'f');
+    if (x.length > 3 && (x.endsWith('ah') || x.endsWith('eh'))) x = x.substring(0, x.length - 1);
+    return latinSkeleton(x);
+  }
+
+  /// أوّل الكلمة (صائتٌ/ساكن) وآخرها (ي ⇔ i/y/a، ا ⇔ a، ه ⇔ a/ah، ساكنٌ ⇔ ساكن) متّفقان بين الكتابتين.
+  static bool _edgesAgree(String ar, String la) {
+    const vowels = 'aeiou';
+    final a0 = ar[0];
+    final l0 = la[0];
+    final arOpen = a0 == 'ا' || a0 == 'ع' || a0 == 'ء';
+    if (arOpen != vowels.contains(l0)) {
+      final glide = (a0 == 'و' && 'wou'.contains(l0)) || (a0 == 'ي' && 'yiej'.contains(l0));
+      if (!glide) return false;
+    }
+    final aN = ar[ar.length - 1];
+    final lN = la[la.length - 1];
+    return switch (aN) {
+      'ي' => 'iyea'.contains(lN) || la.endsWith('ah'),
+      'ا' => lN == 'a' || la.endsWith('ah'),
+      'ه' => 'ae'.contains(lN) || la.endsWith('ah') || la.endsWith('eh') || lN == 't',
+      'و' => 'ouw'.contains(lN),
+      _ => !vowels.contains(lN),
+    };
+  }
+
+  /// «hussein» ⇔ «حسين» (ياءٌ ممدودة بالكتابتين) — يقدّمه على «حسن».
+  static bool _longVowelAgree(String a, String b) {
+    final ar = _arabicLetter.hasMatch(a) ? a : b;
+    final la = (_arabicLetter.hasMatch(a) ? b : a).toLowerCase();
+    if (!_latinLetter.hasMatch(la)) return false;
+    final arLong = ar.length > 1 && ar.substring(1).contains('ي');
+    final laLong = RegExp('ee|ei|ie|ey|ai|ay').hasMatch(la) || la.endsWith('i') || la.endsWith('y');
+    return arLong && laLong;
+  }
+
+  /// هيكلان بينهما حرفٌ واحد (تبديلٌ أو زيادة أو نقص).
+  static bool _oneEdit(String a, String b) {
+    if ((a.length - b.length).abs() > 1) return false;
+    var i = 0;
+    var j = 0;
+    var edits = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] == b[j]) {
+        i++;
+        j++;
+        continue;
+      }
+      if (++edits > 1) return false;
+      if (a.length > b.length) {
+        i++;
+      } else if (b.length > a.length) {
+        j++;
+      } else {
+        i++;
+        j++;
+      }
+    }
+    return edits + (a.length - i) + (b.length - j) <= 1;
+  }
+
   static VoiceQuery _prep(String query) {
     final text = _bare(_norm(query)).replaceAll(RegExp(r'\s+'), ' ').trim();
-    final words = text.isEmpty ? const <String>[] : text.split(' ');
+    // «ali al hussein» — أداة التعريف اللاتينيّة قائمةً بنفسها ليست كلمة اسم
+    final words = text.isEmpty ? const <String>[] : text.split(' ').where((w) => w != 'al' && w != 'el').toList();
     final digits = <String>[];
     final letters = <String>[];
     for (final w in words) {

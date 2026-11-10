@@ -139,6 +139,7 @@ class AiStatus {
     this.lockedText,
     this.mode = AiMode.none,
     this.voice = false,
+    this.voiceAuto = false,
   });
 
   /// المطفأ — والافتراضيّ لكلّ ما لا يقوله الخادم صراحةً.
@@ -165,6 +166,10 @@ class AiStatus {
 
   /// «الأوامر الصوتيّة» (٦ نوفمبر) مفتوحةٌ لهذا الحساب — زرّ المايك بالأعلى. الخادم يقولها لجلسة الشركة وحدها.
   final bool voice;
+
+  /// «الأمر الصوتي ٢» (١٠ نوفمبر): وضع «تلقائي» على الهاتف — التسجيل لخادمنا فيتعرّف العربيّة والإنكليزيّة من النطق. الخادم
+  /// يفتحه لكلّ منصّة (مطفأ ⇒ الهاتف بمحرّكه كما كان، بلغةٍ يختارها الوكيل).
+  final bool voiceAuto;
 
   bool get usable => enabled && canUse == true;
 
@@ -198,6 +203,7 @@ class AiStatus {
       lockedText: _str(j['locked_text']),
       mode: mode,
       voice: j['voice'] == true,
+      voiceAuto: j['voice_auto'] == true,
     );
   }
 
@@ -216,6 +222,7 @@ class AiStatus {
         lockedText: lockedText,
         mode: mode,
         voice: voice,
+        voiceAuto: voiceAuto,
       );
 }
 

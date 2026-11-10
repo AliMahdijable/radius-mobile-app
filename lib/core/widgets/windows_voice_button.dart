@@ -7,18 +7,31 @@ import '../../services/ai_consent.dart';
 import '../../services/voice/desktop_voice_session.dart';
 import '../../theme/colors.dart';
 
-/// Arabic command dictation on Windows. Mobile keeps its system recognizer.
+/// Command dictation through our server: always on Windows; on phones only in the «تلقائي» language mode (the system
+/// recognizer hears one language per session — ours detects Arabic/English from the speech itself).
 class WindowsVoiceButton extends StatefulWidget {
   const WindowsVoiceButton(
       {super.key,
       required this.controller,
       required this.onFinal,
+      this.onFinalAlts,
       this.onListening,
-      this.autoStart = false});
+      this.autoStart = false,
+      this.language = 'auto',
+      this.settingsName = 'ويندوز'});
   final TextEditingController controller;
   final ValueChanged<String> onFinal;
+
+  /// النصّ مع بدائل ما سُمع (الأوّل = ما يُكتب) — يُنادى بدل [onFinal] حين يُعطى.
+  final ValueChanged<List<String>>? onFinalAlts;
   final ValueChanged<bool>? onListening;
   final bool autoStart;
+
+  /// auto (العربيّة والإنكليزيّة من النطق) أو ar أو en.
+  final String language;
+
+  /// «إعدادات ويندوز» / «إعدادات الهاتف» برسالة صلاحيّة الميكروفون.
+  final String settingsName;
   @override
   State<WindowsVoiceButton> createState() => _WindowsVoiceButtonState();
 }
@@ -35,12 +48,24 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
-    _session = DesktopVoiceSession(onText: (text) {
-      if (!mounted) return;
-      widget.controller.value = TextEditingValue(
-          text: text, selection: TextSelection.collapsed(offset: text.length));
-      widget.onFinal(text);
-    }, onError: (message) {
+    _session = DesktopVoiceSession(
+        language: widget.language,
+        settingsName: widget.settingsName,
+        onText: (_) {},
+        onTranscript: (heard) {
+          if (!mounted) return;
+          final text = heard.text;
+          widget.controller.value = TextEditingValue(
+              text: text,
+              selection: TextSelection.collapsed(offset: text.length));
+          final withAlts = widget.onFinalAlts;
+          if (withAlts != null) {
+            withAlts(heard.alts.isEmpty ? [text] : heard.alts);
+          } else {
+            widget.onFinal(text);
+          }
+        },
+        onError: (message) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
@@ -58,6 +83,12 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
     if (!mounted) return;
     setState(() {});
     widget.onListening?.call(_session.phase == DesktopVoicePhase.listening);
+  }
+
+  @override
+  void didUpdateWidget(covariant WindowsVoiceButton old) {
+    super.didUpdateWidget(old);
+    if (old.language != widget.language) _session.language = widget.language;
   }
 
   @override
@@ -84,7 +115,7 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
         final accepted = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-                  title: const Text('تحويل الصوت إلى نص عربي'),
+                  title: const Text('تحويل الصوت إلى نص'),
                   content: const Text(
                       'يُرسل صوتك إلى خادم MyServices لتحويله إلى نص، من دون حفظ التسجيل. يمكنك مراجعة النص، ولا تُنفّذ أي عملية تلقائياً.'),
                   actions: [
@@ -129,10 +160,14 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
     final listening = _session.phase == DesktopVoicePhase.listening;
     return Tooltip(
         message: busy
-            ? 'أحوّل الصوت إلى نص عربي…'
+            ? 'أحوّل الصوت إلى نص…'
             : listening
                 ? 'إنهاء التسجيل'
-                : 'أمر صوتي بالعربي',
+                : switch (widget.language) {
+                    'ar' => 'أمر صوتي بالعربي',
+                    'en' => 'أمر صوتي بالإنكليزي',
+                    _ => 'أمر صوتي — عربي أو إنكليزي',
+                  },
         child: InkResponse(
             onTap: busy ? null : _toggle,
             radius: 20,

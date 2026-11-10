@@ -20,9 +20,11 @@ class VoiceSearchButton extends StatefulWidget {
     this.size = 20,
     this.onResult,
     this.onFinal,
+    this.onFinalAlts,
     this.onListening,
     this.autoStart = false,
     this.idleColor,
+    this.language = 'ar',
   });
 
   final TextEditingController controller;
@@ -33,6 +35,13 @@ class VoiceSearchButton extends StatefulWidget {
 
   /// النصّ النهائيّ وحده (انتهى الكلام) — «الأمر الصوتيّ» ينفّذ عنده لا مع كلّ كلمة.
   final ValueChanged<String>? onFinal;
+
+  /// النصّ النهائيّ مع بدائل المحرّك لما سمع (الأوّل = ما يُكتب) — «الأمر الصوتيّ» يختار منها ما يطابق مشتركاً. يُنادى بدل
+  /// [onFinal] حين يُعطى.
+  final ValueChanged<List<String>>? onFinalAlts;
+
+  /// لغة الإملاء: ar (كما كان) أو en — محرّك الهاتف يسمع لغةً واحدة في الجلسة (١٠ نوفمبر: «الأمر الصوتي ٢»).
+  final String language;
 
   /// بدأ/توقّف الاستماع — لشاشةٍ تعرض «أسمعك…».
   final ValueChanged<bool>? onListening;
@@ -55,6 +64,11 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
   /// أفضل لغة عربيّة يُعلنها الجهاز فعلاً — لا 'ar' مفترضة.
   String? _arLocale;
 
+  /// أفضل إنكليزيّة يُعلنها الجهاز (en-US ثمّ en-GB ثمّ أيّ en) — للأمر بالإنكليزيّة.
+  String? _enLocale;
+
+  bool get _command => widget.onFinal != null || widget.onFinalAlts != null;
+
   /// التهيئة تطلب إذنَي الميكروفون والتعرّف على الكلام، فتؤجَّل إلى أوّل ضغطةٍ
   /// على الزرّ: كانت في initState فيظهر الطلب بمجرّد فتح شاشة المشتركين قبل
   /// أيّ نيّةٍ للبحث الصوتيّ (App Store 5.1.1 — الإذن في سياقه).
@@ -67,6 +81,16 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !_listening) _toggle();
       });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant VoiceSearchButton old) {
+    super.didUpdateWidget(old);
+    // تبدّلت اللغة والمايك يسمع بالقديمة ⇒ يُلغى (لا نصّ بلغةٍ لم تُطلب)
+    if (old.language != widget.language && _listening) {
+      _speech.cancel();
+      _setListening(false);
     }
   }
 
@@ -122,7 +146,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
   String? _messageFor(String msg) {
     if (msg.contains('language-not-supported') ||
         msg.contains('error_language_not_supported')) {
-      return 'العربية غير مدعومة في المحرّك الحالي. الحلّ:\n'
+      return '${widget.language == 'en' ? 'الإنكليزية' : 'العربية'} غير مدعومة في المحرّك الحالي. الحلّ:\n'
           'Settings → Apps → Default apps → Digital assistant → Google';
     }
     if (msg.contains('error_client') ||
@@ -166,8 +190,25 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
             orElse: () => null,
           );
       _arLocale = pick;
+      // الإنكليزيّة: الوسم قد يأتي en_US أو en-US حسب المنصّة
+      String? en;
+      for (final want in ['en-us', 'en-gb']) {
+        for (final id in ids) {
+          if (id.toLowerCase().replaceAll('_', '-') == want) {
+            en = id;
+            break;
+          }
+        }
+        if (en != null) break;
+      }
+      en ??= ids.cast<String?>().firstWhere(
+            (id) => id!.toLowerCase().startsWith('en'),
+            orElse: () => null,
+          );
+      _enLocale = en;
     } catch (_) {
       _arLocale = null;
+      _enLocale = null;
     }
   }
 
@@ -204,7 +245,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
     _setListening(true);
     // 'ar' احتياطاً حين يفشل الاستكشاف: أجهزة بمحرّك خاصّ تشترط
     // localeId وترفض null، ومعظمها يقبل الرمز العامّ.
-    final locale = _arLocale ?? 'ar';
+    final locale = widget.language == 'en' ? (_enLocale ?? 'en-US') : (_arLocale ?? 'ar');
     try {
       await _speech.listen(
         onResult: (r) {
@@ -221,8 +262,19 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
           widget.onResult?.call(txt);
           if (r.finalResult) {
             _setListening(false);
-            widget.onFinal?.call(txt);
-          } else if (widget.onFinal != null && _speech.isListening) {
+            final withAlts = widget.onFinalAlts;
+            if (withAlts != null) {
+              // بدائل المحرّك لما سمع — بلا ترقيمها الأخير وبلا تكرار، وما كُتب أوّلها
+              final alts = <String>[txt];
+              for (final a in r.alternates) {
+                final t = a.recognizedWords.trim().replaceAll(RegExp(r'''[.,;:!?،؛؟"']+$'''), '').trim();
+                if (t.isNotEmpty && !alts.contains(t)) alts.add(t);
+              }
+              withAlts(alts.take(4).toList());
+            } else {
+              widget.onFinal?.call(txt);
+            }
+          } else if (_command && _speech.isListening) {
             // iOS dictation can keep producing partial text without isFinal.
             // Stop after a short pause; the package then delivers its final
             // result (or its existing last-partial fallback). Give the first
@@ -236,9 +288,8 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
           cancelOnError: true,
           listenMode: ListenMode.dictation,
           onDevice: false,
-          pauseFor: widget.onFinal != null ? const Duration(seconds: 8) : null,
-          listenFor:
-              widget.onFinal != null ? const Duration(seconds: 15) : null,
+          pauseFor: _command ? const Duration(seconds: 8) : null,
+          listenFor: _command ? const Duration(seconds: 15) : null,
         ),
       );
     } catch (e) {

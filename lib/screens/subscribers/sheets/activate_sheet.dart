@@ -58,7 +58,7 @@ import '../../../widgets/merged_write_lock.dart';
 ///
 /// Returns true on success so callers (subscribers list, detail screen)
 /// can refresh their cached rows.
-Future<bool?> showActivateSheet(BuildContext context, Subscriber sub) {
+Future<bool?> showActivateSheet(BuildContext context, Subscriber sub, {ActivatePrefill? prefill}) {
   if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
@@ -66,13 +66,37 @@ Future<bool?> showActivateSheet(BuildContext context, Subscriber sub) {
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _ActivateSheet(sub: sub),
+    builder: (_) => _ActivateSheet(sub: sub, prefill: prefill),
   );
 }
 
+/// نوع الدفع كما قاله الوكيل بالأمر الصوتيّ.
+enum ActivatePrefillPay { cash, debt, partial }
+
+/// طريقة الدفع للشركة كما قالها: رصيده، كارت تعبئة، أو بطاقة مصرفيّة (الوطنيّ).
+enum ActivatePrefillMethod { balance, card, bankCard }
+
+/// «الأمر الصوتي ٢» (١٠ نوفمبر — المالك: «تفعيل جزئي»): ما قاله الوكيل («فعّل علي جزئي ١٠ الاف»، «نقد»، «بالكارت»، «شهرين»)
+/// يظهر **مختاراً** بالشاشة حين تُفتح، بسطرٍ أعلاها يقول من أين جاء — ويبقى كلّ شيءٍ بيده: يعدّل ما شاء ثمّ يضغط «تجديد
+/// الآن» بنفسه. لا يُرسل شيءٌ هنا، وما لا تعرضه الشاشة لهذا المشترك (كارتٌ بلا صلاحيّته، أشهرٌ لشركةٍ دورتها واحدة) لا يُختار
+/// ويُقال له.
+class ActivatePrefill {
+  const ActivatePrefill({this.pay, this.paid, this.months, this.method});
+
+  final ActivatePrefillPay? pay;
+
+  /// المدفوع نقداً مع [ActivatePrefillPay.partial] — بخانة «المبلغ المدفوع». null ⇒ الخانة فارغة يكتبها.
+  final int? paid;
+  final int? months;
+  final ActivatePrefillMethod? method;
+
+  bool get isEmpty => pay == null && paid == null && months == null && method == null;
+}
+
 class _ActivateSheet extends StatefulWidget {
-  const _ActivateSheet({required this.sub});
+  const _ActivateSheet({required this.sub, this.prefill});
   final Subscriber sub;
+  final ActivatePrefill? prefill;
 
   @override
   State<_ActivateSheet> createState() => _ActivateSheetState();
@@ -162,6 +186,93 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // الشحن»): الدفع للشركة من محفظة المشترك نفسه (customer_wallet من الخادم — مفتاح <name>_custwallet). لا نقداً ولا ديناً عندنا:
   // المشترك دفع من رصيده، فلا «طريقة الدفع» ولا دين بعده؛ شهرٌ واحد.
   bool _payByCustWallet = false;
+
+  // ── «الأمر الصوتي ٢»: ما قيل وطُبّق على الاختيارات (مرّةً، بعد أوّل تحميل) وما لم تعرضه الشاشة ──
+  bool _prefillDone = false;
+  bool _voiceMonths = false;
+  List<String> _voiceApplied = const [];
+  List<String> _voiceSkipped = const [];
+
+  /// يضع ما قاله الوكيل على الاختيارات — داخل setState بعد أوّل تحميلٍ ناجح. لا يرسل ولا يفعّل؛ والزرّ بشروطه كما هو.
+  void _applyPrefill() {
+    final pf = widget.prefill;
+    if (pf == null || pf.isEmpty || _prefillDone) return;
+    _prefillDone = true;
+    final applied = <String>[];
+    final skipped = <String>[];
+    switch (pf.method) {
+      case ActivatePrefillMethod.card:
+        if (_isEarthlink) {
+          _elMethod = _ElMethod.card;
+          applied.add('كارت');
+        } else if (!_pkgSwitcher && _methods.card) {
+          _method = _Method.card;
+          applied.add('كارت');
+        } else {
+          skipped.add('الكارت غير متاح لهذا التفعيل');
+        }
+      case ActivatePrefillMethod.bankCard:
+        if (_cardPayAvailable) {
+          _payByCard = true;
+          _payByCustWallet = false;
+          applied.add('بطاقة');
+        } else {
+          skipped.add('الدفع بالبطاقة غير متاح لهذا التفعيل');
+        }
+      case ActivatePrefillMethod.balance:
+        // الرصيد هو المختار أصلاً — إلّا حين يكون الكارت الطريق الوحيد
+        if (!_pkgSwitcher && _methods.cardOnly) skipped.add('الرصيد غير متاح — التفعيل بالكارت وحده');
+      case null:
+        break;
+    }
+    final m = pf.months;
+    if (m != null && m > 1) {
+      if (_isKit && _monthsOpts.contains(m) && !_kitCard && !_kitCust) {
+        _months = m;
+        _voiceMonths = true;
+        applied.add(_monthsLabel(m));
+      } else {
+        skipped.add('${_monthsLabel(m)} — المدّة هنا دورة الباقة');
+      }
+    }
+    switch (pf.pay) {
+      case ActivatePrefillPay.cash:
+        _pay = _PayType.cash;
+        applied.add('sheets.pay_cash'.tr());
+      case ActivatePrefillPay.debt:
+        _pay = _PayType.debt;
+        applied.add('sheets.pay_debt'.tr());
+      case ActivatePrefillPay.partial:
+        final paid = pf.paid ?? 0;
+        final price = _displayPrice.round();
+        if (paid > 0 && price > 0 && paid == price) {
+          // المدفوع = السعر كلّه ⇒ نقديّ لا جزئيّ
+          _pay = _PayType.cash;
+          applied.add('sheets.pay_cash'.tr());
+        } else if (paid > 0 && price > 0 && paid > price) {
+          // مدفوعٌ مسموعٌ أكبر من السعر كلّه — الأرجح سمعٌ خاطئ لا رصيدٌ مقصود: الجزئيّ مختار والمبلغ يكتبه بيده
+          _pay = _PayType.partial;
+          applied.add('sheets.pay_partial'.tr());
+          skipped.add('المدفوع المسموع ${formatIQD(paid)} أكبر من السعر — اكتبه بيدك');
+        } else {
+          _pay = _PayType.partial;
+          if (paid > 0) {
+            final text = _formatThousands(paid);
+            _suppressFormat = true;
+            _partialCtrl.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+            _suppressFormat = false;
+            _partialAmount = paid;
+            applied.add('${'sheets.pay_partial'.tr()} ${formatIQD(paid)}');
+          } else {
+            applied.add('${'sheets.pay_partial'.tr()} — اكتب المدفوع');
+          }
+        }
+      case null:
+        break;
+    }
+    _voiceApplied = applied;
+    _voiceSkipped = skipped;
+  }
 
   @override
   void initState() {
@@ -293,8 +404,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           _confirmCooloff = false;
           _fxTiming = null;
         }
+        _applyPrefill();
       }
     });
+    // أشهرٌ من الأمر الصوتيّ ⇒ معاينتها من الشركة كما لو اختارها بيده (مرّةً — وبلاها هذا السطر لا يفعل شيئاً)
+    if (_voiceMonths) {
+      _voiceMonths = false;
+      if (data != null && _kitMonths > 1 && _quoteFor != _quoteKey) unawaited(_fetchQuote());
+    }
   }
 
   /// «جرّب مجدّداً» على سطر الكارت — يعيد قراءة activation-data بلا دوّارة
@@ -894,6 +1011,26 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                 ? formatIQD(_basePrice.round())
                 : null));
     return [
+      if (_voiceApplied.isNotEmpty) ...[
+        _CardNote(
+          key: const ValueKey('activate-voice-note'),
+          tone: AppTone.brand,
+          icon: LucideIcons.mic,
+          text: 'من الأمر الصوتي: ${_voiceApplied.join(' · ')} — راجِعها قبل التأكيد',
+          maxLines: 3,
+        ),
+        const SizedBox(height: Sp.sm),
+      ],
+      if (_voiceSkipped.isNotEmpty) ...[
+        _CardNote(
+          key: const ValueKey('activate-voice-skipped'),
+          tone: AppTone.warning,
+          icon: LucideIcons.mic,
+          text: 'لم يُطبَّق من الأمر الصوتي: ${_voiceSkipped.join('، ')}',
+          maxLines: 3,
+        ),
+        const SizedBox(height: Sp.sm),
+      ],
       SheetPlanCard(
         planLabel: 'subscribers.label_package'.tr(),
         planName: planName,
@@ -2008,6 +2145,7 @@ class _CardOrder {
 
 class _CardNote extends StatelessWidget {
   const _CardNote({
+    super.key,
     required this.tone,
     required this.icon,
     required this.text,

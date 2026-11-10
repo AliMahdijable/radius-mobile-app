@@ -136,6 +136,58 @@ void main() {
     await close(tester);
   });
 
+  testWidgets('English command mode listens with the English locale and delivers alternates once',
+      (tester) async {
+    final localeIds = <String?>[];
+    final heard = <List<String>>[];
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel,
+        (call) async {
+      if (call.method == 'locales') {
+        return ['ar-IQ:العربية العراقية', 'en_GB:English (UK)', 'en_US:English (US)'];
+      }
+      if (call.method == 'listen') {
+        localeIds.add((call.arguments as Map)['localeId'] as String?);
+      }
+      if (call.method == 'stop') {
+        stops++;
+        native('notifyStatus', 'notListening');
+        native('notifyStatus', 'done');
+      }
+      if (call.method == 'cancel') cancels++;
+      return true;
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: VoiceSearchButton(
+      controller: controller,
+      language: 'en',
+      onFinal: (_) => fail('onFinalAlts replaces onFinal'),
+      onFinalAlts: heard.add,
+      onListening: listening.add,
+    ))));
+    await tester.tap(find.byIcon(Icons.mic_none_rounded));
+    await tester.pumpAndSettle();
+    expect(localeIds, ['en_US'], reason: 'en-US preferred over en-GB, whatever the tag separator');
+    native('notifyStatus', 'listening');
+    await tester.pump();
+    native(
+        'textRecognition',
+        jsonEncode({
+          'alternates': [
+            {'recognizedWords': 'Activate Ali Hassan.', 'confidence': 0.7},
+            {'recognizedWords': 'Activate Ali Hussein', 'confidence': 0.6},
+            {'recognizedWords': 'Activate Ali Hassan', 'confidence': 0.5},
+          ],
+          'resultType': 2,
+        }));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(heard, [
+      ['Activate Ali Hassan', 'Activate Ali Hussein']
+    ]);
+    expect(controller.text, 'Activate Ali Hassan');
+    await close(tester);
+  });
+
   testWidgets('ordinary voice search retains its continuous dictation behavior',
       (tester) async {
     await start(tester, command: false);

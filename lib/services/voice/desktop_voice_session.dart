@@ -37,25 +37,55 @@ class RecordVoiceCapture implements VoiceCapture {
 typedef VoiceTranscribe = Future<String> Function(
     Uint8List wav, CancelToken cancel);
 
+/// ما فهمه خادمنا من التسجيل: النصّ، لغته (ar/en — تُعرف من النطق)، وبدائل ما سُمع (الأوّل = [text]).
+class VoiceTranscript {
+  const VoiceTranscript(this.text, {this.lang, this.alts = const []});
+  final String text;
+  final String? lang;
+  final List<String> alts;
+}
+
+typedef VoiceTranscribeFull = Future<VoiceTranscript> Function(
+    Uint8List wav, CancelToken cancel, String language);
+
 /// Windows records bounded PCM in memory; only our server receives it. No command
 /// is executed here. Closing the sheet cancels capture and rejects late results.
+///
+/// ١٠ نوفمبر («الأمر الصوتي ٢»): الخادم يتعرّف العربيّة والإنكليزيّة من النطق ([language] = auto) أو يُلزم بإحداهما (ar/en)،
+/// ويعيد لغة ما فهم وبدائله ([onTranscript]) — والهاتف يستعمل الجلسة نفسها في وضع «تلقائي».
 class DesktopVoiceSession extends ChangeNotifier {
   DesktopVoiceSession(
       {VoiceCapture Function()? captureFactory,
       VoiceTranscribe? transcribe,
+      VoiceTranscribeFull? transcribeFull,
       Future<String> Function()? scope,
       required this.onText,
-      required this.onError})
+      this.onTranscript,
+      required this.onError,
+      this.language = 'auto',
+      this.settingsName = 'ويندوز'})
       : _captureFactory = captureFactory ?? RecordVoiceCapture.new,
-        _transcribe = transcribe ?? _send,
+        _transcribe = transcribeFull ??
+            (transcribe == null
+                ? _send
+                : (wav, cancel, _) async => VoiceTranscript(await transcribe(wav, cancel))),
         _scope = scope ?? _currentScope;
 
   static const maxBytes = 16000 * 2 * 15;
   final VoiceCapture Function() _captureFactory;
-  final VoiceTranscribe _transcribe;
+  final VoiceTranscribeFull _transcribe;
   final Future<String> Function() _scope;
   final ValueChanged<String> onText;
+
+  /// النصّ مع لغته وبدائله — يُنادى بدل [onText] حين يُعطى.
+  final ValueChanged<VoiceTranscript>? onTranscript;
   final ValueChanged<String> onError;
+
+  /// auto (يُعرف من النطق) أو ar أو en — تُقرأ لحظة الإرسال.
+  String language;
+
+  /// اسم المنصّة في رسالة صلاحيّة الميكروفون («إعدادات ويندوز» / «إعدادات الهاتف»).
+  final String settingsName;
   DesktopVoicePhase phase = DesktopVoicePhase.idle;
   VoiceCapture? _capture;
   StreamSubscription<Uint8List>? _subscription;
@@ -71,17 +101,22 @@ class DesktopVoiceSession extends ChangeNotifier {
   static Future<String> _currentScope() async =>
       '${await AuthStorage.readAdminId()}:${await AuthStorage.readAdminUsername()}:${await AuthStorage.isEmployee()}';
 
-  static Future<String> _send(Uint8List wav, CancelToken cancel) async {
+  static Future<VoiceTranscript> _send(
+      Uint8List wav, CancelToken cancel, String language) async {
     final r = await ApiClient.dio.post<dynamic>('/api/v2/ai/transcribe',
         data: wav,
         cancelToken: cancel,
         options: Options(
             contentType: 'audio/wav',
             receiveTimeout: const Duration(seconds: 50),
-            headers: {'x-voice-consent': '1'}));
+            headers: {
+              'x-voice-consent': '1',
+              // خادمٌ أقدم يتجاهلها ويردّ العربيّة كما كان
+              'x-voice-lang': language == 'ar' || language == 'en' ? language : 'auto',
+            }));
     final body = r.data;
     if (r.statusCode == 200 && body is Map && body['success'] == true) {
-      return body['text'] is String ? (body['text'] as String).trim() : '';
+      return transcriptOf(body);
     }
     if (r.statusCode == 429 || r.statusCode == 503) {
       throw const VoiceInputException(
@@ -112,8 +147,8 @@ class DesktopVoiceSession extends ChangeNotifier {
       if (_disposed || gen != _generation) return;
       final capture = _capture ??= _captureFactory();
       if (!await capture.hasPermission()) {
-        throw const VoiceInputException(
-            'فعّل صلاحية الميكروفون من إعدادات ويندوز');
+        throw VoiceInputException(
+            'فعّل صلاحية الميكروفون من إعدادات $settingsName');
       }
       if (_disposed || gen != _generation) return;
       final stream = await capture.start();
@@ -140,7 +175,7 @@ class DesktopVoiceSession extends ChangeNotifier {
       if (!_disposed && gen == _generation) {
         await _fail(e is VoiceInputException
             ? e.message
-            : 'تعذّر تشغيل الميكروفون — تأكد من إعدادات ويندوز');
+            : 'تعذّر تشغيل الميكروفون — تأكد من إعدادات $settingsName');
       }
     }
   }
@@ -190,14 +225,27 @@ class DesktopVoiceSession extends ChangeNotifier {
         return;
       }
       final cancel = _cancel = CancelToken();
-      final text = await _transcribe(pcmWave(pcm), cancel);
+      final heard = await _transcribe(pcmWave(pcm), cancel, language);
       if (_disposed || gen != _generation || await _scope() != _startedScope) {
         return;
       }
+      String clean(String s) =>
+          s.trim().replaceAll(RegExp(r'''[.,;:!?،؛؟"']+$'''), '').trim();
+      final text = clean(heard.text);
       if (text.isEmpty) {
         throw const VoiceInputException('لم يُلتقط كلام واضح — حاول مجدّداً');
       }
-      onText(text.replaceAll(RegExp(r'''[.,;:!?،؛؟"']+$'''), '').trim());
+      final full = onTranscript;
+      if (full == null) {
+        onText(text);
+      } else {
+        final alts = <String>[text];
+        for (final a in heard.alts) {
+          final t = clean(a);
+          if (t.isNotEmpty && !alts.contains(t)) alts.add(t);
+        }
+        full(VoiceTranscript(text, lang: heard.lang, alts: alts));
+      }
     } catch (e) {
       if (!_disposed &&
           gen == _generation &&
@@ -254,6 +302,21 @@ class DesktopVoiceSession extends ChangeNotifier {
     _audio.clear();
     super.dispose();
   }
+}
+
+/// ردّ `/api/v2/ai/transcribe` ⇒ النصّ ولغته وبدائله. خادمٌ أقدم (نصٌّ وحده) ⇒ بلا لغةٍ ولا بدائل.
+VoiceTranscript transcriptOf(Map<dynamic, dynamic> body) {
+  final text = body['text'] is String ? (body['text'] as String).trim() : '';
+  final lang = body['lang'];
+  final alts = <String>[];
+  final raw = body['alts'];
+  if (raw is List) {
+    for (final a in raw.take(4)) {
+      final t = a is Map ? a['text'] : a;
+      if (t is String && t.trim().isNotEmpty && t.length <= 300) alts.add(t.trim());
+    }
+  }
+  return VoiceTranscript(text, lang: lang == 'ar' || lang == 'en' ? lang as String : null, alts: alts);
 }
 
 class VoiceInputException implements Exception {

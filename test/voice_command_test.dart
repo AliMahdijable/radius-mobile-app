@@ -32,17 +32,20 @@ void main() {
   group('الفهم', () {
     VoiceIntent p(String s) => VoiceCommand.parse(s);
 
-    test('التفعيل بصيغه + المدّة والدفع تذكيراً + الاسم بلا حشو', () {
+    test('التفعيل بصيغه + المدّة والدفع + الاسم بلا حشو', () {
       final a = p('فعّل علي حسين شهرين بالدين');
       expect(a.action, VoiceAction.activate);
       expect(a.query, 'علي حسين');
       expect(a.months, 2);
       expect(a.payment, VoicePayment.debt);
-      for (final s in ['جدد اشتراك محمد كاظم', 'جدّدله لمحمد كاظم', 'مدد اشتراك المشترك محمد كاظم', 'اشحن محمد كاظم']) {
+      for (final s in ['جدد اشتراك محمد كاظم', 'جدّدله لمحمد كاظم', 'اشحن محمد كاظم']) {
         final x = p(s);
         expect(x.action, VoiceAction.activate, reason: s);
         expect(x.query.endsWith('محمد كاظم'), isTrue, reason: '$s ⇒ ${x.query}');
       }
+      // ١٠ نوفمبر: «مدّد» صار عمليّة «تمديد» نفسها (زرّها بصفحة المشترك) لا التفعيل
+      final ext = p('مدد اشتراك المشترك محمد كاظم');
+      expect([ext.action, ext.query], [VoiceAction.extend, 'محمد كاظم']);
       expect(p('فعل احمد ٣ اشهر نقد').months, 3);
       expect(p('فعل احمد ٣ اشهر نقد').payment, VoicePayment.cash);
       expect(p('فعل احمد ثلاث اشهر').months, 3);
