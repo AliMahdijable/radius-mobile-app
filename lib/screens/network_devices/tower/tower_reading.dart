@@ -279,7 +279,11 @@ class TowerReading {
       portsUp: wired.isEmpty ? null : wired.where((p) => p.up).length,
       portsTotal: wired.isEmpty ? null : wired.length,
       busiestPort: busiest != null && busiest.total > 0 ? busiest : null,
-      ports: ports,
+      // منافذ العدّ ([PortTraffic.placeholder]) تبقى في «٥/٨» أعلاه — لا في القائمة التي يُطابَق بها منفذٌ باسمه
+      ports: [
+        for (final p in ports)
+          if (!p.placeholder) p,
+      ],
       poeWatts: poeWatts,
       voltage: voltage,
       olt: olt,

@@ -96,10 +96,15 @@ class PortTraffic {
     this.errors,
     this.sfpRx,
     this.poeStatus,
+    this.placeholder = false,
   });
 
   final String name;
   final bool up;
+
+  /// منفذٌ **للعدّ وحده**: قراءة الخادم (VPN) قد تحمل «كم منفذاً يعمل من كم» بلا أسمائها، فتُصاغ لها منافذ (`ether1…`) ليصحّ
+  /// «٥/٨» — اسمها وحال كلٍّ منها بعينه ليسا من الجهاز. لا يُطابَق باسم ولا يُعرض للاختيار («الترابط»: منفذ الكيبل الضوئيّ).
+  final bool placeholder;
 
   /// «الفحص الشامل» للسويجات (٦ نوفمبر): half-duplex صريح، انقطاعات الربط والأخطاء منذ الإقلاع، ضوء الـSFP (dBm)، وحال الـPoE —
   /// ما يقرؤه الطراز وحده (مايكروتك محلّيّاً، وعبر الـVPN من `pl`)؛ الغائب null.
@@ -588,7 +593,7 @@ class DeviceVitals {
       final upN = n(pt['up']) ?? 0;
       final total = n(pt['total']) ?? 0;
       for (var k = 0; k < total && k < 64; k++) {
-        ports.add(PortTraffic(name: 'ether${k + 1}', up: k < upN));
+        ports.add(PortTraffic(name: 'ether${k + 1}', up: k < upN, placeholder: true));
       }
     }
     final peers = [

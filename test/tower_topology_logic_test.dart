@@ -586,6 +586,40 @@ void main() {
       expect([TopoText.stateOf(radio), TopoText.stateOf(const LinkFlow())], ['ممتاز', 'لم يُقرأ'], reason: 'اللنك بكلماته كما كان');
     });
 
+    test('🚨 منافذ العدّ (قراءة الخادم «٣ من ٥» بلا أسماء) ليست منافذ: لا «واقع» ولا «غير موجود» منها، ولا تُعرض للاختيار', () {
+      // قراءة الخادم عبر الـVPN بلا قائمة المنافذ: تُصاغ ether1…ether5 للعدّ، والأوائل «شغّالة» — ليست حال منفذٍ بعينه
+      final counted = DeviceVitals.fromVpn({'kind': 'ros', 'cpu': 5, 'ports': {'up': 3, 'total': 5}}).detail!;
+      expect(counted.ports.length, 5);
+      expect(counted.ports.every((p) => p.placeholder), isTrue);
+      final r = TowerReading.fromProbe(ProbeResult(vitals: const [], detail: counted, counters: const {}));
+      expect([r.portsUp, r.portsTotal], [3, 5], reason: 'العدّ يبقى');
+      expect(r.ports, isEmpty);
+      expect(r.wiredPorts, isEmpty, reason: 'منتقي المنفذ لا يعرض أسماءً مصطنعة');
+      expect(r.port('ether4'), isNull);
+      // كيبلٌ منفذه ether4 («طافٍ» في العدّ المصطنع) أو ether1 («شغّال»): لا حكم — لم يُقرأ
+      for (final name in ['ether4', 'ether1', 'sfp1']) {
+        final f = LinkFlow.ofFiber(rb: r, bPort: name);
+        expect([f.state, f.subPortDown, f.portIssue], [LinkState.unknown, false, null], reason: name);
+      }
+      // وقراءة الخادم المفصّلة (pl) بأسماء الجهاز تُطابَق: حال المنفذ وسرعته وضوؤه — بلا عدّادات فلا رقم
+      final listed = DeviceVitals.fromVpn({
+        'kind': 'ros',
+        'ports': {'up': 1, 'total': 2},
+        'pl': [
+          {'n': 'sfp-sfpplus1', 'r': true, 'sp': '10Gbps', 'sfp': -6.5},
+          {'n': 'ether1', 'r': false},
+        ],
+      }).detail!;
+      expect(listed.ports.any((p) => p.placeholder), isFalse);
+      final r2 = TowerReading.fromProbe(ProbeResult(vitals: const [], detail: listed, counters: const {}));
+      expect(r2.wiredPorts.map((p) => p.name), ['sfp-sfpplus1', 'ether1']);
+      final up = LinkFlow.ofFiber(rb: r2, bPort: 'sfp-sfpplus1');
+      expect([up.state, up.toSubBps, up.light, up.linkSpeed], [LinkState.ok, null, -6.5, '10Gbps']);
+      final off = LinkFlow.ofFiber(rb: r2, bPort: 'ether1');
+      expect([off.state, off.subPortDown], [LinkState.down, true]);
+      expect(LinkFlow.ofFiber(rb: r2, bPort: 'sfp9').portIssue, FiberPortIssue.missing);
+    });
+
     group('أيّ منفذٍ هو منفذ الكيبل: ما يرسله طرفٌ يستقبله الآخر', () {
       // منفذ الرئيسيّ نحو هذا البرج: يرسل 615 وينزل له 71
       final peer = port('sfp-sfpplus1', tx: 615000000, rx: 71000000);
