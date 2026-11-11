@@ -718,7 +718,12 @@ class _MovementTile extends StatelessWidget {
   }) {
     // «إلغاء تسديد»: تسديدٌ بمبلغٍ سالب (أو معلَّمٌ من دفتر ايرث لنك) — رجع دينه.
     if (isVoid) return (LucideIcons.undo2, AppColors.error, 'إلغاء تسديد');
-    // «إضافة دين» بمبلغٍ سالب تُنقص الدين (إلغاء بيعٍ على الدين، إضافة رصيد، تسوية إلغاء تسديد).
+    // سطر تسوية الربط (الدين كان أُعيد يدويّاً بإضافة دين — محاسبةٌ بلا أثرٍ على دين المشترك): باسمه كما في التقارير،
+    // لا «إنقاص دين» أخضر كأنّ دينه نقص.
+    if (type == 'BALANCE_ADD' && desc.trimLeft().startsWith('تسوية إلغاء تسديد')) {
+      return (LucideIcons.undo2, AppColors.textMid, 'تسوية إلغاء تسديد');
+    }
+    // «إضافة دين» بمبلغٍ سالب تُنقص الدين (إلغاء بيعٍ على الدين، إضافة رصيد).
     if (type == 'BALANCE_ADD' && negative) return (LucideIcons.minus, AppColors.success, 'إنقاص دين');
     switch (type) {
       case 'SUBSCRIBER_ACTIVATE':

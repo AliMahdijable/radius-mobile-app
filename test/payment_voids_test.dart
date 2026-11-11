@@ -758,6 +758,43 @@ void main() {
       await shoot(t, s1bSasOwner, 'pay_void_movements', _narrow, server.inner as VisualServer);
     });
 
+    testWidgets('إلغاءٌ بالربط (حالة المالك): «إلغاء تسديد» وسطر تسويته باسمه «تسوية إلغاء تسديد» — لا «إنقاص دين» كأنّ دينه نقص', (t) async {
+      final server = await open(t, s1bSasOwner, prep: (s) {
+        s.voids[770745] = s._voidItem(770745, 60000, mode: 'link');
+        s.statement = [
+          {
+            'id': 830143, 'created_at': '2026-11-11T14:22:34Z', 'action_type': 'BALANCE_ADD', 'amount': -60000, 'balance_after': null,
+            'description': 'تسوية إلغاء تسديد — إضافة الدين 60,000 د.ع للمشترك ali.kareem كانت إرجاعاً للتسديد (حركة #770745) — ألغاه المدير mahdi',
+            'admin_name': 'mahdi',
+          },
+          {
+            'id': 830142, 'created_at': '2026-11-11T14:22:34Z', 'action_type': 'BALANCE_DEDUCT', 'amount': -60000, 'balance_after': null,
+            'description': 'إلغاء تسديد دين 60,000 د.ع للمشترك ali.kareem — ألغاه المدير mahdi، استلمه الموظّف hussein (أُعيد دينه سابقاً بإضافة دين)',
+            'admin_name': 'mahdi',
+          },
+          {
+            'id': 774526, 'created_at': '2026-11-02T17:09:00Z', 'action_type': 'BALANCE_ADD', 'amount': 60000, 'balance_after': -60000,
+            'description': 'إضافة دين 60,000 د.ع للمشترك ali.kareem', 'admin_name': 'mahdi',
+          },
+          ...s.statement.where((x) => x['id'] == 770745).map((x) => {...x, 'balance_after': 0}),
+        ];
+      });
+      expect(find.text('تسوية إلغاء تسديد'), findsOneWidget);
+      expect(find.text('إلغاء تسديد'), findsOneWidget);
+      expect(find.text('إنقاص دين'), findsNothing);
+      expect(find.text('إضافة دين'), findsNWidgets(2), reason: 'الفلتر + الإضافة اليدويّة');
+      expect(find.text('ملغى'), findsOneWidget);
+      expect(find.byType(PaymentVoidRowButton), findsNothing, reason: 'التسديد الوحيد ملغى');
+      expect(find.textContaining('ألغاه المدير mahdi'), findsNWidgets(2), reason: 'من ألغى مسمّىً في السطرين');
+      await shoot(t, s1bSasOwner, 'pay_void_movements_link', phone, server.inner as VisualServer);
+      // الفلتر: السطران تحت «إضافة دين» (يخصّان الدين لا التحصيل)
+      await t.tap(find.text('تسديد'));
+      await t.pump();
+      expect(find.text('إلغاء تسديد'), findsNothing);
+      expect(find.text('تسوية إلغاء تسديد'), findsNothing);
+      expect(find.text('تسديد دين'), findsOneWidget);
+    });
+
     testWidgets('الداكن: الكشف بعد الإلغاء — بلا استثناء', (t) async {
       final server = await open(t, s1bSasOwner, d: phoneDark, prep: (s) => s._applyVoid(900001, mode: 'restore'));
       expect(find.text('إلغاء تسديد'), findsOneWidget);
