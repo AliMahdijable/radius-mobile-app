@@ -1,6 +1,7 @@
 // قارئ أطراف اللنكات لـ«الترابط» ([TowerLinkProbe]) — بقواعد البرج نفسها، وبدرس تنبيهات الأجهزة (المالك ١١ نوفمبر:
 // «تنبيهات الاجهزه كذلك غير دقيقه» — جهازٌ يعمل قيل عنه طافٍ من حكمٍ قديم): «لا يردّ» بفحصٍ حديثٍ نجريه نحن وحده، والرقم
 // القديم ليس رقماً، وخارج الشبكة لا يُقال شيء. الشبكة كلّها مزيّفة.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -12,6 +13,7 @@ import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/tower/tower_link_probe.dart';
+import 'package:rad_mysvcs/screens/network_devices/tower/tower_reading.dart';
 import 'package:rad_mysvcs/services/agent_net_presence.dart';
 import 'package:rad_mysvcs/services/deep_probe_scheduler.dart';
 import 'package:rad_mysvcs/services/device_read_health.dart';
@@ -247,6 +249,147 @@ void main() {
     expect(reachCalls, isEmpty);
     expect([p.isDown(11), p.isDown(21)], [false, false]);
     p.dispose();
+  });
+
+  group('قراءةٌ واحدة الآن لمنتقي منفذ الكيبل', () {
+    testWidgets('جهازٌ ليس طرف وصلة: يُقرأ مرّةً بمنافذه ولا يدخل الدورة', (t) async {
+      await boot();
+      final p = TowerLinkProbe();
+      p.setDevices(ends: [_dev(11)]);
+      p.start();
+      await run(t, seconds: 6);
+      final before = reads;
+      TowerReading? got;
+      p.readOnce(_dev(41, region: 4)).then((r) => got = r);
+      await run(t);
+      expect(reads, before + 1);
+      expect(got, isNotNull);
+      expect(got!.ports.map((x) => x.name), contains('ether1'), reason: 'المنافذ بأسمائها — منها يُختار منفذ الكيبل');
+      expect(got!.wiredPorts.map((x) => x.name), ['ether1'], reason: 'الواجهة اللاسلكيّة ليست طرف كيبل');
+      expect(p.known[41], same(got));
+      // لا يدخل الدورة
+      now = now.add(const Duration(seconds: 21));
+      await run(t, seconds: 21);
+      expect(reads, before + 2, reason: 'الدورة قرأت طرفها (11) وحده');
+      p.dispose();
+    });
+
+    testWidgets('طرفٌ تقرؤه الدورة الآن: تُنتظر قراءتها — لا جلسة ثانية على الجهاز نفسه', (t) async {
+      await boot();
+      final gate = Completer<void>();
+      MikrotikApi.debugFetch = () async {
+        reads++;
+        await gate.future;
+        return _stats();
+      };
+      final p = TowerLinkProbe();
+      p.setDevices(ends: [_dev(11)]);
+      p.start();
+      await run(t, seconds: 1);
+      expect(reads, 1, reason: 'قراءة الدورة جارية');
+      TowerReading? got;
+      var answered = false;
+      p.readOnce(_dev(11)).then((r) {
+        got = r;
+        answered = true;
+      });
+      await run(t, seconds: 1);
+      expect(reads, 1, reason: 'لا جلسة ثانية');
+      expect(answered, isFalse);
+      gate.complete();
+      await run(t, seconds: 1);
+      expect(answered, isTrue);
+      expect(got, same(p.readingOf(11)));
+      expect(reads, 1);
+      p.dispose();
+    });
+
+    testWidgets('تعذّرت قراءته: يُرجع آخر ما عندنا ولا يُسجَّل عطلاً على الجهاز — والدورة تبقى تقرؤه', (t) async {
+      await boot();
+      final p = TowerLinkProbe();
+      p.setDevices(ends: [_dev(11)]);
+      p.start();
+      await run(t, seconds: 6);
+      final had = p.readingOf(11);
+      expect(had, isNotNull);
+      readsFail = true;
+      TowerReading? got;
+      var answered = false;
+      p.readOnce(_dev(11)).then((r) {
+        got = r;
+        answered = true;
+      });
+      await run(t);
+      expect(answered, isTrue);
+      expect(got, same(had));
+      expect([p.isDown(11), p.needsSettings(11)], [false, false]);
+      expect(p.readingOf(11), same(had), reason: 'فشل قراءة المنتقي لا يُسقط قراءة الوصلة');
+      expect(reachCalls, isEmpty);
+      // جهازٌ لا شيء عندنا عنه ⇒ null («تعذّرت قراءة منافذه»)
+      TowerReading? none = had;
+      p.readOnce(_dev(41, region: 4)).then((r) => none = r);
+      await run(t);
+      expect(none, isNull);
+      // الدورة لم تُحجز
+      readsFail = false;
+      final before = reads;
+      now = now.add(const Duration(seconds: 21));
+      await run(t, seconds: 21);
+      expect(reads, before + 1);
+      p.dispose();
+    });
+
+    testWidgets('خارج الشبكة أو «الفحص الشامل» يجري: لا جلسة — آخر ما عندنا', (t) async {
+      await boot();
+      final p = TowerLinkProbe();
+      p.setDevices(ends: [_dev(11)]);
+      p.start();
+      await run(t, seconds: 6);
+      final before = reads;
+      DeviceSweep.acquire();
+      expect(await p.readOnce(_dev(11)), same(p.known[11]));
+      expect(await p.readOnce(_dev(41, region: 4)), isNull);
+      DeviceSweep.release();
+      AgentNetPresence.debugSet(NetPresence.off);
+      AgentNetPresence.now = () => now;
+      addTearDown(() => AgentNetPresence.now = DateTime.now);
+      expect(await p.readOnce(_dev(41, region: 4)), isNull);
+      expect(reads, before);
+      p.dispose();
+    });
+
+    testWidgets('الشاشة أُغلقت والمنتقي ينتظر: يُجاب بلا شيء ولا مؤقّت يبقى', (t) async {
+      await boot();
+      final gate = Completer<void>();
+      MikrotikApi.debugFetch = () async {
+        reads++;
+        await gate.future;
+        return _stats();
+      };
+      final p = TowerLinkProbe();
+      p.setDevices(ends: [_dev(11)]);
+      p.start();
+      await run(t, seconds: 1);
+      final answers = <TowerReading?>[];
+      var n = 0;
+      // واحدةٌ تنتظر قراءة الدورة (11)، وأخرى في الطابور لجهازٍ آخر (41)
+      p.readOnce(_dev(11)).then((r) {
+        answers.add(r);
+        n++;
+      });
+      p.readOnce(_dev(41, region: 4)).then((r) {
+        answers.add(r);
+        n++;
+      });
+      await run(t, seconds: 1);
+      expect(n, 0);
+      p.dispose();
+      await run(t, seconds: 1);
+      expect(n, 2);
+      expect(answers, [null, null]);
+      gate.complete();
+      await run(t, seconds: 1);
+    });
   });
 
   testWidgets('صحنٌ غير مربوط يُقرأ مرّةً واحدة (لاقتراح الوصلات) لا كلّ دورة', (t) async {

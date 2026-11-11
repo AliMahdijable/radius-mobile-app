@@ -3,6 +3,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/tower_layout.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
@@ -450,8 +451,203 @@ void main() {
     });
   });
 
+  // ── ١١ نوفمبر صباحاً — المالك: «اكو ابراج ترتبط مع بعضها فايبر… مرات مو لنك يعني مباشر كيبل ضوئي بين سوجات» ──
+  group('الكيبل الضوئيّ بين سويجين', () {
+    PortTraffic port(String name, {bool up = true, int? rx, int? tx, String? speed, double? light, bool half = false, bool physical = true}) =>
+        PortTraffic(name: name, up: up, rxBps: rx, txBps: tx, linkSpeed: speed, sfpRx: light, halfDuplex: half, physical: physical);
+    TowerReading sw(List<PortTraffic> ports) => TowerReading(at: DateTime(2026, 11, 11, 8), ports: ports);
+
+    test('النموذج: النوع والمنفذان من الخادم، القلب يبدّل المنفذين مع الطرفين، واللنك اللاسلكيّ بلا منافذ', () {
+      final f = TowerLink.fromJson({'id': 7, 'a_device_id': 100, 'b_device_id': 200, 'kind': 'fiber', 'a_port': ' sfp-sfpplus1 ', 'b_port': 'sfp1'})!;
+      expect([f.kind, f.isFiber, f.aPort, f.bPort], [TowerLinkKind.fiber, true, 'sfp-sfpplus1', 'sfp1']);
+      final flipped = f.flipped();
+      expect([flipped.aDeviceId, flipped.bDeviceId, flipped.aPort, flipped.bPort, flipped.kind], [200, 100, 'sfp1', 'sfp-sfpplus1', TowerLinkKind.fiber]);
+      expect(f == TowerLink.fromJson({'id': 7, 'a_device_id': 100, 'b_device_id': 200, 'kind': 'fiber', 'a_port': 'sfp-sfpplus1', 'b_port': 'sfp1'}), isTrue);
+      expect(f == TowerLink.fromJson({'id': 7, 'a_device_id': 100, 'b_device_id': 200, 'kind': 'fiber', 'a_port': 'sfp-sfpplus1', 'b_port': 'sfp2'}), isFalse);
+      // خادمٌ قبل الهجرة 087 (بلا kind) ⇒ لنكٌ لاسلكيّ؛ ومنفذٌ على لاسلكيّ يُهمل
+      final old = TowerLink.fromJson({'id': 1, 'a_device_id': 11, 'b_device_id': 21})!;
+      expect([old.kind, old.isFiber, old.aPort], [TowerLinkKind.radio, false, null]);
+      expect(TowerLink.fromJson({'id': 1, 'a_device_id': 11, 'b_device_id': 21, 'kind': 'radio', 'b_port': 'ether1'})!.bPort, isNull);
+      final lay = TowerLayouts.fromJson({'success': true, 'links': [], 'links_ready': true, 'fiber_ready': true});
+      expect([lay.linksReady, lay.fiberReady], [true, true]);
+      expect(TowerLayouts.fromJson({'success': true, 'links': [], 'links_ready': true}).fiberReady, isFalse, reason: 'خادمٌ أقدم');
+    });
+
+    test('قراءة السويج: المنفذ باسمه (بلا حالة أحرف)، والسلكيّة وحدها تصلح طرفَ كيبل', () {
+      final r = sw([port('sfp-sfpplus1'), port('ether2'), port('wlan1'), port('bridge1', physical: false)]);
+      expect(r.port('SFP-SFPPLUS1')?.name, 'sfp-sfpplus1');
+      expect([r.port('sfp9'), r.port(null), r.port('  ')], [null, null, null]);
+      expect(r.wiredPorts.map((p) => p.name).toList(), ['sfp-sfpplus1', 'ether2']);
+    });
+
+    test('🚨 ما يعبر الكيبل = ما يعبر منفذه بعينه — لا «أنشط منفذ» في السويج', () {
+      // سويج الفرعيّ: منفذ الكيبل sfp1 يستقبل 340 ميغا من الرئيسيّ؛ ومنفذٌ آخر (ether5) أنشط منه
+      final sub = sw([port('sfp1', rx: 340000000, tx: 28000000, speed: '10Gbps', light: -7.1), port('ether5', rx: 900000000, tx: 900000000, speed: '1Gbps')]);
+      final main = sw([port('sfp-sfpplus1', tx: 342000000, rx: 28500000, speed: '10Gbps', light: -6.4), port('sfp-sfpplus2', tx: 5, rx: 5)]);
+      final f = LinkFlow.ofFiber(ra: main, rb: sub, aPort: 'sfp-sfpplus1', bPort: 'sfp1');
+      expect([f.fiber, f.state, f.toSubBps, f.toMainBps], [true, LinkState.ok, 340000000, 28000000]);
+      expect([f.light, f.linkSpeed, f.signal, f.ccq], [-7.1, '10Gbps', null, null], reason: 'أضعف الضوءين، ولا إشارة ولا CCQ لكيبل');
+      // الفرعيّ لم يُقرأ ⇒ من منفذ الرئيسيّ: ما يرسله ينزل للفرع
+      final onlyMain = LinkFlow.ofFiber(ra: main, aPort: 'sfp-sfpplus1', bPort: 'sfp1');
+      expect([onlyMain.state, onlyMain.toSubBps, onlyMain.toMainBps], [LinkState.ok, 342000000, 28500000]);
+      // منفذ الفرعيّ وحده محدَّد
+      final onlySubPort = LinkFlow.ofFiber(ra: main, rb: sub, bPort: 'sfp1');
+      expect([onlySubPort.toSubBps, onlySubPort.light], [340000000, -7.1]);
+    });
+
+    test('🚨 «واقع» بدليل: السويج يردّ ويقول المنفذ طافٍ — أو طرفٌ لا يردّ؛ ومنفذٌ شغّال بلا عدّادات «يعمل» بلا رقم', () {
+      final up = sw([port('sfp1', rx: 10, tx: 10)]);
+      final off = sw([port('sfp1', up: false)]);
+      final a = LinkFlow.ofFiber(ra: up, rb: off, aPort: 'sfp1', bPort: 'sfp1');
+      expect([a.state, a.subPortDown, a.mainPortDown, a.subDown, a.toSubBps], [LinkState.down, true, false, false, null]);
+      final b = LinkFlow.ofFiber(ra: off, rb: up, aPort: 'sfp1', bPort: 'sfp1');
+      expect([b.state, b.mainPortDown, b.subPortDown], [LinkState.down, true, false]);
+      final dead = LinkFlow.ofFiber(ra: up, aPort: 'sfp1', bPort: 'sfp1', bDown: true);
+      expect([dead.state, dead.subDown, dead.subPortDown, dead.fiber], [LinkState.down, true, false, true]);
+      // قراءةٌ عبر الـVPN: الحال والسرعة بلا عدّادات
+      final vpn = LinkFlow.ofFiber(rb: sw([port('sfp1', speed: '1Gbps')]), bPort: 'sfp1');
+      expect([vpn.state, vpn.toSubBps, vpn.linkSpeed], [LinkState.ok, null, '1Gbps']);
+      expect(TopoText.stateOf(vpn), 'يعمل');
+    });
+
+    test('بلا منفذٍ محدَّد لا يُعرف أيّ منفذٍ يُقرأ ⇒ «بلا منفذ» بلا أرقام؛ ومنفذٌ غاب عن الجهاز يُسمّى', () {
+      final busy = sw([port('ether5', rx: 900000000, tx: 900000000)]);
+      final unset = LinkFlow.ofFiber(ra: busy, rb: busy);
+      expect([unset.state, unset.portIssue, unset.toSubBps, unset.fiber], [LinkState.unknown, FiberPortIssue.unset, null, true]);
+      expect(TopoText.stateOf(unset), 'بلا منفذ');
+      final missing = LinkFlow.ofFiber(ra: busy, rb: busy, bPort: 'sfp1');
+      expect([missing.state, missing.portIssue, missing.missingPort], [LinkState.unknown, FiberPortIssue.missing, 'sfp1']);
+      expect(TopoText.stateOf(missing), 'المنفذ غير موجود');
+      // الجهاز لم يُقرأ بعد (أو لا يعرض منافذه) ⇒ «لم يُقرأ» لا «غير موجود»
+      final unread = LinkFlow.ofFiber(bPort: 'sfp1');
+      expect([unread.state, unread.portIssue], [LinkState.unknown, null]);
+      expect(TopoText.stateOf(unread), 'لم يُقرأ');
+      expect(LinkFlow.ofFiber(rb: sw(const []), bPort: 'gpon-uplink').portIssue, isNull, reason: 'جهازٌ بلا منافذ مقروءة');
+    });
+
+    test('الانتباه بحدَّي «الفحص الشامل»: ضوءٌ تحت ‎−25 ضعيف وتحت ‎−30 ضعيف جدّاً، وhalf-duplex و≤10M — وبلا ضوءٍ مقروء «يعمل»', () {
+      LinkFlow of({double? light, String? speed, bool half = false}) =>
+          LinkFlow.ofFiber(rb: sw([port('sfp1', rx: 1, tx: 1, light: light, speed: speed, half: half)]), bPort: 'sfp1');
+      expect([of(light: -7).state, TopoText.stateOf(of(light: -7))], [LinkState.ok, 'يعمل']);
+      expect([of(light: -24.9).state, of(light: -25).state], [LinkState.ok, LinkState.ok], reason: 'الحدّ نفسه سليم (sfp < −25)');
+      expect([of(light: -26.5).state, TopoText.stateOf(of(light: -26.5))], [LinkState.fair, 'ضوء ضعيف']);
+      expect([of(light: -31).state, TopoText.stateOf(of(light: -31))], [LinkState.weak, 'ضوء ضعيف جدّاً']);
+      expect([of(half: true).state, TopoText.stateOf(of(half: true))], [LinkState.fair, 'half-duplex']);
+      expect([of(speed: '10Mbps').state, TopoText.stateOf(of(speed: '10Mbps'))], [LinkState.fair, 'سرعة واطية']);
+      expect(of(speed: '100Mbps').state, LinkState.ok, reason: 'كيبل 100M قديم ليس عطلاً');
+      expect(of().state, LinkState.ok, reason: 'سويجٌ لا يقرأ ضوء الـSFP لا يُتّهم');
+      // أبطأ السرعتين وأضعف الضوءين من الطرفين
+      final both = LinkFlow.ofFiber(
+        ra: sw([port('a', rx: 1, tx: 1, speed: '10Gbps', light: -5)]),
+        rb: sw([port('b', rx: 1, tx: 1, speed: '1000M', light: -12.5)]),
+        aPort: 'a',
+        bPort: 'b',
+      );
+      expect([both.linkSpeed, both.light], ['1000M', -12.5]);
+    });
+
+    test('كيبلان لبرجٍ واحد: المجموع وأضعف الضوء، و«واقع» حين يقعان معاً وحده؛ وكيبلٌ مع لنك لاسلكيّ وصلةٌ مختلطة', () {
+      final c1 = LinkFlow.ofFiber(rb: sw([port('sfp1', rx: 300, tx: 30, light: -6)]), bPort: 'sfp1');
+      final c2 = LinkFlow.ofFiber(rb: sw([port('sfp2', rx: 200, tx: 20, light: -27)]), bPort: 'sfp2');
+      final two = LinkFlow.merge([c1, c2]);
+      expect([two.fiber, two.toSubBps, two.toMainBps, two.light, two.state], [true, 500, 50, -27, LinkState.fair]);
+      final off = LinkFlow.ofFiber(rb: sw([port('sfp2', up: false)]), bPort: 'sfp2');
+      expect(LinkFlow.merge([c1, off]).state, LinkState.weak, reason: 'كيبلٌ سليم يُبقي الفرع موصولاً');
+      final bothOff = LinkFlow.merge([off, off]);
+      expect([bothOff.state, bothOff.subPortDown], [LinkState.down, true]);
+      final radio = LinkFlow.of(rb: rd(rx: 50, tx: 5, signal: -55, ccq: 97));
+      final mixed = LinkFlow.merge([c1, radio]);
+      expect([mixed.fiber, mixed.toSubBps, mixed.light, mixed.signal], [false, 350, null, -55]);
+    });
+
+    test('الرسم: وصلةٌ كلّها كيابل «كيبل»، والمختلطة لا؛ والعدّ كلّ نوعٍ باسمه', () {
+      const fiber = TowerLink(id: 1, aDeviceId: 100, bDeviceId: 200, kind: TowerLinkKind.fiber);
+      const radio = TowerLink(id: 2, aDeviceId: 11, bDeviceId: 21);
+      expect(const TopoEdge(from: 1, to: 2, links: [fiber]).fiber, isTrue);
+      expect(const TopoEdge(from: 1, to: 2, links: [fiber, radio]).fiber, isFalse);
+      expect(const TopoEdge(from: 1, to: 2, links: [radio]).fiber, isFalse);
+      expect([for (final n in [0, 1, 2, 5, 12]) TopoText.cables(n)], ['لا كيابل', 'كيبل واحد', 'كيبلان', '5 كيابل', '12 كيبلاً']);
+      expect(TopoText.linkCounts(radio: 3, fiber: 0), '3 لنكات', reason: 'بلا كيابل كما كان');
+      expect(TopoText.linkCounts(radio: 0, fiber: 0), 'لا لنكات');
+      expect(TopoText.linkCounts(radio: 0, fiber: 2), 'كيبلان');
+      expect(TopoText.linkCounts(radio: 1, fiber: 2), 'لنك واحد · كيبلان');
+    });
+
+    test('أرقام السطر بنوعها: اللنك إشارته وCCQ، والكيبل سرعة منفذه وضوؤه', () {
+      expect([for (final v in ['10Gbps', '1Gbps', '1000M', '100Mbps', '2.5Gbps', null, 'auto']) TopoText.speed(v)], ['10G', '1G', '1G', '100M', '2.5G', '—', 'auto']);
+      expect([TopoText.light(-7.123), TopoText.light(null)], ['-7.1 dBm', '—']);
+      final cable = LinkFlow.ofFiber(rb: sw([port('sfp1', rx: 1, tx: 1, speed: '10Gbps', light: -7.1)]), bPort: 'sfp1');
+      // الرقم السالب بعد كلمةٍ عربيّة معزولٌ اتّجاهيّاً — وإلّا انقلبت إشارته لآخره («7.1-»)
+      expect(TopoText.lightFact(-7.1), 'ضوء ${iso('-7.1 dBm')}');
+      expect(TopoText.facts(cable), ['10G', TopoText.lightFact(-7.1)]);
+      expect(TopoText.facts(LinkFlow.ofFiber(rb: sw([port('ether1', rx: 1, tx: 1)]), bPort: 'ether1')), isEmpty);
+      final radio = LinkFlow.of(rb: rd(rx: 1, tx: 1, signal: -52, ccq: 98));
+      expect(TopoText.facts(radio), ['-52 dBm', 'CCQ 98٪']);
+      expect([TopoText.stateOf(radio), TopoText.stateOf(const LinkFlow())], ['ممتاز', 'لم يُقرأ'], reason: 'اللنك بكلماته كما كان');
+    });
+
+    group('أيّ منفذٍ هو منفذ الكيبل: ما يرسله طرفٌ يستقبله الآخر', () {
+      // منفذ الرئيسيّ نحو هذا البرج: يرسل 615 وينزل له 71
+      final peer = port('sfp-sfpplus1', tx: 615000000, rx: 71000000);
+      // سويج الفرعيّ: منفذ الكيبل يستقبل ما أُرسل له، ومنفذ السكتر يرسله لمشتركيه (فيخالف بالاتّجاهين)
+      List<PortTraffic> sub() => [
+            port('sfp1', rx: 612000000, tx: 70000000),
+            port('ether1', rx: 69000000, tx: 600000000),
+            port('ether2', rx: 900000, tx: 12000000),
+            port('sfp2', up: false),
+          ];
+
+      test('المنفذ الذي يعبره المقدار نفسه معكوساً — واحدٌ بعينه', () {
+        expect(FiberPortMatch.find(sub(), peer), 'sfp1');
+        // والعكس: منفذ الرئيسيّ يُعرف من منفذ الفرعيّ (العلاقة نفسها من الطرف الآخر)
+        final main = [peer, port('sfp-sfpplus2', tx: 231000000, rx: 30000000), port('ether1', tx: 880000000, rx: 990000000)];
+        expect(FiberPortMatch.find(main, port('sfp1', rx: 612000000, tx: 70000000)), 'sfp-sfpplus1');
+      });
+
+      test('اتّجاهٌ واحد يطابق والآخر يخالف ⇒ ليس هو (منفذ السكتر يرسل ما وصل لا ما يستقبله)', () {
+        // يستقبل ما يطابق (≈615)، لكنّه يرسل 400 والطرف الآخر يستقبل 71
+        expect(FiberPortMatch.find([port('x', rx: 612000000, tx: 400000000)], peer), isNull);
+      });
+
+      test('منفذان يطابقان (كيبلان متوازيان) ⇒ لا تخمين', () {
+        expect(FiberPortMatch.find([...sub(), port('sfp3', rx: 620000000, tx: 72000000)], peer), isNull);
+      });
+
+      test('اتّجاهٌ خاملٌ عند الطرفين لا يُحكم به — يكفي الاتّجاه الحامل', () {
+        final quiet = port('sfp-sfpplus1', tx: 80000000, rx: 300000);
+        expect(FiberPortMatch.find([port('sfp1', rx: 78000000, tx: 500000), port('ether1', rx: 200000, tx: 77000000)], quiet), 'sfp1');
+      });
+
+      test('خاملٌ بالاتّجاهين، أو لم تُقرأ عدّاداته، أو منفذ الطرف الآخر طافٍ ⇒ لا مطابقة', () {
+        expect(FiberPortMatch.find(sub(), port('p', tx: 900000, rx: 100000)), isNull, reason: 'تحت الحدّ: الخاملة كلّها تتشابه');
+        expect(FiberPortMatch.find(sub(), port('p')), isNull, reason: 'قراءة VPN بلا عدّادات');
+        expect(FiberPortMatch.find(sub(), port('p', up: false, tx: 615000000, rx: 71000000)), isNull);
+        expect(FiberPortMatch.find(sub(), null), isNull);
+        expect(FiberPortMatch.find(const [], peer), isNull);
+      });
+
+      test('الفرق المسموح ١٥٪ من الأكبر — أبعد منه ليس مطابقة', () {
+        expect(FiberPortMatch.find([port('a', rx: 530000000, tx: 62000000)], peer), 'a', reason: '≈14٪');
+        expect(FiberPortMatch.find([port('a', rx: 500000000, tx: 71000000)], peer), isNull, reason: '≈19٪');
+        expect(FiberPortMatch.minBps, 2000000);
+      });
+
+      test('قراءتان متباعدتا اللحظة لا تُقارنان (ما يعبر تغيّر)', () {
+        expect(FiberPortMatch.find(sub(), peer, skew: const Duration(seconds: 60)), 'sfp1');
+        expect(FiberPortMatch.find(sub(), peer, skew: const Duration(seconds: -60)), 'sfp1', reason: 'أيّهما الأقدم سواء');
+        expect(FiberPortMatch.find(sub(), peer, skew: const Duration(minutes: 3)), isNull);
+        expect(FiberPortMatch.find(sub(), peer, skew: const Duration(minutes: -3)), isNull);
+      });
+
+      test('المنفذ الطافي عند هذا الطرف لا يُطابَق ولو حمل أرقاماً قديمة', () {
+        expect(FiberPortMatch.find([port('sfp1', up: false, rx: 612000000, tx: 70000000)], peer), isNull);
+      });
+    });
+  });
+
   test('النصوص بتمييز العدد العربيّ', () {
     expect([for (final n in [0, 1, 2, 4, 11]) TopoText.towers(n)], ['لا أبراج', 'برج واحد', 'برجان', '4 أبراج', '11 برجاً']);
+    expect([for (final n in [1, 2, 3, 11]) TopoText.toTowers(n)], ['إلى برج واحد', 'إلى برجين', 'إلى 3 أبراج', 'إلى 11 برجاً'], reason: 'المثنّى مجروراً بالياء');
     expect([for (final n in [0, 1, 2, 3, 12]) TopoText.links(n)], ['لا لنكات', 'لنك واحد', 'لنكان', '3 لنكات', '12 لنكاً']);
     expect([for (final n in [0, 1, 2, 6, 23]) TopoText.devices(n)], ['بلا أجهزة', 'جهاز واحد', 'جهازان', '6 أجهزة', '23 جهازاً']);
     expect(LinkState.values.map(TopoText.state).toList(), ['ممتاز', 'متوسّط', 'ضعيف', 'واقع', 'لم يُقرأ']);

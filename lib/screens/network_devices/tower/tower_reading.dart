@@ -33,6 +33,7 @@ class TowerReading {
     this.portsUp,
     this.portsTotal,
     this.busiestPort,
+    this.ports = const [],
     this.poeWatts,
     this.voltage,
     this.olt,
@@ -82,12 +83,32 @@ class TowerReading {
   final int? portsUp;
   final int? portsTotal;
   final PortTraffic? busiestPort;
+
+  /// منافذ الجهاز كما قُرئت (اسمها، شغّالة أم لا، ما يعبرها، سرعتها، ضوء الـSFP) — «الترابط» يقرأ منها منفذ الكيبل الضوئيّ
+  /// بين سويجين بعينه لا «أنشط منفذ» (المالك ١١ نوفمبر: «مباشر كيبل ضوئي بين سوجات»).
+  final List<PortTraffic> ports;
   final double? poeWatts;
   final double? voltage;
 
   /// أولت — المالك ٢٩ أكتوبر: «الاولتي مجاي يجلب بيانات في وضع البرج». من لقطة البنية نفسها التي تملأ بطاقة الجدار
   /// ([VsolOltStats])؛ `null` لغير الأولت.
   final OltSummary? olt;
+
+  /// المنفذ باسمه كما يسمّيه الجهاز (بلا حالة أحرف) — null إن لم يُقرأ منفذٌ بهذا الاسم.
+  PortTraffic? port(String? name) {
+    final n = (name ?? '').trim().toLowerCase();
+    if (n.isEmpty) return null;
+    for (final p in ports) {
+      if (p.name.trim().toLowerCase() == n) return p;
+    }
+    return null;
+  }
+
+  /// المنافذ السلكيّة (إيثر و SFP) — ما يصلح طرفَ كيبل؛ الواجهات اللاسلكيّة والمنطقيّة (جسر، VLAN، أنفاق) خارجها.
+  List<PortTraffic> get wiredPorts => [
+        for (final p in ports)
+          if (p.physical && !_isWirelessPort(p.name)) p,
+      ];
 
   /// نقطة وصول (تخدم مشتركين) لا مستقبِل.
   bool get isAccessPoint {
@@ -258,6 +279,7 @@ class TowerReading {
       portsUp: wired.isEmpty ? null : wired.where((p) => p.up).length,
       portsTotal: wired.isEmpty ? null : wired.length,
       busiestPort: busiest != null && busiest.total > 0 ? busiest : null,
+      ports: ports,
       poeWatts: poeWatts,
       voltage: voltage,
       olt: olt,

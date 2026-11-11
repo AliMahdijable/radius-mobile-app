@@ -87,22 +87,62 @@ class TowerApi {
 
   // ── ترابط الأبراج (١١ نوفمبر — الهجرة 086) ───────────────────────────────────────────────────
 
-  /// `POST /towers/links` — لنكٌ من جهاز البرج الرئيسيّ [aDeviceId] إلى جهاز الفرعيّ [bDeviceId].
-  static Future<({bool ok, TowerLink? link, String? message})> addLink(int aDeviceId, int bDeviceId, {String? label}) async {
+  /// `POST /towers/links` — ربطٌ من جهاز البرج الرئيسيّ [aDeviceId] إلى جهاز الفرعيّ [bDeviceId]: لنكٌ لاسلكيّ (الافتراضيّ،
+  /// كما كان) أو كيبلٌ ضوئيّ ([kind] = fiber) بمنفذه عند كلّ طرف ([aPort]/[bPort] — يُحدَّدان الآن أو لاحقاً).
+  /// [existed]: الخادم وجده مربوطاً من قبل فأعاده كما هو.
+  static Future<({bool ok, TowerLink? link, bool existed, String? message})> addLink(
+    int aDeviceId,
+    int bDeviceId, {
+    String? label,
+    TowerLinkKind kind = TowerLinkKind.radio,
+    String? aPort,
+    String? bPort,
+  }) async {
+    String? port(String? v) => v == null || v.trim().isEmpty ? null : v.trim();
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/towers/links', data: {
         'a_device_id': aDeviceId,
         'b_device_id': bDeviceId,
         if (label != null && label.trim().isNotEmpty) 'label': label.trim(),
+        // اللاسلكيّ بلا «kind»: الطلب نفسه الذي يفهمه خادمٌ قبل الهجرة 087
+        if (kind == TowerLinkKind.fiber) ...{
+          'kind': kind.wire,
+          if (port(aPort) != null) 'a_port': port(aPort),
+          if (port(bPort) != null) 'b_port': port(bPort),
+        },
       });
       final link = TowerLink.fromJson(r.data?['link']);
       if (r.statusCode != 200 || r.data?['success'] != true || link == null) {
-        return (ok: false, link: null, message: _msg(r, 'تعذّر حفظ الربط'));
+        return (ok: false, link: null, existed: false, message: _msg(r, 'تعذّر حفظ الربط'));
+      }
+      return (ok: true, link: link, existed: r.data?['existed'] == true, message: null);
+    } catch (e) {
+      _log('addLink', e);
+      return (ok: false, link: null, existed: false, message: humanError(e, fallback: 'تعذّر حفظ الربط'));
+    }
+  }
+
+  /// `PUT /towers/links/:id` — نوع الربط ومنفذا الكيبل معاً (المنفذ null يُمسح؛ واللاسلكيّ بلا منافذ).
+  static Future<({bool ok, TowerLink? link, String? message})> setLinkMedium(
+    int id, {
+    required TowerLinkKind kind,
+    String? aPort,
+    String? bPort,
+  }) async {
+    String? port(String? v) => v == null || v.trim().isEmpty ? null : v.trim();
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>('$_base/towers/links/$id', data: {
+        'kind': kind.wire,
+        if (kind == TowerLinkKind.fiber) ...{'a_port': port(aPort), 'b_port': port(bPort)},
+      });
+      final link = TowerLink.fromJson(r.data?['link']);
+      if (r.statusCode != 200 || r.data?['success'] != true || link == null) {
+        return (ok: false, link: null, message: _msg(r, 'تعذّر تعديل الربط'));
       }
       return (ok: true, link: link, message: null);
     } catch (e) {
-      _log('addLink', e);
-      return (ok: false, link: null, message: humanError(e, fallback: 'تعذّر حفظ الربط'));
+      _log('setLinkMedium', e);
+      return (ok: false, link: null, message: humanError(e, fallback: 'تعذّر تعديل الربط'));
     }
   }
 

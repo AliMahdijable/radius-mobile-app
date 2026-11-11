@@ -46,6 +46,10 @@ class TowerLinkProbe extends ChangeNotifier {
   final Map<int, TowerReach> _reach = {};
   final Set<int> _reaching = {};
   final Set<int> _inFlight = {};
+
+  /// من ينتظر القراءة الجارية على جهاز ([readOnce] والدورة تقرؤه)، وقراءات [readOnce] المعلّقة بمالكها في الطابور.
+  final Map<int, List<Completer<void>>> _landing = {};
+  final Map<Object, Completer<TowerReading?>> _once = {};
   final Set<int> _scanned = {};
   final Map<int, Timer> _followUps = {};
   final Set<int> _followed = {};
@@ -125,6 +129,8 @@ class TowerLinkProbe extends ChangeNotifier {
     for (final id in _owners.keys.toList()) {
       if (!next.containsKey(id) && !_others.containsKey(id)) {
         DeepProbeScheduler.instance.cancel(_owners.remove(id)!);
+        // مهمّةٌ سُحبت قبل أن تبدأ لا يصلها `finally` — وإلّا بقي الجهاز «قيد القراءة» ولم يُقرأ إن رُبط من جديد
+        _land(id);
         _readings.remove(id);
         _failedSince.remove(id);
         _reach.remove(id);
@@ -169,6 +175,77 @@ class TowerLinkProbe extends ChangeNotifier {
     _followUps.clear();
   }
 
+  /// قراءةٌ واحدة مفصّلة لجهازٍ **الآن** — لمنتقي منفذ الكيبل الضوئيّ (منافذ السويج بحالها وما يعبرها)، أيّاً كان الجهاز
+  /// (طرف وصلةٍ أو لا). بطابور القسم نفسه ومخزنه، فلا تُدفع الجلسة مرّتين. تُرجع ما قُرئ، أو آخر ما عندنا إن لم يُقرأ
+  /// (خارج الشبكة، بلا بيانات دخول، تعذّر الاتّصال) — وnull إن لم يكن عندنا شيء.
+  Future<TowerReading?> readOnce(NetworkDevice d) async {
+    if (_disposed) return null;
+    TowerReading? last() => _disposed ? null : _readings[d.id];
+    if (DeviceVitals.skipReason(d.copyWith(lastStatus: 'online')) != null || DeviceSweep.suspended || DeviceSweep.busy(d.id)) {
+      return last();
+    }
+    // الدورة تقرؤه الآن (طرف وصلة) — تُنتظر قراءتها، لا جلسةٌ ثانية على الجهاز نفسه
+    if (_inFlight.contains(d.id)) {
+      final landed = Completer<void>();
+      (_landing[d.id] ??= []).add(landed);
+      await landed.future.timeout(readOnceTimeout, onTimeout: () {});
+      return last();
+    }
+    _inFlight.add(d.id);
+    final owner = Object();
+    final done = Completer<TowerReading?>();
+    _once[owner] = done;
+    DeepProbeScheduler.instance.submit(owner, first: true, () async {
+      try {
+        final prev = DeviceStatsCache.instance.sampleOf(d.id);
+        final r = await DeviceVitals.fetch(
+          d,
+          prev: prev == null ? null : CounterSample(prev.counters, prev.at),
+          detailed: true,
+        );
+        if (r.raw != null) DeviceStatsCache.instance.putRaw(d.id, r.raw!, detailed: true);
+        DeviceStatsCache.instance.putVitals(d.id, r.vitals, r.detail);
+        DeviceStatsCache.instance.putSample(d.id, r.counters);
+        final reading = TowerReading.fromProbe(r);
+        if (!_disposed) {
+          _readings[d.id] = reading;
+          DeviceReadHealth.instance.ok(d.id);
+          if (_ends.containsKey(d.id)) {
+            _failedSince.remove(d.id);
+            _reached(d.id);
+          }
+          _scheduleFlush();
+        }
+        if (!done.isCompleted) done.complete(reading);
+      } catch (_) {
+        // قراءةٌ بطلب المنتقي: فشلها يقوله المنتقي نفسه («تعذّرت قراءة منافذه») — لا يُسجَّل على الجهاز عطلاً
+        if (!done.isCompleted) done.complete(last());
+      } finally {
+        _once.remove(owner);
+        _land(d.id);
+      }
+    });
+    // مهمّةٌ علقت جلستها لا تُبقي المنتقي يدور — ولا تحجز الجهاز عن دورة القراءة
+    return done.future.timeout(readOnceTimeout, onTimeout: () {
+      _once.remove(owner);
+      _land(d.id);
+      return last();
+    });
+  }
+
+  /// أقصى انتظار [readOnce].
+  static const readOnceTimeout = Duration(seconds: 25);
+
+  /// انتهت القراءة الجارية على الجهاز (نجحت أو لا) — يُفرج عنه ويُنبَّه من ينتظرها.
+  void _land(int id) {
+    _inFlight.remove(id);
+    final waiting = _landing.remove(id);
+    if (waiting == null) return;
+    for (final w in waiting) {
+      if (!w.isCompleted) w.complete();
+    }
+  }
+
   /// الآن لا بعد الدورة (رجع من صفحة جهاز، أو سحب للتحديث).
   void refreshNow({int? only}) {
     if (!_running) return;
@@ -186,6 +263,15 @@ class TowerLinkProbe extends ChangeNotifier {
     _flush?.cancel();
     for (final o in _owners.values) {
       DeepProbeScheduler.instance.cancel(o);
+    }
+    // قراءات المنتقي المعلّقة ومن ينتظر: تُسحب وتُجاب بلا شيء — لا مؤقّت يبقى بعد الشاشة
+    for (final e in _once.entries.toList()) {
+      DeepProbeScheduler.instance.cancel(e.key);
+      if (!e.value.isCompleted) e.value.complete(null);
+    }
+    _once.clear();
+    for (final id in _landing.keys.toList()) {
+      _land(id);
     }
     super.dispose();
   }
@@ -281,7 +367,7 @@ class TowerLinkProbe extends ChangeNotifier {
         _checkReach(d);
         _scheduleFlush();
       } finally {
-        _inFlight.remove(d.id);
+        _land(d.id);
       }
     });
   }

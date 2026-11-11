@@ -32,6 +32,10 @@ import 'tower_topology_paint.dart';
 /// الأبراج (مناطق الأجهزة) مصغّرةً: الرئيسيّ أعلى والفرعيّات تحته، ووصلة كلّ لنك شرطاتٌ تسير من الرئيسيّ للفرعيّ بلون حالها،
 /// وفوق كلّ فرعيّ ما ينزل له الآن. الربط يُحفظ على خادمنا ([TowerApi])، والقراءات من طرفَي كلّ لنك مباشرةً ([TowerLinkProbe])
 /// — «واقع» لا يُقال إلّا بفحصٍ حديث، وما لم يُقرأ «—» لا صفر.
+///
+/// والربط نوعان (المالك صباح ١١ نوفمبر: «اكو ابراج ترتبط مع بعضها فايبر… مرات مو لنك يعني مباشر كيبل ضوئي بين سوجات»):
+/// لنكٌ لاسلكيّ (شرطات، إشارة وCCQ) وكيبلٌ ضوئيّ بين سويجين (خطٌّ متّصل بنبضات): ما يعبر **منفذه** بعينه، وسرعة المنفذ وضوء
+/// الـSFP، و«واقع» حين يقول السويج نفسه إنّ المنفذ طافٍ.
 class TowerTopologyScreen extends StatefulWidget {
   const TowerTopologyScreen({
     super.key,
@@ -86,6 +90,9 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
 
   bool get _canEdit => Perms.has('devices.manage');
   bool get _ready => _loadedOk && _layouts.linksReady;
+
+  /// الخادم يحفظ الكيبل الضوئيّ (الهجرة 087) — وإلّا اللنك اللاسلكيّ وحده.
+  bool get _fiberReady => _ready && _layouts.fiberReady;
 
   /// الجهاز بمعرّفه وبرجه (منطقته، و0 بلا منطقة) — تُحسب مرّةً لكلّ قائمة أجهزة.
   Map<int, NetworkDevice> _byId = const {};
@@ -208,16 +215,26 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     return n;
   }
 
-  /// طرف رئيسيّ واحد لعدّة لنكات (ماستر بعدّة سليفات): ما يعبر واجهته مجموعُها كلّها، لا لنكٌ بعينه — فلا يُنسب لأيٍّ منها؛
-  /// قراءة طرف الفرعيّ وحدها تقول ما يعبر لنكه (وإلّا «—» لا مجموعٌ يُكرَّر على كلّ لنك).
-  bool _sharedMain(TowerLink l) => _links.where((x) => x.aDeviceId == l.aDeviceId).length > 1;
+  /// طرف رئيسيّ واحد لعدّة لنكات لاسلكيّة (ماستر بعدّة سليفات): ما يعبر واجهته مجموعُها كلّها، لا لنكٌ بعينه — فلا يُنسب
+  /// لأيٍّ منها؛ قراءة طرف الفرعيّ وحدها تقول ما يعبر لنكه (وإلّا «—» لا مجموعٌ يُكرَّر على كلّ لنك). الكيبل لا يلزمه هذا:
+  /// لكلّ كيبلٍ منفذه وعدّاده.
+  bool _sharedMain(TowerLink l) => _links.where((x) => !x.isFiber && x.aDeviceId == l.aDeviceId).length > 1;
 
-  LinkFlow _flowOf(TowerLink l) => LinkFlow.of(
-        ra: _sharedMain(l) ? null : _probe.readingOf(l.aDeviceId),
-        rb: _probe.readingOf(l.bDeviceId),
-        aDown: _probe.isDown(l.aDeviceId),
-        bDown: _probe.isDown(l.bDeviceId),
-      );
+  LinkFlow _flowOf(TowerLink l) => l.isFiber
+      ? LinkFlow.ofFiber(
+          ra: _probe.readingOf(l.aDeviceId),
+          rb: _probe.readingOf(l.bDeviceId),
+          aPort: l.aPort,
+          bPort: l.bPort,
+          aDown: _probe.isDown(l.aDeviceId),
+          bDown: _probe.isDown(l.bDeviceId),
+        )
+      : LinkFlow.of(
+          ra: _sharedMain(l) ? null : _probe.readingOf(l.aDeviceId),
+          rb: _probe.readingOf(l.bDeviceId),
+          aDown: _probe.isDown(l.aDeviceId),
+          bDown: _probe.isDown(l.bDeviceId),
+        );
 
   // ── الأفعال ─────────────────────────────────────────────────────────────────────────────
 
@@ -243,11 +260,70 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
         links: _links,
         suggestions: _suggestions(),
         fromTower: from?.id,
+        fiberReady: _fiberReady,
+        readDevice: _probe.readOnce,
+        knownReading: (id) => _probe.known[id],
       ),
     ));
     if (link == null || !mounted) return;
     _putLink(link);
-    showSheetSnack(context, 'رُبط اللنك');
+    showSheetSnack(context, link.isFiber ? 'رُبط الكيبل' : 'رُبط اللنك');
+  }
+
+  /// منفذ الكيبل عند أحد طرفيه — يُختار من منافذ الجهاز كما تُقرأ الآن.
+  Future<void> _setPort(TowerLink l, {required bool main}) async {
+    if (!_guard() || _busy.contains(l.id)) return;
+    final d = _byId[main ? l.aDeviceId : l.bDeviceId];
+    if (d == null) return;
+    final peer = _probe.readingOf(main ? l.bDeviceId : l.aDeviceId);
+    final r = await showTowerPortPicker(
+      context,
+      device: d,
+      main: main,
+      current: main ? l.aPort : l.bPort,
+      taken: fiberPortsTaken(_links, d.id, except: l.id),
+      readDevice: _probe.readOnce,
+      known: _probe.known[d.id],
+      // منفذ الطرف الآخر كما يُقرأ الآن — به يُعلَّم المنفذ المطابق
+      peer: peer?.port(main ? l.bPort : l.aPort),
+      peerAt: peer?.at,
+    );
+    if (r == null || !mounted) return;
+    await _saveMedium(l, kind: TowerLinkKind.fiber, aPort: main ? r.port : l.aPort, bPort: main ? l.bPort : r.port);
+  }
+
+  /// تحويل النوع من تفاصيل الوصلة. من كيبلٍ اختير منفذه إلى لنك: المنفذان يُمسحان (اللنك بلا منافذ) — فيُسأل أوّلاً.
+  Future<void> _convert(TowerLink l, TowerLinkKind kind) async {
+    if (!_guard() || _busy.contains(l.id)) return;
+    if (kind == TowerLinkKind.radio && (l.aPort != null || l.bPort != null)) {
+      final sure = await showConfirmSheet(
+        context,
+        title: 'تحويله إلى لنك لاسلكي',
+        message: 'يُمسح منفذ الكيبل المحدَّد عند الطرفين. إن رجعت للكيبل تختاره من جديد.',
+        confirmLabel: 'حوّله',
+        icon: LucideIcons.radioTower,
+      );
+      if (sure != true || !mounted) return;
+    }
+    await _saveMedium(l, kind: kind, aPort: l.aPort, bPort: l.bPort);
+  }
+
+  /// نوع الربط (لنك لاسلكيّ ⇄ كيبل ضوئيّ) ومنفذا الكيبل.
+  Future<void> _saveMedium(TowerLink l, {required TowerLinkKind kind, String? aPort, String? bPort}) async {
+    if (!_guard() || _busy.contains(l.id)) return;
+    if (kind == TowerLinkKind.fiber && !_fiberReady) {
+      showSheetSnack(context, 'الربط بالكيبل الضوئيّ غير متاح الآن — أعد المحاولة بعد قليل', isError: true, autoExplain: false);
+      return;
+    }
+    _update(() => _busy.add(l.id));
+    final r = await TowerApi.setLinkMedium(l.id, kind: kind, aPort: aPort, bPort: bPort);
+    if (!mounted) return;
+    _update(() => _busy.remove(l.id));
+    if (!r.ok || r.link == null) {
+      showSheetSnack(context, r.message ?? 'تعذّر تعديل الربط', isError: true);
+      return;
+    }
+    _putLink(r.link!);
   }
 
   void _putLink(TowerLink link) {
@@ -338,13 +414,17 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               aTower: a == null ? '—' : _towerName(a.regionId ?? 0),
               bTower: b == null ? '—' : _towerName(b.regionId ?? 0),
               flow: _flowOf(l),
+              note: _noteOf(l, _flowOf(l)),
               probe: _probe,
               canEdit: _canEdit,
+              fiberReady: _fiberReady,
               busy: _busy.contains(l.id),
               onOpenDevice: (d) {
                 Navigator.of(ctx).pop();
                 _openDevice(d);
               },
+              onPort: (main) => _setPort(l, main: main),
+              onKind: (kind) => _convert(l, kind),
               onFlip: () => _flip(l),
               onDelete: () async {
                 final nav = Navigator.of(ctx);
@@ -366,9 +446,12 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       barrierColor: AppColors.scrim,
       builder: (ctx) => DesignSheet(
         header: SheetHeaderBar(
-          icon: LucideIcons.link,
+          icon: e.fiber ? LucideIcons.cable : LucideIcons.link,
           title: '${_towerName(e.from)} ← ${_towerName(e.to)}',
-          subtitle: TopoText.links(e.links.length),
+          subtitle: TopoText.linkCounts(
+            radio: e.links.where((l) => !l.isFiber).length,
+            fiber: e.links.where((l) => l.isFiber).length,
+          ),
           onClose: () => Navigator.of(ctx).pop(),
         ),
         body: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -400,7 +483,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
             // لبرجين فأكثر — برجٌ واحد لا يُربط بشيء
             if (_towers().length >= 2)
               IconButton(
-                tooltip: 'ربط لنك بين برجين',
+                tooltip: 'ربط برجين — لنك أو كيبل',
                 icon: Icon(_canEdit ? LucideIcons.link : LucideIcons.lock, size: 20),
                 onPressed: _loading ? null : _openEditor,
               ),
@@ -477,7 +560,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               Padding(
                 padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
                 child: Text(
-                  'القراءات من طرفَي كلّ لنك مباشرةً وتتحدّث كلّ ${_probe.refreshEvery.inSeconds} ثانية.',
+                  'القراءات من طرفَي كلّ وصلة مباشرةً وتتحدّث كلّ ${_probe.refreshEvery.inSeconds} ثانية.',
                   textAlign: TextAlign.center,
                   style: AppType.muted(color: AppColors.textMid),
                 ),
@@ -508,7 +591,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
         ],
         Expanded(
           child: Text(
-            '${TopoText.towers(n)} · ${TopoText.links(_links.length - topo.broken.length)}',
+            '${TopoText.towers(n)} · ${TopoText.linkCounts(radio: _drawn(topo, fiber: false), fiber: _drawn(topo, fiber: true))}',
             style: AppType.body(color: AppColors.textMid),
             overflow: TextOverflow.ellipsis,
           ),
@@ -516,6 +599,12 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       ]),
     );
   }
+
+  /// ما يُرسم من الوصلات بنوعه (ما لا يُرسم — طرفاه في برجٍ واحد — خارج العدّ).
+  int _drawn(TowerTopology topo, {required bool fiber}) =>
+      topo.edges.fold<int>(0, (n, e) => n + e.links.where((l) => l.isFiber == fiber).length);
+
+  bool _anyFiber(TowerTopology topo) => topo.edges.any((e) => e.links.any((l) => l.isFiber));
 
   Widget _notice(AppTone tone, IconData icon, String text, {String? action, VoidCallback? onAction}) => Padding(
         padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
@@ -551,14 +640,27 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
 
   Widget _kpis(TowerTopology topo, Map<int, LinkFlow> flows) {
     final roots = {for (final n in topo.nodes) if (n.root) n.tower.id};
+    // ما يوزّعه الرئيسيّ: مجموع ما يعبر وصلاته الشغّالة. الواقعة لا يعبرها شيء فلا تُعدّ؛ والتي تعمل ولم يُقرأ ما يعبرها (طرفٌ
+    // لم يُقرأ، منفذٌ بلا عدّادات عبر VPN، كيبلٌ بلا منفذ) تجعل المجموع ناقصاً — فيُقال «المقروء N من M» لا «إلى M أبراج».
     int? out;
-    var fed = 0;
+    var alive = 0, measured = 0;
+    final fed = <int>{};
     for (final e in topo.edges) {
       if (!roots.contains(e.from)) continue;
-      fed++;
-      final v = LinkFlow.merge(e.links.map((l) => flows[l.id]!)).toSubBps;
-      if (v != null) out = (out ?? 0) + v;
+      for (final l in e.links) {
+        final f = flows[l.id]!;
+        if (f.state == LinkState.down) continue;
+        alive++;
+        fed.add(e.to);
+        final v = f.toSubBps;
+        if (v == null) continue;
+        out = (out ?? 0) + v;
+        measured++;
+      }
     }
+    final outFoot = alive == 0
+        ? 'لا وصلة تعمل'
+        : (measured > 0 && measured < alive ? 'المقروء $measured من $alive' : TopoText.toTowers(fed.length));
     final all = [for (final e in topo.edges) ...e.links.map((l) => flows[l.id]!)];
     final working = all.where((f) => f.state == LinkState.ok || f.state == LinkState.fair || f.state == LinkState.weak).length;
     final down = all.where((f) => f.state == LinkState.down).length;
@@ -594,9 +696,9 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
       child: Row(children: [
-        tile('يوزّع الرئيسي', TowerText.bps(out), fed == 0 ? '—' : 'إلى ${TopoText.towers(fed)}'),
+        tile('يوزّع الرئيسي', TowerText.bps(out), outFoot),
         const SizedBox(width: Sp.sm),
-        tile('اللنكات', '$working/${all.length}', linksFoot,
+        tile(_anyFiber(topo) ? 'الوصلات' : 'اللنكات', '$working/${all.length}', linksFoot,
             footColor: down > 0 || (weak > 0 && working == all.length) ? AppColors.error : null),
         const SizedBox(width: Sp.sm),
         tile('الأبراج', '$towers', topo.loose.isEmpty ? 'كلّها مربوطة' : '${topo.loose.length} غير مربوط'),
@@ -619,6 +721,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
         state: flow.state,
         tree: e.tree,
         hasPill: e.tree,
+        fiber: e.fiber,
       );
       shapes.add(shape);
       // وصلة الشجرة: ما ينزل للفرعيّ فوقه مباشرةً؛ غيرها حبّتها في منتصفها
@@ -689,7 +792,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               ]),
             ),
           ),
-          if (topo.hasLinks) _legend(),
+          if (topo.hasLinks) _legend(mixed: _anyFiber(topo)),
         ]),
       ),
     );
@@ -790,11 +893,14 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       LinkState.unknown => AppTone.neutral,
     };
     final down = f.state == LinkState.down;
-    final text = down ? 'واقع' : TowerText.bps(f.toSubBps);
+    // تعمل ولم يُعرف ما يعبرها بعد (أوّل قراءة، أو قراءةٌ بلا عدّادات كالـVPN) ⇒ «يعمل» لا «—»
+    final text = down
+        ? 'واقع'
+        : (f.toSubBps != null ? TowerText.bps(f.toSubBps) : (f.state == LinkState.unknown ? '—' : 'يعمل'));
     return Semantics(
       button: true,
-      label: 'لنك ${_towerName(e.from)} إلى ${_towerName(e.to)} — '
-          '${down ? 'واقع' : (f.toSubBps == null ? 'لم يُقرأ' : 'ينزل $text')}',
+      label: '${e.fiber ? 'كيبل' : 'لنك'} ${_towerName(e.from)} إلى ${_towerName(e.to)} — '
+          '${down ? 'واقع' : (f.toSubBps == null ? (f.state == LinkState.unknown ? 'لم يُقرأ' : 'يعمل') : 'ينزل $text')}',
       excludeSemantics: true,
       child: Material(
         key: ValueKey('topo-pill-${e.from}-${e.to}'),
@@ -833,7 +939,24 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     );
   }
 
-  Widget _legend() {
+  Widget _legend({bool mixed = false}) {
+    // نوعا الوصلة برسمهما — حين يوجد كيبل: خطٌّ متّصل للكيبل وشرطات للّنك
+    Widget kind(String label, {required bool solid}) => Row(mainAxisSize: MainAxisSize.min, children: [
+          if (solid)
+            Container(width: 16, height: 2.4, decoration: BoxDecoration(color: AppColors.textMid, borderRadius: BorderRadius.circular(R.pill)))
+          else
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              for (var i = 0; i < 3; i++)
+                Container(
+                  width: 4,
+                  height: 2.4,
+                  margin: EdgeInsetsDirectional.only(end: i == 2 ? 0 : 2),
+                  decoration: BoxDecoration(color: AppColors.textMid, borderRadius: BorderRadius.circular(R.pill)),
+                ),
+            ]),
+          const SizedBox(width: 4),
+          Text(label, style: AppType.micro(color: AppColors.textMid)),
+        ]);
     Widget item(Color c, String label, {bool cross = false}) => Row(mainAxisSize: MainAxisSize.min, children: [
           cross
               ? Icon(LucideIcons.x, size: 11, color: c)
@@ -845,16 +968,25 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 7),
       decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.divider))),
-      child: Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(LucideIcons.arrowDown, size: 11, color: AppColors.textMid),
-          const SizedBox(width: 3),
-          Text('ينزل للفرعي', style: AppType.micro(color: AppColors.textMid)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (mixed) ...[
+          Wrap(alignment: WrapAlignment.center, spacing: 14, runSpacing: 4, children: [
+            kind('كيبل ضوئي', solid: true),
+            kind('لنك لاسلكي', solid: false),
+          ]),
+          const SizedBox(height: 5),
+        ],
+        Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(LucideIcons.arrowDown, size: 11, color: AppColors.textMid),
+            const SizedBox(width: 3),
+            Text('ينزل للفرعي', style: AppType.micro(color: AppColors.textMid)),
+          ]),
+          item(AppColors.success, 'ممتاز'),
+          item(AppColors.warningFill, 'متوسّط'),
+          item(AppColors.error, 'ضعيف'),
+          item(AppColors.error, 'واقع', cross: true),
         ]),
-        item(AppColors.success, 'ممتاز'),
-        item(AppColors.warningFill, 'متوسّط'),
-        item(AppColors.error, 'ضعيف'),
-        item(AppColors.error, 'واقع', cross: true),
       ]),
     );
   }
@@ -883,7 +1015,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(_canEdit ? LucideIcons.plus : LucideIcons.lock, size: 15, color: AppColors.onBrand),
                 const SizedBox(width: 5),
-                Text('ربط لنك', style: AppType.bodyBold(color: AppColors.onBrand)),
+                Text('ربط برجين', style: AppType.bodyBold(color: AppColors.onBrand)),
               ]),
             ),
           ),
@@ -893,7 +1025,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
   Widget _linksSection(TowerTopology topo, Map<int, LinkFlow> flows) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionTitle('اللنكات · ${_links.length - topo.broken.length}', trailing: _addButton()),
+          _sectionTitle('${_anyFiber(topo) ? 'الوصلات' : 'اللنكات'} · ${_links.length - topo.broken.length}', trailing: _addButton()),
           for (final e in topo.edges)
             for (final l in e.links) _linkRow(l, flows[l.id]!, onTap: () => _openLink(l)),
         ],
@@ -903,20 +1035,8 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     final a = _byId[l.aDeviceId];
     final b = _byId[l.bDeviceId];
     final color = linkStateColor(f.state);
-    final quality = [
-      if (f.signal != null) '${f.signal} dBm',
-      if (f.ccq != null) 'CCQ ${f.ccq}٪',
-    ];
-    final String second;
-    if (f.state == LinkState.down) {
-      second = f.mainDown && f.subDown
-          ? 'الطرفان لا يردّان'
-          : (f.mainDown ? 'طرف الرئيسي لا يردّ' : 'طرف الفرعي لا يردّ');
-    } else if (f.state == LinkState.unknown) {
-      second = _probe.offNetwork ? 'خارج شبكتك' : _unreadWhy(l);
-    } else {
-      second = quality.isEmpty ? TopoText.state(f.state) : '${TopoText.state(f.state)} · ${isoJoin(quality, ' · ')}';
-    }
+    // الكيبل يُسمّى باسمه في سطره — واللنك كما كان
+    final second = l.isFiber ? 'كيبل · ${_noteOf(l, f)}' : _noteOf(l, f);
     return Padding(
       padding: EdgeInsets.fromLTRB(inSheet ? 0 : Sp.lg, 0, inSheet ? 0 : Sp.lg, 6),
       child: Semantics(
@@ -976,6 +1096,27 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
         ),
       ),
     );
+  }
+
+  /// سطر حال الوصلة: كلمتها وأرقامها، أو لمَ هي واقعة، أو لمَ لم تُقرأ.
+  String _noteOf(TowerLink l, LinkFlow f) {
+    if (f.state == LinkState.down) {
+      // السويج يردّ ويقول إنّ المنفذ طافٍ — الكيبل نفسه أو وحدة الـSFP أو الطرف الثاني مطفأ
+      if (f.mainPortDown || f.subPortDown) {
+        return f.mainPortDown && f.subPortDown
+            ? 'المنفذان طافيان — الكيبل أو الـSFP'
+            : (f.mainPortDown ? 'منفذ الرئيسي طافي — الكيبل أو الـSFP' : 'منفذ الفرعي طافي — الكيبل أو الـSFP');
+      }
+      return f.mainDown && f.subDown ? 'الطرفان لا يردّان' : (f.mainDown ? 'طرف الرئيسي لا يردّ' : 'طرف الفرعي لا يردّ');
+    }
+    if (f.state == LinkState.unknown) {
+      if (_probe.offNetwork) return 'خارج شبكتك';
+      if (f.portIssue == FiberPortIssue.unset) return 'اختر المنفذ ليظهر ما يعبر الكيبل';
+      if (f.portIssue == FiberPortIssue.missing) return 'المنفذ «${f.missingPort}» غير موجود بالجهاز — اختره من جديد';
+      return _unreadWhy(l);
+    }
+    final facts = TopoText.facts(f);
+    return facts.isEmpty ? TopoText.stateOf(f) : '${TopoText.stateOf(f)} · ${isoJoin(facts, ' · ')}';
   }
 
   /// لمَ لم يُقرأ اللنك — بسبب أحد طرفيه إن عُرف.
@@ -1116,7 +1257,10 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('اربط أبراجك', style: AppType.bodyBold(color: AppColors.textHi)),
                 const SizedBox(height: 2),
-                Text('اختر لنك البرج الرئيسي وطرفه في البرج الفرعي — يظهر مسار الترافيك من الرئيسي للفرعيّات.',
+                Text(
+                    _fiberReady
+                        ? 'لنك لاسلكي (ماستر وسليف) أو كيبل ضوئي بين سويجين — يظهر مسار الترافيك من الرئيسي للفرعيّات.'
+                        : 'اختر لنك البرج الرئيسي وطرفه في البرج الفرعي — يظهر مسار الترافيك من الرئيسي للفرعيّات.',
                     style: AppType.muted(color: AppColors.textMid)),
               ]),
             ),
@@ -1146,7 +1290,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               style: AppType.cardTitle(color: AppColors.textHi), textAlign: TextAlign.center),
           const SizedBox(height: Sp.xs),
           Text(
-            'قسّم أجهزتك على أبراج (كلّ برجٍ منطقة) ثمّ اربط اللنكات بينها — يظهر هنا الرئيسي والفرعيّات وسير الترافيك بينها.',
+            'قسّم أجهزتك على أبراج (كلّ برجٍ منطقة) ثمّ اربطها — لنكات لاسلكيّة أو كيابل ضوئيّة — يظهر هنا الرئيسي والفرعيّات وسير الترافيك بينها.',
             textAlign: TextAlign.center,
             style: AppType.body(color: AppColors.textMid),
           ),
@@ -1168,7 +1312,8 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       );
 }
 
-/// تفاصيل لنكٍ واحد: ما ينزل للفرعيّ وما يصعد منه، الإشارة والجودة، طرفاه، وقلب الاتّجاه والحذف.
+/// تفاصيل وصلةٍ واحدة: ما ينزل للفرعيّ وما يصعد منه، وأرقامها بنوعها (اللنك: الإشارة والـCCQ؛ الكيبل: سرعة المنفذ وضوء
+/// الـSFP ومنفذه عند كلّ طرف — يُغيَّر من هنا)، طرفاها، وقلب الاتّجاه والحذف وتحويل النوع.
 class _LinkSheet extends StatelessWidget {
   const _LinkSheet({
     required this.link,
@@ -1177,10 +1322,14 @@ class _LinkSheet extends StatelessWidget {
     required this.aTower,
     required this.bTower,
     required this.flow,
+    required this.note,
     required this.probe,
     required this.canEdit,
+    required this.fiberReady,
     required this.busy,
     required this.onOpenDevice,
+    required this.onPort,
+    required this.onKind,
     required this.onFlip,
     required this.onDelete,
   });
@@ -1191,15 +1340,24 @@ class _LinkSheet extends StatelessWidget {
   final String aTower;
   final String bTower;
   final LinkFlow flow;
+
+  /// سطر الحال كما في القائمة (كلمتها وأرقامها، أو لمَ هي واقعة/لم تُقرأ).
+  final String note;
   final TowerLinkProbe probe;
   final bool canEdit;
+  final bool fiberReady;
   final bool busy;
   final ValueChanged<NetworkDevice> onOpenDevice;
+
+  /// «غيّر المنفذ» عند طرف الرئيسيّ (true) أو الفرعيّ.
+  final ValueChanged<bool> onPort;
+  final ValueChanged<TowerLinkKind> onKind;
   final VoidCallback onFlip;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final fiber = link.isFiber;
     final AppTone tone = switch (flow.state) {
       LinkState.ok => AppTone.success,
       LinkState.fair => AppTone.warning,
@@ -1229,57 +1387,104 @@ class _LinkSheet extends StatelessWidget {
           ),
         );
 
-    Widget end(String caption, NetworkDevice? d, String tower, bool down) {
+    Widget end(String caption, NetworkDevice? d, String tower, bool down, {required bool main}) {
       final note = d == null
           ? null
           : (down
               ? 'لا يردّ'
               : (probe.needsSettings(d.id) ? 'يردّ وتعذّرت قراءته — تحقّق من إعداداته' : probe.skipReasonOf(d.id)));
+      final portName = main ? link.aPort : link.bPort;
+      final reading = d == null ? null : probe.readingOf(d.id);
+      final port = reading?.port(portName);
+      // الجهاز قُرئ بمنافذه وهذا ليس بينها (غُيّر اسمه أو كُتب خطأً) — يُقال عند طرفه، ولو قُرئ الكيبل من الطرف الآخر
+      final gone = portName != null && port == null && reading != null && reading.wiredPorts.isNotEmpty;
+      final portFacts = [
+        if (gone) 'غير موجود بالجهاز',
+        if (port != null && !port.up) 'طافي',
+        if (port != null && port.up && (port.linkSpeed ?? '').isNotEmpty) TopoText.speed(port.linkSpeed),
+        if (port?.sfpRx != null) TopoText.lightFact(port!.sfpRx),
+      ];
       return Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Material(
           color: AppColors.bg,
           borderRadius: BorderRadius.circular(R.md),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(R.md),
-            onTap: d == null ? null : () => onOpenDevice(d),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              child: Row(children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.chip)),
-                  child: d == null
-                      ? Icon(LucideIcons.circleAlert, size: 18, color: AppColors.textMid)
-                      : DeviceGlyph(shape: TowerShapes.detect(d).shape, size: 24, color: AppColors.brand),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(caption, style: AppType.micro(color: AppColors.textMid)),
-                    Text(d?.name ?? 'جهاز محذوف',
-                        style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(d == null ? '—' : isoJoin([tower, d.ip], ' · '),
-                        style: AppType.muted(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    if (note != null)
-                      Text(note, style: AppType.muted(color: down ? AppColors.error : AppTone.warning.onSoft), maxLines: 2),
-                  ]),
-                ),
-                if (d != null) Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
-              ]),
+          clipBehavior: Clip.antiAlias,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            InkWell(
+              onTap: d == null ? null : () => onOpenDevice(d),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                child: Row(children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.chip)),
+                    child: d == null
+                        ? Icon(LucideIcons.circleAlert, size: 18, color: AppColors.textMid)
+                        : DeviceGlyph(shape: TowerShapes.detect(d).shape, size: 24, color: AppColors.brand),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(caption, style: AppType.micro(color: AppColors.textMid)),
+                      Text(d?.name ?? 'جهاز محذوف',
+                          style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(d == null ? '—' : isoJoin([tower, d.ip], ' · '),
+                          style: AppType.muted(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (note != null)
+                        Text(note, style: AppType.muted(color: down ? AppColors.error : AppTone.warning.onSoft), maxLines: 2),
+                    ]),
+                  ),
+                  if (d != null) Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
+                ]),
+              ),
             ),
-          ),
+            // منفذ الكيبل عند هذا الطرف — يُغيَّر من هنا
+            if (fiber && d != null) ...[
+              Container(height: 1, color: AppColors.divider),
+              Semantics(
+                button: true,
+                child: InkWell(
+                  key: ValueKey('link-sheet-port-${main ? 'main' : 'sub'}'),
+                  onTap: () => onPort(main),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(children: [
+                      Icon(LucideIcons.cable, size: 15, color: portName == null ? AppColors.brand : AppColors.textMid),
+                      const SizedBox(width: 8),
+                      Text('المنفذ', style: AppType.muted(color: AppColors.textMid)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          portName == null ? 'اختر المنفذ' : isoJoin([portName, ...portFacts], ' · '),
+                          style: AppType.bodyBold(
+                              color: portName == null
+                                  ? AppColors.brand
+                                  : (port != null && !port.up
+                                      ? AppColors.error
+                                      : (gone ? AppTone.warning.onSoft : AppColors.textHi))),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(canEdit ? LucideIcons.pencil : LucideIcons.lock, size: 14, color: AppColors.textLow),
+                    ]),
+                  ),
+                ),
+              ),
+            ],
+          ]),
         ),
       );
     }
 
     return DesignSheet(
       header: SheetHeaderBar(
-        icon: LucideIcons.link,
+        icon: fiber ? LucideIcons.cable : LucideIcons.link,
         title: '$aTower ← $bTower',
-        subtitle: TopoText.state(flow.state),
+        subtitle: fiber ? 'كيبل ضوئي · ${TopoText.stateOf(flow)}' : TopoText.stateOf(flow),
         tint: tone == AppTone.neutral ? null : tone.onSoft,
         tintBg: tone == AppTone.neutral ? null : tone.softBg,
         onClose: () => Navigator.of(context).pop(),
@@ -1290,19 +1495,42 @@ class _LinkSheet extends StatelessWidget {
           const SizedBox(width: 6),
           cell('يصعد للرئيسي', TowerText.bps(flow.toMainBps), icon: LucideIcons.arrowUp),
           const SizedBox(width: 6),
-          cell('الإشارة', flow.signal == null ? '—' : '${flow.signal} dBm'),
-          const SizedBox(width: 6),
-          cell('CCQ', flow.ccq == null ? '—' : '${flow.ccq}٪'),
+          if (fiber) ...[
+            cell('سرعة المنفذ', TopoText.speed(flow.linkSpeed)),
+            const SizedBox(width: 6),
+            cell('ضوء الـSFP', TopoText.light(flow.light)),
+          ] else ...[
+            cell('الإشارة', flow.signal == null ? '—' : '${flow.signal} dBm'),
+            const SizedBox(width: 6),
+            cell('CCQ', flow.ccq == null ? '—' : '${flow.ccq}٪'),
+          ],
         ]),
-        if (probe.offNetwork)
+        // الواقع وما لم يُقرأ: السبب بكلماته (منفذٌ طافٍ، طرفٌ لا يردّ، بلا منفذ…)
+        if (flow.state == LinkState.down || flow.state == LinkState.unknown)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('أنت خارج شبكة أجهزتك — القراءة تظهر حين تتّصل بها أو تفعّل «وضع VPN».',
-                style: AppType.muted(color: AppColors.textMid)),
+            child: Text(note, style: AppType.body(color: flow.state == LinkState.down ? AppColors.error : AppColors.textMid)),
           ),
         const SizedBox(height: 4),
-        end('طرف البرج الرئيسي (الماستر)', a, aTower, flow.mainDown),
-        end('طرف البرج الفرعي (السليف)', b, bTower, flow.subDown),
+        end(fiber ? 'طرف البرج الرئيسي' : 'طرف البرج الرئيسي (الماستر)', a, aTower, flow.mainDown, main: true),
+        end(fiber ? 'طرف البرج الفرعي' : 'طرف البرج الفرعي (السليف)', b, bTower, flow.subDown, main: false),
+        // سويجان رُبطا «لنكاً» قبل أن يوجد الكيبل (أو العكس) — النوع يُصحَّح بلا حذفٍ وإعادة
+        if (fiberReady)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: const ValueKey('link-sheet-kind'),
+              onPressed: busy ? null : () => onKind(fiber ? TowerLinkKind.radio : TowerLinkKind.fiber),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brand,
+                minimumSize: const Size(44, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+              icon: Icon(canEdit ? (fiber ? LucideIcons.radioTower : LucideIcons.cable) : LucideIcons.lock, size: 15),
+              label: Text(fiber ? 'حوّله إلى لنك لاسلكي' : 'حوّله إلى كيبل ضوئي',
+                  style: AppType.bodyStrong(color: AppColors.brand)),
+            ),
+          ),
       ]),
       footer: SheetFooterBar(
         label: 'اقلب الاتّجاه',

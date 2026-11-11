@@ -91,9 +91,27 @@ List<Map<String, Object?>> fourTowersDevices() => [
       _d(423, 'سكتر الجامعة 3', 4),
     ];
 
-Map<String, Object?> _l(int id, int a, int b) => {'id': id, 'a_device_id': a, 'b_device_id': b, 'label': null, 'updated_at': '2026-11-10T22:00:00.000Z'};
+Map<String, Object?> _l(int id, int a, int b, {String kind = 'radio', String? aPort, String? bPort}) => {
+      'id': id,
+      'a_device_id': a,
+      'b_device_id': b,
+      'label': null,
+      'kind': kind,
+      'a_port': aPort,
+      'b_port': bPort,
+      'updated_at': '2026-11-10T22:00:00.000Z',
+    };
+
+/// كيبلٌ ضوئيّ بين سويجين بمنفذيه.
+Map<String, Object?> _f(int id, int a, int b, {String? aPort, String? bPort}) => _l(id, a, b, kind: 'fiber', aPort: aPort, bPort: bPort);
 
 List<Map<String, Object?>> starLinks() => [_l(1, 111, 211), _l(2, 112, 311), _l(3, 113, 411)];
+
+/// قراءة سويج: منافذه بحالها وما يعبرها (rx ما يستقبله المنفذ، tx ما يرسله) وسرعتها وضوء الـSFP.
+TowerReading _sw(List<PortTraffic> ports) => TowerReading(at: DateTime.now(), ports: ports);
+
+PortTraffic _port(String name, {bool up = true, int? rx, int? tx, String? speed, double? light}) =>
+    PortTraffic(name: name, up: up, rxBps: rx, txBps: tx, linkSpeed: speed, sfpRx: light);
 
 TowerReading _rd({String? mode, int? rx, int? tx, int? signal, int? ccq, int? freq, List<PeerLink> peers = const []}) => TowerReading(
       at: DateTime.now(),
@@ -130,6 +148,9 @@ class FakeTowersApi implements HttpClientAdapter {
   final List<Map<String, Object?>> regions;
   final List<Map<String, Object?>> links;
   bool linksReady = true;
+
+  /// الخادم بعد الهجرة 087 (الكيبل الضوئيّ ومنفذاه) — false: خادمٌ قبلها.
+  bool fiberReady = true;
   bool towersFail = false;
   int _nextLink = 50;
   int _nextRegion = 20;
@@ -166,24 +187,46 @@ class FakeTowersApi implements HttpClientAdapter {
     }
     if (m == 'GET' && p == '$base/towers') {
       if (towersFail) return _json(500, {'success': false, 'message': 'تعذّر جلب ترتيب البرج'});
-      return _json(200, {'success': true, 'towers': [], 'placements': [], 'links': linksReady ? links : [], 'links_ready': linksReady});
+      return _json(200, {
+        'success': true,
+        'towers': [],
+        'placements': [],
+        'links': linksReady ? links : [],
+        'links_ready': linksReady,
+        'fiber_ready': linksReady && fiberReady,
+      });
     }
+    // خانة فرادة الطرف الفرعيّ — كالخادم (server/towerRoutes.js slotOf)
+    String slot(Map<String, Object?> l) =>
+        l['kind'] != 'fiber' ? '' : (l['b_port'] != null ? 'p:${'${l['b_port']}'.toLowerCase()}' : 'a:${l['a_device_id']}');
+    String? port(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
     if (m == 'POST' && p == '$base/towers/links') {
       final a = data['a_device_id'] as int;
       final b = data['b_device_id'] as int;
+      final kind = (data['kind'] ?? 'radio') as String;
+      final fiber = kind == 'fiber';
       if (!_has(a) || !_has(b)) return _json(404, {'success': false, 'message': 'الجهاز غير موجود'});
-      if ((_region(a) ?? 0) == (_region(b) ?? 0)) return _json(400, {'success': false, 'message': 'الجهازان في البرج نفسه — اللنك يربط برجين'});
-      final same = links.where((l) => l['a_device_id'] == a && l['b_device_id'] == b).firstOrNull;
-      if (same != null) return _json(200, {'success': true, 'link': same, 'existed': true});
+      if ((_region(a) ?? 0) == (_region(b) ?? 0)) {
+        return _json(400, {'success': false, 'message': fiber ? 'الجهازان في البرج نفسه — الكيبل يربط برجين' : 'الجهازان في البرج نفسه — اللنك يربط برجين'});
+      }
+      if (fiber && !fiberReady) return _json(409, {'success': false, 'message': 'الربط بالكيبل الضوئيّ غير متاح الآن — حاول بعد قليل'});
+      final next = _l(_nextLink, a, b, kind: kind, aPort: fiber ? port(data['a_port']) : null, bPort: fiber ? port(data['b_port']) : null);
       if (links.any((l) => l['a_device_id'] == b && l['b_device_id'] == a)) {
         return _json(409, {'success': false, 'message': 'هذا اللنك مربوطٌ بالاتّجاه المعاكس — اقلب اتّجاهه'});
       }
-      if (links.any((l) => l['b_device_id'] == b)) {
-        return _json(409, {'success': false, 'message': 'الطرف الفرعيّ مربوطٌ بلنكٍ آخر — احذف ربطه أوّلاً'});
+      final pair = links.where((l) => l['a_device_id'] == a && l['b_device_id'] == b).toList();
+      if (pair.any((l) => l['kind'] != kind)) return _json(409, {'success': false, 'message': 'هذان الجهازان مربوطان — غيّر نوع الربط من تفاصيله'});
+      final same = pair.where((l) => !fiber || next['b_port'] == null || l['b_port'] == null || slot(l) == slot(next)).firstOrNull;
+      if (same != null) return _json(200, {'success': true, 'link': same, 'existed': true});
+      if (links.any((l) => l['b_device_id'] == b && slot(l) == slot(next))) {
+        return _json(409, {
+          'success': false,
+          'message': fiber ? 'منفذ الطرف الفرعيّ مربوطٌ بكيبلٍ آخر — اختر منفذاً غيره' : 'الطرف الفرعيّ مربوطٌ بلنكٍ آخر — احذف ربطه أوّلاً',
+        });
       }
-      final link = _l(_nextLink++, a, b);
-      links.add(link);
-      return _json(200, {'success': true, 'link': link});
+      _nextLink++;
+      links.add(next);
+      return _json(200, {'success': true, 'link': next});
     }
     final linkId = RegExp('^$base/towers/links/(\\d+)\$').firstMatch(p)?.group(1);
     if (linkId != null) {
@@ -194,14 +237,25 @@ class FakeTowersApi implements HttpClientAdapter {
         return _json(200, {'success': true});
       }
       if (m == 'PUT') {
+        final l = links[i];
+        final wantsFiber = data['kind'] == 'fiber' || port(data['a_port']) != null || port(data['b_port']) != null;
+        if (wantsFiber && !fiberReady) return _json(409, {'success': false, 'message': 'الربط بالكيبل الضوئيّ غير متاح الآن — حاول بعد قليل'});
+        var next = {...l};
+        if (data.containsKey('kind')) next['kind'] = data['kind'];
+        if (data.containsKey('a_port')) next['a_port'] = port(data['a_port']);
+        if (data.containsKey('b_port')) next['b_port'] = port(data['b_port']);
         if (data['flip'] == true) {
-          final l = links[i];
-          if (links.any((x) => x['id'] != l['id'] && x['b_device_id'] == l['a_device_id'])) {
-            return _json(409, {'success': false, 'message': 'الطرف الفرعيّ مربوطٌ بلنكٍ آخر — احذف ربطه أوّلاً'});
-          }
-          links[i] = {...l, 'a_device_id': l['b_device_id'], 'b_device_id': l['a_device_id']};
+          next = {...next, 'a_device_id': next['b_device_id'], 'b_device_id': next['a_device_id'], 'a_port': next['b_port'], 'b_port': next['a_port']};
         }
-        return _json(200, {'success': true, 'link': links[i]});
+        if (next['kind'] != 'fiber') next = {...next, 'a_port': null, 'b_port': null};
+        if (links.any((x) => x['id'] != l['id'] && x['b_device_id'] == next['b_device_id'] && slot(x) == slot(next))) {
+          return _json(409, {
+            'success': false,
+            'message': next['kind'] == 'fiber' ? 'منفذ الطرف الفرعيّ مربوطٌ بكيبلٍ آخر — اختر منفذاً غيره' : 'الطرف الفرعيّ مربوطٌ بلنكٍ آخر — احذف ربطه أوّلاً',
+          });
+        }
+        links[i] = next;
+        return _json(200, {'success': true, 'link': next});
       }
     }
     final assign = RegExp('^$base/regions/(\\d+)/assign\$').firstMatch(p)?.group(1);
@@ -233,6 +287,7 @@ class ProbeData {
   final Set<int> settings = {};
   bool off = false;
   Set<int> ends = {};
+  final List<int> readOnceCalls = [];
   FakeProbe? live;
 
   /// كأنّ دورة قراءةٍ انتهت.
@@ -271,6 +326,13 @@ class FakeProbe extends TowerLinkProbe {
   @override
   String? skipReasonOf(int id) => null;
 
+  /// منتقي منفذ الكيبل يقرأ الجهاز الآن — هنا ما حُقن له (أو لا شيء: «تعذّرت قراءته»).
+  @override
+  Future<TowerReading?> readOnce(NetworkDevice d) async {
+    data.readOnceCalls.add(d.id);
+    return data.off ? null : data.readings[d.id];
+  }
+
   @override
   void dispose() {
     if (identical(data.live, this)) data.live = null;
@@ -306,6 +368,13 @@ Future<void> snap(WidgetTester t, String name, VisualDevice d) async {
   f.parent.createSync(recursive: true);
   f.writeAsBytesSync(png!, flush: true);
 }
+
+/// النصّ بلا أحرف العزل الاتّجاهيّ (الشاشة تعزل المقاطع اللاتينيّة — `iso`/`isoJoin`) — للمطابقة بما يقرؤه الوكيل.
+String _strip(String s) => s.replaceAll(RegExp(r'[\u2066-\u2069\u200e\u200f\u202a-\u202e]'), '');
+Finder plain(String s) =>
+    find.byWidgetPredicate((w) => w is Text && w.data != null && _strip(w.data!) == s, description: 'نصّ «$s»');
+Finder plainHas(String s) =>
+    find.byWidgetPredicate((w) => w is Text && w.data != null && _strip(w.data!).contains(s), description: 'نصّ فيه «$s»');
 
 List<NetworkDevice> devicesOf(FakeTowersApi api) => [for (final d in api.devices) NetworkDevice.fromJson(Map<String, dynamic>.from(d))];
 List<DeviceRegion> regionsOf(FakeTowersApi api) => [for (final r in api.regions) DeviceRegion.fromJson(Map<String, dynamic>.from(r))];
@@ -385,6 +454,7 @@ void main() {
         expect(find.text('ترابط الأبراج'), findsOneWidget);
         expect(find.text('4 أبراج · 3 لنكات'), findsOneWidget);
         expect(find.text('مباشر'), findsOneWidget);
+        expect(find.text('إلى 3 أبراج'), findsOneWidget, reason: 'كلّ الوصلات مقروءة ⇒ المجموع كامل');
         // الرئيسيّ فوق الفرعيّات، والثلاثة على صفٍّ واحد داخل الشاشة
         final main = t.getRect(find.byKey(const ValueKey('topo-node-1')));
         final subs = [for (final id in [2, 3, 4]) t.getRect(find.byKey(ValueKey('topo-node-$id')))];
@@ -429,7 +499,7 @@ void main() {
         await boot(t);
         await openHub(t, d);
         expect(find.text('اللنكات · 3'), findsOneWidget);
-        expect(find.textContaining('القراءات من طرفَي كلّ لنك'), findsOneWidget);
+        expect(find.textContaining('القراءات من طرفَي كلّ وصلة'), findsOneWidget);
         await snap(t, 'star4_page', d);
         await close(t);
       }
@@ -444,6 +514,7 @@ void main() {
       expect(find.textContaining('2/3'), findsOneWidget);
       expect(find.text('طرف الفرعي لا يردّ'), findsOneWidget);
       expect(find.textContaining('230 Mbps'), findsOneWidget, reason: 'الواقع لا يُحسب في ما يوزّعه الرئيسيّ');
+      expect(find.text('إلى برجين'), findsOneWidget, reason: 'يوزّع الآن لبرجين — الثالث واقع');
       await snap(t, 'link_down', tall(p390));
       // عاد يردّ ⇒ يعود بلا إعادة فتح
       probe.down.clear();
@@ -451,6 +522,13 @@ void main() {
       await settle(t, seconds: 1);
       expect(find.text('1 واقع'), findsNothing);
       expect(find.textContaining('3/3'), findsOneWidget);
+      expect(find.text('إلى 3 أبراج'), findsOneWidget);
+      // الثلاثة واقعة ⇒ لا رقم ولا «إلى»
+      probe.down.addAll([211, 311, 411]);
+      probe.poke();
+      await settle(t, seconds: 1);
+      expect(find.text('لا وصلة تعمل'), findsOneWidget);
+      expect(find.text('3 واقع'), findsOneWidget);
       await close(t);
     });
 
@@ -520,6 +598,8 @@ void main() {
       expect(find.textContaining('240 Mbps'), findsNothing);
       expect(find.textContaining('2/3'), findsOneWidget);
       expect(find.text('1 لم يُقرأ'), findsOneWidget);
+      expect(find.text('المقروء 2 من 3'), findsOneWidget, reason: 'مجموعٌ ناقص لا يُقال «إلى 3 أبراج»');
+      expect(find.text('إلى 3 أبراج'), findsNothing);
       expect(probe.ends, {111, 211, 311, 411});
       await close(t);
     });
@@ -696,7 +776,7 @@ void main() {
       await settle(t, seconds: 2);
       expect(find.text('أجهزتك بلا أبراج بعد'), findsOneWidget);
       expect(find.text('برج جديد'), findsOneWidget);
-      expect(find.byTooltip('ربط لنك بين برجين'), findsNothing, reason: 'لا برجين ليُربطا');
+      expect(find.byTooltip('ربط برجين — لنك أو كيبل'), findsNothing, reason: 'لا برجين ليُربطا');
       await snap(t, 'no_zones', p390);
       await close(t);
     });
@@ -739,7 +819,7 @@ void main() {
     testWidgets('«ربط لنك»: طرف الرئيسيّ ثمّ الفرعيّ — ما في برج الطرف الآخر وما رُبط فرعيّاً معطّلٌ بسببه — والحفظ يرسمه', (t) async {
       await boot(t, links: [_l(1, 111, 211)]);
       await openHub(t, p390);
-      await t.tap(find.byTooltip('ربط لنك بين برجين'));
+      await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
       await settle(t, seconds: 1);
       expect(find.byType(TowerLinkEditorScreen), findsOneWidget);
       expect(t.widget<FilledButton>(find.byKey(const ValueKey('link-save'))).onPressed, isNull);
@@ -803,7 +883,7 @@ void main() {
       expect(find.text('الربط بين الأبراج غير متاح الآن.'), findsOneWidget);
       expect(find.text('4 أبراج · لا لنكات'), findsOneWidget);
       expect(find.text('اربط أبراجك'), findsNothing, reason: 'لا دعوة لما لا يمكن');
-      await t.tap(find.byTooltip('ربط لنك بين برجين'));
+      await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
       await settle(t, seconds: 4);
       expect(find.byType(TowerLinkEditorScreen), findsNothing);
       await close(t);
@@ -817,6 +897,352 @@ void main() {
       await t.tap(find.text('أعد المحاولة'));
       await settle(t, seconds: 2);
       expect(find.text('4 أبراج · 3 لنكات'), findsOneWidget);
+      await close(t);
+    });
+  });
+
+  // ── ١١ نوفمبر صباحاً — المالك: «اكو ابراج ترتبط مع بعضها فايبر… مرات مو لنك يعني مباشر كيبل ضوئي بين سوجات» ──
+  group('الكيبل الضوئيّ بين سويجين', () {
+    // سويج الرئيسيّ (102) يخرج منه كيبلان: للحيّ (201) وللجامعة (401)؛ والمعامل بلنكٍ لاسلكيّ كما هو
+    List<Map<String, Object?>> mixedLinks() => [
+          _f(1, 102, 201, aPort: 'sfp-sfpplus1', bPort: 'sfp1'),
+          _l(2, 112, 311),
+          _f(3, 102, 401, aPort: 'sfp-sfpplus2', bPort: 'sfp-sfpplus1'),
+        ];
+    Map<int, TowerReading> mixedReadings() => {
+          102: _sw([
+            _port('sfp-sfpplus1', tx: 615000000, rx: 71000000, speed: '10Gbps', light: -6.4),
+            _port('sfp-sfpplus2', tx: 231000000, rx: 30000000, speed: '10Gbps', light: -8.0),
+            _port('ether1', tx: 880000000, rx: 990000000, speed: '1Gbps'), // الأنشط — ليس كيبل برج
+            _port('ether2', up: false),
+          ]),
+          201: _sw([
+            _port('sfp1', rx: 612000000, tx: 70000000, speed: '10Gbps', light: -7.1),
+            _port('sfp2', up: false),
+            _port('ether1', rx: 4000000, tx: 300000000, speed: '1Gbps'),
+          ]),
+          401: _sw([
+            _port('sfp-sfpplus1', rx: 228000000, tx: 29000000, speed: '10Gbps', light: -26.8),
+            _port('ether1', rx: 1000000, tx: 110000000, speed: '1Gbps'),
+          ]),
+          112: starReadings()[112]!,
+          311: starReadings()[311]!,
+        };
+
+    testWidgets('كيبلان ولنك: كلّ نوعٍ برسمه واسمه، وما ينزل لكلّ برج ما يعبر منفذ كيبله — لا أنشط منفذ', (t) async {
+      for (final d in [tall(p390), tall(p390dark), tall(p360)]) {
+        await boot(t, links: mixedLinks(), readings: mixedReadings());
+        await openHub(t, d);
+        expect(plain('4 أبراج · لنك واحد · كيبلان'), findsOneWidget);
+        expect(plain('الوصلات · 3'), findsOneWidget);
+        expect(plain('الوصلات'), findsOneWidget, reason: 'بلاطة الملخّص');
+        // منفذ كيبل الحيّ يستقبل 612 — لا 300 (أنشط منافذه) ولا 990 (أنشط منافذ الرئيسيّ)
+        expect(plainHas('612 Mbps'), findsWidgets);
+        expect(plainHas('228 Mbps'), findsWidgets);
+        expect(plainHas('990 Mbps'), findsNothing);
+        expect(plainHas('300 Mbps'), findsNothing);
+        expect(plainHas('886 Mbps'), findsOneWidget, reason: 'يوزّع الرئيسي: 612 + 228 + 46.2');
+        expect(plain('إلى 3 أبراج'), findsOneWidget);
+        expect(plain('كيبل · يعمل · 10G · ضوء -7.1 dBm'), findsOneWidget);
+        expect(plain('كيبل · ضوء ضعيف · 10G · ضوء -26.8 dBm'), findsOneWidget);
+        expect(plainHas('متوسّط · -73 dBm'), findsOneWidget, reason: 'اللنك اللاسلكيّ بكلماته كما كان');
+        // مفتاح الرسم يسمّي النوعين
+        expect(plain('كيبل ضوئي'), findsOneWidget);
+        expect(plain('لنك لاسلكي'), findsOneWidget);
+        expect(probe.ends, {102, 201, 401, 112, 311});
+        await snap(t, 'fiber_mixed', d);
+        await close(t);
+      }
+    });
+
+    testWidgets('🚨 منفذ الكيبل طافٍ والسويج يردّ ⇒ «واقع» بسببه؛ ومنفذٌ بلا عدّادات (قراءة VPN) «يعمل»', (t) async {
+      final readings = mixedReadings();
+      readings[201] = _sw([_port('sfp1', up: false), _port('ether1', rx: 4000000, tx: 300000000, speed: '1Gbps')]);
+      readings[102] = _sw([_port('sfp-sfpplus1', up: false), _port('sfp-sfpplus2', speed: '10Gbps')]);
+      readings[401] = _sw([_port('sfp-sfpplus1', speed: '10Gbps', light: -9.0)]);
+      await boot(t, links: mixedLinks(), readings: readings);
+      await openHub(t, tall(p390));
+      expect(plain('كيبل · المنفذان طافيان — الكيبل أو الـSFP'), findsOneWidget);
+      expect(plain('1 واقع'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('topo-pill-1-2')), matching: plain('واقع')), findsOneWidget);
+      // كيبل الجامعة: شغّال بلا رقم
+      expect(find.descendant(of: find.byKey(const ValueKey('topo-pill-1-4')), matching: plain('يعمل')), findsOneWidget);
+      expect(plain('كيبل · يعمل · 10G · ضوء -9.0 dBm'), findsOneWidget);
+      // الرقم المعروض (46) ما يعبر اللنك اللاسلكيّ وحده: كيبلٌ واقع (لا يُعدّ) وكيبلٌ يعمل بلا عدّادات ⇒ «المقروء 1 من 2»
+      expect(plain('المقروء 1 من 2'), findsOneWidget);
+      await snap(t, 'fiber_port_down', tall(p390));
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      expect(plain('كيبل ضوئي · واقع'), findsOneWidget);
+      expect(plain('المنفذان طافيان — الكيبل أو الـSFP'), findsOneWidget);
+      expect(plain('سرعة المنفذ'), findsOneWidget);
+      expect(plain('ضوء الـSFP'), findsOneWidget);
+      expect(plain('الإشارة'), findsNothing, reason: 'لا إشارة ولا CCQ لكيبل');
+      expect(plainHas('sfp1 · طافي'), findsOneWidget);
+      await snap(t, 'fiber_sheet_down', p390);
+      await close(t);
+    });
+
+    testWidgets('كيبل بلا منفذ: «اختر المنفذ» — من تفاصيله يُختار من منافذ السويج كما تُقرأ الآن، والمأخوذ معطّل', (t) async {
+      final readings = mixedReadings();
+      await boot(t, links: [_f(1, 102, 201, aPort: 'sfp-sfpplus1'), _f(3, 301, 201)], readings: readings, devices: [
+        ...fourTowersDevices(),
+        _d(302, 'سويج المعامل', 3, type: 'switch'),
+      ]);
+      // كيبل الحيّ منفذه عند الرئيسيّ وحده ⇒ يُقرأ منه؛ وكيبل المعامل (راوتره ⇐ سويج الحيّ) بلا منفذ
+      await openHub(t, tall(p390));
+      expect(plain('كيبل · اختر المنفذ ليظهر ما يعبر الكيبل'), findsOneWidget);
+      expect(plainHas('615 Mbps'), findsWidgets, reason: 'ما يرسله منفذ الرئيسيّ');
+      expect(plain('المقروء 1 من 2'), findsOneWidget, reason: 'الكيبل بلا منفذ يعمل ولم يُقرأ ما يعبره');
+      await snap(t, 'fiber_unset', tall(p390));
+      await t.tap(find.byKey(const ValueKey('topo-link-1')));
+      await settle(t, seconds: 1);
+      expect(plainHas('sfp-sfpplus1 · 10G'), findsOneWidget);
+      // منفذ الفرعيّ: منتقٍ بمنافذ سويج الحيّ الآن
+      await t.tap(find.byKey(const ValueKey('link-sheet-port-sub')));
+      await settle(t, seconds: 1);
+      expect(plain('منفذ الكيبل'), findsOneWidget);
+      expect(probe.readOnceCalls, contains(201));
+      expect(find.byKey(const ValueKey('pick-port-sfp1')), findsOneWidget);
+      expect(plainHas('↓ 612 Mbps ↑ 70 Mbps · ضوء -7.1 dBm'), findsOneWidget, reason: 'يُعرف منفذ الكيبل بما يعبره');
+      // منفذ الرئيسيّ يرسل 615 وينزل له 71 ⇒ المنفذ الذي يستقبل 612 ويرسل 70 هو طرف الكيبل — يُعلَّم، وواحدٌ فقط
+      expect(find.descendant(of: find.byKey(const ValueKey('pick-port-sfp1')), matching: plain('يطابق ما يعبر الطرف الآخر')), findsOneWidget);
+      expect(plain('يطابق ما يعبر الطرف الآخر'), findsOneWidget);
+      // الشغّالة أوّلاً ومنافذ الـSFP قبل الإيثر
+      final ys = [for (final n in ['sfp1', 'ether1', 'sfp2']) t.getTopLeft(find.byKey(ValueKey('pick-port-$n'))).dy];
+      expect(ys[0] < ys[1] && ys[1] < ys[2], isTrue, reason: '$ys');
+      await snap(t, 'fiber_port_picker', p390);
+      await t.tap(find.byKey(const ValueKey('pick-port-sfp1')));
+      await settle(t, seconds: 2);
+      expect(api.bodies['PUT /api/v2/admin/devices/towers/links/1']!.last, {'kind': 'fiber', 'a_port': 'sfp-sfpplus1', 'b_port': 'sfp1'});
+      expect(plainHas('sfp1 · 10G · ضوء -7.1 dBm'), findsOneWidget, reason: 'الورقة تتبع الربط بعد حفظه');
+      await t.tapAt(const Offset(195, 60));
+      await settle(t, seconds: 1);
+      expect(plainHas('612 Mbps'), findsWidgets, reason: 'صار يُقرأ من منفذ الفرعيّ');
+      // الكيبل الثاني على السويج نفسه: sfp1 مأخوذ
+      await t.tap(find.byKey(const ValueKey('topo-link-3')));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('link-sheet-port-sub')));
+      await settle(t, seconds: 1);
+      expect(find.descendant(of: find.byKey(const ValueKey('pick-port-sfp1')), matching: plain('عليه كيبلٌ آخر')), findsOneWidget);
+      expect(plain('يطابق ما يعبر الطرف الآخر'), findsNothing, reason: 'منفذ الطرف الآخر لم يُحدَّد — لا شيء يُطابَق به');
+      await t.tap(find.byKey(const ValueKey('pick-port-sfp1')), warnIfMissed: false);
+      await settle(t, seconds: 1);
+      expect(plain('منفذ الكيبل'), findsOneWidget, reason: 'المأخوذ لا يُختار');
+      // ولا يُكتب: المكتوب كالمختار
+      await t.enterText(find.byKey(const ValueKey('port-manual')), 'SFP1');
+      await t.tap(find.byKey(const ValueKey('port-manual-use')));
+      await settle(t, seconds: 1);
+      expect(plain('منفذ الكيبل'), findsOneWidget);
+      expect(find.text('على هذا المنفذ كيبلٌ آخر — اختر منفذاً غيره'), findsOneWidget);
+      expect(api.bodies['PUT /api/v2/admin/devices/towers/links/3'], isNull);
+      await settle(t, seconds: 5);
+      await t.enterText(find.byKey(const ValueKey('port-manual')), ' SFP2 ');
+      await t.tap(find.byKey(const ValueKey('port-manual-use')));
+      await settle(t, seconds: 2);
+      expect(api.bodies['PUT /api/v2/admin/devices/towers/links/3']!.last, {'kind': 'fiber', 'a_port': null, 'b_port': 'sfp2'},
+          reason: 'المكتوب بين منافذ الجهاز ⇒ يُحفظ باسمه كما يكتبه الجهاز');
+      await close(t);
+    });
+
+    testWidgets('«ربط برجين» ⇒ «كيبل ضوئي»: السويجات أوّلاً، والمنفذ بعد كلّ جهاز، والحفظ بنوعه ومنفذيه', (t) async {
+      await boot(t, links: [_l(2, 112, 311)], readings: mixedReadings());
+      await openHub(t, p390);
+      await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
+      await settle(t, seconds: 1);
+      expect(find.byType(TowerLinkEditorScreen), findsOneWidget);
+      expect(plain('لنك لاسلكي'), findsOneWidget);
+      await t.tap(plain('كيبل ضوئي'));
+      await settle(t, seconds: 1);
+      expect(plainHas('كيبل ضوئي (فايبر) مباشر بين سويجين'), findsOneWidget);
+      await snap(t, 'fiber_editor_empty', p390);
+      await t.tap(find.byKey(const ValueKey('link-end-main')));
+      await settle(t, seconds: 1);
+      // السويج والراوتر قبل اللنكات والسكاترات في برجهما
+      final yRouter = t.getTopLeft(find.byKey(const ValueKey('pick-device-101'))).dy;
+      final ySwitch = t.getTopLeft(find.byKey(const ValueKey('pick-device-102'))).dy;
+      final yLink = t.getTopLeft(find.byKey(const ValueKey('pick-device-111'))).dy;
+      expect(yRouter < yLink && ySwitch < yLink, isTrue);
+      await t.tap(find.byKey(const ValueKey('pick-device-102')));
+      await settle(t, seconds: 1);
+      // المنفذ مباشرةً بعد الجهاز
+      expect(plain('منفذ الكيبل'), findsOneWidget);
+      expect(plain('يطابق ما يعبر الطرف الآخر'), findsNothing, reason: 'الطرف الآخر لم يُختر بعد');
+      await t.tap(find.byKey(const ValueKey('pick-port-sfp-sfpplus1')));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('link-end-sub')));
+      await settle(t, seconds: 1);
+      final list = find.descendant(of: find.byType(BottomSheet), matching: find.byType(Scrollable)).last;
+      await t.scrollUntilVisible(find.byKey(const ValueKey('pick-device-201')), 120, scrollable: list);
+      await t.tap(find.byKey(const ValueKey('pick-device-201')));
+      await settle(t, seconds: 1);
+      // منفذ الرئيسيّ اختير ⇒ منفذ سويج الحيّ الذي يعبره المقدار نفسه معكوساً معلَّم
+      expect(find.descendant(of: find.byKey(const ValueKey('pick-port-sfp1')), matching: plain('يطابق ما يعبر الطرف الآخر')), findsOneWidget);
+      expect(plain('يطابق ما يعبر الطرف الآخر'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('pick-port-sfp1')));
+      await settle(t, seconds: 1);
+      expect(find.descendant(of: find.byKey(const ValueKey('link-port-main')), matching: plainHas('sfp-sfpplus1')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('link-port-sub')), matching: plainHas('sfp1')), findsOneWidget);
+      await snap(t, 'fiber_editor_ready', p390);
+      await t.tap(find.byKey(const ValueKey('link-save')));
+      await settle(t, seconds: 4);
+      expect(api.bodies['POST /api/v2/admin/devices/towers/links'], [
+        {'a_device_id': 102, 'b_device_id': 201, 'kind': 'fiber', 'a_port': 'sfp-sfpplus1', 'b_port': 'sfp1'},
+      ]);
+      expect(find.byType(TowerLinkEditorScreen), findsNothing);
+      expect(plain('4 أبراج · لنك واحد · كيبل واحد'), findsOneWidget);
+      expect(plainHas('612 Mbps'), findsWidgets);
+      await close(t);
+    });
+
+    testWidgets('السويج لا يُقرأ الآن: يُكتب اسم المنفذ أو يُترك لوقتٍ لاحق — والربط يُحفظ ويُرسم', (t) async {
+      await boot(t, links: [], readings: {});
+      await openHub(t, p390);
+      await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
+      await settle(t, seconds: 1);
+      await t.tap(plain('كيبل ضوئي'));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('link-end-main')));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('pick-device-102')));
+      await settle(t, seconds: 1);
+      expect(plainHas('تعذّرت قراءة منافذ «سويج الرئيسي» الآن'), findsOneWidget);
+      await snap(t, 'fiber_port_manual', p390);
+      await t.enterText(find.byKey(const ValueKey('port-manual')), '  sfp-sfpplus3 ');
+      await t.tap(find.byKey(const ValueKey('port-manual-use')));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('link-end-sub')));
+      await settle(t, seconds: 1);
+      final list = find.descendant(of: find.byType(BottomSheet), matching: find.byType(Scrollable)).last;
+      await t.scrollUntilVisible(find.byKey(const ValueKey('pick-device-401')), 120, scrollable: list);
+      await t.tap(find.byKey(const ValueKey('pick-device-401')));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('port-later')));
+      await settle(t, seconds: 1);
+      await t.tap(find.byKey(const ValueKey('link-save')));
+      await settle(t, seconds: 4);
+      expect(api.bodies['POST /api/v2/admin/devices/towers/links'], [
+        {'a_device_id': 102, 'b_device_id': 401, 'kind': 'fiber', 'a_port': 'sfp-sfpplus3'},
+      ]);
+      expect(plain('4 أبراج · كيبل واحد'), findsOneWidget);
+      expect(find.byKey(const ValueKey('topo-pill-1-4')), findsOneWidget, reason: 'يُرسم ولو لم يُقرأ');
+      await close(t);
+    });
+
+    testWidgets('سويجان رُبطا «لنكاً» قبل أن يوجد الكيبل: يُحوَّل من تفاصيله بلا حذف — ويرجع', (t) async {
+      await boot(t, links: [_l(1, 102, 201)], readings: mixedReadings());
+      await openHub(t, p390);
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      expect(plain('الإشارة'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('link-sheet-kind')));
+      await settle(t, seconds: 2);
+      expect(api.bodies['PUT /api/v2/admin/devices/towers/links/1']!.last, {'kind': 'fiber', 'a_port': null, 'b_port': null});
+      expect(plain('كيبل ضوئي · بلا منفذ'), findsOneWidget);
+      expect(plain('الإشارة'), findsNothing);
+      expect(plain('ضوء الـSFP'), findsOneWidget);
+      expect(find.byKey(const ValueKey('link-sheet-port-main')), findsOneWidget);
+      await snap(t, 'fiber_converted', p390);
+      await t.tap(find.byKey(const ValueKey('link-sheet-kind')));
+      await settle(t, seconds: 2);
+      expect(api.bodies['PUT /api/v2/admin/devices/towers/links/1']!.last, {'kind': 'radio'});
+      expect(plain('الإشارة'), findsOneWidget);
+      await close(t);
+    });
+
+    testWidgets('كيبلٌ اختير منفذه ⇒ تحويله إلى لنك يسأل أوّلاً (المنفذان يُمسحان) — والإلغاء لا يغيّر شيئاً', (t) async {
+      await boot(t, links: [_f(1, 102, 201, aPort: 'sfp-sfpplus1', bPort: 'sfp1')], readings: mixedReadings());
+      await openHub(t, p390);
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      expect(plain('حوّله إلى لنك لاسلكي'), findsOneWidget, reason: 'الزرّ يقول ما سيفعله');
+      await t.tap(find.byKey(const ValueKey('link-sheet-kind')));
+      await settle(t, seconds: 1);
+      expect(plain('تحويله إلى لنك لاسلكي'), findsOneWidget);
+      expect(plainHas('يُمسح منفذ الكيبل المحدَّد عند الطرفين'), findsOneWidget);
+      await snap(t, 'fiber_convert_confirm', p390);
+      await t.tap(find.text('إلغاء'));
+      await settle(t, seconds: 1);
+      expect(api.writes(), isEmpty);
+      expect(plain('كيبل ضوئي · يعمل'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('link-sheet-kind')));
+      await settle(t, seconds: 1);
+      await t.tap(plain('حوّله'));
+      await settle(t, seconds: 2);
+      expect(api.bodies['PUT /api/v2/admin/devices/towers/links/1'], [
+        {'kind': 'radio'},
+      ]);
+      expect(api.links.single['a_port'], isNull, reason: 'اللنك بلا منافذ');
+      expect(plain('الإشارة'), findsOneWidget);
+      expect(plain('حوّله إلى كيبل ضوئي'), findsOneWidget);
+      await close(t);
+    });
+
+    testWidgets('منفذٌ محدَّد وليس بين منافذ السويج كما قُرئت: يُقال عند طرفه — ولو قُرئ الكيبل من الطرف الآخر', (t) async {
+      // منفذ الفرعيّ كُتب خطأً (sfp9)، ومنفذ الرئيسيّ صحيح ⇒ الكيبل يُقرأ من الرئيسيّ، والخطأ يظهر عند طرفه
+      await boot(t, links: [_f(1, 102, 201, aPort: 'sfp-sfpplus1', bPort: 'sfp9')], readings: mixedReadings());
+      await openHub(t, p390);
+      expect(plainHas('615 Mbps'), findsWidgets, reason: 'ما يرسله منفذ الرئيسيّ');
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      expect(find.descendant(of: find.byKey(const ValueKey('link-sheet-port-sub')), matching: plain('sfp9 · غير موجود بالجهاز')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('link-sheet-port-main')), matching: plainHas('غير موجود')), findsNothing);
+      await t.tapAt(const Offset(195, 60));
+      await settle(t, seconds: 1);
+      await close(t);
+      // والمنفذان خطأ ⇒ الكيبل لم يُقرأ، بسببه
+      await boot(t, links: [_f(1, 102, 201, aPort: 'sfp8', bPort: 'sfp9')], readings: mixedReadings());
+      await openHub(t, p390);
+      expect(plain('كيبل · المنفذ «sfp9» غير موجود بالجهاز — اختره من جديد'), findsOneWidget);
+      await close(t);
+    });
+
+    testWidgets('القلب يبدّل المنفذين مع الطرفين', (t) async {
+      await boot(t, links: [_f(1, 102, 201, aPort: 'sfp-sfpplus1', bPort: 'sfp1')], readings: mixedReadings());
+      await openHub(t, p390);
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      await t.tap(plain('اقلب الاتّجاه'));
+      await settle(t, seconds: 2);
+      expect(api.links.single, containsPair('a_port', 'sfp1'));
+      expect(api.links.single, containsPair('b_port', 'sfp-sfpplus1'));
+      expect(plain('برج الحي الصناعي ← البرج الرئيسي'), findsWidgets);
+      // صار سويج الرئيسيّ الطرف الفرعيّ: ما يستقبله منفذه (71) ينزل له
+      expect(plainHas('71 Mbps'), findsWidgets);
+      await close(t);
+    });
+
+    testWidgets('خادمٌ قبل الهجرة 087: لا خيار كيبل ولا تحويل — واللنك اللاسلكيّ كما كان', (t) async {
+      await boot(t);
+      api.fiberReady = false;
+      await openHub(t, p390);
+      expect(plain('4 أبراج · 3 لنكات'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      expect(find.byKey(const ValueKey('link-sheet-kind')), findsNothing);
+      await t.tapAt(const Offset(195, 60));
+      await settle(t, seconds: 1);
+      await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
+      await settle(t, seconds: 1);
+      expect(find.byType(TowerLinkEditorScreen), findsOneWidget);
+      expect(plain('كيبل ضوئي'), findsNothing);
+      expect(plainHas('اللنك يربط برجين'), findsOneWidget);
+      await close(t);
+    });
+
+    testWidgets('موظّفٌ بلا «إدارة الأجهزة»: يرى الكيبل ومنفذيه، وتغيير المنفذ والتحويل بقفل', (t) async {
+      await boot(t, links: mixedLinks(), readings: mixedReadings());
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.view': true});
+      await openHub(t, p390);
+      await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
+      await settle(t, seconds: 1);
+      expect(plainHas('sfp1 · 10G · ضوء -7.1 dBm'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('link-sheet-port-sub')));
+      await settle(t, seconds: 3);
+      expect(plain('منفذ الكيبل'), findsNothing);
+      await t.tap(find.byKey(const ValueKey('link-sheet-kind')));
+      await settle(t, seconds: 3);
+      expect(api.writes(), isEmpty);
       await close(t);
     });
   });
@@ -897,7 +1323,7 @@ void main() {
       PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.view': true});
       await openHub(t, p390);
       expect(find.text('4 أبراج · 3 لنكات'), findsOneWidget);
-      await t.tap(find.byTooltip('ربط لنك بين برجين'));
+      await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
       await settle(t, seconds: 3);
       expect(find.byType(TowerLinkEditorScreen), findsNothing);
       await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));

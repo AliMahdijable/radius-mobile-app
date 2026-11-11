@@ -3,12 +3,15 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
 import '../../../models/network_device.dart';
 import '../../../models/tower_layout.dart';
+import '../../../services/devices_check.dart';
 import '../../../theme/colors.dart';
 import '../widgets/_grade.dart';
 import 'tower_logic.dart' show naturalCompare;
+import '../device_vitals.dart' show PortTraffic;
 import 'tower_reading.dart';
 
 /// «الترابط» بين الأبراج (المالك ١١ نوفمبر: «برج a منطي ٣ لنكات ماستر والابراج الفرعي سليف وياه… يظهر رسم البرج بشكل مصغر حتى
@@ -44,6 +47,9 @@ class TopoEdge {
 
   /// وصلة الشجرة (منها عُرف مستوى [to])؛ غيرها وصلةٌ إضافيّة لبرجٍ عُرف مستواه (مسارٌ ثانٍ أو حلقة) — تُرسم متقطّعة.
   final bool tree;
+
+  /// كلّ ما بين البرجين كيابل ضوئيّة (لا لنك لاسلكيّ بينها) — تُرسم خطّاً متّصلاً لا شرطات.
+  bool get fiber => links.isNotEmpty && links.every((l) => l.isFiber);
 }
 
 @immutable
@@ -217,6 +223,14 @@ class TopoText {
 
   static String towers(int n) => n == 0 ? 'لا أبراج' : arCount(n, one: 'برج واحد', two: 'برجان', few: 'أبراج', many: 'برجاً');
   static String links(int n) => n == 0 ? 'لا لنكات' : arCount(n, one: 'لنك واحد', two: 'لنكان', few: 'لنكات', many: 'لنكاً');
+  static String cables(int n) => n == 0 ? 'لا كيابل' : arCount(n, one: 'كيبل واحد', two: 'كيبلان', few: 'كيابل', many: 'كيبلاً');
+
+  /// «إلى برج واحد» · «إلى برجين» · «إلى 4 أبراج» — المجرور بعد «إلى» (المثنّى بالياء).
+  static String toTowers(int n) => n == 2 ? 'إلى برجين' : 'إلى ${towers(n)}';
+
+  /// «3 لنكات» · «كيبلان» · «3 لنكات · كيبل واحد» — كلّ نوعٍ باسمه، وبلا كيابل كما كان.
+  static String linkCounts({required int radio, required int fiber}) =>
+      fiber == 0 ? links(radio) : (radio == 0 ? cables(fiber) : '${links(radio)} · ${cables(fiber)}');
   static String devices(int n) => n == 0 ? 'بلا أجهزة' : arCount(n, one: 'جهاز واحد', two: 'جهازان', few: 'أجهزة', many: 'جهازاً');
 
   static String role(TopoRole r) => switch (r) {
@@ -234,6 +248,94 @@ class TopoText {
         LinkState.down => 'واقع',
         LinkState.unknown => 'لم يُقرأ',
       };
+
+  /// كلمة حال الوصلة بنوعها: اللنك اللاسلكيّ بدرجة إشارته (ممتاز/متوسّط/ضعيف)، والكيبل الضوئيّ بما يقوله منفذه — «يعمل»،
+  /// أو سبب الانتباه نفسه (ضوءٌ ضعيف · half-duplex · سرعةٌ واطية). للكيبل لا «ممتاز»: ضوؤه قد لا يقرؤه الجهاز أصلاً.
+  static String stateOf(LinkFlow f) {
+    if (!f.fiber) return state(f.state);
+    return switch (f.state) {
+      LinkState.ok => 'يعمل',
+      LinkState.fair || LinkState.weak => f.light != null && f.light! < LinkFlow.fairLight
+          ? (f.light! < LinkFlow.weakLight ? 'ضوء ضعيف جدّاً' : 'ضوء ضعيف')
+          : (f.halfDuplex ? 'half-duplex' : 'سرعة واطية'),
+      LinkState.down => 'واقع',
+      LinkState.unknown => switch (f.portIssue) {
+          FiberPortIssue.unset => 'بلا منفذ',
+          FiberPortIssue.missing => 'المنفذ غير موجود',
+          null => 'لم يُقرأ',
+        },
+    };
+  }
+
+  /// «10G» · «1G» · «100M» من نصّ الجهاز («10Gbps» · «1000M») — وما لا يُفهم كما هو.
+  static String speed(String? raw) {
+    final mb = DevicesCheck.mbpsOf(raw);
+    return mb == null ? (raw == null || raw.trim().isEmpty ? '—' : raw.trim()) : DevicesCheck.fmtMbps(mb);
+  }
+
+  /// «-7.1 dBm» · «—».
+  static String light(double? dbm) => dbm == null ? '—' : '${dbm.toStringAsFixed(1)} dBm';
+
+  /// «ضوء -7.1 dBm» — الرقم معزولٌ اتّجاهيّاً: بعد كلمةٍ عربيّة تنقلب إشارته السالبة لآخره («7.1-») بلا عزل.
+  static String lightFact(double? dbm) => 'ضوء ${iso(light(dbm))}';
+
+  /// سطر أرقام الوصلة تحت اسمها: اللنك «−52 dBm · CCQ 98٪»، والكيبل «10G · ضوء −7.1 dBm» — فارغ إن لم يُقرأ منها شيء.
+  static List<String> facts(LinkFlow f) => f.fiber
+      ? [
+          if (f.linkSpeed != null) speed(f.linkSpeed),
+          if (f.light != null) lightFact(f.light),
+        ]
+      : [
+          if (f.signal != null) '${f.signal} dBm',
+          if (f.ccq != null) 'CCQ ${f.ccq}٪',
+        ];
+}
+
+/// منفذ الكيبل عند طرفٍ يُعرف بما يعبر الطرف الآخر: الكيبل واحد، فما يرسله منفذٌ يستقبله المنفذ المقابل، والعكس. فحين يُعرف
+/// منفذ أحد الطرفين وما يعبره، منفذ الطرف الآخر هو الذي يعبره المقدار نفسه **بالاتّجاهين** معكوسَين.
+///
+/// تلميحٌ للمنتقي لا اختيارٌ عن الوكيل: يُعلَّم المنفذ إن طابق **واحدٌ بعينه**، والقراءتان متقاربتا اللحظة.
+class FiberPortMatch {
+  FiberPortMatch._();
+
+  /// أدنى ما يُحكم به (تحته المنافذ الخاملة كلّها تتشابه)، وأقصى فرقٍ نسبيّ بين الطرفين (عدّادان بلحظتين)، وأقصى ما بين
+  /// لحظتَي القراءتين (أبعد منه تغيّر ما يعبر فلا يُقارن).
+  static const minBps = 2000000;
+  static const tolerance = 0.15;
+  static const maxSkew = Duration(seconds: 90);
+
+  /// اتّجاهٌ واحد: 1 يطابق · 0 لا يُحكم به (لم يُقرأ عند أحدهما، أو خاملٌ عند الاثنين) · -1 يخالف.
+  static int _direction(int? sent, int? received) {
+    if (sent == null || received == null) return 0;
+    final hi = math.max(sent, received);
+    if (hi < minBps) return 0;
+    return (sent - received).abs() <= hi * tolerance ? 1 : -1;
+  }
+
+  /// اسم المنفذ من [ports] (منافذ هذا الطرف) الذي يطابق [peer] (منفذ الطرف الآخر) — null إن لم يطابق واحدٌ بعينه، أو كان
+  /// منفذ الطرف الآخر طافياً أو خاملاً، أو تباعدت القراءتان ([skew] = ما بين لحظتيهما).
+  static String? find(Iterable<PortTraffic> ports, PortTraffic? peer, {Duration skew = Duration.zero}) {
+    if (peer == null || !peer.up || skew.abs() > maxSkew) return null;
+    String? hit;
+    for (final p in ports) {
+      if (!p.up) continue;
+      final out = _direction(p.txBps, peer.rxBps);
+      final back = _direction(p.rxBps, peer.txBps);
+      if (out < 0 || back < 0 || out + back == 0) continue; // اتّجاهٌ يخالف، أو لا اتّجاه يُحكم به
+      if (hit != null) return null; // منفذان يطابقان (كيبلان متوازيان مثلاً) — لا تخمين
+      hit = p.name;
+    }
+    return hit;
+  }
+}
+
+/// لمَ لا يُقرأ كيبلٌ وجهازاه يردّان.
+enum FiberPortIssue {
+  /// لم يُحدَّد منفذه عند أيٍّ من الطرفين — لا يُعرف أيّ منفذٍ يُقرأ.
+  unset,
+
+  /// المنفذ المحدَّد ليس بين منافذ الجهاز كما قُرئت (غُيّر اسمه أو أُزيل).
+  missing,
 }
 
 /// مسار وصلةٍ على الرسم: من [from] إلى [to] مباشرةً، أو عبر ممرٍّ عموديّ ([channelX] من [channelTop] إلى [channelBottom])
@@ -468,6 +570,14 @@ class LinkFlow {
     this.state = LinkState.unknown,
     this.mainDown = false,
     this.subDown = false,
+    this.fiber = false,
+    this.light,
+    this.linkSpeed,
+    this.halfDuplex = false,
+    this.mainPortDown = false,
+    this.subPortDown = false,
+    this.portIssue,
+    this.missingPort,
   });
 
   /// من البرج الرئيسيّ للفرعيّ (ما ينزل للفرع) ومن الفرعيّ للرئيسيّ — null لم يُقرأ.
@@ -482,6 +592,28 @@ class LinkFlow {
   /// أيّ الطرفين لا يردّ ([LinkState.down]).
   final bool mainDown;
   final bool subDown;
+
+  /// كيبلٌ ضوئيّ بين سويجين (لا لنك لاسلكيّ): أرقامه سرعة منفذه وضوء الـSFP لا الإشارة والـCCQ ([ofFiber]).
+  final bool fiber;
+
+  /// أضعف ضوء SFP مستقبَل عند الطرفين (dBm) — null: الجهاز لا يقرؤه (أو منفذٌ نحاسيّ).
+  final double? light;
+
+  /// سرعة المنفذ كما يقولها الجهاز («10Gbps» · «1000M») — الأبطأ من الطرفين.
+  final String? linkSpeed;
+  final bool halfDuplex;
+
+  /// منفذ الكيبل طافٍ عند هذا الطرف — الجهاز يردّ ويقولها بنفسه ([LinkState.down]).
+  final bool mainPortDown;
+  final bool subPortDown;
+
+  /// لمَ لا يُقرأ الكيبل وجهازاه يردّان ([LinkState.unknown])، واسم المنفذ الغائب.
+  final FiberPortIssue? portIssue;
+  final String? missingPort;
+
+  /// حدّا ضوء الـSFP — حدّا «الفحص الشامل» لمنافذ السويجات نفسهما (devices_check): تحت ‎−25 يُنبَّه، وتحت ‎−30 سيّئ.
+  static const fairLight = -25.0;
+  static const weakLight = -30.0;
 
   /// [ra] قراءة طرف الرئيسيّ و[rb] طرف الفرعيّ (null: لم يُقرأ أو قراءته تفشل الآن)، و[aDown]/[bDown] حكم وصولٍ حديث «لا يردّ».
   static LinkFlow of({TowerReading? ra, TowerReading? rb, bool aDown = false, bool bDown = false}) {
@@ -505,6 +637,67 @@ class LinkFlow {
         _ => LinkState.ok,
       },
     );
+  }
+
+  /// كيبلٌ ضوئيّ: ما يعبر **منفذه** عند كلّ طرف ([aPort] منفذ طرف الرئيسيّ و[bPort] منفذ الفرعيّ — كما سمّاهما الوكيل) لا
+  /// «أنشط منفذ» في السويج. ما يستقبله منفذ الفرعيّ جاء من الرئيسيّ (ينزل للفرع)، وما يرسله يصعد له.
+  ///
+  /// «واقع»: طرفٌ لا يردّ (حكم وصولٍ حديث)، أو طرفٌ ردّ وقال إنّ المنفذ طافٍ — دليلٌ من الجهاز نفسه، لا تخمين.
+  /// بلا منفذٍ محدَّد عند الطرفين لا يُعرف أيّ منفذٍ يُقرأ ⇒ «لم يُقرأ» ([FiberPortIssue.unset]) لا رقم منفذٍ آخر.
+  static LinkFlow ofFiber({
+    TowerReading? ra,
+    TowerReading? rb,
+    String? aPort,
+    String? bPort,
+    bool aDown = false,
+    bool bDown = false,
+  }) {
+    if (aDown || bDown) return LinkFlow(fiber: true, state: LinkState.down, mainDown: aDown, subDown: bDown);
+    final pa = ra?.port(aPort);
+    final pb = rb?.port(bPort);
+    final aOff = pa != null && !pa.up;
+    final bOff = pb != null && !pb.up;
+    if (aOff || bOff) return LinkFlow(fiber: true, state: LinkState.down, mainPortDown: aOff, subPortDown: bOff);
+    if (pa == null && pb == null) {
+      if (aPort == null && bPort == null) return const LinkFlow(fiber: true, portIssue: FiberPortIssue.unset);
+      // منفذٌ محدَّد وجهازه قُرئ بمنافذه وليس بينها — الفرعيّ أوّلاً (منه تُقرأ السرعة)
+      final miss = bPort != null && rb != null && rb.ports.isNotEmpty
+          ? bPort
+          : (aPort != null && ra != null && ra.ports.isNotEmpty ? aPort : null);
+      return LinkFlow(fiber: true, portIssue: miss == null ? null : FiberPortIssue.missing, missingPort: miss);
+    }
+    final light = _weaker(pa?.sfpRx, pb?.sfpRx);
+    final speed = _slower(pa?.linkSpeed, pb?.linkSpeed);
+    final mb = DevicesCheck.mbpsOf(speed);
+    final half = (pa?.halfDuplex ?? false) || (pb?.halfDuplex ?? false);
+    final LinkState state;
+    if (light != null && light < weakLight) {
+      state = LinkState.weak;
+    } else if ((light != null && light < fairLight) || half || (mb != null && mb <= 10)) {
+      state = LinkState.fair;
+    } else {
+      state = LinkState.ok;
+    }
+    return LinkFlow(
+      fiber: true,
+      toSubBps: pb?.rxBps ?? pa?.txBps,
+      toMainBps: pb?.txBps ?? pa?.rxBps,
+      light: light,
+      linkSpeed: speed,
+      halfDuplex: half,
+      state: state,
+    );
+  }
+
+  static double? _weaker(double? x, double? y) => x == null ? y : (y == null ? x : math.min(x, y));
+
+  /// الأبطأ من سرعتَي الطرفين (ما لا يُفهم منهما يُترك للآخر).
+  static String? _slower(String? x, String? y) {
+    final mx = DevicesCheck.mbpsOf(x);
+    final my = DevicesCheck.mbpsOf(y);
+    if (mx == null) return my == null ? (x ?? y) : y;
+    if (my == null) return x;
+    return mx <= my ? x : y;
   }
 
   static int? _worst(int? x, int? y) => x == null ? y : (y == null ? x : math.min(x, y));
@@ -536,6 +729,7 @@ class LinkFlow {
         state = LinkState.worse(state, f.state == LinkState.down ? LinkState.weak : f.state);
       }
     }
+    final allFiber = list.every((f) => f.fiber);
     return LinkFlow(
       toSubBps: sum((f) => f.toSubBps),
       toMainBps: sum((f) => f.toMainBps),
@@ -544,6 +738,11 @@ class LinkFlow {
       state: state,
       mainDown: allDown && list.every((f) => f.mainDown),
       subDown: allDown && list.every((f) => f.subDown),
+      fiber: allFiber,
+      light: allFiber ? list.map((f) => f.light).fold<double?>(null, _weaker) : null,
+      halfDuplex: allFiber && list.any((f) => f.halfDuplex),
+      mainPortDown: allDown && list.every((f) => f.mainPortDown),
+      subPortDown: allDown && list.every((f) => f.subPortDown),
     );
   }
 }

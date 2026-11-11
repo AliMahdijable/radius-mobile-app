@@ -171,17 +171,48 @@ class TowerPlacement {
   int get hashCode => Object.hash(deviceId, level, azimuth, beamwidth, fixed, shape);
 }
 
-/// لنكٌ بين برجين («الترابط» — المالك ١١ نوفمبر: «برج a منطي ٣ لنكات ماستر والابراج الفرعي سليف وياه»).
+/// نوع الربط بين برجين — المالك ١١ نوفمبر صباحاً: «اكو ابراج ترتبط مع بعضها فايبر… مرات مو لنك يعني مباشر كيبل ضوئي بين سوجات».
+enum TowerLinkKind {
+  /// لنكٌ لاسلكيّ: ماستر ⇐ سليف (ما كان قبل الهجرة 087 كلّه).
+  radio,
+
+  /// كيبلٌ ضوئيّ بين سويجين/راوترين/أولت — له منفذٌ عند كلّ طرف.
+  fiber;
+
+  static TowerLinkKind parse(Object? v) => v == 'fiber' ? fiber : radio;
+
+  String get wire => name;
+}
+
+/// ربطٌ بين برجين («الترابط» — المالك ١١ نوفمبر: «برج a منطي ٣ لنكات ماستر والابراج الفرعي سليف وياه»).
 /// [aDeviceId] طرف البرج الرئيسيّ (الماستر — منه يخرج الترافيك) و[bDeviceId] طرف الفرعيّ (السليف). البرجان يُعرفان من
-/// منطقة كلٍّ من الجهازين الآن، فنقل جهازٍ لبرجٍ آخر ينقل لنكه معه.
+/// منطقة كلٍّ من الجهازين الآن، فنقل جهازٍ لبرجٍ آخر ينقل ربطه معه.
+///
+/// [kind] لنكٌ لاسلكيّ أو كيبلٌ ضوئيّ؛ وللكيبل [aPort]/[bPort]: منفذه عند كلّ طرف كما يسمّيه الجهاز (`sfp-sfpplus1`) — منه
+/// يُقرأ ما يعبر الكيبل نفسه. null = لم يُحدَّد بعد.
 @immutable
 class TowerLink {
-  const TowerLink({required this.id, required this.aDeviceId, required this.bDeviceId, this.label});
+  const TowerLink({
+    required this.id,
+    required this.aDeviceId,
+    required this.bDeviceId,
+    this.label,
+    this.kind = TowerLinkKind.radio,
+    this.aPort,
+    this.bPort,
+  });
 
   final int id;
   final int aDeviceId;
   final int bDeviceId;
   final String? label;
+  final TowerLinkKind kind;
+  final String? aPort;
+  final String? bPort;
+
+  bool get isFiber => kind == TowerLinkKind.fiber;
+
+  static String? _port(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
 
   static TowerLink? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -190,23 +221,49 @@ class TowerLink {
     final b = _int(j['b_device_id']);
     if (id == null || id <= 0 || a == null || a <= 0 || b == null || b <= 0 || a == b) return null;
     final label = j['label'];
-    return TowerLink(id: id, aDeviceId: a, bDeviceId: b, label: label is String && label.trim().isNotEmpty ? label.trim() : null);
+    final kind = TowerLinkKind.parse(j['kind']);
+    final fiber = kind == TowerLinkKind.fiber;
+    return TowerLink(
+      id: id,
+      aDeviceId: a,
+      bDeviceId: b,
+      label: label is String && label.trim().isNotEmpty ? label.trim() : null,
+      kind: kind,
+      // المنفذ للكيبل وحده
+      aPort: fiber ? _port(j['a_port']) : null,
+      bPort: fiber ? _port(j['b_port']) : null,
+    );
   }
 
-  TowerLink flipped() => TowerLink(id: id, aDeviceId: bDeviceId, bDeviceId: aDeviceId, label: label);
+  /// الطرفان — ومنفذاهما — معكوسةً.
+  TowerLink flipped() =>
+      TowerLink(id: id, aDeviceId: bDeviceId, bDeviceId: aDeviceId, label: label, kind: kind, aPort: bPort, bPort: aPort);
 
   @override
   bool operator ==(Object other) =>
-      other is TowerLink && other.id == id && other.aDeviceId == aDeviceId && other.bDeviceId == bDeviceId && other.label == label;
+      other is TowerLink &&
+      other.id == id &&
+      other.aDeviceId == aDeviceId &&
+      other.bDeviceId == bDeviceId &&
+      other.label == label &&
+      other.kind == kind &&
+      other.aPort == aPort &&
+      other.bPort == bPort;
 
   @override
-  int get hashCode => Object.hash(id, aDeviceId, bDeviceId, label);
+  int get hashCode => Object.hash(id, aDeviceId, bDeviceId, label, kind, aPort, bPort);
 }
 
 /// ما رجع من الخادم: أبراج الحساب (بالمنطقة) ومواقع أجهزته (بالجهاز) واللنكات بين أبراجه.
 @immutable
 class TowerLayouts {
-  const TowerLayouts({this.towers = const {}, this.placements = const {}, this.links = const [], this.linksReady = false});
+  const TowerLayouts({
+    this.towers = const {},
+    this.placements = const {},
+    this.links = const [],
+    this.linksReady = false,
+    this.fiberReady = false,
+  });
 
   static const empty = TowerLayouts();
 
@@ -218,6 +275,9 @@ class TowerLayouts {
 
   /// الخادم يحفظ الترابط (الهجرة 086) — false: خادمٌ أقدم أو تعذّر، فيُعرض بلا ربط ولا تعديل.
   final bool linksReady;
+
+  /// الخادم يحفظ الكيبل الضوئيّ ومنفذيه (الهجرة 087) — false: الربط اللاسلكيّ وحده، ولا يُعرض خيار الكيبل.
+  final bool fiberReady;
 
   static TowerLayouts fromJson(Object? body) {
     if (body is! Map || body['success'] != true) return empty;
@@ -241,6 +301,7 @@ class TowerLayouts {
       placements: Map.unmodifiable(places),
       links: List.unmodifiable(links),
       linksReady: body['links_ready'] == true,
+      fiberReady: body['links_ready'] == true && body['fiber_ready'] == true,
     );
   }
 }

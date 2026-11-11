@@ -112,14 +112,17 @@ class MiniTowerPainter extends CustomPainter {
       old.type != type || old.strong != strong || old.soft != soft || old.waves != waves;
 }
 
-/// وصلةٌ جاهزة للرسم: مسارها ([TopoRoute]) وحالها.
+/// وصلةٌ جاهزة للرسم: مسارها ([TopoRoute]) وحالها ونوعها.
 @immutable
 class TopoEdgeShape {
-  const TopoEdgeShape({required this.route, required this.state, this.tree = true, this.hasPill = true});
+  const TopoEdgeShape({required this.route, required this.state, this.tree = true, this.hasPill = true, this.fiber = false});
 
   final TopoRoute route;
   final LinkState state;
   final bool tree;
+
+  /// كيبلٌ ضوئيّ: خطٌّ متّصل تسير عليه نبضات — واللنك اللاسلكيّ شرطاتٌ بلا خطّ.
+  final bool fiber;
 
   /// رأس الوصلة يدخل حبّة السرعة فوق البرج الفرعيّ (وصلة الشجرة) — وإلّا سهمٌ عند البرج نفسه.
   final bool hasPill;
@@ -162,10 +165,15 @@ class TopoEdgeShape {
 
   @override
   bool operator ==(Object other) =>
-      other is TopoEdgeShape && other.route == route && other.state == state && other.tree == tree && other.hasPill == hasPill;
+      other is TopoEdgeShape &&
+      other.route == route &&
+      other.state == state &&
+      other.tree == tree &&
+      other.hasPill == hasPill &&
+      other.fiber == fiber;
 
   @override
-  int get hashCode => Object.hash(route, state, tree, hasPill);
+  int get hashCode => Object.hash(route, state, tree, hasPill, fiber);
 }
 
 /// لون حال الوصلة.
@@ -177,7 +185,10 @@ Color linkStateColor(LinkState s) => switch (s) {
       LinkState.unknown => AppColors.textLow,
     };
 
-/// وصلات الأبراج: شرطاتٌ تسير من الرئيسيّ للفرعيّ بلون حالها؛ الواقعة منقّطةٌ ساكنة وعليها ✕، والتي لم تُقرأ رماديّةٌ ساكنة.
+/// وصلات الأبراج بلون حالها وسيرها من الرئيسيّ للفرعيّ — وكلّ نوعٍ برسمه:
+///   • اللنك اللاسلكيّ: شرطاتٌ تسير (بلا خطٍّ تحتها)؛ الواقع منقّطٌ ساكن، وما لم يُقرأ شرطاتٌ رماديّة ساكنة.
+///   • الكيبل الضوئيّ: خطٌّ متّصل تسير عليه نبضات؛ الواقع وما لم يُقرأ خطٌّ رماديّ ساكن.
+/// والواقع من النوعين عليه ✕.
 class TopoEdgesPainter extends CustomPainter {
   TopoEdgesPainter({required this.edges, required this.flow}) : super(repaint: flow);
 
@@ -188,6 +199,10 @@ class TopoEdgesPainter extends CustomPainter {
 
   static const _dash = 7.0;
   static const _gap = 5.0;
+
+  /// نبضة الكيبل: خرزةٌ قصيرة على الخطّ بدورة شرطات اللنك نفسها (١٢) — فتسير بسرعته وتُعاد بلا قفزة.
+  static const _pulse = 3.0;
+  static const _pulseGap = 9.0;
 
   /// مسار كلّ وصلة — يُحسب مرّةً لهذا الرسّام (يُعاد رسمه كلّ إطارٍ مع [flow]، ولا يُعاد إنشاؤه إلّا بتغيّر الوصلات).
   late final List<Path> _paths = [for (final e in edges) e.path()];
@@ -200,29 +215,26 @@ class TopoEdgesPainter extends CustomPainter {
       final path = _paths[i];
       final color = linkStateColor(e.state);
       final flowing = e.state == LinkState.ok || e.state == LinkState.fair || e.state == LinkState.weak;
-      if (flowing) {
-        canvas.drawPath(path, Paint()
-          ..color = color.withValues(alpha: 0.13)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = e.tree ? 7 : 5
-          ..strokeCap = StrokeCap.round);
-        _dashed(canvas, path, _dash, _gap, phase, Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = e.tree ? 2.3 : 1.8
-          ..strokeCap = StrokeCap.round);
+      Paint stroke(Color c, double w) => Paint()
+        ..color = c
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w
+        ..strokeCap = StrokeCap.round;
+      if (e.fiber) {
+        if (flowing) {
+          canvas.drawPath(path, stroke(color.withValues(alpha: 0.13), e.tree ? 8 : 6));
+          canvas.drawPath(path, stroke(color.withValues(alpha: 0.55), e.tree ? 2.4 : 1.9));
+          _dashed(canvas, path, _pulse, _pulseGap, phase, stroke(color, e.tree ? 4.2 : 3.4));
+        } else {
+          canvas.drawPath(path, stroke(e.state == LinkState.down ? AppColors.textLow : AppColors.border, 2));
+        }
+      } else if (flowing) {
+        canvas.drawPath(path, stroke(color.withValues(alpha: 0.13), e.tree ? 7 : 5));
+        _dashed(canvas, path, _dash, _gap, phase, stroke(color, e.tree ? 2.3 : 1.8));
       } else if (e.state == LinkState.down) {
-        _dashed(canvas, path, 2, 5, 0, Paint()
-          ..color = AppColors.textLow
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round);
+        _dashed(canvas, path, 2, 5, 0, stroke(AppColors.textLow, 2));
       } else {
-        canvas.drawPath(path, Paint()
-          ..color = AppColors.border
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round);
+        _dashed(canvas, path, _dash, _gap, 0, stroke(AppColors.border, 2));
       }
       if (!e.hasPill) _arrow(canvas, path, flowing ? color : AppColors.textLow);
       if (e.state == LinkState.down) _cross(canvas, path);
