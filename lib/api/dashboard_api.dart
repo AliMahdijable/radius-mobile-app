@@ -226,6 +226,9 @@ class DashboardApi {
         queryParameters: {
           'admin_id': adminId,
           'include_payments': '1',
+          // «إلغاء تسديد» (١١ نوفمبر): سطره في السجلّ تسديدٌ بمبلغٍ سالب — الخادم لا يعيده إلّا لمن يطلبه (تطبيقٌ أقدم كان
+          // سيعرضه «تسديد دين» بمبلغه)، ومعه pay_void ومبلغه ومن ألغاه ([RecentActivities]).
+          'include_voids': '1',
         },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );

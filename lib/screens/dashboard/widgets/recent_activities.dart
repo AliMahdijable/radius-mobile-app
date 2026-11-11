@@ -82,7 +82,11 @@ class _Row extends StatelessWidget {
     final action = (m['action'] ?? m['action_type'] ?? '').toString();
     final descr =
         (m['action_description'] ?? m['description'] ?? '').toString();
-    final visual = _visualForAction(action);
+    // «إلغاء تسديد» (١١ نوفمبر ٢٠٢٦): سطره في السجلّ تسديدٌ بمبلغٍ سالب منسوبٌ لمن استلم التسديد. الخادم لا يعيده إلّا لمن
+    // يطلبه (`include_voids` — dashboard_api.dart) ويعلّمه `pay_void` ومعه مبلغه ومن ألغاه: فلا يُشتقّ شيءٌ من نوعه ولا من وصفه
+    // (كان سيُقرأ «تسديد دين» بمبلغه).
+    final isVoid = _truthy(m['pay_void']);
+    final visual = isVoid ? (Icons.undo_rounded, AppTone.danger) : _visualForAction(action);
     // Backend enriches each row with user_firstname / user_lastname /
     // user_username via SAS4's user directory (see
     // /api/activities/daily-activations row enrichment). The Arabic
@@ -106,8 +110,10 @@ class _Row extends StatelessWidget {
         : (username.isNotEmpty ? username : action);
     // حركةٌ سحبتها مزامنة الساس (عُملت في صفحة الساس أو تطبيقٍ آخر): لا نقد ولا
     // دين عندنا — اللابل يقول مصدرها، والتفصيل طريقتها («بكارت»/«بالرصيد»).
-    final fromSas = _truthy(m['from_sas']) || descr.contains('من الساس');
-    final details = fromSas ? _sasDetails(descr) : _actionDetails(action, descr);
+    final fromSas = !isVoid && (_truthy(m['from_sas']) || descr.contains('من الساس'));
+    final details = isVoid
+        ? _voidDetails(m)
+        : (fromSas ? _sasDetails(descr) : _actionDetails(action, descr));
     final amount = _readAmount(m);
     final created = m['created_at']?.toString();
     final timeLabel = _humanCreatedAt(created);
@@ -121,7 +127,11 @@ class _Row extends StatelessWidget {
     final adminUser = (m['admin_username'] ?? '').toString().trim();
     String? actor;
     var isEmployee = false;
-    if (empName.isNotEmpty || empUser.isNotEmpty) {
+    if (isVoid && m['voided_by_employee_id'] == null) {
+      // ألغاه صاحب الصفحة: السطر منسوبٌ للموظّف الذي استلم التسديد (من حصّته يخرج المبلغ) — والمعروض من ألغى.
+      final by = (m['voided_by'] ?? '').toString().trim();
+      actor = by.isNotEmpty ? by : (adminUser.isNotEmpty ? adminUser : null);
+    } else if (empName.isNotEmpty || empUser.isNotEmpty) {
       actor = empName.isNotEmpty ? empName : empUser;
       isEmployee = true;
     } else if (adminUser.isNotEmpty) {
@@ -336,6 +346,16 @@ class _Row extends StatelessWidget {
   }
 
   static bool _truthy(Object? v) => v == true || v == 1 || v == '1' || v == 'true';
+
+  /// «إلغاء تسديد» بمبلغه كما أرسله الخادم (`void_amount`) — لا من الوصف.
+  static ({String? label, String? detail}) _voidDetails(Map<String, dynamic> m) {
+    final raw = m['void_amount'];
+    final amt = raw is num ? raw.round() : num.tryParse((raw ?? '').toString())?.round();
+    return (
+      label: 'إلغاء تسديد',
+      detail: amt != null && amt > 0 ? '${_formatIntCompact(amt)} د.ع' : null,
+    );
+  }
 
   /// «تفعيل من الساس — بكارت (أُلغي)» ← لابل «من الساس» وتفصيل «بكارت (أُلغي)».
   static ({String? label, String? detail}) _sasDetails(String description) {

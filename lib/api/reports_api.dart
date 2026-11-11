@@ -295,6 +295,14 @@ class FinanceKPIs {
   }
 }
 
+/// «إلغاء تسديد» (١١ نوفمبر ٢٠٢٦): سطر الإلغاء (وسطر تسوية الربط) منسوبٌ عند الخادم لمن **استلم** التسديد — به تُحسب الحصص وفلتر
+/// الموظّف — ومن ألغاه قد يكون صاحب الصفحة. الخادم يعلّم السطرين (`pay_void` / `pay_void_link`) ويرسل من ألغى
+/// (`voided_by_employee_id`: رقم الموظّف، أو null = صاحب الصفحة). true ⇒ المنفّذ المعروض والمصدَّر صاحب الصفحة لا الموظّف.
+bool voidedByManager(Map<String, dynamic> j) {
+  bool on(Object? v) => v == true || v == 1 || v == '1' || v == 'true';
+  return (on(j['pay_void']) || on(j['pay_void_link'])) && j['voided_by_employee_id'] == null;
+}
+
 class FinanceLog {
   const FinanceLog({
     required this.id,
@@ -399,14 +407,15 @@ class FinanceLog {
     if (at == null || ts == null) return null;
     final rawId = j['id']?.toString() ?? '';
     final id = int.tryParse(rawId) ?? rawId.hashCode.abs();
+    final byManager = voidedByManager(j);
     return FinanceLog(
       id: id,
       actionType: at,
       actionDescription: j['action_description']?.toString(),
       amount: FinanceKPIs._n(j['amount']),
       adminUsername: j['admin_username']?.toString(),
-      actingEmployeeFullName: j['acting_employee_full_name']?.toString(),
-      actingEmployeeUsername: j['acting_employee_username']?.toString(),
+      actingEmployeeFullName: byManager ? null : j['acting_employee_full_name']?.toString(),
+      actingEmployeeUsername: byManager ? null : j['acting_employee_username']?.toString(),
       userUsername: j['user_username']?.toString(),
       userFirstname: j['user_firstname']?.toString(),
       userLastname: j['user_lastname']?.toString(),
@@ -529,7 +538,7 @@ class ActivityRow {
       actionDescription: j['action_description']?.toString(),
       amount: FinanceKPIs._n(j['amount']),
       adminUsername: j['admin_username']?.toString(),
-      actingEmployeeFullName: j['acting_employee_full_name']?.toString(),
+      actingEmployeeFullName: voidedByManager(j) ? null : j['acting_employee_full_name']?.toString(),
       userUsername: j['user_username']?.toString(),
       userFirstname: j['user_firstname']?.toString(),
       userLastname: j['user_lastname']?.toString(),

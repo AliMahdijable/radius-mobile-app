@@ -1464,7 +1464,8 @@
     "pay_void_pending": "Voiding",
     "pay_void_action": "Void payment",
     "pay_void_continue": "Finish voiding the payment",
-    "pay_void_locked": "Void payment — no permission"
+    "pay_void_locked": "Void payment — no permission",
+    "pay_void_from_share": "from {who}'s share"
   },
   "archive": {
     "showing_current": "Showing activity after settlement #{} · {} — settled items are archived.",

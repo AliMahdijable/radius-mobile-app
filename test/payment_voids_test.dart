@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/dashboard_api.dart';
 import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/api/payment_voids_api.dart';
+import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/api/settlements_api.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/screens/dashboard/widgets/recent_activities.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_log_tile.dart';
 import 'package:rad_mysvcs/screens/settlements/settlements_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
@@ -61,6 +64,10 @@ class _PvServer implements HttpClientAdapter {
   int expected = 950000;
   int currentGets = 0;
   int statementGets = 0;
+
+  /// طلبات «آخر النشاطات» كما وصلت، وما يُردّ لها.
+  final feedQueries = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> feed = const [];
 
   List<Map<String, dynamic>> moves = [
     {
@@ -137,10 +144,13 @@ class _PvServer implements HttpClientAdapter {
     final amount = _amountOf(paymentId);
     voids[paymentId] = _voidItem(paymentId, amount, mode: mode);
     expected -= amount.toInt();
+    // كالخادم: حركة الإلغاء منسوبةٌ لمن استلم التسديد (من حصّته يخرج المبلغ)
+    final paid = moves.firstWhere((m) => m['payment_activity_id'] == paymentId, orElse: () => const {});
     moves = [
       {
         'source': 'activity', 'id': 990000 + voids.length, 'kind': 'debt_payment_void', 'direction': 'out', 'amount': amount,
-        'created_at': '2026-11-11T12:30:00Z', 'subscriber': _subOf(paymentId), 'employee_id': null,
+        'created_at': '2026-11-11T12:30:00Z', 'subscriber': _subOf(paymentId), 'employee_id': paid['employee_id'],
+        'employee_username': paid['employee_username'], 'employee_name': paid['employee_name'],
       },
       ...moves,
     ];
@@ -264,6 +274,12 @@ class _PvServer implements HttpClientAdapter {
     }
     if (get && p == '/api/v2/settlements') {
       return _json(200, {'success': true, 'data': {'items': const [], 'total': 0}});
+    }
+
+    // ── «آخر النشاطات» بالرئيسيّة ──
+    if (get && p == '/api/activities/daily-activations') {
+      feedQueries.add(Map<String, dynamic>.from(o.queryParameters));
+      return _json(200, {'success': true, 'counts': {'activate': 0, 'extend': 0, 'total': feed.length}, 'data': feed});
     }
 
     // ── كشف المشترك ──
@@ -560,6 +576,9 @@ void main() {
       expect(find.text('ملغى'), findsOneWidget);
       expect(find.byType(PaymentVoidRowButton), findsOneWidget, reason: 'الملغى بلا زرّ');
       expect(find.textContaining('إلغاء تسديد'), findsWidgets, reason: 'حركة الإلغاء باسمها');
+      // الحركة منسوبةٌ لمن استلم التسديد (من حصّته يخرج المبلغ) — «من حصّة فلان» لا «فلان» (فلا يُقرأ «فلان ألغى»)
+      expect(find.textContaining('من حصّة'), findsOneWidget);
+      expect(find.textContaining('حسين مهدي'), findsNWidgets(2), reason: 'التسديد باسمه، والإلغاء من حصّته');
       await settle(t, seconds: 4); // الإشعار يزول
       await shoot(t, s1bSasOwner, 'pay_void_settlements_after', phone, server.inner as VisualServer);
     });
@@ -764,6 +783,84 @@ void main() {
       expect(find.byType(PaymentVoidRowButton), findsNothing);
       expect(find.byType(PaymentVoidBadge), findsNothing);
       expect(find.text('تسديد دين'), findsNWidgets(2));
+    });
+  });
+
+  group('الحركات (السجلّ وآخر النشاطات)', () {
+    test('المنفّذ المعروض من ألغى: السطر منسوبٌ لمن استلم التسديد، وصاحب الصفحة هو من ألغاه', () {
+      // صاحب الصفحة ألغى تسديد الموظّف (voided_by_employee_id: null)
+      final byOwner = {
+        'id': 830142, 'action_type': 'BALANCE_DEDUCT', 'created_at': '2026-11-11T14:22:34Z', 'amount': -60000,
+        'action_description': 'إلغاء تسديد دين 60,000 د.ع للمشترك ali.kareem — ألغاه المدير mahdi، استلمه الموظّف hussein',
+        'admin_username': 'mahdi', 'acting_employee_full_name': 'حسين مهدي', 'acting_employee_username': 'hussein',
+        'pay_void': true, 'voided_by': 'mahdi', 'voided_by_employee_id': null,
+      };
+      expect(voidedByManager(byOwner), isTrue);
+      final f = FinanceLog.fromJson(byOwner)!;
+      expect((f.actingEmployeeFullName, f.actingEmployeeUsername, f.adminUsername, f.amount), (null, null, 'mahdi', -60000));
+      final a = ActivityRow.fromJson(byOwner)!;
+      expect((a.actingEmployeeFullName, a.adminUsername), (null, 'mahdi'));
+      // سطر تسوية الربط كذلك (الخادم يعلّمه pay_void_link)
+      expect(voidedByManager({'pay_void_link': 1, 'voided_by_employee_id': null}), isTrue);
+      // الموظّف ألغى تسديده هو: المنفّذ هو
+      final own = {...byOwner, 'voided_by': 'hussein', 'voided_by_employee_id': 3};
+      expect(voidedByManager(own), isFalse);
+      expect(FinanceLog.fromJson(own)!.actingEmployeeFullName, 'حسين مهدي');
+      expect(ActivityRow.fromJson(own)!.actingEmployeeFullName, 'حسين مهدي');
+      // سطرٌ عاديّ (وخادمٌ أقدم لا يرسل الحقول): كما كان
+      final pay = {...byOwner, 'amount': 60000}..remove('pay_void')..remove('voided_by')..remove('voided_by_employee_id');
+      expect(voidedByManager(pay), isFalse);
+      expect(FinanceLog.fromJson(pay)!.actingEmployeeFullName, 'حسين مهدي');
+      expect(FinanceLog.fromJson(pay)!.actingEmployeeUsername, 'hussein');
+    });
+
+    testWidgets('«آخر النشاطات» تطلب سطر الإلغاء صراحةً (include_voids) — الخادم لا يعيده لتطبيقٍ لا يعرفه', (t) async {
+      final server = _PvServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      addTearDown(visualTearDown);
+      final r = await t.runAsync(DashboardApi.fetchDailyActivations);
+      expect(r, isNotNull);
+      expect(server.feedQueries.single['include_payments'], '1');
+      expect(server.feedQueries.single['include_voids'], '1');
+    });
+
+    testWidgets('«آخر النشاطات»: الإلغاء باسمه ومبلغه ومن ألغاه — لا «تسديد دين» بمبلغه باسم الموظّف', (t) async {
+      final server = await visualSetUp(s1bSasOwner);
+      addTearDown(visualTearDown);
+      final items = <Map<String, dynamic>>[
+        // صاحب الصفحة ألغى تسديداً استلمه الموظّف حسين (السطر منسوبٌ لحسين)
+        {
+          'id': 830142, 'action_type': 'BALANCE_DEDUCT', 'created_at': DateTime.now().toUtc().toIso8601String(),
+          'action_description': 'إلغاء تسديد دين 60,000 د.ع للمشترك ali.kareem — ألغاه المدير mahdi، استلمه الموظّف hussein',
+          'target_name': 'ali.kareem', 'user_username': 'ali.kareem', 'user_firstname': 'علي', 'user_lastname': 'كريم',
+          'admin_username': 'mahdi', 'acting_employee_id': 3, 'acting_employee_username': 'hussein', 'acting_employee_full_name': 'حسين مهدي',
+          'pay_void': true, 'void_amount': 60000, 'voided_by': 'mahdi', 'voided_by_employee_id': null,
+        },
+        // موظّفٌ ألغى تسديده هو
+        {
+          'id': 830150, 'action_type': 'BALANCE_DEDUCT', 'created_at': DateTime.now().toUtc().toIso8601String(),
+          'action_description': 'إلغاء تسديد دين 25,000 د.ع للمشترك sara.net — ألغاه الموظّف hussein',
+          'target_name': 'sara.net', 'user_username': 'sara.net', 'admin_username': 'mahdi',
+          'acting_employee_id': 3, 'acting_employee_username': 'hussein', 'acting_employee_full_name': 'حسين مهدي',
+          'pay_void': 1, 'void_amount': '25000.00', 'voided_by': 'hussein', 'voided_by_employee_id': 3,
+        },
+        // تسديدٌ عاديّ — كما كان
+        {
+          'id': 830100, 'action_type': 'BALANCE_DEDUCT', 'created_at': DateTime.now().toUtc().toIso8601String(),
+          'action_description': 'تسديد دين 35,000 د.ع للمشترك omar.fiber', 'target_name': 'omar.fiber', 'user_username': 'omar.fiber',
+          'admin_username': 'mahdi', 'acting_employee_id': null,
+        },
+      ];
+      await pumpVisual(t, phone, home: (_) => Scaffold(body: SafeArea(child: SingleChildScrollView(child: RecentActivities(items: items)))));
+      await settle(t, seconds: 1);
+      expect(find.text('إلغاء تسديد'), findsNWidgets(2));
+      expect(find.text('60,000 د.ع'), findsOneWidget);
+      expect(find.text('25,000 د.ع'), findsOneWidget);
+      expect(find.text('المدير: mahdi'), findsNWidgets(2), reason: 'إلغاء صاحب الصفحة، والتسديد العاديّ له');
+      expect(find.text('الموظف: حسين مهدي'), findsOneWidget, reason: 'إلغاء الموظّف لتسديده هو فقط');
+      expect(find.text('تسديد دين'), findsOneWidget, reason: 'التسديد العاديّ وحده');
+      expect(find.text('35,000 د.ع'), findsOneWidget);
+      await shoot(t, s1bSasOwner, 'pay_void_home_feed', phone, server);
     });
   });
 

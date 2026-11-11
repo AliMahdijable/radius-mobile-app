@@ -188,7 +188,8 @@ class MovementTile extends StatelessWidget {
         // ما بيع (الوصف بلا بادئة «بيع:»/«إلغاء بيع:»).
         if (isSale && (m.description ?? '').isNotEmpty)
           m.description!.replaceFirst(RegExp(r'^(?:إلغاء بيع|بيع):\s*'), ''),
-        who,
+        // سطر الإلغاء منسوبٌ لمن استلم التسديد (من حصّته يخرج المبلغ) — «من حصّة فلان» فلا يُقرأ «فلان ألغى»
+        m.kind == 'debt_payment_void' ? 'settle.pay_void_from_share'.tr(namedArgs: {'who': who}) : who,
         settleWhen(m.createdAt),
       ], ' · '),
       style: AppType.muted(),
