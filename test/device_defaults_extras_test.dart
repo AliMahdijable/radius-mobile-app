@@ -144,7 +144,7 @@ void main() {
     await open(t);
     final section = find.byKey(const ValueKey('creds-tplink'));
     expect(section, findsOneWidget);
-    expect(find.descendant(of: section, matching: find.text('TP-Link (CPE)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('TP-Link (CPE والراوتر)')), findsOneWidget);
     expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'tp-old')), findsOneWidget);
 
     final fields = find.descendant(of: section, matching: find.byType(TextField));

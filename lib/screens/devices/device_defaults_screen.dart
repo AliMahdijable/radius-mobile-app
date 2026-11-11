@@ -202,7 +202,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   _section(
                     key: const ValueKey('creds-tplink'),
                     icon: LucideIcons.radioTower,
-                    title: 'TP-Link (CPE)',
+                    title: 'TP-Link (CPE والراوتر)',
                     subtitle: 'devices.tplink_default_hint'.tr(),
                     userController: _tplinkUser,
                     passController: _tplinkPass,
