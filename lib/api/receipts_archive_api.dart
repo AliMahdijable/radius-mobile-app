@@ -249,10 +249,15 @@ class ArchivedReceipt {
     this.partialAmount,
     this.newBalance,
     this.issuer,
+    this.companyKey,
   });
 
   final int id;
   final int? receiptNo;
+
+  /// شركة الوصل في «كل الشركات» — مفتاح الطلب الذي أعاده (null: المفتوحة). يسافر مع الوصل: تصميمه ورابط QR لمشتركه يُطلبان
+  /// لشركته هي (رقم المشترك فريدٌ داخل شركته وحدها)، لا لما يتبدّل في الشاشة بعد ذلك.
+  final String? companyKey;
 
   /// null = نوعٌ لا يُطبع (القديم).
   final ReceiptKind? kind;
@@ -281,7 +286,7 @@ class ArchivedReceipt {
   /// «أصدره» كما حُفظ: الاسم المختار يومها، ثمّ يوزر الموظّف، ثمّ يوزر المدير.
   final String? issuer;
 
-  static ArchivedReceipt? fromJson(Object? raw) {
+  static ArchivedReceipt? fromJson(Object? raw, {String? companyKey}) {
     final j = _map(raw);
     final id = _intOrNull(j['id']);
     final issued = _time(j['issued_at']);
@@ -318,6 +323,7 @@ class ArchivedReceipt {
       partialAmount: _numOrNull(j['partial_amount']),
       newBalance: _numOrNull(j['new_balance']),
       issuer: _str(iss['name']) ?? _str(iss['employee_username']) ?? _str(iss['manager_username']),
+      companyKey: companyKey,
     );
   }
 }
@@ -445,7 +451,7 @@ class ReceiptsArchiveApi {
     try {
       final r = await ApiClient.dio.post<Object?>('$_base/$name', data: data, options: CompanyRoute.explicit(companyKey));
       final body = _map(r.data);
-      final receipt = body['success'] == true ? ArchivedReceipt.fromJson(body['receipt']) : null;
+      final receipt = body['success'] == true ? ArchivedReceipt.fromJson(body['receipt'], companyKey: companyKey) : null;
       if (receipt == null) {
         return (receipt: null, existing: false, message: _str(body['message']) ?? fallback, code: _str(body['code']));
       }

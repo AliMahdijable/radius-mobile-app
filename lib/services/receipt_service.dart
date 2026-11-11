@@ -103,15 +103,16 @@ class ReceiptService {
   }
 
   /// وصلٌ من «أرشيف الوصولات» (١١ نوفمبر — إعادة طباعة ما ضاع، أو وصل عمليّةٍ لم تُطبع): برقمه وتاريخه ومحتواه و«أصدره» كما
-  /// أعادها الخادم — **بلا أرشفةٍ ثانية** (صفّه قائم) وبتصميم الحساب اليوم. [companyKey] شركة القسم في «كل الشركات».
+  /// أعادها الخادم — **بلا أرشفةٍ ثانية** (صفّه قائم) وبتصميم الحساب اليوم. شركته معه ([ArchivedReceipt.companyKey] — مفتاح
+  /// الطلب الذي أعاده): تصميمها هي ورابط QR لمشتركها هي.
   /// رمز QR كما في الطباعة ساعة العمليّة (الساس وحده، وحين يطبعه التصميم) — تعذّره لا يمنع الطباعة.
-  static Future<PrintResult> printArchived(ArchivedReceipt r, {String? companyKey}) async {
+  static Future<PrintResult> printArchived(ArchivedReceipt r) async {
     try {
       final kind = r.kind;
       if (kind == null) return const PrintResult.failed('هذا النوع من الوصولات لا يُطبع');
-      final merged = MergedMode.companyOf(companyKey);
+      final merged = MergedMode.companyOf(r.companyKey);
       final earthlink = merged != null ? merged.provider == MergedProvider.earthlink : _sessionIsEarthlink;
-      final settings = await CompanyRoute.pin(companyKey, ReceiptSettingsApi.fetch);
+      final settings = await CompanyRoute.pin(r.companyKey, ReceiptSettingsApi.fetch);
       final look = settings ?? const ReceiptSettings();
       final id = await _identity(merged);
       final idx = r.idx;
@@ -119,7 +120,8 @@ class ReceiptService {
       String? qr;
       if (look.showQr && !noQr && idx != null && RegExp(r'^\d+$').hasMatch(idx)) {
         try {
-          qr = await CompanyRoute.pin(companyKey, () => SubscribersApi.receiptLink(idx));
+          // رقم المشترك من وصل شركته ⇒ الرابط لها هي (شركة الوصل لا شركة الشريط)
+          qr = await CompanyRoute.pin(r.companyKey, () => SubscribersApi.receiptLink(idx));
         } catch (_) {
           qr = null;
         }

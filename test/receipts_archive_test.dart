@@ -323,6 +323,9 @@ void main() {
       expect(ArchivedReceipt.fromJson(j({}, {'kind': null, 'type': 'add_debt'}))!.kind, isNull);
       expect(ArchivedReceipt.fromJson(j({}, {'subscriber': {'name': 'بلا يوزر'}})), isNull);
       expect(ArchivedReceipt.fromJson('x'), isNull);
+      // شركة الوصل تسافر معه (مفتاح الطلب الذي أعاده) — null: المفتوحة
+      expect(r.companyKey, isNull);
+      expect(ArchivedReceipt.fromJson(j({}), companyKey: 'c0123456789ab')!.companyKey, 'c0123456789ab');
 
       final row = ArchiveItem.fromJson({'key': 'a:9', 'activity_id': 9, 'type': 'activate', 'at': 1761900000000, 'username': 'ali@net', 'amount': 35000})!;
       final after = row.afterPrint(r);
@@ -446,6 +449,7 @@ void main() {
         hint: const ArchiveHint(name: 'زينب كاظم', phone: '', expiration: '2026-11-20 14:30:00', packageName: null),
       );
       expect((a.existing, a.receipt!.receiptNo, a.receipt!.copy, a.receipt!.late, a.message), (false, 126, false, true, null));
+      expect(a.receipt!.companyKey, isNull, reason: 'وصل المفتوحة');
       expect(server.posts.single.$1, 'issue');
       expect(server.posts.single.$2, {'activity_id': 830501, 'subscriber': {'name': 'زينب كاظم', 'expiration': '2026-11-20 14:30:00'}});
       expect(server.seen.last.extra['companyOpen'], isTrue);

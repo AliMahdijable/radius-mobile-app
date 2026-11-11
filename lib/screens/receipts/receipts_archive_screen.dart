@@ -254,7 +254,7 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
     }
     // الصفّ صار له وصل (أو زاد عدّ إعادته) — قبل الطباعة: الرقم حُجز في الخادم ولو أُلغيت نافذة الطباعة
     setState(() => _items = [for (final i in _items) i.key == it.key ? i.afterPrint(receipt) : i]);
-    final result = await ReceiptService.printArchived(receipt, companyKey: key);
+    final result = await ReceiptService.printArchived(receipt);
     if (!mounted) return;
     setState(() => _busyKey = null);
     await showPrintResult(context, result);

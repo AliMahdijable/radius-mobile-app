@@ -161,7 +161,8 @@ const reviewedWriterPrefixes = <String, List<String>>{
   'lib/screens/subscribers/subscriber_detail_screen.dart SubscribersApi.disconnect': ['MergedOps.write(sub,'],
   'lib/screens/subscribers/subscriber_detail_screen.dart SubscribersApi.toggleResult': ['MergedOps.write(sub,'],
   'lib/screens/subscribers/widgets/private_note_card.dart PrivateNotesApi.save': ['MergedOps.write(widget.sub,'],
-  'lib/services/receipt_service.dart SubscribersApi.receiptLink': ['CompanyRoute.pin(key=sub.companyKey,'],
+  // printArchived («أرشيف الوصولات» ١١ نوفمبر): شركة الوصل نفسه (ArchivedReceipt.companyKey = مفتاح الطلب الذي أعاده) — ثمّ _emit: شركة الصفّ
+  'lib/services/receipt_service.dart SubscribersApi.receiptLink': ['CompanyRoute.pin(r.companyKey,', 'CompanyRoute.pin(key=sub.companyKey,'],
 };
 
 /// `_co(...)` في شيتَي «مشترك جديد»: شركة الشيت (run بمفتاحها)، وبلاها في «كل الشركات» ⇒ المفتوحة صراحةً.
