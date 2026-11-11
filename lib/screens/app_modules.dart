@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api/cards_api.dart';
 import '../api/jtpay_api.dart';
 import '../api/national_more_api.dart';
+import '../api/receipts_archive_api.dart';
 import '../api/renew_requests_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
@@ -37,6 +38,7 @@ import 'national/national_wallet_screen.dart';
 import 'national/national_work_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
+import 'receipts/receipts_archive_screen.dart';
 import 'renew/renew_requests_screen.dart';
 import 'reports_screen.dart';
 import 'sales/sales_screen.dart';
@@ -103,6 +105,8 @@ Listenable appModulesListenable() => Listenable.merge([
       SelfDepositState.gate,
       // «المبيعات» — الاستماع يطلب حالتها إن كانت قديمة (مفتاحٌ بالخادم).
       SalesState.gate,
+      // «أرشيف الوصولات» — مفتاحٌ بالخادم (receipts_archive): الاستماع يطلب حاله إن كانت قديمة.
+      ReceiptsArchiveState.gate,
       // «شحن من pay الجزيرة» — لشركات الجزيرة وحدها (لا سؤال لغيرها).
       JtpayState.gate,
       // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
@@ -298,6 +302,19 @@ List<AppModule> buildAppModules() {
         subtitle: 'more.settlements_hint'.tr(),
         // «كل الشركات» (٨ نوفمبر): صندوق الشركة المختارة وتسويتها بمكانها (settlements_routed)
         page: SettlementsScreen.mergedPage,
+      ),
+    // ١١ نوفمبر: «أرشيف الوصولات» (المالك: «مرّات المدراء ينسون طباعته أو يفقدونه») — كلّ تفعيلٍ وتمديدٍ وتسديد ووصله: طباعة ما
+    // لم يُطبع وإعادة ما ضاع برقمه. تظهر حين يقول الخادم إنّها مفتوحةٌ للحساب؛ الموظّف بلا «عرض المشتركين» يراها مقفلةً بمكانها.
+    if (ReceiptsArchiveState.visible && permShown(const ['subscribers.view']))
+      AppModule(
+        id: 'receipts',
+        group: AppModuleGroup.finance,
+        locked: !Perms.has('subscribers.view'),
+        icon: LucideIcons.receiptText,
+        tone: AppTone.info,
+        title: ReceiptsArchiveScreen.title,
+        subtitle: 'اطبع ما لم يُطبع، وأعد طباعة وصلٍ ضاع برقمه نفسه',
+        page: ReceiptsArchiveScreen.mergedPage,
       ),
     // ٢٣ أكتوبر: «المبيعات» — موادّ الوكيل ومخزونه وبيعها نقداً أو على دين المشترك. تظهر حين يقول الخادم إنّها
     // مفتوحةٌ للحساب (مفتاحٌ مطفأ افتراضيّاً)؛ الموظّف بلا `sales.view` يراها مقفلةً بمكانها، والمقيَّد بمديرٍ فرعيّ بسببها.

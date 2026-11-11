@@ -6,6 +6,7 @@ import '../api/company_route.dart';
 import '../api/package_names_api.dart';
 import '../api/printed_receipts_api.dart';
 import '../api/receipt_facts.dart';
+import '../api/receipts_archive_api.dart';
 import '../api/receipt_settings_api.dart';
 import '../api/subscribers_api.dart';
 import '../models/merged_company.dart';
@@ -99,6 +100,58 @@ class ReceiptService {
       expiration: sub.expiration,
       newBalance: f?.newBalance,
     );
+  }
+
+  /// وصلٌ من «أرشيف الوصولات» (١١ نوفمبر — إعادة طباعة ما ضاع، أو وصل عمليّةٍ لم تُطبع): برقمه وتاريخه ومحتواه و«أصدره» كما
+  /// أعادها الخادم — **بلا أرشفةٍ ثانية** (صفّه قائم) وبتصميم الحساب اليوم. [companyKey] شركة القسم في «كل الشركات».
+  /// رمز QR كما في الطباعة ساعة العمليّة (الساس وحده، وحين يطبعه التصميم) — تعذّره لا يمنع الطباعة.
+  static Future<PrintResult> printArchived(ArchivedReceipt r, {String? companyKey}) async {
+    try {
+      final kind = r.kind;
+      if (kind == null) return const PrintResult.failed('هذا النوع من الوصولات لا يُطبع');
+      final merged = MergedMode.companyOf(companyKey);
+      final earthlink = merged != null ? merged.provider == MergedProvider.earthlink : _sessionIsEarthlink;
+      final settings = await CompanyRoute.pin(companyKey, ReceiptSettingsApi.fetch);
+      final look = settings ?? const ReceiptSettings();
+      final id = await _identity(merged);
+      final idx = r.idx;
+      final noQr = earthlink || (merged == null && (ProviderService.isFiberx || ProviderService.isKit));
+      String? qr;
+      if (look.showQr && !noQr && idx != null && RegExp(r'^\d+$').hasMatch(idx)) {
+        try {
+          qr = await CompanyRoute.pin(companyKey, () => SubscribersApi.receiptLink(idx));
+        } catch (_) {
+          qr = null;
+        }
+      }
+      final name = (r.name ?? '').trim();
+      return _print(ReceiptDoc(
+        kind: kind,
+        issuedAt: r.issuedAt,
+        look: look,
+        receiptNo: r.receiptNo,
+        copy: r.copy,
+        shopName: look.shopName ?? id.shop,
+        subscriberName: name.isEmpty ? r.username : name,
+        username: r.username,
+        phone: r.phone,
+        packageName: r.packageName,
+        packagePrice: r.packagePrice,
+        expiration: r.expiration,
+        remainingDays: r.remainingDays,
+        pay: r.pay,
+        amount: r.amount,
+        partialAmount: r.pay == ReceiptPay.partial ? r.partialAmount : null,
+        newBalance: r.newBalance,
+        qrUrl: qr,
+        // «أصدره» من أصدره أوّلاً — لا اسم من يطبع الآن
+        issuer: r.issuer,
+      ));
+    } catch (e, st) {
+      if (kDebugMode) debugPrint('[ReceiptService] archived: $e');
+      final where = st.toString().split('\n').where((l) => l.contains('package:rad_mysvcs')).take(3).join(' < ');
+      return PrintResult.failed('$e${where.isEmpty ? '' : ' @ $where'}');
+    }
   }
 
   /// معاينة «قوالب الطباعة»: وصلٌ تجريبيّ بتصميم الحساب، كما يخرج بعد التفعيل.

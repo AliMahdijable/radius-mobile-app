@@ -93,9 +93,12 @@ class ReceiptDoc {
     this.qrUrl,
     this.issuer,
     this.sale,
+    this.copy = false,
   });
 
   final ReceiptKind kind;
+
+  /// التاريخ المطبوع. وصلٌ من «أرشيف الوصولات»: وقت طباعته الأولى، أو وقت العمليّة لوصلٍ صدر لاحقاً — لا «الآن».
   final DateTime issuedAt;
   final String shopName;
   final String subscriberName;
@@ -125,12 +128,21 @@ class ReceiptDoc {
   /// فاتورة البيع ([ReceiptKind.sale]) — الزبون في [subscriberName]/[username]/[phone]، ووقت البيع في [issuedAt].
   final SaleInvoiceDoc? sale;
 
+  /// إعادة طباعةٍ من «أرشيف الوصولات» (١١ نوفمبر): «نسخة» بجوار رقم الوصل — الرقم والتاريخ والمحتوى كما كانت.
+  final bool copy;
+
+  /// علامة النسخة كما يكتبها الموقع (client-v2 print-receipt: COPY_MARK).
+  static const copyWord = 'نسخة';
+
   /// العنوان المطبوع: الفاتورة برقمها.
   String get title => sale != null ? '${kind.title} رقم ${sale!.id}' : kind.title;
 
-  String get receiptId => receiptNo != null
+  /// رقم الوصل بلا علامة النسخة.
+  String get receiptIdPlain => receiptNo != null
       ? 'No. ${receiptNo.toString().padLeft(5, '0')}'
       : 'R-${issuedAt.millisecondsSinceEpoch.toRadixString(36).toUpperCase()}';
+
+  String get receiptId => copy ? '$receiptIdPlain ($copyWord)' : receiptIdPlain;
 
   /// وقت الإصدار بتوقيت بغداد مهما كانت منطقة الجهاز (كالموقع). العراق بلا توقيتٍ صيفيّ.
   String get issuedText => intl.DateFormat('yyyy-MM-dd HH:mm', 'en_US')
@@ -402,8 +414,15 @@ class _Body {
           : pw.MainAxisAlignment.center,
       children: [
         // الفاتورة رقمها في عنوانها.
+        // «نسخة» كلمةٌ عربيّة بجوار الرقم اللاتينيّ: نصّان (مكتبة PDF لا تشكّل العربيّ في سطرٍ LTR).
         if (d.look.showReceiptId && d.sale == null)
-          pw.Text('#${d.receiptId}', textDirection: pw.TextDirection.ltr, style: style),
+          d.copy
+              ? pw.Row(mainAxisSize: pw.MainAxisSize.min, children: [
+                  pw.Text('#${d.receiptIdPlain}', textDirection: pw.TextDirection.ltr, style: style),
+                  pw.SizedBox(width: 3),
+                  pw.Text('(${ReceiptDoc.copyWord})', textDirection: pw.TextDirection.rtl, style: style),
+                ])
+              : pw.Text('#${d.receiptId}', textDirection: pw.TextDirection.ltr, style: style),
         if (d.look.showDateTime) pw.Text(d.issuedText, textDirection: pw.TextDirection.ltr, style: style),
       ],
     );

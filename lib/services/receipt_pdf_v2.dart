@@ -26,7 +26,7 @@ ReceiptInput receiptInputOf(ReceiptDoc d, {required bool hasLogo}) {
     receiptNoText: s != null
         ? '${s.id}'
         : d.receiptNo != null
-            ? d.receiptNo.toString().padLeft(5, '0')
+            ? '${d.receiptNo.toString().padLeft(5, '0')}${d.copy ? ' (${ReceiptDoc.copyWord})' : ''}'
             : d.receiptId,
     issuer: d.issuer,
     hasLogo: hasLogo,
