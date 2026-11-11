@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/zte_ont_service.dart';
+import '../core/net/tplink_agile_service.dart';
+import '../core/net/tplink_classic_service.dart';
 import '../core/net/tplink_pharos_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../core/net/tcp_reachability.dart';
@@ -257,7 +259,11 @@ class DeviceProbeApi {
     _tplinkWinner.clear();
     _radioVendorByKey.clear();
     _tplinkSeen.clear();
+    _tpClassicSeen.clear();
+    _tpAgileSeen.clear();
     TplinkPharosService.reset();
+    TplinkClassicService.reset();
+    TplinkAgileService.reset();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -367,6 +373,8 @@ class DeviceProbeApi {
     if (retryLogin) {
       ZteOntService.forget(effectiveIp);
       TplinkPharosService.forget(effectiveIp, manual: true);
+      TplinkClassicService.forget(effectiveIp);
+      TplinkAgileService.forget(effectiveIp, manual: true);
     }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
@@ -523,9 +531,13 @@ class DeviceProbeApi {
     _tplinkWinner.remove(k);
     _radioVendorByKey.remove(k);
     _tplinkSeen.remove(ip.trim());
+    _tpClassicSeen.remove(ip.trim());
+    _tpAgileSeen.remove(ip.trim());
     // اعتماداتٌ جديدة تُجرَّب: الرفض السابق على هذا العنوان يُنسى (لا يُعاد إلّا المرفوض نفسه بلا تغيير).
     ZteOntService.forget(ip.trim());
     TplinkPharosService.forget(ip.trim());
+    TplinkClassicService.forget(ip.trim());
+    TplinkAgileService.forget(ip.trim());
     _schedulePersist();
   }
 
@@ -839,6 +851,10 @@ class DeviceProbeApi {
 
     // جهازٌ عُرف أنّه TP-Link (ولو فشل دخوله: رفضٌ أو مشغول) ⇒ فرعه وحده — لا تطرقه طلبات هواوي وUBNT كلّ موجة.
     if (_radioVendorByKey[kindKey] == 'tplink') return _probeTplinkAny(ip, c.tplink, kindKey);
+    // راوتر TP-Link كلاسيكيّ (١١ نوفمبر) — كذلك فرعه وحده.
+    if (_radioVendorByKey[kindKey] == 'tpclassic') return _probeTpClassicAny(ip, c.tplink, kindKey);
+    // راوتر TP-Link الحديث Agile (١١ نوفمبر) — كذلك فرعه وحده.
+    if (_radioVendorByKey[kindKey] == 'tpagile') return _probeTpAgileAny(ip, c.tprouter, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -858,25 +874,185 @@ class DeviceProbeApi {
     final others = _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
     // TP-Link يعرّف نفسه بطلبٍ واحد بلا دخول: إن كان هو فنتيجة فرعه هي الجواب — ولو فشلاً بسببه — ولا يُنتظر فرعا هواوي
     // وUBNT على جهازٍ ليس لهما؛ وإن لم يكن فالجواب جوابهما كما كان. والأسبق من (نجاح أحدهما · معرفة أنّه TP-Link) يحسم.
+    // والراوتر الكلاسيكيّ (١١ نوفمبر) كذلك يعرّف نفسه بطلبٍ بلا دخول (401 + realm) — بعد أن يقول تعرّف Pharos «ليس أنا».
     final hello = _helloTplink(ip);
+    final classic = _helloTpClassic(ip);
+    final agile = _helloTpAgile(ip);
     final done = Completer<DeviceHealthSnapshot?>();
     var othersDone = false;
     var helloDone = false;
+    var classicDone = false;
+    var agileDone = false;
+    void noneYet() {
+      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone) done.complete(null);
+    }
     others.then((snap) {
       othersDone = true;
       if (done.isCompleted) return;
-      if (snap != null || helloDone) done.complete(snap);
+      if (snap != null) {
+        done.complete(snap);
+      } else {
+        noneYet();
+      }
     });
     hello.then((h) {
       helloDone = true;
       if (done.isCompleted) return;
       if (h != null) {
         done.complete(_probeTplinkAny(ip, c.tplink, kindKey, hello: h));
-      } else if (othersDone) {
-        done.complete(null);
+      } else {
+        noneYet();
+      }
+    });
+    classic.then((h) {
+      classicDone = true;
+      if (done.isCompleted) return;
+      if (h != null) {
+        done.complete(_probeTpClassicAny(ip, c.tplink, kindKey, hello: h));
+      } else {
+        noneYet();
+      }
+    });
+    agile.then((yes) {
+      agileDone = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(_probeTpAgileAny(ip, c.tprouter, kindKey));
+      } else {
+        noneYet();
       }
     });
     return done.future;
+  }
+
+  /// تعرّف الراوتر الكلاسيكيّ الجاري لكلّ عنوان — فرعه وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
+  static final _tpClassicHello = <String, Future<TpClassicHello?>>{};
+
+  /// نتيجة آخر تعرّفٍ كلاسيكيّ لكلّ عنوان (نصف دقيقة كـPharos): الإيجاب يحمل التعرّف نفسه، والسلب null.
+  static final _tpClassicSeen = <String, ({TpClassicHello? hello, DateTime at})>{};
+
+  /// تعرّفٌ كلاسيكيّ — **بعد** أن يقول تعرّف Pharos إنّ العنوان ليس Pharos: طلب «/» على Pharos قد يُبدّل الـnonce الذي حفظه تعرّفه
+  /// (الجهاز يحفظ آخر nonce طلبه أيّ عميل). على الكلاسيكيّ نفسه يجيب طلب Pharos بـ401 سريعاً، فلا يزيد الانتظار إلّا ~٠٫٤ث.
+  static Future<TpClassicHello?> _helloTpClassic(String ip) {
+    final running = _tpClassicHello[ip];
+    if (running != null) return running;
+    final seen = _tpClassicSeen[ip];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.hello);
+    final f = (() async {
+      if (await _isTplink(ip)) return null;
+      return TplinkClassicService.detect(ip);
+    })()
+        .catchError((Object _) => null);
+    _tpClassicHello[ip] = f;
+    f.then((h) => _tpClassicSeen[ip] = (hello: h, at: DateTime.now()));
+    f.whenComplete(() => _tpClassicHello.remove(ip));
+    return f;
+  }
+
+  static Future<bool> _isTpClassic(String ip) async => (await _helloTpClassic(ip)) != null;
+
+  /// راوتر TP-Link الكلاسيكيّ: مرشّحو قائمة TP-Link (الفائز المحفوظ أوّلاً) — قراءةٌ بمصادقة Basic بلا جلسة
+  /// ([TplinkClassicService.readOnce]). لا افتراض مصنّع (قفله بعد الخطأ لم يُجرَّب)، والتالي لا يُجرَّب إلّا بعد رفضٍ صريح (401).
+  /// رفضٌ ⇒ يبقى معروفاً «كلاسيكيّاً» (فلا تطرقه طلبات هواوي وUBNT كلّ موجة)؛ لا يجاوب ⇒ يُنسى فيُعاد التعرّف.
+  static Future<DeviceHealthSnapshot?> _probeTpClassicAny(
+      String ip, List<DeviceCred> cands, String kindKey, {TpClassicHello? hello}) async {
+    _radioVendorByKey[kindKey] = 'tpclassic';
+    final model = hello?.model ?? '';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'classic no-creds $model');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkClassicService.readOnce(ip, list[i].username, list[i].password, realmModel: model);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'classic $model error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkClassicService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          TpClassicIssue.rejected => ProbeIssue.loginRejected,
+          TpClassicIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'classic $model ${why?.trace ?? '?'}',
+      );
+      if (why?.issue == TpClassicIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != TpClassicIssue.rejected) break;
+    }
+    return null;
+  }
+
+  /// تعرّف الراوتر الحديث Agile (HTTPS، مصافحة keys العامّة) الجاري لكلّ عنوان — نصف دقيقة كغيره. مستقلٌّ عن تعرّف Pharos (HTTPS لا
+  /// يمسّ nonce الـHTTP).
+  static final _tpAgileHello = <String, Future<bool>>{};
+  static final _tpAgileSeen = <String, ({bool yes, DateTime at})>{};
+
+  static Future<bool> _helloTpAgile(String ip) {
+    final running = _tpAgileHello[ip];
+    if (running != null) return running;
+    final seen = _tpAgileSeen[ip];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
+    final f = TplinkAgileService.detect(ip).catchError((Object _) => false);
+    _tpAgileHello[ip] = f;
+    f.then((y) => _tpAgileSeen[ip] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _tpAgileHello.remove(ip));
+    return f;
+  }
+
+  static Future<bool> _isTpAgile(String ip) => _helloTpAgile(ip);
+
+  /// راوتر TP-Link الحديث Agile: مرشّحو قائمة TP-Link (الباسورد المحلّيّ؛ اليوزر يُمرَّر لمن تطلبه فيرموَيره، والافتراضيّ فارغ) —
+  /// دخولٌ RSA+AES ثمّ قراءة `/admin/status` ([TplinkAgileService.readOnce]). لا افتراض مصنّع، والمرفوض لا يُعاد.
+  static Future<DeviceHealthSnapshot?> _probeTpAgileAny(String ip, List<DeviceCred> cands, String kindKey) async {
+    _radioVendorByKey[kindKey] = 'tpagile';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'agile no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkAgileService.readOnce(ip, list[i].password, username: list[i].username);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'agile error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkAgileService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          AgileIssue.rejected => ProbeIssue.loginRejected,
+          AgileIssue.busy => ProbeIssue.busy,
+          AgileIssue.locked => ProbeIssue.locked,
+          AgileIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'agile ${why?.trace ?? '?'}',
+      );
+      if (why?.issue == AgileIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != AgileIssue.rejected) break;
+    }
+    return null;
   }
 
   /// تعرّف TP-Link الجاري لكلّ عنوان — فرعه وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
@@ -918,8 +1094,14 @@ class DeviceProbeApi {
     final known = _radioVendorByKey[kindKey];
     if (known == 'ubnt') return _probeUbntAny(ip, ubnt, kindKey);
     if (known == 'tplink') return _probeTplinkAny(ip, tplink, kindKey);
+    if (known == 'tpclassic') return _probeTpClassicAny(ip, tplink, kindKey);
+    if (known == 'tpagile') return _probeTpAgileAny(ip, tplink, kindKey);
     final hello = await _helloTplink(ip);
-    return hello != null ? _probeTplinkAny(ip, tplink, kindKey, hello: hello) : _probeUbntAny(ip, ubnt, kindKey);
+    if (hello != null) return _probeTplinkAny(ip, tplink, kindKey, hello: hello);
+    final classic = await _helloTpClassic(ip);
+    if (classic != null) return _probeTpClassicAny(ip, tplink, kindKey, hello: classic);
+    if (await _helloTpAgile(ip)) return _probeTpAgileAny(ip, tplink, kindKey);
+    return _probeUbntAny(ip, ubnt, kindKey);
   }
 
   static void _tplinkNote(String ip, ProbeIssue issue, String trace, {int? lockLeft}) =>
@@ -1030,7 +1212,7 @@ class DeviceProbeApi {
   /// [tplink] (١٠ نوفمبر): اعتماد المشترك وحده، وإلّا خانة المدير الأولى ثمّ إضافيّاه — **بلا افتراض مصنّع أبداً**: جهاز
   /// TP-Link يعدّ المحاولات الغلط من كلّ الهواتف ويقفل صفحته عند عشر.
   @visibleForTesting
-  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory, List<DeviceCred> tplink}) candidatesFor(
+  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory, List<DeviceCred> tplink, List<DeviceCred> tprouter}) candidatesFor(
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) {
@@ -1068,7 +1250,24 @@ class DeviceProbeApi {
         if (!tplink.contains(e)) tplink.add(e);
       }
     }
-    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory, tplink: tplink);
+    // راوتر TP-Link الحديث (Agile): كلمات سرٍّ فقط، يوزرٌ فارغٌ دائماً (يوزرٌ غير فارغٍ يفسد هاش الدخول). اعتماد المشترك أوّلاً
+    // (إن كان من عائلة الراديو)، ثمّ كلمات سرّ المدير المخصّصة، ثمّ باسوردات قائمة TP-Link العاديّة احتياطاً (لو أُدخلت هناك قبل الفصل).
+    final tprouter = <DeviceCred>[];
+    void addRouterPass(String p) {
+      if (p.isEmpty || tprouter.any((e) => e.password == p)) return;
+      tprouter.add(DeviceCred('', p));
+    }
+
+    if (ubntOwn) addRouterPass(cfg?.password ?? '');
+    addRouterPass(defaults.tprouterPassword ?? '');
+    for (final p in defaults.tprouterExtra) {
+      addRouterPass(p);
+    }
+    addRouterPass(defaults.tplinkPassword ?? '');
+    for (final e in defaults.tplinkExtra) {
+      addRouterPass(e.password);
+    }
+    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory, tplink: tplink, tprouter: tprouter);
   }
 
   /// ⑦: الاعتماد الذي دخل على كلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يبدأ به، وجلسة الترافيك وإعادة التشغيل
@@ -1318,7 +1517,8 @@ class DeviceProbeApi {
   static Future<DeviceHealthSnapshot?> _probeUbnt(
       String ip, String user, String pass, {bool unlessOther = false}) async {
     if (unlessOther) {
-      final other = await Future.wait([_isZte(ip), _isTplink(ip)]);
+      // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها.
+      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip)]);
       if (other.contains(true)) return null;
     }
     final session =

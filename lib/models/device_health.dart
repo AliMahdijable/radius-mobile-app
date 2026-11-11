@@ -150,6 +150,29 @@ class LanPort {
 }
 
 /// Unified snapshot the UI consumes — same shape regardless of kind.
+/// جهازٌ متّصلٌ بالراوتر المنزليّ (قائمة المتّصلين المنسدلة في البطاقة). [ip]/[name] قد يكونان null حسب ما يصدّره الراوتر.
+class RouterClient {
+  const RouterClient({required this.mac, this.ip, this.name, this.wired = false});
+  final String mac;
+  final String? ip;
+  final String? name;
+  final bool wired;
+
+  Map<String, dynamic> toJson() => {
+        'm': mac,
+        if (ip != null && ip!.isNotEmpty) 'i': ip,
+        if (name != null && name!.isNotEmpty) 'n': name,
+        if (wired) 'w': 1,
+      };
+
+  static RouterClient fromJson(Map<String, dynamic> j) => RouterClient(
+        mac: (j['m'] ?? '').toString(),
+        ip: j['i']?.toString(),
+        name: j['n']?.toString(),
+        wired: j['w'] == 1,
+      );
+}
+
 class UbiquitiStatus {
   const UbiquitiStatus({
     required this.hostname,
@@ -171,16 +194,44 @@ class UbiquitiStatus {
     required this.baseUrl,
     this.vendor = 'ubnt',
     this.model = '',
+    this.wanOnlineSeconds,
+    this.dhcpCount,
+    this.wanType = '',
+    this.clients = const [],
   });
 
-  /// المورّد: `ubnt` (الأصل — airOS) أو `tplink` (TP-Link Pharos: CPE/WBS، ١٠ نوفمبر) — نفس القراءات والبطاقات، ويحدّد
-  /// جلسة الترافيك وتوفّر إعادة التشغيل وتسمية الجهاز.
+  /// المورّد: `ubnt` (الأصل — airOS) أو `tplink` (TP-Link Pharos: CPE/WBS، ١٠ نوفمبر) أو `tpclassic` (راوتر TP-Link المنزليّ
+  /// القديم — TL-WR741ND وأخواته، ١١ نوفمبر) — نفس القراءات والبطاقات، ويحدّد جلسة الترافيك وتوفّر إعادة التشغيل وتسمية الجهاز.
   final String vendor;
 
   /// الطراز كما يسمّيه الجهاز («CPE610 v2.0») — فارغٌ حين لا يُعرف (airOS يضعه في [firmware] أو لا يذكره).
   final String model;
 
   bool get isTplink => vendor == 'tplink';
+
+  /// راوتر TP-Link المنزليّ القديم (واجهة userRpm بمصادقة HTTP Basic): لا رابط لاسلكيّ للمزوّد (لا إشارة ولا CCQ)، و[peerCount]
+  /// = أجهزة الوايرلس المتّصلة **الآن** (صفحة Wireless Statistics — لا إيجارات DHCP)، ولا حالة منافذ يصدّرها.
+  bool get isTpClassic => vendor == 'tpclassic';
+
+  /// راوتر TP-Link الحديث «Agile» (Archer AX10 & kin — واجهة SPA، دخول RSA+AES، ١١ نوفمبر): كذلك راوترٌ منزليّ، [peerCount] من
+  /// قائمتَي الأجهزة اللاسلكيّة والسلكيّة، ومدّة الاتصال من WAN.
+  bool get isTpAgile => vendor == 'tpagile';
+
+  /// جهاز المشترك راوترٌ منزليّ (لا راديو) — ما يُعرض له يختلف: المتّصلون ومدّة الاتصال لا الإشارة والمنافذ.
+  bool get isRouter => isTpClassic || isTpAgile;
+
+  /// مدّة اتّصال الإنترنت (PPPoE) بالثواني كما يعدّها الراوتر («Online Time») — غير [uptimeSeconds] (تشغيل الجهاز). null = غير معروفة.
+  final int? wanOnlineSeconds;
+
+  /// عدد إيجارات DHCP (سلكيّ + لاسلكيّ) — ثانويّ: الإيجار يبقى بعد خروج الجهاز، فلا يُعرض «متّصلاً الآن».
+  final int? dhcpCount;
+
+  /// نوع اتّصال الإنترنت كما يسمّيه الراوتر («PPPoE»، «Dynamic IP»…) — فارغٌ لغير الراوتر.
+  final String wanType;
+
+  /// الأجهزة المتّصلة بالراوتر المنزليّ (آيبي/ماك/اسم) — تُعرض في قائمةٍ منسدلةٍ بالبطاقة (مغلقةٌ حتى ينقرها الوكيل). فارغةٌ لغير الراوتر
+  /// أو حين لا يصدّر الراوتر تفاصيلها. قد تكون أقصر من [peerCount] إن أعطى الراوتر العدّ دون التفاصيل الكاملة.
+  final List<RouterClient> clients;
 
   final String hostname;
   final String firmware;
@@ -234,6 +285,8 @@ class UbiquitiStatus {
   }
 
   String get lanHealth {
+    // الراوتر المنزليّ لا يصدّر حالة منافذه — «مجهول» لا «مفصول» (لا إنذارٌ أحمر كاذب على كلّ راوتر).
+    if (isRouter) return 'unknown';
     if (!lanUp) return 'bad';
     // موصولٌ والسرعة مجهولة ليس عطلاً — لا نصبغه بالأحمر.
     if (primaryLan?.speedUnknown ?? false) return 'unknown';
@@ -269,6 +322,10 @@ class UbiquitiStatus {
         'b': baseUrl,
         if (vendor != 'ubnt') 'vd': vendor,
         if (model.isNotEmpty) 'md': model,
+        if (wanOnlineSeconds != null) 'wos': wanOnlineSeconds,
+        if (dhcpCount != null) 'dh': dhcpCount,
+        if (wanType.isNotEmpty) 'wt': wanType,
+        if (clients.isNotEmpty) 'cl': clients.map((c) => c.toJson()).toList(),
       };
 
   static UbiquitiStatus fromJson(Map<String, dynamic> j) => UbiquitiStatus(
@@ -293,6 +350,13 @@ class UbiquitiStatus {
         // مخزَّنٌ قبل حقل المورّد ⇒ يوبيكويتي كما كان.
         vendor: (j['vd'] ?? 'ubnt').toString(),
         model: (j['md'] ?? '').toString(),
+        wanOnlineSeconds: j['wos'] is int ? j['wos'] as int : null,
+        dhcpCount: j['dh'] is int ? j['dh'] as int : null,
+        wanType: (j['wt'] ?? '').toString(),
+        clients: (j['cl'] as List? ?? const [])
+            .whereType<Map>()
+            .map((m) => RouterClient.fromJson(Map<String, dynamic>.from(m)))
+            .toList(),
       );
 
   /// نسخةٌ بقراءاتٍ حيّة أحدث (نبضة الكرت) — ما لم يُعطَ يبقى كما هو؛ والمنافذ تُستبدل كلّها حين تُعطى.
@@ -304,6 +368,10 @@ class UbiquitiStatus {
     int? rxRateKbps,
     int? uptimeSeconds,
     List<LanPort>? lanPorts,
+    int? peerCount,
+    int? wanOnlineSeconds,
+    int? dhcpCount,
+    List<RouterClient>? clients,
   }) =>
       UbiquitiStatus(
         hostname: hostname,
@@ -321,10 +389,14 @@ class UbiquitiStatus {
         txBytes: txBytes,
         lanPorts: lanPorts ?? this.lanPorts,
         peerMac: peerMac,
-        peerCount: peerCount,
+        peerCount: peerCount ?? this.peerCount,
         baseUrl: baseUrl,
         vendor: vendor,
         model: model,
+        wanOnlineSeconds: wanOnlineSeconds ?? this.wanOnlineSeconds,
+        dhcpCount: dhcpCount ?? this.dhcpCount,
+        wanType: wanType,
+        clients: clients ?? this.clients,
       );
 }
 

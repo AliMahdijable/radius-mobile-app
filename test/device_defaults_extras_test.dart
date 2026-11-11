@@ -84,12 +84,12 @@ void main() {
     final popped = await open(t);
     expect(find.text('اعتماد 2'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'x-1'), findsOneWidget);
-    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(3), reason: 'ONT فيه واحد من اثنين، وUBNT وTP-Link فارغان');
+    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(4), reason: 'ONT فيه واحد من اثنين، وUBNT وTP-Link وراوتر Agile فارغة');
 
     await t.tap(find.text('إضافة اعتماد آخر').first);
     await t.pumpAndSettle();
     expect(find.text('اعتماد 3'), findsOneWidget);
-    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(2), reason: 'ثلاثةٌ لـONT ⇒ لا زرّ إضافة له (يبقى زرّا UBNT وTP-Link)');
+    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(3), reason: 'ثلاثةٌ لـONT ⇒ لا زرّ إضافة له (تبقى أزرار UBNT وTP-Link وراوتر Agile)');
 
     // الخانة الجديدة: آخر حقلَي يوزر/باسورد في قسم ONT (قبل قسم UBNT).
     final fields = find.byType(TextField);
@@ -144,7 +144,7 @@ void main() {
     await open(t);
     final section = find.byKey(const ValueKey('creds-tplink'));
     expect(section, findsOneWidget);
-    expect(find.descendant(of: section, matching: find.text('TP-Link (CPE)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('TP-Link — يوزر + باسورد (CPE / راوتر قديم)')), findsOneWidget);
     expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'tp-old')), findsOneWidget);
 
     final fields = find.descendant(of: section, matching: find.byType(TextField));
@@ -168,6 +168,34 @@ void main() {
       {'username': 'tp-x', 'password': 'tp-x-p'},
     ]);
     expect([body['ubntUsername'], body['ubntPassword']], ['adm-ub', 'adm-ub-p'], reason: 'قسم يوبيكويتي كما كان');
+    await t.pump(const Duration(seconds: 4));
+  });
+
+  // ١١ نوفمبر — المالك: «الرواترات… النوع الي يدور فقط باسورد». راوتر Agile (Archer) يدخل بكلمة سرٍّ محلّيّة بلا يوزر.
+  testWidgets('قسم راوتر Agile (باسورد فقط): المحفوظ يظهر بلا خانة يوزر، والجديد وإضافيّه يُرسلان', (t) async {
+    server.defaults = {'tprouterPassword': 'r-old'};
+    await open(t);
+    final section = find.byKey(const ValueKey('creds-tprouter'));
+    expect(section, findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('راوتر TP-Link حديث — باسورد فقط (Archer)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'r-old')), findsOneWidget);
+    // باسورد فقط: حقلٌ نصّيٌّ واحد قبل الإضافة (لا خانة يوزر).
+    expect(find.descendant(of: section, matching: find.byType(TextField)), findsOneWidget);
+
+    await t.ensureVisible(section);
+    await t.tap(find.descendant(of: section, matching: find.text('إضافة اعتماد آخر')));
+    await t.pumpAndSettle();
+    final fields = find.descendant(of: section, matching: find.byType(TextField));
+    expect(fields, findsNWidgets(2), reason: 'باسورد أوّل + إضافيّ، بلا يوزر');
+    await t.enterText(fields.at(0), 'r-new');
+    await t.enterText(fields.at(1), 'r-extra');
+
+    await t.ensureVisible(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.pumpAndSettle();
+    final body = server.saved.single;
+    expect(body['tprouterPassword'], 'r-new');
+    expect(body['tprouterExtra'], ['r-extra']);
     await t.pump(const Duration(seconds: 4));
   });
 }

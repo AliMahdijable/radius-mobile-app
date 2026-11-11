@@ -870,6 +870,9 @@ class SubscriberNetworkMetrics extends StatelessWidget {
       if (snap.kind == DeviceKind.ubiquiti) {
         final h = snap.ubnt?.hostname.trim() ?? '';
         if (h.isNotEmpty) return h;
+        // الراوتر الكلاسيكيّ بلا hostname — طرازه («TL-WR741ND v4»).
+        final m = snap.ubnt?.model.trim() ?? '';
+        if ((snap.ubnt?.isRouter ?? false) && m.isNotEmpty) return m;
       } else if (snap.kind == DeviceKind.ont) {
         final m = snap.ont?.model.trim() ?? '';
         if (m.isNotEmpty) return m;
@@ -907,6 +910,10 @@ class SubscriberNetworkMetrics extends StatelessWidget {
           if (u.lanSpeedShort != null) {
             items.add(_metric(
                 Icons.lan_rounded, u.lanSpeedShort!, _health(u.lanHealth)));
+          }
+          // الراوتر (١١ نوفمبر): لا إشارة ولا منافذ — أجهزة الوايرلس المتّصلة الآن بدلهما (لا لونٌ صحّيّ: عددٌ لا حكم).
+          if (u.isRouter && u.peerCount != null) {
+            items.add(_metric(Icons.devices_rounded, '${u.peerCount}', AppColors.textMid));
           }
         } else if (snap.kind == DeviceKind.ont && snap.ont != null) {
           final o = snap.ont!;

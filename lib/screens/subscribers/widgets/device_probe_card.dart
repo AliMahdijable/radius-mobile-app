@@ -9,6 +9,7 @@ import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
+import '../../../core/net/tplink_classic_service.dart';
 import '../../../core/net/tplink_pharos_service.dart';
 import '../../../services/agent_net_presence.dart';
 import '../../../services/subscriber_refresh_signal.dart';
@@ -101,6 +102,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   bool? _reach;
   String? _notes;
 
+  /// قائمة المتّصلين بالراوتر (آيبي/ماك/اسم) مطويّةٌ افتراضاً — تنفتح بنقر الوكيل فقط (المالك ١١ نوفمبر).
+  bool _clientsExpanded = false;
+
   // ═══════════ الترافيك اللحظي ═══════════
   //
   // عدّادات البايت تصل أصلاً في كلّ استجابة `/status.cgi` — نفس الطلب
@@ -160,6 +164,14 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   DateTime? _tpRetryAt;
 
   bool get _isTplink => _snap?.kind == DeviceKind.ubiquiti && (_snap?.ubnt?.isTplink ?? false);
+
+  /// راوتر TP-Link الكلاسيكيّ (١١ نوفمبر): مصادقة Basic بلا جلسة — كلّ نبضةٍ صفحة الحالة وحدها (~٠٫٧ث: عدّادات WAN ومدّتا
+  /// التشغيل والاتّصال)، وكلّ [_tcClientsEvery] نبضاتٍ صفحة الوايرلس (المتّصلون الآن). المعدّل = فرق عيّنتين.
+  bool get _isTpClassic => _snap?.kind == DeviceKind.ubiquiti && (_snap?.ubnt?.isTpClassic ?? false);
+  static const _tcClientsEvery = 4;
+  TpClassicLive? _tcLast;
+  int _tcPulses = 0;
+  DateTime? _tcRetryAt;
   int? _lastRx;
   int? _lastTx;
   DateTime? _lastSample;
@@ -340,6 +352,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // TP-Link: الفحص الدوريّ يقرأ بجلسة الكرت الحيّة (طلبٌ واحد). بلاها يكون دخولاً وخروجاً كاملين كلّ عشر ثوانٍ على
       // معالج الجهاز — والنبضة الحيّة نفسها تعيد فتح الجلسة وتحدّث الإشارة، فلا حاجة له.
       if (_isTplink && !TplinkPharosService.hasLive(_snap!.ip)) return;
+      // الراوتر الكلاسيكيّ: نبضته الحيّة تحدّث المتّصلين والمدّتين — فحصٌ كاملٌ فوقها حملٌ بلا فائدة على معالجٍ قديم.
+      if (_isTpClassic && _trafficTimer != null) return;
       _refreshQuietly(force: true);
     });
     // عدّاد «آخر تحديث» يتقدّم بنفسه ولو لم يصل جديد — وإلّا جمد
@@ -373,6 +387,14 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // TP-Link: لا SSH — صفحة الجهاز نفسها تعطي معدّل الترافيك جاهزاً.
       _pulseTplink();
       _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTplink());
+      return;
+    }
+    if (snap.ubnt?.isTpClassic ?? false) {
+      // الراوتر الكلاسيكيّ: لا SSH ولا معدّلٌ جاهز — عدّادات WAN من صفحة الحالة، والمعدّل فرق عيّنتين.
+      _tcLast = null;
+      _tcPulses = 0;
+      _pulseTpClassic();
+      _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTpClassic());
       return;
     }
     _pulseTraffic(); // نبضة فوريّة تزرع المرجع بلا انتظار 3 ثوانٍ
@@ -450,6 +472,70 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final s = _tpSession;
     _tpSession = null;
     if (s != null) unawaited(s.close());
+  }
+
+  /// نبضة الراوتر الكلاسيكيّ: صفحة الحالة (عدّادات WAN + مدّة التشغيل + مدّة الاتّصال) كلّ نبضة، وصفحة الوايرلس كلّ
+  /// [_tcClientsEvery] نبضات. بالاعتماد الذي دخل به الفحص ([DeviceProbeApi.resolveTplinkCreds]). تعثّرٌ ⇒ لا رقمٌ قديم يُعرض
+  /// كأنّه الآن، ومهلة [_tpRetry] قبل السؤال ثانيةً.
+  Future<void> _pulseTpClassic() async {
+    if (_pulsing || !mounted || _trafficPaused) return;
+    final epoch = _trafficEpoch;
+    final retryAt = _tcRetryAt;
+    if (retryAt != null && DateTime.now().isBefore(retryAt)) return;
+    _pulsing = true;
+    try {
+      final creds = await DeviceProbeApi.resolveTplinkCreds(
+        fallbackIp: widget.ip,
+        subscriberUsername: widget.username,
+        company: widget.company,
+      );
+      if (!_trafficCurrent(epoch)) return;
+      if (creds == null) {
+        _loseTraffic();
+        _tcRetryAt = DateTime.now().add(_tpRetry);
+        return;
+      }
+      final live = await TplinkClassicService.sample(creds.ip, creds.user, creds.pass);
+      if (!_trafficCurrent(epoch)) return;
+      if (live == null) {
+        _tcLast = null;
+        _loseTraffic();
+        _tcRetryAt = DateTime.now().add(_tpRetry);
+        return;
+      }
+      _tcRetryAt = null;
+      final wantClients = _tcPulses++ % _tcClientsEvery == 0;
+      final clients = wantClients ? await TplinkClassicService.sampleClients(creds.ip, creds.user, creds.pass) : null;
+      if (!_trafficCurrent(epoch)) return;
+      final snap = _snap;
+      final u = snap?.ubnt;
+      if (snap != null && u != null && u.isTpClassic) {
+        setState(() {
+          _snap = DeviceHealthSnapshot(
+            kind: snap.kind,
+            ip: snap.ip,
+            ubnt: u.withLive(
+              uptimeSeconds: live.uptimeSeconds,
+              wanOnlineSeconds: live.wanOnlineSeconds,
+              peerCount: clients,
+            ),
+          );
+          _lastAt = DateTime.now();
+        });
+      }
+      final prev = _tcLast;
+      _tcLast = live;
+      final rate = prev == null ? null : tpClassicRate(prev, live);
+      if (rate != null) _recordTraffic(rate.down, rate.up);
+    } catch (_) {
+      if (_trafficCurrent(epoch)) {
+        _tcLast = null;
+        _tcRetryAt = DateTime.now().add(_tpRetry);
+        _loseTraffic();
+      }
+    } finally {
+      _pulsing = false;
+    }
   }
 
   /// نبضة ترافيك الـONU: جلسةٌ تُفتح مرّةً (باعتمادات شركة المشترك وعنوانه المثبَّت — كالفحص حرفاً)، ثمّ قراءةٌ ومعدّل.
@@ -691,6 +777,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final k = _snap?.kind;
     // ZTE (٢٥ أكتوبر): مسار إعادة تشغيله لم يُفحص على جهازٍ حقيقيّ — لا زرّ يَعِد بما لم يُجرَّب.
     if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return false;
+    // الراوتر الكلاسيكيّ (١١ نوفمبر): لا SSH له ولا إذن من المالك بإقلاعه — لا زرّ (كان سيُرسل إقلاع النانو بـSSH على منفذٍ مقفول).
+    if (k == DeviceKind.ubiquiti && (_snap?.ubnt?.isRouter ?? false)) return false;
     // TP-Link (١٠ نوفمبر): بأمر صفحته نفسها ([TplinkPharosService.reboot]).
     return k == DeviceKind.ubiquiti || k == DeviceKind.ont;
   }
@@ -966,7 +1054,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // الفحص الكامل جاهز: واصلٌ ومقروء.
       label = switch (snap.kind) {
         DeviceKind.ont => 'ONT',
-        DeviceKind.ubiquiti => (snap.ubnt?.isTplink ?? false) ? 'TP-Link' : 'UBNT',
+        DeviceKind.ubiquiti => (snap.ubnt?.isTplink ?? false)
+            ? 'TP-Link'
+            : (snap.ubnt?.isRouter ?? false)
+                ? 'راوتر'
+                : 'UBNT',
         _ => 'متصل',
       };
       fg = AppColors.brandOnSoft;
@@ -1363,6 +1455,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           field: CopyField('SNR', '${u.snrDb} dB'),
           color: AppColors.textHi,
         ),
+      // الراوتر (١١ نوفمبر — المالك: «عدد المتصلين… الوايرلس تلكاه المتصل الفعلي»): أجهزة الوايرلس المتّصلة الآن، قصيرٌ ثابت.
+      // ومنسدلٌ بنقر الوكيل (المالك: «اجعلها توكل بتن… يطلعه ايبي وماك واسم الجهاز… مغلق دائما الا ينقره الوكيل»).
+      if (u.isRouter && u.peerCount != null) _routerClientsTile(u),
     ];
 
     // الترافيك اللحظي محلّ SNR (طلب المستخدم 2026-08-30): SNR رقم
@@ -1387,12 +1482,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
               ],
             ],
           ),
+        // القائمة المنسدلة للمتّصلين (تحت صفّ البلاطات مباشرةً) — تظهر فقط حين ينقر الوكيل البلاطة.
+        if (u.isRouter && _clientsExpanded && u.clients.isNotEmpty) _routerClientsList(u),
         if (wide != null) ...[
           if (short.isNotEmpty) const SizedBox(height: Sp.sm),
           wide, // العرض الكامل — بلا Expanded وبلا جار
         ],
         if (short.isNotEmpty || wide != null) const SizedBox(height: 14),
         _DetailRow(field: _ubntKind(u), strong: true),
+        // مدّة اتّصال الإنترنت (PPPoE) — من متغيّرات المالك الثلاثة («مده الاتصالات»)؛ صفّ كامل العرض لا بلاطة (نصٌّ عربيّ طويل).
+        if (u.isRouter && u.wanOnlineSeconds != null)
+          _DetailRow(field: _routerOnline(u), rtlValue: true),
+        if (u.isRouter && u.wanType.isNotEmpty)
+          _DetailRow(field: _routerWan(u), small: true),
         if (u.firmware.isNotEmpty)
           _DetailRow(field: _ubntFirmware(u), small: true),
         if (u.ssid.isNotEmpty)
@@ -1408,6 +1510,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ),
         if ((u.uptimeSeconds ?? 0) > 0)
           _DetailRow(field: _ubntUptime(u), rtlValue: true),
+        if (u.isRouter && u.dhcpCount != null)
+          _DetailRow(field: _routerDhcp(u), small: true),
         // 🐛 كانتا صفّاً واحداً بتسمية «الإرسال / الاستقبال» (7.24em —
         // أطول تسمية في الكارت) فتُقصّ سرعة الاستقبال على 360dp،
         // فقُسِّمتا صفّين. والآن تعودان صفّاً واحداً **بتسمية لاتينيّة
@@ -1420,6 +1524,144 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
         // eth interface بحبّة منفصلة مع plugged/speed.
         if (u.lanPorts.isNotEmpty) _lanPortsRow(u.lanPorts),
+      ],
+    );
+  }
+
+  /// بلاطة «المتّصلون الآن» — قابلةٌ للنقر لفتح/طيّ قائمة الأجهزة حين تتوفّر تفاصيلها (المالك: «توكل بتن… مغلق دائما الا ينقره الوكيل»)،
+  /// وإلّا بلاطةٌ عاديّة (عدٌّ بلا تفاصيل).
+  Widget _routerClientsTile(UbiquitiStatus u) {
+    if (u.clients.isEmpty) {
+      return _MetricTile(field: _routerClients(u), color: AppColors.textHi);
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(R.icon),
+      onTap: () => setState(() => _clientsExpanded = !_clientsExpanded),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(R.icon),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Flexible(
+                  child: Text('المتّصلون الآن',
+                      style: AppType.micro(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: Sp.xs),
+                Icon(
+                  _clientsExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 15,
+                  color: AppColors.brandAccent,
+                ),
+              ],
+            ),
+            const SizedBox(height: Sp.xxs),
+            Text('${u.peerCount}',
+                textDirection: TextDirection.ltr,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.cardTitle(color: AppColors.textHi)
+                    .copyWith(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// القائمة المنسدلة: كلّ جهازٍ باسمه (أو رقمه) وآيبيه وماكه مرتّباً، والماك قابلٌ للنسخ؛ والسلكيّ موسوم.
+  Widget _routerClientsList(UbiquitiStatus u) {
+    final cs = u.clients;
+    return Container(
+      margin: const EdgeInsets.only(top: Sp.sm),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.icon),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < cs.length; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.border),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+              child: _clientRow(cs[i], i + 1),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _clientRow(RouterClient c, int n) {
+    final name = (c.name != null && c.name!.trim().isNotEmpty)
+        ? c.name!.trim()
+        : 'جهاز $n';
+    return Row(
+      children: [
+        SizedBox(
+          width: 18,
+          child: Text('$n',
+              textDirection: TextDirection.ltr,
+              style: AppType.micro(color: AppColors.textLabel)),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(name,
+                        style: AppType.body()
+                            .copyWith(fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  if (c.wired) ...[
+                    const SizedBox(width: Sp.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(R.pill),
+                      ),
+                      child: Text('سلكيّ',
+                          style: AppType.micro(color: AppColors.textLabel)),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 1),
+              Text(c.mac,
+                  textDirection: TextDirection.ltr,
+                  style: AppType.micro(color: AppColors.textLabel),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        if (c.ip != null && c.ip!.isNotEmpty) ...[
+          const SizedBox(width: Sp.sm),
+          Text(c.ip!,
+              textDirection: TextDirection.ltr,
+              style: AppType.body(color: AppColors.textHi)),
+        ],
+        _CopyIcon(value: c.mac, label: 'MAC'),
       ],
     );
   }
@@ -1910,9 +2152,13 @@ CopyField _ubntSignal(UbiquitiStatus u) =>
 
 CopyField _ubntCcq(UbiquitiStatus u) => CopyField('CCQ', '${u.ccqPercent}%');
 
-/// يوبيكويتي كما كان؛ وTP-Link بطرازه كما يسمّيه الجهاز («Emad (TP-Link CPE610 v2.0)»).
+/// يوبيكويتي كما كان؛ وTP-Link بطرازه كما يسمّيه الجهاز («Emad (TP-Link CPE610 v2.0)»)؛ والراوتر الكلاسيكيّ «راوتر TP-Link TL-WR741ND v4».
 CopyField _ubntKind(UbiquitiStatus u) {
-  final brand = u.isTplink ? (u.model.isEmpty ? 'TP-Link' : 'TP-Link ${u.model}') : null;
+  final brand = u.isTplink
+      ? (u.model.isEmpty ? 'TP-Link' : 'TP-Link ${u.model}')
+      : u.isRouter
+          ? (u.model.isEmpty ? 'راوتر TP-Link' : 'راوتر TP-Link ${u.model}')
+          : null;
   return CopyField(
     'نوع الجهاز',
     brand != null
@@ -1940,6 +2186,20 @@ CopyField _ubntRates(UbiquitiStatus u) => CopyField(
 
 CopyField _ubntPeerMac(UbiquitiStatus u) =>
     CopyField('Peer MAC', u.peerMac ?? '');
+
+/// أجهزة الوايرلس المتّصلة الآن (صفحة Wireless Statistics) — لا إيجارات DHCP.
+CopyField _routerClients(UbiquitiStatus u) => CopyField('المتّصلون الآن', '${u.peerCount}');
+
+/// مدّة اتّصال الإنترنت (PPPoE «Online Time») — صفرٌ يعني أنّ الراوتر غير متّصل الآن.
+CopyField _routerOnline(UbiquitiStatus u) => CopyField(
+      'مدّة الاتصال',
+      (u.wanOnlineSeconds ?? 0) <= 0 ? 'غير متّصل بالإنترنت' : _DeviceProbeCardState._uptime(u.wanOnlineSeconds!),
+    );
+
+CopyField _routerWan(UbiquitiStatus u) => CopyField('الإنترنت', u.wanType);
+
+/// إيجارات DHCP (سلكيّ + لاسلكيّ) — تبقى بعد خروج الجهاز، فاسمها «أجهزة DHCP» لا «متّصلون».
+CopyField _routerDhcp(UbiquitiStatus u) => CopyField('أجهزة DHCP', '${u.dhcpCount}');
 
 /// «ETH0 · 100 Mbps» — نصّ حبّة المنفذ كما تُرسم.
 String _lanPortText(LanPort p) =>
@@ -1978,6 +2238,10 @@ List<CopyField> deviceCopyFields(DeviceHealthSnapshot snap, {DateTime? at}) {
   } else if (snap.kind == DeviceKind.ubiquiti && u != null) {
     fields.addAll([
       _ubntKind(u),
+      if (u.isRouter && u.peerCount != null) _routerClients(u),
+      if (u.isRouter && u.wanOnlineSeconds != null) _routerOnline(u),
+      if (u.isRouter && u.wanType.isNotEmpty) _routerWan(u),
+      if (u.isRouter && u.dhcpCount != null) _routerDhcp(u),
       if (u.signalDbm != null) _ubntSignal(u),
       if (u.ccqPercent != null) _ubntCcq(u),
       if (u.firmware.isNotEmpty) _ubntFirmware(u),
