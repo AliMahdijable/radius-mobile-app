@@ -269,7 +269,25 @@ class DeviceWarmService with WidgetsBindingObserver {
   @visibleForTesting
   static Future<bool?> Function()? debugPresence;
 
+  /// العيّنة نفسها بأعدادها (كم عنواناً خاصّاً سُئل وكم ردّ) — لحارس «وضع VPN» (١١ نوفمبر): ردٌّ واحد لا يكفيه ليقول «رجعت
+  /// لشبكتك» (عنوانٌ مطابق على شبكةٍ أخرى يردّ أيضاً). تبلّغ الحال المشتركة كـ[onAgentNetwork]؛ null بشروطها نفسها.
+  static Future<NetSample?> agentNetworkSample() {
+    final f = debugSample;
+    if (f != null) return f();
+    if (debugDisabled || Platform.environment.containsKey('FLUTTER_TEST')) return Future.value(null);
+    return _i._sampleNet();
+  }
+
+  @visibleForTesting
+  static Future<NetSample?> Function()? debugSample;
+
   Future<bool?> _presence() async {
+    if (await _sampleNet() == null) return null;
+    final p = AgentNetPresence.current;
+    return p == NetPresence.unknown ? null : p == NetPresence.on;
+  }
+
+  Future<NetSample?> _sampleNet() async {
     if (!_providerHasDevices) return null;
     try {
       final list = await SubscribersApi.loadAll();
@@ -280,10 +298,10 @@ class DeviceWarmService with WidgetsBindingObserver {
       if (ips.isEmpty) return null;
       final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
       final reached = ok.where((x) => x).length;
-      final p = AgentNetPresence.report(attempted: ips.length, reached: reached);
+      AgentNetPresence.report(attempted: ips.length, reached: reached);
       _offNet = reached == 0;
       if (reached > 0) unawaited(_rememberGood(subs));
-      return p == NetPresence.unknown ? null : p == NetPresence.on;
+      return (attempted: ips.length, reached: reached);
     } catch (_) {
       return null;
     }

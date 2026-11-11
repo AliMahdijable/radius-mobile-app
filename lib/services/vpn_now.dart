@@ -409,8 +409,11 @@ class VpnNow {
   //    متى يكون بنك ناصي… حتى يعرفه هو داخل شبكه يحول الفحص للشبكه بدون vpn») ──
   // زرّ VPN بالقسمين يشغّله: الفحص المباشر من الموبايل يتوقّف، والفحص عبر الـVPN يتكرّر للقسم الظاهر ([attach]) — الأجهزة كلّ
   // دقيقة والمشتركون كلّ ٣ د على نفق الشركة الدائم، وأبطأ على ملفّه/قالب شركته (غرفةٌ مؤقّتة أثقل). والحارس كلّ ٢٠ث يجرّب عناوين
-  // شبكة الوكيل الخاصّة: أوّل ردٍّ ⇒ رجع لشبكته ⇒ الوضع ينطفي وحده والفحص يرجع مباشراً ([notice] «رجعت لشبكتك»).
+  // شبكة الوكيل الخاصّة: ردّ منها عنوانان ⇒ رجع لشبكته ⇒ الوضع ينطفي وحده والفحص يرجع مباشراً ([notice] «رجعت لشبكتك»).
   // دخله وهو على شبكته (ضغطةٌ صريحة) ⇒ الحارس لا يُطفئه حتى يرى الشبكة تغيب مرّةً ثمّ تعود.
+  // ١١ نوفمبر (المالك: «مرات جاي ينخدع البرنامج اني هسه مو على شبكه بس يشوف اي ايبي من ضمن شبكتي حتى لو وهمي يروح الزر… تبقي
+  // زر يظهر حتى الوكيل مخير بالنقر ويفحص»): الزرّ بالقسمين ظاهرٌ دائماً لمن له طريق VPN (لا يختفي بـ«على شبكتك»)، وضغطته قرارٌ
+  // لا ينقضه عنوانٌ واحد يردّ — عنوانٌ من نطاق شبكته قد يردّ من شبكةٍ أخرى (راوتر البيت، شبكة الجوّال) ⇒ [guardVerdict].
   static final ValueNotifier<bool> mode = ValueNotifier<bool>(false);
   static final ValueNotifier<String?> notice = ValueNotifier<String?>(null);
   static final Map<VpnNowKind, int> _attached = {};
@@ -430,8 +433,20 @@ class VpnNow {
   @visibleForTesting
   static Future<bool?> Function()? guardProbe;
 
-  /// مصادر إضافيّة للحارس (قسم الأجهزة: أجهزة الوكيل بعناوينها الخاصّة) — true/false/null كـ[guardProbe].
-  static final Map<String, Future<bool?> Function()> guardSources = {};
+  /// مصادر إضافيّة للحارس (قسم الأجهزة: أجهزة الوكيل بعناوينها الخاصّة) — كم عنواناً خاصّاً سُئل وكم ردّ؛ null لا عنوان يُسأل.
+  static final Map<String, Future<NetSample?> Function()> guardSources = {};
+
+  /// كم عنواناً من شبكة الوكيل يكفي ردّه ليقال «رجعت لشبكتك» — واحدٌ لا يكفي (قد يكون عنواناً مطابقاً على شبكةٍ أخرى).
+  static const guardMinReplies = 2;
+
+  /// حكم الحارس من عيّنته: ردّ [guardMinReplies] فأكثر ⇒ على شبكته · لا ردّ من ≥٣ ⇒ خارجها · وما بينهما (ردٌّ واحد، عيّنةٌ صغيرة)
+  /// لا يُحكم به — الوضع يبقى كما اختاره الوكيل.
+  @visibleForTesting
+  static bool? guardVerdict({required int attempted, required int reached}) {
+    if (reached >= guardMinReplies) return true;
+    if (reached == 0 && attempted >= AgentNetPresence.minAttempts) return false;
+    return null;
+  }
 
   static bool get isOn => mode.value;
 
@@ -587,19 +602,26 @@ class VpnNow {
     }
   }
 
-  /// «هل رجع لشبكته؟» — مصادر الأقسام (أجهزته) ثمّ عيّنة المشتركين ([DeviceWarmService.onAgentNetwork]): ردٌّ واحد يكفي.
+  /// «هل رجع لشبكته؟» — مصادر الأقسام (أجهزته) ثمّ عيّنة المشتركين ([DeviceWarmService.agentNetworkSample]) إن لم تكفِ الأولى:
+  /// الحكم من مجموع العيّنتين ([guardVerdict] — ردٌّ واحد لا يكفي).
   static Future<bool?> _guard() async {
     final f = guardProbe;
     if (f != null) return f();
-    bool? out;
+    var attempted = 0, reached = 0;
     for (final src in guardSources.values.toList()) {
       final r = await src();
-      if (r == true) return true;
-      if (r == false) out = false;
+      if (r == null) continue;
+      attempted += r.attempted;
+      reached += r.reached;
     }
-    final s = await DeviceWarmService.onAgentNetwork();
-    if (s == true) return true;
-    return s ?? out;
+    if (reached < guardMinReplies) {
+      final s = await DeviceWarmService.agentNetworkSample();
+      if (s != null) {
+        attempted += s.attempted;
+        reached += s.reached;
+      }
+    }
+    return guardVerdict(attempted: attempted, reached: reached);
   }
 
   static final subscribers = VpnNowJob(VpnNowKind.subscribers);

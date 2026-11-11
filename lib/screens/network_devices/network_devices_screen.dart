@@ -281,20 +281,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
   }
 
-  /// حارس «وضع VPN» (المالك: «حارس فحص بداخل التطبيق يفحص متى يكون بنك ناصي»): أجهزتك بعناوينها الخاصّة — حتى ٤، ما ردّ قبلاً
-  /// أوّلاً. ردٌّ واحد ⇒ رجعت لشبكتك. (العامّ يردّ من أيّ مكان فلا يدلّ.)
-  Future<bool?> _guardDevices() async {
+  /// حارس «وضع VPN» (المالك: «حارس فحص بداخل التطبيق يفحص متى يكون بنك ناصي»): أجهزتك بعناوينها الخاصّة — حتى ٤ عناوين
+  /// مختلفة، ما ردّ قبلاً أوّلاً. (العامّ يردّ من أيّ مكان فلا يدلّ.) يعيد العيّنة بأعدادها: الحكم لـ[VpnNow.guardVerdict] —
+  /// عنوانٌ واحد يردّ لا يُطفئ الوضع (١١ نوفمبر: عنوانٌ من نطاق شبكتك قد يردّ من شبكةٍ أخرى).
+  Future<NetSample?> _guardDevices() async {
+    final seen = <String>{};
     final cand = _mine.where((d) => AgentNetPresence.isPrivate(d.ip)).toList()
       ..sort((a, b) => (b.lastStatus == 'online' ? 1 : 0) - (a.lastStatus == 'online' ? 1 : 0));
-    final pick = cand.take(4).toList();
+    final pick = cand.where((d) => seen.add(d.ip.trim().split(':').first)).take(4).toList();
     if (pick.isEmpty) return null;
     // مباشرٌ دائماً (DeviceNet.direct): ردّ الجهاز عبر ممرّ «وضع VPN» لا يعني أنّك رجعت لشبكتك
     final rs = await DeviceNet.direct(() => Future.wait(pick.map((d) =>
         NetworkDevicesApi.probeDevice(d).then((r) => r.status == 'online').catchError((Object _) => false))));
     final reached = rs.where((x) => x).length;
     AgentNetPresence.report(attempted: pick.length, reached: reached);
-    if (reached > 0) return true;
-    return pick.length >= AgentNetPresence.minAttempts ? false : null;
+    return (attempted: pick.length, reached: reached);
   }
 
   /// خارج الشبكة بلا «وضع VPN»: الحال «غير معروف» (رماديّ) — لا «غير متّصل» أحمر: الجهاز لم يطفِ، موبايلك هو البعيد (المالك ٥
@@ -1750,9 +1751,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           children: [
             Expanded(child: _searchField()),
             const SizedBox(width: Sp.sm),
-            // ٥ نوفمبر (المالك: «اريد من ينقر ع vpn يتفعل الفحص يتوجه ع vpn»): زرّ «وضع VPN» لمن له طريق VPN — يظهر خارج شبكتك
-            // (أو والحال مجهولة) وطول ما الوضع شغّال؛ على شبكتك لا حاجة له فلا يأخذ من البحث.
-            if (_vpnLinked && PermissionsService.canDevicesVpn && (VpnNow.mode.value || !AgentNetPresence.isOn)) ...[
+            // ٥ نوفمبر (المالك: «اريد من ينقر ع vpn يتفعل الفحص يتوجه ع vpn»): زرّ «وضع VPN» لمن له طريق VPN. كان يختفي وأنت
+            // «على شبكتك»؛ ١١ نوفمبر (المالك: «ينخدع البرنامج… يشوف اي ايبي من ضمن شبكتي حتى لو وهمي يروح الزر… تبقي زر يظهر حتى
+            // الوكيل مخير بالنقر ويفحص»): ظاهرٌ دائماً — الوكيل يقرّر، لا تخمين التطبيق.
+            if (_vpnLinked && PermissionsService.canDevicesVpn) ...[
               _vpnButton(),
               SizedBox(width: gap),
             ],

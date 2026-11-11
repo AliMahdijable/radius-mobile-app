@@ -12,6 +12,9 @@ import 'package:flutter/foundation.dart';
 /// * الحال تشيخ بعد [staleAfter] ⇒ «غير معروف» حتى تُقاس من جديد.
 enum NetPresence { unknown, on, off }
 
+/// عيّنة «على شبكتك؟»: كم عنواناً خاصّاً سُئل وكم ردّ — حارس «وضع VPN» يحكم من مجموعها (ردٌّ واحد لا يكفيه).
+typedef NetSample = ({int attempted, int reached});
+
 class AgentNetPresence {
   AgentNetPresence._();
 

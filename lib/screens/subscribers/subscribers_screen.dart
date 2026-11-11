@@ -492,10 +492,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     }
   }
 
-  /// زرّ VPN بالرأس: لمن له طريق VPN، خارج شبكته (أو والحال مجهولة) وطول ما الوضع شغّال.
+  /// زرّ VPN بالرأس: لمن له طريق VPN — ظاهرٌ دائماً (١١ نوفمبر — المالك: «ينخدع البرنامج اني هسه مو على شبكه بس يشوف اي ايبي
+  /// من ضمن شبكتي حتى لو وهمي يروح الزر… تبقي زر يظهر حتى الوكيل مخير بالنقر ويفحص»). كان يختفي و«على شبكتك».
   // مشتركو الوطنيّ/فايبر اكس على شبكة الشركة ⇒ لا زرّ «وضع VPN» بقسمهم (الخادم بـ«الطريق»: subscribers=false — ٦ نوفمبر)
-  bool get _vpnButton =>
-      _vpnLinked && VpnNow.subscribersOk && PermissionsService.subsCheckVpn && (VpnNow.mode.value || !AgentNetPresence.isOn);
+  bool get _vpnButton => _vpnLinked && VpnNow.subscribersOk && PermissionsService.subsCheckVpn;
 
   void _toggleVpn() => VpnNow.mode.value ? VpnNow.exitMode() : VpnNow.enterMode(from: VpnNowKind.subscribers);
 

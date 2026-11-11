@@ -12,6 +12,7 @@ import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/agent_net_presence.dart';
+import 'package:rad_mysvcs/services/device_warm_service.dart';
 import 'package:rad_mysvcs/services/vpn_now.dart';
 import 'package:rad_mysvcs/widgets/vpn_now_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -442,6 +443,112 @@ void main() {
       clock = clock.add(const Duration(seconds: 25));
       await VpnNow.tick();
       expect(VpnNow.mode.value, isFalse);
+    });
+
+    // ١١ نوفمبر (المالك: «مرات جاي ينخدع البرنامج اني هسه مو على شبكه بس يشوف اي ايبي من ضمن شبكتي حتى لو وهمي يروح الزر… تبقي
+    // زر يظهر حتى الوكيل مخير بالنقر ويفحص»): عنوانٌ من نطاق شبكته قد يردّ من شبكةٍ أخرى (راوتر البيت، شبكة الجوّال) — ضغطة الوكيل
+    // قرارٌ لا ينقضه ردٌّ واحد.
+    test('حكم الحارس: ردّان فأكثر ⇒ على شبكته؛ لا ردّ من ≥٣ ⇒ خارجها؛ ردٌّ واحد أو عيّنةٌ صغيرة ⇒ لا يُحكم', () {
+      expect(VpnNow.guardVerdict(attempted: 4, reached: 2), isTrue);
+      expect(VpnNow.guardVerdict(attempted: 12, reached: 7), isTrue);
+      expect(VpnNow.guardVerdict(attempted: 4, reached: 0), isFalse);
+      expect(VpnNow.guardVerdict(attempted: 3, reached: 0), isFalse);
+      expect(VpnNow.guardVerdict(attempted: 4, reached: 1), isNull, reason: 'عنوانٌ واحد قد يكون مطابقاً على شبكةٍ أخرى');
+      expect(VpnNow.guardVerdict(attempted: 1, reached: 1), isNull, reason: 'ولو كان الوحيد المسؤول');
+      expect(VpnNow.guardVerdict(attempted: 2, reached: 0), isNull, reason: 'عنوانان بلا ردّ لا يقرّران «خارج»');
+      expect(VpnNow.guardVerdict(attempted: 0, reached: 0), isNull);
+    });
+
+    test('عنوانٌ واحد «وهميّ» يردّ لا يُطفئ الوضع؛ ردّان ⇒ «رجعت لشبكتك»', () async {
+      VpnNow.guardProbe = null; // الحارس الحقيقيّ بمصادره
+      NetSample? sample = (attempted: 4, reached: 0);
+      var asked = 0;
+      VpnNow.guardSources['t'] = () async {
+        asked++;
+        return sample;
+      };
+      DeviceWarmService.debugSample = () async => null;
+      addTearDown(() {
+        VpnNow.guardSources.remove('t');
+        DeviceWarmService.debugSample = null;
+      });
+      await VpnNow.enterMode();
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(asked, 1);
+      expect(VpnNow.mode.value, isTrue, reason: 'خارج شبكته');
+      for (var i = 0; i < 3; i++) {
+        sample = (attempted: 4, reached: 1);
+        clock = clock.add(const Duration(seconds: 25));
+        await VpnNow.tick();
+        expect(VpnNow.mode.value, isTrue, reason: 'ردٌّ واحد (جولة $i) لا ينقض ضغطته');
+        expect(VpnNow.notice.value, isNull);
+      }
+      sample = (attempted: 4, reached: 2);
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isFalse);
+      expect(VpnNow.notice.value, contains('رجعت لشبكتك'));
+    });
+
+    test('شغّله والتطبيق يظنّه «على شبكته» (عنوانٌ وهميّ) ⇒ يبقى: الردّ الواحد لا يُطفئه ولا يسلّحه، ولو تقطّع', () async {
+      VpnNow.guardProbe = null;
+      NetSample? sample = (attempted: 4, reached: 1);
+      VpnNow.guardSources['t'] = () async => sample;
+      DeviceWarmService.debugSample = () async => null;
+      addTearDown(() {
+        VpnNow.guardSources.remove('t');
+        DeviceWarmService.debugSample = null;
+      });
+      AgentNetPresence.debugSet(NetPresence.on);
+      await VpnNow.enterMode();
+      for (final reached in [1, 0, 1, 1, 0, 1]) {
+        // عيّنةٌ من عنوانين: «لا ردّ» منها لا يقرّر «خارج» (فلا يتسلّح الحارس بتقطّع العنوان الوهميّ)
+        sample = (attempted: 2, reached: reached);
+        clock = clock.add(const Duration(seconds: 25));
+        await VpnNow.tick();
+        expect(VpnNow.mode.value, isTrue, reason: 'reached=$reached');
+      }
+    });
+
+    test('الحارس يجمع مصدريه: جهازٌ من أجهزته + مشتركٌ من عيّنته = ردّان ⇒ رجع؛ وعيّنة المشتركين لا تُسأل إن كفت أجهزته', () async {
+      VpnNow.guardProbe = null;
+      NetSample? devices = (attempted: 4, reached: 0);
+      NetSample? subs = (attempted: 6, reached: 0);
+      var subsAsked = 0;
+      VpnNow.guardSources['t'] = () async => devices;
+      DeviceWarmService.debugSample = () async {
+        subsAsked++;
+        return subs;
+      };
+      addTearDown(() {
+        VpnNow.guardSources.remove('t');
+        DeviceWarmService.debugSample = null;
+      });
+      await VpnNow.enterMode();
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isTrue);
+      expect(subsAsked, 1);
+      devices = (attempted: 4, reached: 1);
+      subs = (attempted: 6, reached: 1);
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(subsAsked, 2);
+      expect(VpnNow.mode.value, isFalse, reason: 'عنوانان مختلفان ردّا');
+
+      await VpnNow.enterMode();
+      devices = (attempted: 4, reached: 0);
+      subs = (attempted: 6, reached: 0);
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isTrue);
+      final before = subsAsked;
+      devices = (attempted: 4, reached: 3);
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isFalse);
+      expect(subsAsked, before, reason: 'أجهزته كفت');
     });
 
     test('القسم الظاهر يُحدَّث بإيقاعه (الأجهزة: تأكّد الطريق كلّ دقيقة) والمختفي لا؛ «إيقاف» يترك الجاري', () async {

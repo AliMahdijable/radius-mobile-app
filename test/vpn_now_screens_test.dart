@@ -158,11 +158,27 @@ void main() {
     await close(t);
   });
 
-  testWidgets('المشتركون: على شبكتك (والوضع مطفأ) أو بلا طريق VPN ⇒ لا زرّ — لا يأخذ من البحث', (t) async {
+  // ١١ نوفمبر (المالك: «مرات جاي ينخدع البرنامج اني هسه مو على شبكه بس يشوف اي ايبي من ضمن شبكتي حتى لو وهمي يروح الزر… تبقي
+  // زر يظهر حتى الوكيل مخير بالنقر ويفحص»): كان الزرّ يختفي و«على شبكتك» — الآن ظاهرٌ دائماً لمن له طريق VPN، وضغطته تشغّل الوضع.
+  testWidgets('المشتركون: «على شبكتك» بنظر التطبيق ⇒ الزرّ باقٍ والضغطة تشغّل الوضع (الوكيل يقرّر)؛ بلا طريق VPN ⇒ لا زرّ', (t) async {
     VpnNow.routeSource = () async => (linked: true, via: 'company');
     AgentNetPresence.debugSet(NetPresence.on);
     await openSubscribers(t);
-    expect(subsVpn, findsNothing);
+    expect(subsVpn, findsOneWidget, reason: 'لا يختفي بتخمين «على شبكتك»');
+    expect(find.descendant(of: subsVpn, matching: find.byIcon(LucideIcons.shield)), findsOneWidget, reason: 'مطفأ ⇒ درعٌ بإطار');
+    await t.tap(subsVpn);
+    await settleFor(t, seconds: 1);
+    expect(VpnNow.mode.value, isTrue, reason: 'ضغطةٌ صريحة وهو «على شبكته» ⇒ الوضع يشتغل');
+    expect(find.descendant(of: subsVpn, matching: find.byIcon(LucideIcons.shieldCheck)), findsOneWidget);
+    await t.tap(find.byIcon(Icons.radar_rounded));
+    await settleFor(t, seconds: 1);
+    expect(t.widget<SubscribersCheckScreen>(find.byType(SubscribersCheckScreen)).viaVpn, isTrue, reason: 'الفحص العامّ بالوضع عبر الـVPN');
+    Navigator.of(t.element(find.byType(SubscribersCheckScreen))).pop();
+    await settleFor(t, seconds: 1);
+    await t.tap(subsVpn);
+    await settleFor(t, seconds: 1);
+    expect(VpnNow.mode.value, isFalse);
+    expect(subsVpn, findsOneWidget, reason: 'وبعد الإطفاء باقٍ');
     await close(t);
 
     VpnNow.routeSource = () async => (linked: false, via: null);
@@ -272,8 +288,27 @@ void main() {
     await close(t);
   });
 
-  testWidgets('الأجهزة: على شبكتك ⇒ لا زرّ VPN (والأدوات كما كانت)', (t) async {
+  testWidgets('الأجهزة: «على شبكتك» بنظر التطبيق ⇒ زرّ VPN باقٍ والضغطة تشغّل الوضع (١١ نوفمبر)؛ بلا طريق VPN ⇒ لا زرّ', (t) async {
+    final pipes = _PingPipe(const {});
+    final orig = VpnPipe.transport;
+    VpnPipe.transport = pipes;
+    addTearDown(() => VpnPipe.transport = orig);
     VpnNow.routeSource = () async => (linked: true, via: 'company');
+    AgentNetPresence.debugSet(NetPresence.on);
+    await openDevices(t);
+    expect(devVpn, findsOneWidget, reason: 'لا يختفي بتخمين «على شبكتك»');
+    expect(find.byTooltip('الفحص عبر VPN'), findsOneWidget);
+    await t.tap(devVpn);
+    await settleFor(t, seconds: 2);
+    expect(VpnNow.mode.value, isTrue, reason: 'ضغطةٌ صريحة وهو «على شبكته» ⇒ الوضع يشتغل');
+    expect(pipes.opens.where((o) => o.startsWith('ping ')), isNotEmpty, reason: 'جولة القسم عبر الـVPN');
+    await t.tap(devVpn);
+    await settleFor(t, seconds: 1);
+    expect(VpnNow.mode.value, isFalse);
+    expect(devVpn, findsOneWidget, reason: 'وبعد الإطفاء باقٍ');
+    await close(t);
+
+    VpnNow.routeSource = () async => (linked: false, via: null);
     AgentNetPresence.debugSet(NetPresence.on);
     await openDevices(t);
     expect(devVpn, findsNothing);
