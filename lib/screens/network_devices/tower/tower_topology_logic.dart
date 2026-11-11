@@ -419,7 +419,7 @@ class TopoLayout {
 
   static const nodeW = 80.0;
   static const nodeH = 100.0;
-  static const rowGap = 64.0;
+  static const rowGap = 78.0;
   static const pad = 10.0;
 
   /// ارتفاع سطر عنوان «غير مربوطة» فوق صفّها، والمسافة بين صفوفها.

@@ -454,7 +454,9 @@ void main() {
         expect(find.text('ترابط الأبراج'), findsOneWidget);
         expect(find.text('4 أبراج · 3 لنكات'), findsOneWidget);
         expect(find.text('مباشر'), findsOneWidget);
-        expect(find.text('إلى 3 أبراج'), findsOneWidget, reason: 'كلّ الوصلات مقروءة ⇒ المجموع كامل');
+        // النقل بالجهتين (المالك: «لازم تظهر النقل بالجهتين rx/tx»): الملخّص ما ينزل (243) وتحته ما يصعد (21 + 6.2 + 1.1)
+        expect(plain('28 Mbps'), findsOneWidget, reason: '${d.tag}: ما يصعد للرئيسي في الملخّص');
+        expect(find.text('إلى 3 أبراج'), findsNothing);
         // الرئيسيّ فوق الفرعيّات، والثلاثة على صفٍّ واحد داخل الشاشة
         final main = t.getRect(find.byKey(const ValueKey('topo-node-1')));
         final subs = [for (final id in [2, 3, 4]) t.getRect(find.byKey(ValueKey('topo-node-$id')))];
@@ -483,6 +485,21 @@ void main() {
           expect(pill.bottom <= node.top + 1 && pill.top > main.bottom, isTrue, reason: '${d.tag}: الحبّة بين الصفّين');
           expect(pill.left >= 0 && pill.right <= d.size.width, isTrue);
         }
+        // كلّ حبّةٍ بسطرين: ما ينزل للفرعيّ وتحته ما يصعد منه — والنازل فوق الصاعد
+        for (final (id, downText, upText) in [(2, '184 Mbps', '21 Mbps'), (3, '46 Mbps', '6.2 Mbps'), (4, '12 Mbps', '1.1 Mbps')]) {
+          final pill = find.byKey(ValueKey('topo-pill-1-$id'));
+          final dn = find.descendant(of: pill, matching: plain(downText));
+          final up = find.descendant(of: pill, matching: plain(upText));
+          expect(dn, findsOneWidget, reason: '${d.tag}: ينزل لـ$id');
+          expect(up, findsOneWidget, reason: '${d.tag}: يصعد من $id');
+          expect(t.getCenter(dn).dy < t.getCenter(up).dy, isTrue);
+          final box = t.getRect(pill);
+          for (final f in [dn, up]) {
+            final r = t.getRect(f);
+            expect(r.left >= box.left - 0.5 && r.right <= box.right + 0.5, isTrue, reason: '${d.tag}: الرقم داخل الحبّة $r ⊂ $box');
+          }
+        }
+        expect(find.text('يصعد للرئيسي'), findsOneWidget, reason: 'مفتاح الرسم يسمّي الجهتين');
         // الملخّص: مجموع ما يوزّعه الرئيسيّ، واللنكات الشغّالة
         expect(find.text('يوزّع الرئيسي'), findsOneWidget);
         expect(find.textContaining('243 Mbps'), findsOneWidget, reason: '184 + 46.2 + 12.4');
@@ -514,7 +531,10 @@ void main() {
       expect(find.textContaining('2/3'), findsOneWidget);
       expect(find.text('طرف الفرعي لا يردّ'), findsOneWidget);
       expect(find.textContaining('230 Mbps'), findsOneWidget, reason: 'الواقع لا يُحسب في ما يوزّعه الرئيسيّ');
-      expect(find.text('إلى برجين'), findsOneWidget, reason: 'يوزّع الآن لبرجين — الثالث واقع');
+      expect(plain('27 Mbps'), findsOneWidget, reason: 'ما يصعد من البرجين الشغّالين (21 + 6.2) — الواقع لا يُعدّ');
+      // الحبّة الواقعة سطرٌ واحد «واقع»، والشغّالتان بسطرين
+      expect(t.getSize(find.byKey(const ValueKey('topo-pill-1-4'))).height, 22);
+      expect(t.getSize(find.byKey(const ValueKey('topo-pill-1-2'))).height, 36);
       await snap(t, 'link_down', tall(p390));
       // عاد يردّ ⇒ يعود بلا إعادة فتح
       probe.down.clear();
@@ -522,13 +542,32 @@ void main() {
       await settle(t, seconds: 1);
       expect(find.text('1 واقع'), findsNothing);
       expect(find.textContaining('3/3'), findsOneWidget);
-      expect(find.text('إلى 3 أبراج'), findsOneWidget);
+      expect(plain('28 Mbps'), findsOneWidget);
       // الثلاثة واقعة ⇒ لا رقم ولا «إلى»
       probe.down.addAll([211, 311, 411]);
       probe.poke();
       await settle(t, seconds: 1);
       expect(find.text('لا وصلة تعمل'), findsOneWidget);
       expect(find.text('3 واقع'), findsOneWidget);
+      await close(t);
+    });
+
+    testWidgets('النقل بالجهتين: جهةٌ لم تُقرأ «—» لا صفر، والملخّص لا يجمع صاعداً ناقصاً', (t) async {
+      // سليف المعامل قُرئ ما يستقبله ولم يُقرأ ما يرسله (عدّادٌ ارتدّ)
+      final readings = starReadings();
+      readings[311] = _rd(mode: 'station', rx: 46200000, signal: -73, ccq: 81);
+      readings[112] = _rd(mode: 'ap-bridge', signal: -71, ccq: 84);
+      await boot(t, readings: readings);
+      await openHub(t, tall(p390));
+      final pill = find.byKey(const ValueKey('topo-pill-1-3'));
+      expect(find.descendant(of: pill, matching: plain('46 Mbps')), findsOneWidget);
+      expect(find.descendant(of: pill, matching: plain('—')), findsOneWidget, reason: 'ما يصعد لم يُقرأ');
+      expect(t.getSize(pill).height, 36);
+      // ما ينزل كاملٌ (243) لكنّ الصاعد ناقص ⇒ لا رقم صاعدٍ في الملخّص، بل «إلى 3 أبراج»
+      expect(find.textContaining('243 Mbps'), findsOneWidget);
+      expect(find.text('إلى 3 أبراج'), findsOneWidget);
+      expect(plain('22 Mbps'), findsNothing, reason: 'لا مجموع صاعدٍ ناقص (21 + 1.1)');
+      await snap(t, 'one_way_unread', tall(p390));
       await close(t);
     });
 
@@ -790,7 +829,8 @@ void main() {
       await settle(t, seconds: 1);
       expect(find.text('البرج الرئيسي ← برج الحي الصناعي'), findsWidgets);
       expect(find.text('ينزل للفرعي'), findsNWidgets(2), reason: 'مفتاح الرسم + خانة الورقة');
-      for (final s in ['يصعد للرئيسي', 'الإشارة', 'CCQ', 'طرف البرج الرئيسي (الماستر)', 'طرف البرج الفرعي (السليف)']) {
+      expect(find.text('يصعد للرئيسي'), findsNWidgets(2), reason: 'مفتاح الرسم + خانة الورقة');
+      for (final s in ['الإشارة', 'CCQ', 'طرف البرج الرئيسي (الماستر)', 'طرف البرج الفرعي (السليف)']) {
         expect(find.text(s), findsOneWidget, reason: s);
       }
       expect(find.textContaining('21 Mbps'), findsWidgets);
@@ -942,7 +982,10 @@ void main() {
         expect(plainHas('990 Mbps'), findsNothing);
         expect(plainHas('300 Mbps'), findsNothing);
         expect(plainHas('886 Mbps'), findsOneWidget, reason: 'يوزّع الرئيسي: 612 + 228 + 46.2');
-        expect(plain('إلى 3 أبراج'), findsOneWidget);
+        expect(plain('105 Mbps'), findsOneWidget, reason: 'يصعد للرئيسي: 70 + 29 + 6.2');
+        // حبّة الكيبل بالجهتين من منفذه: يستقبل 612 ويرسل 70
+        expect(find.descendant(of: find.byKey(const ValueKey('topo-pill-1-2')), matching: plain('612 Mbps')), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('topo-pill-1-2')), matching: plain('70 Mbps')), findsOneWidget);
         expect(plain('كيبل · يعمل · 10G · ضوء -7.1 dBm'), findsOneWidget);
         expect(plain('كيبل · ضوء ضعيف · 10G · ضوء -26.8 dBm'), findsOneWidget);
         expect(plainHas('متوسّط · -73 dBm'), findsOneWidget, reason: 'اللنك اللاسلكيّ بكلماته كما كان');

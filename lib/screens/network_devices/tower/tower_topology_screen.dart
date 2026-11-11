@@ -642,8 +642,11 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     final roots = {for (final n in topo.nodes) if (n.root) n.tower.id};
     // ما يوزّعه الرئيسيّ: مجموع ما يعبر وصلاته الشغّالة. الواقعة لا يعبرها شيء فلا تُعدّ؛ والتي تعمل ولم يُقرأ ما يعبرها (طرفٌ
     // لم يُقرأ، منفذٌ بلا عدّادات عبر VPN، كيبلٌ بلا منفذ) تجعل المجموع ناقصاً — فيُقال «المقروء N من M» لا «إلى M أبراج».
+    // والنقل بالجهتين (المالك ١١ نوفمبر: «بالترابط لازم تظهر النقل بالجهتين rx/tx»): ما ينزل من الرئيسيّ رقم البلاطة، وما
+    // يصعد له تحته — حين قُرئت الجهتان لكلّ وصلاته الشغّالة (مجموعٌ ناقص لا يُعرض).
     int? out;
-    var alive = 0, measured = 0;
+    int? back;
+    var alive = 0, measured = 0, measuredBack = 0;
     final fed = <int>{};
     for (final e in topo.edges) {
       if (!roots.contains(e.from)) continue;
@@ -652,15 +655,22 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
         if (f.state == LinkState.down) continue;
         alive++;
         fed.add(e.to);
+        final up = f.toMainBps;
+        if (up != null) {
+          back = (back ?? 0) + up;
+          measuredBack++;
+        }
         final v = f.toSubBps;
         if (v == null) continue;
         out = (out ?? 0) + v;
         measured++;
       }
     }
+    final partial = measured > 0 && measured < alive;
+    final bothWays = alive > 0 && measured == alive && measuredBack == alive;
     final outFoot = alive == 0
         ? 'لا وصلة تعمل'
-        : (measured > 0 && measured < alive ? 'المقروء $measured من $alive' : TopoText.toTowers(fed.length));
+        : (partial ? 'المقروء $measured من $alive' : (bothWays ? TowerText.bps(back) : TopoText.toTowers(fed.length)));
     final all = [for (final e in topo.edges) ...e.links.map((l) => flows[l.id]!)];
     final working = all.where((f) => f.state == LinkState.ok || f.state == LinkState.fair || f.state == LinkState.weak).length;
     final down = all.where((f) => f.state == LinkState.down).length;
@@ -672,7 +682,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
             : (weak > 0 ? '$weak ضعيف' : 'كلّها تعمل'));
     final towers = topo.nodes.length + topo.loose.length;
 
-    Widget tile(String label, String value, String foot, {Color? footColor}) => Expanded(
+    Widget tile(String label, String value, String foot, {Color? footColor, IconData? valueIcon, IconData? footIcon}) => Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
@@ -686,9 +696,24 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: AlignmentDirectional.centerStart,
-                child: Text(iso(value), style: AppType.statValue(color: AppColors.textHi), maxLines: 1),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (valueIcon != null) ...[
+                    Icon(valueIcon, size: 15, color: AppColors.textMid),
+                    const SizedBox(width: 3),
+                  ],
+                  Text(iso(value), style: AppType.statValue(color: AppColors.textHi), maxLines: 1),
+                ]),
               ),
-              Text(foot, style: AppType.micro(color: footColor ?? AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Row(children: [
+                if (footIcon != null) ...[
+                  Icon(footIcon, size: 11, color: footColor ?? AppColors.textMid),
+                  const SizedBox(width: 2),
+                ],
+                Expanded(
+                  child: Text(footIcon != null ? iso(foot) : foot,
+                      style: AppType.micro(color: footColor ?? AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ]),
             ]),
           ),
         );
@@ -696,7 +721,8 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
       child: Row(children: [
-        tile('يوزّع الرئيسي', TowerText.bps(out), outFoot),
+        tile('يوزّع الرئيسي', TowerText.bps(out), outFoot,
+            valueIcon: out == null ? null : LucideIcons.arrowDown, footIcon: bothWays && !partial ? LucideIcons.arrowUp : null),
         const SizedBox(width: Sp.sm),
         tile(_anyFiber(topo) ? 'الوصلات' : 'اللنكات', '$working/${all.length}', linksFoot,
             footColor: down > 0 || (weak > 0 && working == all.length) ? AppColors.error : null),
@@ -708,7 +734,12 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
 
   // ── الرسم ──────────────────────────────────────────────────────────────────────────────
 
-  static const _pillRoom = 26.0;
+  /// ارتفاع حبّة الوصلة: سطرٌ («واقع» · «يعمل» · «—») أو سطران (ما ينزل للفرعيّ وما يصعد منه).
+  static const _pillOneH = 22.0;
+  static const _pillTwoH = 36.0;
+
+  /// الحبّة بسطرين حين تعمل وقُرئ ما يعبرها بأيٍّ من الجهتين.
+  static bool _twoWay(LinkFlow f) => f.state != LinkState.down && (f.toSubBps != null || f.toMainBps != null);
 
   Widget _drawing(TowerTopology topo, TopoLayout layout, Map<int, LinkFlow> flows) {
     final shapes = <TopoEdgeShape>[];
@@ -716,8 +747,11 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
     for (final e in topo.edges) {
       final b = layout.rectOf(e.to);
       final flow = LinkFlow.merge(e.links.map((l) => flows[l.id]!));
+      // مكان الحبّة فوق الفرعيّ بارتفاعها — فتنتهي الوصلة عند أعلاها أيّاً كان عدد أسطرها
+      final ph = _twoWay(flow) ? _pillTwoH : _pillOneH;
+      final room = ph + 4;
       final shape = TopoEdgeShape(
-        route: layout.routeOf(e, pillRoom: _pillRoom),
+        route: layout.routeOf(e, pillRoom: room),
         state: flow.state,
         tree: e.tree,
         hasPill: e.tree,
@@ -725,20 +759,20 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       );
       shapes.add(shape);
       // وصلة الشجرة: ما ينزل للفرعيّ فوقه مباشرةً؛ غيرها حبّتها في منتصفها
-      final at = e.tree ? Offset(b.center.dx, b.top - _pillRoom / 2 - 1) : shape.middle;
+      final at = e.tree ? Offset(b.center.dx, b.top - room / 2 - 1) : shape.middle;
       // مساحة اللمس أوسع من الحبّة (٢٢ ارتفاعاً لا تكفي إصبعاً): تمتدّ فوقها على طرف الوصلة، لا على البرج تحتها
       pills.add(Positioned(
         left: at.dx - 44,
-        top: at.dy - 26,
+        top: at.dy - ph / 2 - 15,
         width: 88,
-        height: 38,
+        height: ph + 16,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _openEdge(e),
           child: Align(
             alignment: Alignment.bottomCenter,
             child: SizedBox(
-              height: 24,
+              height: ph + 2,
               child: Center(child: _edgePill(e, flow, e.tree ? layout.pillMaxFor(e.to) : TopoLayout.pillWidest)),
             ),
           ),
@@ -893,45 +927,58 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       LinkState.unknown => AppTone.neutral,
     };
     final down = f.state == LinkState.down;
-    // تعمل ولم يُعرف ما يعبرها بعد (أوّل قراءة، أو قراءةٌ بلا عدّادات كالـVPN) ⇒ «يعمل» لا «—»
-    final text = down
-        ? 'واقع'
-        : (f.toSubBps != null ? TowerText.bps(f.toSubBps) : (f.state == LinkState.unknown ? '—' : 'يعمل'));
+    // النقل بالجهتين (المالك ١١ نوفمبر: «لازم تظهر النقل بالجهتين rx/tx»): ما ينزل للفرعيّ وتحته ما يصعد منه. ما لم يُقرأ من
+    // إحداهما «—». وتعمل ولم يُعرف ما يعبرها بعد (أوّل قراءة، أو قراءةٌ بلا عدّادات كالـVPN) ⇒ «يعمل» لا «—».
+    final two = _twoWay(f);
+    final text = down ? 'واقع' : (f.state == LinkState.unknown ? '—' : 'يعمل');
+    final ink = down ? AppColors.onBrand : tone.onSoft;
+    final radius = BorderRadius.circular(two ? 12 : R.pill);
+    final count = e.links.length > 1
+        ? [
+            const SizedBox(width: 3),
+            Text('×${e.links.length}', textDirection: TextDirection.ltr, style: AppType.daysWordBold(color: ink)),
+          ]
+        : const <Widget>[];
+    Widget way(IconData icon, int? bps, {required bool main}) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 11, color: main ? ink : ink.withValues(alpha: 0.72)),
+          const SizedBox(width: 2),
+          Text(iso(TowerText.bps(bps)), style: AppType.pillBold(color: main ? ink : ink.withValues(alpha: 0.72))),
+        ]);
     return Semantics(
       button: true,
       label: '${e.fiber ? 'كيبل' : 'لنك'} ${_towerName(e.from)} إلى ${_towerName(e.to)} — '
-          '${down ? 'واقع' : (f.toSubBps == null ? (f.state == LinkState.unknown ? 'لم يُقرأ' : 'يعمل') : 'ينزل $text')}',
+          '${two ? 'ينزل ${TowerText.bps(f.toSubBps)} ويصعد ${TowerText.bps(f.toMainBps)}' : (down ? 'واقع' : (f.state == LinkState.unknown ? 'لم يُقرأ' : 'يعمل'))}',
       excludeSemantics: true,
       child: Material(
         key: ValueKey('topo-pill-${e.from}-${e.to}'),
         color: down ? AppColors.error : tone.softBg,
-        borderRadius: BorderRadius.circular(R.pill),
+        borderRadius: radius,
         child: InkWell(
-          borderRadius: BorderRadius.circular(R.pill),
+          borderRadius: radius,
           onTap: () => _openEdge(e),
           child: Container(
-            height: 22,
+            height: two ? _pillTwoH : _pillOneH,
             constraints: BoxConstraints(minWidth: 40, maxWidth: maxWidth),
             padding: const EdgeInsets.symmetric(horizontal: 7),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.pill),
+              borderRadius: radius,
               border: Border.all(color: AppColors.surface, width: 1.5),
             ),
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (!down && f.toSubBps != null) ...[
-                  Icon(LucideIcons.arrowDown, size: 11, color: tone.onSoft),
-                  const SizedBox(width: 2),
-                ],
-                Text(iso(text), style: AppType.pillBold(color: down ? AppColors.onBrand : tone.onSoft)),
-                if (e.links.length > 1) ...[
-                  const SizedBox(width: 3),
-                  Text('×${e.links.length}',
-                      textDirection: TextDirection.ltr,
-                      style: AppType.daysWordBold(color: down ? AppColors.onBrand : tone.onSoft)),
-                ],
-              ]),
+              child: two
+                  // «×2» بجانب السطرين معاً: الرقمان مجموع وصلتين بين البرجين
+                  ? Row(mainAxisSize: MainAxisSize.min, children: [
+                      Column(mainAxisSize: MainAxisSize.min, children: [
+                        way(LucideIcons.arrowDown, f.toSubBps, main: true),
+                        way(LucideIcons.arrowUp, f.toMainBps, main: false),
+                      ]),
+                      ...count,
+                    ])
+                  : Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(iso(text), style: AppType.pillBold(color: ink)),
+                      ...count,
+                    ]),
             ),
           ),
         ),
@@ -976,12 +1023,21 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
           ]),
           const SizedBox(height: 5),
         ],
-        Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
+        // الجهتان في سطر والحال في سطر — كلّ سطرٍ متوازن، لا عنصر يتيم يلتفّ وحده
+        Wrap(alignment: WrapAlignment.center, spacing: 14, runSpacing: 4, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(LucideIcons.arrowDown, size: 11, color: AppColors.textMid),
             const SizedBox(width: 3),
             Text('ينزل للفرعي', style: AppType.micro(color: AppColors.textMid)),
           ]),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(LucideIcons.arrowUp, size: 11, color: AppColors.textMid),
+            const SizedBox(width: 3),
+            Text('يصعد للرئيسي', style: AppType.micro(color: AppColors.textMid)),
+          ]),
+        ]),
+        const SizedBox(height: 5),
+        Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
           item(AppColors.success, 'ممتاز'),
           item(AppColors.warningFill, 'متوسّط'),
           item(AppColors.error, 'ضعيف'),
