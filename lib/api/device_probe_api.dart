@@ -374,7 +374,7 @@ class DeviceProbeApi {
       ZteOntService.forget(effectiveIp);
       TplinkPharosService.forget(effectiveIp, manual: true);
       TplinkClassicService.forget(effectiveIp);
-      TplinkAgileService.forget(effectiveIp);
+      TplinkAgileService.forget(effectiveIp, manual: true);
     }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
@@ -1040,6 +1040,7 @@ class DeviceProbeApi {
         switch (why?.issue) {
           AgileIssue.rejected => ProbeIssue.loginRejected,
           AgileIssue.busy => ProbeIssue.busy,
+          AgileIssue.locked => ProbeIssue.locked,
           AgileIssue.readFailed => ProbeIssue.readFailed,
           _ => ProbeIssue.unreachable,
         },
