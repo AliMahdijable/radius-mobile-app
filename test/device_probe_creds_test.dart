@@ -76,6 +76,33 @@ void main() {
       expect(none.ubnt, [ubntFactory]);
     });
 
+    test('راوتر Agile (باسورد فقط): يوزرٌ فارغٌ دائماً، اعتماد المشترك أوّلاً، ثمّ المدير، ثمّ باسوردات TP-Link احتياطاً بلا تكرار', () {
+      const d = AdminDeviceDefaults(
+        tplinkUsername: 'admin', tplinkPassword: 'tp-pass', tplinkExtra: [DeviceCred('u2', 'tp-extra')],
+        tprouterPassword: 'router-pass', tprouterExtra: ['router-extra', 'router-pass'],
+      );
+      // بلا اعتماد مشترك: المدير ثمّ احتياط TP-Link، كلّها بيوزرٍ فارغ، بلا تكرار كلمات السرّ.
+      final c = DeviceProbeApi.candidatesFor(null, d);
+      expect(c.tprouter, const [
+        DeviceCred('', 'router-pass'),
+        DeviceCred('', 'router-extra'),
+        DeviceCred('', 'tp-pass'),
+        DeviceCred('', 'tp-extra'),
+      ], reason: 'يوزرٌ فارغ، وبلا تكرار (router-pass مرّةً واحدة)');
+      // اعتماد المشترك (راديو) أوّلاً.
+      final own = DeviceProbeApi.candidatesFor(
+          const DeviceConfig(username: 'sub', password: 'sub-pass'), d);
+      expect(own.tprouter.first, const DeviceCred('', 'sub-pass'));
+      // round-trip عبر الخادم: الباسورد كما هو، وبحدّ maxExtra.
+      final fromJson = AdminDeviceDefaults.fromJson({
+        'tprouterPassword': 'p0',
+        'tprouterExtra': ['p1', '', 'p2', 'p3'],
+      });
+      expect(fromJson.tprouterPassword, 'p0');
+      expect(fromJson.tprouterExtra, ['p1', 'p2'], reason: 'الفارغ يُسقط، وبحدّ اثنين');
+      expect(AdminDeviceDefaults.empty.toJson()['tprouterExtra'], isEmpty);
+    });
+
     test('من الخادم وإليه: اليوزر الفارغ يُسقط، وبحدّ اثنين، والقائمتان تُرسلان دائماً', () {
       final d = AdminDeviceDefaults.fromJson({
         'ontUsername': 'adm-ont',

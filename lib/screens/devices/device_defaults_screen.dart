@@ -36,14 +36,18 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   final _ubntPass = TextEditingController();
   final _tplinkUser = TextEditingController();
   final _tplinkPass = TextEditingController();
+  // راوتر TP-Link الحديث «Agile» (Archer…): كلمة سرٍّ فقط بلا يوزر.
+  final _tprouterPass = TextEditingController();
   final List<_ExtraField> _ontExtra = [];
   final List<_ExtraField> _ubntExtra = [];
   final List<_ExtraField> _tplinkExtra = [];
+  final List<TextEditingController> _tprouterExtra = [];
   bool _loading = true;
   bool _saving = false;
   bool _ontObscure = true;
   bool _ubntObscure = true;
   bool _tplinkObscure = true;
+  bool _tprouterObscure = true;
 
   @override
   void initState() {
@@ -59,9 +63,13 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     _ubntPass.dispose();
     _tplinkUser.dispose();
     _tplinkPass.dispose();
+    _tprouterPass.dispose();
     for (final f in [..._ontExtra, ..._ubntExtra, ..._tplinkExtra]) {
       f.user.dispose();
       f.pass.dispose();
+    }
+    for (final c in _tprouterExtra) {
+      c.dispose();
     }
     super.dispose();
   }
@@ -81,9 +89,11 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
       _ubntPass.text = d.ubntPassword ?? '';
       _tplinkUser.text = d.tplinkUsername ?? '';
       _tplinkPass.text = d.tplinkPassword ?? '';
+      _tprouterPass.text = d.tprouterPassword ?? '';
       _ontExtra.addAll(d.ontExtra.map(_field));
       _ubntExtra.addAll(d.ubntExtra.map(_field));
       _tplinkExtra.addAll(d.tplinkExtra.map(_field));
+      _tprouterExtra.addAll(d.tprouterExtra.map((p) => TextEditingController(text: p)));
       _loading = false;
     });
   }
@@ -109,6 +119,17 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     });
   }
 
+  void _addPwdExtra() {
+    if (_tprouterExtra.length >= AdminDeviceDefaults.maxExtra) return;
+    setState(() => _tprouterExtra.add(TextEditingController()));
+  }
+
+  void _removePwdExtra(int i) {
+    final c = _tprouterExtra[i];
+    setState(() => _tprouterExtra.removeAt(i));
+    WidgetsBinding.instance.addPostFrameCallback((_) => c.dispose());
+  }
+
   Future<void> _save() async {
     setState(() => _saving = true);
     final ok = await AdminDeviceDefaultsApi.save(
@@ -123,6 +144,11 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
         ontExtra: _credsOf(_ontExtra),
         ubntExtra: _credsOf(_ubntExtra),
         tplinkExtra: _credsOf(_tplinkExtra),
+        tprouterPassword: _tprouterPass.text.isEmpty ? null : _tprouterPass.text,
+        tprouterExtra: [
+          for (final c in _tprouterExtra)
+            if (c.text.isNotEmpty) c.text,
+        ],
       ),
     );
     if (!mounted) return;
@@ -202,7 +228,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   _section(
                     key: const ValueKey('creds-tplink'),
                     icon: LucideIcons.radioTower,
-                    title: 'TP-Link (CPE والراوتر)',
+                    title: 'TP-Link — يوزر + باسورد (CPE / راوتر قديم)',
                     subtitle: 'devices.tplink_default_hint'.tr(),
                     userController: _tplinkUser,
                     passController: _tplinkPass,
@@ -213,6 +239,13 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     onRemove: (i) => _removeExtra(_tplinkExtra, i),
                     // جملة الإضافيّ العامّة تتكلّم عن ZTE — هنا بكلمات TP-Link.
                     extraHint: 'devices.tplink_extra_hint'.tr(),
+                  ),
+                  const SizedBox(height: Sp.md),
+                  // راوتر TP-Link الحديث (Agile/Archer): كلمة سرٍّ محلّيّة فقط بلا يوزر (المالك ١١ نوفمبر: «النوع الي يدور فقط باسورد»).
+                  _passwordSection(
+                    key: const ValueKey('creds-tprouter'),
+                    title: 'راوتر TP-Link حديث — باسورد فقط (Archer)',
+                    subtitle: 'devices.tprouter_default_hint'.tr(),
                   ),
                   const SizedBox(height: Sp.lg),
                   SizedBox(
@@ -379,6 +412,91 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
               Text(
                 extraHint ?? 'devices.extra_hint'.tr(),
                 style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  /// قسم «باسورد فقط» (راوتر TP-Link الحديث — دخولٌ بكلمة سرٍّ محلّيّة بلا يوزر). كلمةٌ أولى + [maxExtra] إضافيّة.
+  Widget _passwordSection({Key? key, required String title, required String subtitle}) => Container(
+        key: key,
+        padding: const EdgeInsets.all(Sp.md),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.lg),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoftBg,
+                    borderRadius: BorderRadius.circular(R.md),
+                  ),
+                  child: Icon(LucideIcons.router, size: 14, color: AppColors.brand),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
+            ),
+            const SizedBox(height: Sp.md),
+            _labelText('login.password'.tr()),
+            TextField(
+              controller: _tprouterPass,
+              obscureText: _tprouterObscure,
+              style: const TextStyle(fontSize: 13, height: 1.45),
+              decoration: _dec(suffix: _eye(_tprouterObscure, () => setState(() => _tprouterObscure = !_tprouterObscure))),
+            ),
+            for (var i = 0; i < _tprouterExtra.length; i++) ...[
+              const SizedBox(height: Sp.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'devices.extra_cred'.tr(args: ['${i + 2}']),
+                      style: AppType.label(color: AppColors.textMid)
+                          .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'devices.remove_cred'.tr(),
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(LucideIcons.trash2, size: 15, color: AppColors.error),
+                    onPressed: () => _removePwdExtra(i),
+                  ),
+                ],
+              ),
+              TextField(
+                controller: _tprouterExtra[i],
+                obscureText: _tprouterObscure,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+                decoration: _dec(hint: 'login.password'.tr()),
+              ),
+            ],
+            if (_tprouterExtra.length < AdminDeviceDefaults.maxExtra) ...[
+              const SizedBox(height: Sp.sm),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  onPressed: _addPwdExtra,
+                  icon: const Icon(LucideIcons.plus, size: 15),
+                  label: Text('devices.add_cred'.tr()),
+                ),
               ),
             ],
           ],

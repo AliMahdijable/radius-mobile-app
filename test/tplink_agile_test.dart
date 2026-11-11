@@ -36,6 +36,7 @@ class _FakeAgile {
   final sessions = <String, ({String key, String iv})>{};
   final paths = <String>[];
   int loginTries = 0, rejected = 0;
+  String lastLoginBody = '';
 
   String get host => '127.0.0.1:${server.port}';
 
@@ -53,6 +54,7 @@ class _FakeAgile {
         out = {'success': true, 'data': {'key': [rsa.nHex, rsa.eHex], 'seq': seq}};
       } else if (form == 'login') {
         loginTries++;
+        lastLoginBody = raw;
         out = _login(raw);
       } else if (req.uri.path.contains('/admin/status')) {
         out = _status(req.uri.path, raw);
@@ -100,8 +102,12 @@ class _FakeAgile {
         'sys_uptime': 123456,
         'wan_ipv4_conntype': 'pppoe',
         'wan_ipv4_uptime': 15660,
-        'access_devices_wireless_host': [{'mac': 'a'}, {'mac': 'b'}, {'mac': 'c'}, {'mac': 'd'}, {'mac': 'e'}],
-        'access_devices_wired': [{'mac': 'w'}],
+        'access_devices_wireless_host': [
+          {'mac': 'AA-01', 'ipaddr': '192.168.0.11', 'hostname': 'Galaxy'},
+          {'mac': 'AA-02', 'ip': '192.168.0.12', 'name': 'iPhone'},
+          {'mac': 'AA-03'}, {'mac': 'AA-04'}, {'mac': 'AA-05'},
+        ],
+        'access_devices_wired': [{'macaddr': 'WW-01', 'ipaddr': '192.168.0.20', 'hostname': 'PC'}],
         'wan_ipv4_totaldata_down': 987654321,
         'wan_ipv4_totaldata_up': 123456789,
         'ssid_2g': 'MyWiFi',
@@ -165,11 +171,21 @@ void main() {
       final u = await TplinkAgileService.readStatus(ss);
       expect([u?.vendor, u?.isRouter, u?.isTpClassic], ['tpagile', true, false]);
       expect(u?.peerCount, 6, reason: '٥ لاسلكيّ + ١ سلكيّ');
+      // قائمة المتّصلين (المنسدلة): ماك دائماً، وآيبي/اسمٌ حين يصدّرهما الراوتر (أسماء حقولٍ مختلفة)، والسلكيّ مميَّز.
+      expect(u?.clients.length, 6);
+      expect([u?.clients[0].mac, u?.clients[0].ip, u?.clients[0].name, u?.clients[0].wired], ['AA-01', '192.168.0.11', 'Galaxy', false]);
+      expect([u?.clients[1].ip, u?.clients[1].name], ['192.168.0.12', 'iPhone'], reason: 'حقول ip/name البديلة');
+      expect([u?.clients[2].ip, u?.clients[2].name], [null, null], reason: 'ماك وحده ⇒ بلا آيبي/اسم (لا قيمٌ كاذبة)');
+      expect([u?.clients[5].mac, u?.clients[5].wired], ['WW-01', true], reason: 'السلكيّ');
       expect(u?.wanOnlineSeconds, 15660);
       expect(u?.wanType, 'PPPoE');
       expect(u?.model, 'Archer AX10');
       expect([u?.rxBytes, u?.txBytes], [987654321, 123456789]);
       expect(u?.lanHealth, 'unknown', reason: 'راوترٌ بلا منافذ ⇒ لا إنذار أحمر');
+      // ارتداد ١١ نوفمبر (حيّاً على Archer AX10): operation=login في الجسم الخارجيّ نصّاً، لا داخل الحمولة المعمّاة
+      // (وإلّا «no such callback» لأنّ `;stok=/login` بلا جلسةٍ ليفكّ ويوجّه).
+      expect(d.lastLoginBody, contains('&operation=login'));
+      expect(d.lastLoginBody, isNot(contains('operation=read')));
     });
 
     test('readOnce = دخول + قراءة بخطوة', () async {

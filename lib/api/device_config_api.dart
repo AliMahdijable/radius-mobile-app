@@ -93,6 +93,8 @@ class AdminDeviceDefaults {
     this.ontExtra = const [],
     this.ubntExtra = const [],
     this.tplinkExtra = const [],
+    this.tprouterPassword,
+    this.tprouterExtra = const [],
   });
   final String? ontUsername;
   final String? ontPassword;
@@ -106,6 +108,11 @@ class AdminDeviceDefaults {
   final List<DeviceCred> ontExtra;
   final List<DeviceCred> ubntExtra;
   final List<DeviceCred> tplinkExtra;
+
+  /// راوتر TP-Link الحديث «Agile» (Archer وأخواته، ١١ نوفمبر) يدخل بكلمة سرٍّ محلّيّة **بلا يوزر** (يفسد الهاش لو أُضيف يوزر) —
+  /// فاعتماده هنا كلمات سرٍّ فقط، مستقلّةٌ عن قائمة [tplinkExtra] ذات اليوزر (CPE Pharos والكلاسيكيّ). الأولى + [maxExtra] إضافيّة.
+  final String? tprouterPassword;
+  final List<String> tprouterExtra;
 
   static const int maxExtra = 2;
 
@@ -123,7 +130,23 @@ class AdminDeviceDefaults {
         ontExtra: DeviceCred.listFrom(j['ontExtra']),
         ubntExtra: DeviceCred.listFrom(j['ubntExtra']),
         tplinkExtra: DeviceCred.listFrom(j['tplinkExtra']),
+        tprouterPassword:
+            (j['tprouterPassword']?.toString() ?? '').isEmpty ? null : j['tprouterPassword'].toString(),
+        tprouterExtra: _passwordList(j['tprouterExtra']),
       );
+
+  /// قائمة كلمات سرٍّ (نصوص غير فارغة) لحدّ [maxExtra] — كلمة السرّ كما هي بلا قصّ.
+  static List<String> _passwordList(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <String>[];
+    for (final e in raw) {
+      final p = e?.toString() ?? '';
+      if (p.isEmpty) continue;
+      out.add(p);
+      if (out.length >= maxExtra) break;
+    }
+    return List.unmodifiable(out);
+  }
 
   /// يُرسل القوائم دائماً (ولو فارغة): هذه النسخة تملك القائمة كاملةً — والخادم لا يلمس ما لا يصله مفتاحه (نسخةٌ أقدم لا
   /// تعرف TP-Link لا تمسح اعتماده).
@@ -137,6 +160,8 @@ class AdminDeviceDefaults {
         'ontExtra': [for (final c in ontExtra) c.toJson()],
         'ubntExtra': [for (final c in ubntExtra) c.toJson()],
         'tplinkExtra': [for (final c in tplinkExtra) c.toJson()],
+        'tprouterPassword': tprouterPassword,
+        'tprouterExtra': tprouterExtra,
       };
 }
 

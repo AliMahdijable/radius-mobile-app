@@ -854,7 +854,7 @@ class DeviceProbeApi {
     // راوتر TP-Link كلاسيكيّ (١١ نوفمبر) — كذلك فرعه وحده.
     if (_radioVendorByKey[kindKey] == 'tpclassic') return _probeTpClassicAny(ip, c.tplink, kindKey);
     // راوتر TP-Link الحديث Agile (١١ نوفمبر) — كذلك فرعه وحده.
-    if (_radioVendorByKey[kindKey] == 'tpagile') return _probeTpAgileAny(ip, c.tplink, kindKey);
+    if (_radioVendorByKey[kindKey] == 'tpagile') return _probeTpAgileAny(ip, c.tprouter, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -917,7 +917,7 @@ class DeviceProbeApi {
       agileDone = true;
       if (done.isCompleted) return;
       if (yes) {
-        done.complete(_probeTpAgileAny(ip, c.tplink, kindKey));
+        done.complete(_probeTpAgileAny(ip, c.tprouter, kindKey));
       } else {
         noneYet();
       }
@@ -1211,7 +1211,7 @@ class DeviceProbeApi {
   /// [tplink] (١٠ نوفمبر): اعتماد المشترك وحده، وإلّا خانة المدير الأولى ثمّ إضافيّاه — **بلا افتراض مصنّع أبداً**: جهاز
   /// TP-Link يعدّ المحاولات الغلط من كلّ الهواتف ويقفل صفحته عند عشر.
   @visibleForTesting
-  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory, List<DeviceCred> tplink}) candidatesFor(
+  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory, List<DeviceCred> tplink, List<DeviceCred> tprouter}) candidatesFor(
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) {
@@ -1249,7 +1249,24 @@ class DeviceProbeApi {
         if (!tplink.contains(e)) tplink.add(e);
       }
     }
-    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory, tplink: tplink);
+    // راوتر TP-Link الحديث (Agile): كلمات سرٍّ فقط، يوزرٌ فارغٌ دائماً (يوزرٌ غير فارغٍ يفسد هاش الدخول). اعتماد المشترك أوّلاً
+    // (إن كان من عائلة الراديو)، ثمّ كلمات سرّ المدير المخصّصة، ثمّ باسوردات قائمة TP-Link العاديّة احتياطاً (لو أُدخلت هناك قبل الفصل).
+    final tprouter = <DeviceCred>[];
+    void addRouterPass(String p) {
+      if (p.isEmpty || tprouter.any((e) => e.password == p)) return;
+      tprouter.add(DeviceCred('', p));
+    }
+
+    if (ubntOwn) addRouterPass(cfg?.password ?? '');
+    addRouterPass(defaults.tprouterPassword ?? '');
+    for (final p in defaults.tprouterExtra) {
+      addRouterPass(p);
+    }
+    addRouterPass(defaults.tplinkPassword ?? '');
+    for (final e in defaults.tplinkExtra) {
+      addRouterPass(e.password);
+    }
+    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory, tplink: tplink, tprouter: tprouter);
   }
 
   /// ⑦: الاعتماد الذي دخل على كلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يبدأ به، وجلسة الترافيك وإعادة التشغيل

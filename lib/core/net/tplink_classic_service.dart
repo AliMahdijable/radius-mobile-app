@@ -119,6 +119,42 @@ class TpClassicParse {
   /// عدد إيجارات DHCP (`DHCPDynPara[0]`).
   static int? dhcpClients(String dhcpHtml) => _int(array(dhcpHtml, 'DHCPDynPara'), 0);
 
+  /// قائمة المتّصلين الآن (محطّات الوايرلس من `hostList`، ماكٌ لكلٍّ) مُثراةً باسم/آيبي من إيجارات DHCP (`DHCPDynList`) بالربط بالماك.
+  /// الوايرلس = المتّصل فعلاً (لا إيجار DHCP الباقي بعد الخروج). فارغةٌ حين لا تُقرأ صفحة الوايرلس.
+  static List<RouterClient> clientList({String? wlanHtml, String? dhcpHtml}) {
+    // خريطة DHCP بالماك (حرفٌ كبير) ⇒ (اسم، آيبي). كلّ إيجارٍ ٤ حقول: اسم، ماك، آيبي، مدّة.
+    final dhcp = <String, ({String? name, String? ip})>{};
+    if (dhcpHtml != null) {
+      final a = array(dhcpHtml, 'DHCPDynList');
+      if (a != null) {
+        for (var i = 0; i + 2 < a.length; i += 4) {
+          final mac = a[i + 1] is String ? a[i + 1] as String : '';
+          if (!mac.contains('-') && !mac.contains(':')) continue; // الذيل 0,0
+          final name = a[i] is String ? (a[i] as String).trim() : '';
+          final ip = a[i + 2] is String ? (a[i + 2] as String).trim() : '';
+          dhcp[mac.toUpperCase()] = (
+            name: (name.isEmpty || name.toLowerCase() == 'unknown') ? null : name,
+            ip: ip.isEmpty ? null : ip,
+          );
+        }
+      }
+    }
+    final out = <RouterClient>[];
+    if (wlanHtml != null) {
+      final h = array(wlanHtml, 'hostList');
+      if (h != null) {
+        // كلّ محطّةٍ ٤ حقول: ماك، حالة، مستلَم، مُرسَل. الذيل 0,0 ليس نصّاً ⇒ يُتخطّى.
+        for (var i = 0; i + 3 < h.length; i += 4) {
+          final mac = h[i] is String ? h[i] as String : '';
+          if (!mac.contains('-') && !mac.contains(':')) continue;
+          final d = dhcp[mac.toUpperCase()];
+          out.add(RouterClient(mac: mac, ip: d?.ip, name: d?.name, wired: false));
+        }
+      }
+    }
+    return out;
+  }
+
   /// عيّنة حيّة من صفحة الحالة — null إن غابت العدّادات.
   static TpClassicLive? live(String statusHtml, DateTime at) {
     final stat = array(statusHtml, 'statistList');
@@ -171,6 +207,7 @@ class TpClassicParse {
       wanOnlineSeconds: durationSeconds(_str(wan, 12)),
       dhcpCount: dhcpHtml == null ? null : dhcpClients(dhcpHtml),
       wanType: wanTypeName(_int(wan, 3)),
+      clients: clientList(wlanHtml: wlanHtml, dhcpHtml: dhcpHtml),
     );
   }
 }

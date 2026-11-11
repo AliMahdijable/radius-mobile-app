@@ -102,6 +102,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   bool? _reach;
   String? _notes;
 
+  /// قائمة المتّصلين بالراوتر (آيبي/ماك/اسم) مطويّةٌ افتراضاً — تنفتح بنقر الوكيل فقط (المالك ١١ نوفمبر).
+  bool _clientsExpanded = false;
+
   // ═══════════ الترافيك اللحظي ═══════════
   //
   // عدّادات البايت تصل أصلاً في كلّ استجابة `/status.cgi` — نفس الطلب
@@ -1453,11 +1456,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           color: AppColors.textHi,
         ),
       // الراوتر (١١ نوفمبر — المالك: «عدد المتصلين… الوايرلس تلكاه المتصل الفعلي»): أجهزة الوايرلس المتّصلة الآن، قصيرٌ ثابت.
-      if (u.isRouter && u.peerCount != null)
-        _MetricTile(
-          field: _routerClients(u),
-          color: AppColors.textHi,
-        ),
+      // ومنسدلٌ بنقر الوكيل (المالك: «اجعلها توكل بتن… يطلعه ايبي وماك واسم الجهاز… مغلق دائما الا ينقره الوكيل»).
+      if (u.isRouter && u.peerCount != null) _routerClientsTile(u),
     ];
 
     // الترافيك اللحظي محلّ SNR (طلب المستخدم 2026-08-30): SNR رقم
@@ -1482,6 +1482,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
               ],
             ],
           ),
+        // القائمة المنسدلة للمتّصلين (تحت صفّ البلاطات مباشرةً) — تظهر فقط حين ينقر الوكيل البلاطة.
+        if (u.isRouter && _clientsExpanded && u.clients.isNotEmpty) _routerClientsList(u),
         if (wide != null) ...[
           if (short.isNotEmpty) const SizedBox(height: Sp.sm),
           wide, // العرض الكامل — بلا Expanded وبلا جار
@@ -1522,6 +1524,144 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
         // eth interface بحبّة منفصلة مع plugged/speed.
         if (u.lanPorts.isNotEmpty) _lanPortsRow(u.lanPorts),
+      ],
+    );
+  }
+
+  /// بلاطة «المتّصلون الآن» — قابلةٌ للنقر لفتح/طيّ قائمة الأجهزة حين تتوفّر تفاصيلها (المالك: «توكل بتن… مغلق دائما الا ينقره الوكيل»)،
+  /// وإلّا بلاطةٌ عاديّة (عدٌّ بلا تفاصيل).
+  Widget _routerClientsTile(UbiquitiStatus u) {
+    if (u.clients.isEmpty) {
+      return _MetricTile(field: _routerClients(u), color: AppColors.textHi);
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(R.icon),
+      onTap: () => setState(() => _clientsExpanded = !_clientsExpanded),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(R.icon),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Flexible(
+                  child: Text('المتّصلون الآن',
+                      style: AppType.micro(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: Sp.xs),
+                Icon(
+                  _clientsExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 15,
+                  color: AppColors.brandAccent,
+                ),
+              ],
+            ),
+            const SizedBox(height: Sp.xxs),
+            Text('${u.peerCount}',
+                textDirection: TextDirection.ltr,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.cardTitle(color: AppColors.textHi)
+                    .copyWith(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// القائمة المنسدلة: كلّ جهازٍ باسمه (أو رقمه) وآيبيه وماكه مرتّباً، والماك قابلٌ للنسخ؛ والسلكيّ موسوم.
+  Widget _routerClientsList(UbiquitiStatus u) {
+    final cs = u.clients;
+    return Container(
+      margin: const EdgeInsets.only(top: Sp.sm),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.icon),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < cs.length; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.border),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+              child: _clientRow(cs[i], i + 1),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _clientRow(RouterClient c, int n) {
+    final name = (c.name != null && c.name!.trim().isNotEmpty)
+        ? c.name!.trim()
+        : 'جهاز $n';
+    return Row(
+      children: [
+        SizedBox(
+          width: 18,
+          child: Text('$n',
+              textDirection: TextDirection.ltr,
+              style: AppType.micro(color: AppColors.textLabel)),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(name,
+                        style: AppType.body()
+                            .copyWith(fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  if (c.wired) ...[
+                    const SizedBox(width: Sp.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(R.pill),
+                      ),
+                      child: Text('سلكيّ',
+                          style: AppType.micro(color: AppColors.textLabel)),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 1),
+              Text(c.mac,
+                  textDirection: TextDirection.ltr,
+                  style: AppType.micro(color: AppColors.textLabel),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        if (c.ip != null && c.ip!.isNotEmpty) ...[
+          const SizedBox(width: Sp.sm),
+          Text(c.ip!,
+              textDirection: TextDirection.ltr,
+              style: AppType.body(color: AppColors.textHi)),
+        ],
+        _CopyIcon(value: c.mac, label: 'MAC'),
       ],
     );
   }

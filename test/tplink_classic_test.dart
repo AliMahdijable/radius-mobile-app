@@ -204,6 +204,18 @@ void main() {
       expect(TpClassicParse.array(_statusPage(), 'notThere'), isNull);
     });
 
+    test('قائمة المتّصلين: محطّات الوايرلس (ماك) مُثراةٌ باسم/آيبي DHCP بالربط بالماك؛ غير الموجود بلا قيمٍ كاذبة، و«Unknown» ⇒ بلا اسم', () {
+      const wlan = '<SCRIPT>var hostList = new Array("AA-BB-CC-00-01-10", 1, 100, 200, "AA-BB-CC-00-01-11", 1, 5, 6, "AA-BB-CC-00-01-12", 1, 7, 8, 0,0 );</SCRIPT>';
+      const dhcp = '<SCRIPT>var DHCPDynList = new Array("Phone-A", "AA-BB-CC-00-01-10", "192.168.6.100", "01:19:06", "Unknown", "AA-BB-CC-00-01-11", "192.168.6.101", "01:33:15", "Old-Lease", "AA-BB-CC-00-09-99", "192.168.6.150", "00:10:00", 0,0 );</SCRIPT>';
+      final list = TpClassicParse.clientList(wlanHtml: wlan, dhcpHtml: dhcp);
+      expect(list.length, 3, reason: 'من الوايرلس (المتّصل الآن) لا إيجارات DHCP');
+      expect([list[0].mac, list[0].ip, list[0].name], ['AA-BB-CC-00-01-10', '192.168.6.100', 'Phone-A']);
+      expect([list[1].ip, list[1].name], ['192.168.6.101', null], reason: '«Unknown» ⇒ بلا اسم، والآيبي يبقى');
+      expect([list[2].ip, list[2].name], [null, null], reason: 'بلا إيجار DHCP ⇒ ماكٌ وحده');
+      expect(list.every((c) => !c.wired), isTrue);
+      expect(TpClassicParse.clientList(wlanHtml: null, dhcpHtml: dhcp), isEmpty, reason: 'بلا صفحة وايرلس ⇒ فارغة');
+    });
+
     test('مدّة الاتّصال بصيغها، وغير المفهوم null لا صفر', () {
       expect(TpClassicParse.durationSeconds('0 day(s) 03:43:03'), 3 * 3600 + 43 * 60 + 3);
       expect(TpClassicParse.durationSeconds('3 days 14:31:49'), 3 * 86400 + 14 * 3600 + 31 * 60 + 49);

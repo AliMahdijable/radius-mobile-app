@@ -150,6 +150,29 @@ class LanPort {
 }
 
 /// Unified snapshot the UI consumes — same shape regardless of kind.
+/// جهازٌ متّصلٌ بالراوتر المنزليّ (قائمة المتّصلين المنسدلة في البطاقة). [ip]/[name] قد يكونان null حسب ما يصدّره الراوتر.
+class RouterClient {
+  const RouterClient({required this.mac, this.ip, this.name, this.wired = false});
+  final String mac;
+  final String? ip;
+  final String? name;
+  final bool wired;
+
+  Map<String, dynamic> toJson() => {
+        'm': mac,
+        if (ip != null && ip!.isNotEmpty) 'i': ip,
+        if (name != null && name!.isNotEmpty) 'n': name,
+        if (wired) 'w': 1,
+      };
+
+  static RouterClient fromJson(Map<String, dynamic> j) => RouterClient(
+        mac: (j['m'] ?? '').toString(),
+        ip: j['i']?.toString(),
+        name: j['n']?.toString(),
+        wired: j['w'] == 1,
+      );
+}
+
 class UbiquitiStatus {
   const UbiquitiStatus({
     required this.hostname,
@@ -174,6 +197,7 @@ class UbiquitiStatus {
     this.wanOnlineSeconds,
     this.dhcpCount,
     this.wanType = '',
+    this.clients = const [],
   });
 
   /// المورّد: `ubnt` (الأصل — airOS) أو `tplink` (TP-Link Pharos: CPE/WBS، ١٠ نوفمبر) أو `tpclassic` (راوتر TP-Link المنزليّ
@@ -204,6 +228,10 @@ class UbiquitiStatus {
 
   /// نوع اتّصال الإنترنت كما يسمّيه الراوتر («PPPoE»، «Dynamic IP»…) — فارغٌ لغير الراوتر.
   final String wanType;
+
+  /// الأجهزة المتّصلة بالراوتر المنزليّ (آيبي/ماك/اسم) — تُعرض في قائمةٍ منسدلةٍ بالبطاقة (مغلقةٌ حتى ينقرها الوكيل). فارغةٌ لغير الراوتر
+  /// أو حين لا يصدّر الراوتر تفاصيلها. قد تكون أقصر من [peerCount] إن أعطى الراوتر العدّ دون التفاصيل الكاملة.
+  final List<RouterClient> clients;
 
   final String hostname;
   final String firmware;
@@ -297,6 +325,7 @@ class UbiquitiStatus {
         if (wanOnlineSeconds != null) 'wos': wanOnlineSeconds,
         if (dhcpCount != null) 'dh': dhcpCount,
         if (wanType.isNotEmpty) 'wt': wanType,
+        if (clients.isNotEmpty) 'cl': clients.map((c) => c.toJson()).toList(),
       };
 
   static UbiquitiStatus fromJson(Map<String, dynamic> j) => UbiquitiStatus(
@@ -324,6 +353,10 @@ class UbiquitiStatus {
         wanOnlineSeconds: j['wos'] is int ? j['wos'] as int : null,
         dhcpCount: j['dh'] is int ? j['dh'] as int : null,
         wanType: (j['wt'] ?? '').toString(),
+        clients: (j['cl'] as List? ?? const [])
+            .whereType<Map>()
+            .map((m) => RouterClient.fromJson(Map<String, dynamic>.from(m)))
+            .toList(),
       );
 
   /// نسخةٌ بقراءاتٍ حيّة أحدث (نبضة الكرت) — ما لم يُعطَ يبقى كما هو؛ والمنافذ تُستبدل كلّها حين تُعطى.
@@ -338,6 +371,7 @@ class UbiquitiStatus {
     int? peerCount,
     int? wanOnlineSeconds,
     int? dhcpCount,
+    List<RouterClient>? clients,
   }) =>
       UbiquitiStatus(
         hostname: hostname,
@@ -362,6 +396,7 @@ class UbiquitiStatus {
         wanOnlineSeconds: wanOnlineSeconds ?? this.wanOnlineSeconds,
         dhcpCount: dhcpCount ?? this.dhcpCount,
         wanType: wanType,
+        clients: clients ?? this.clients,
       );
 }
 

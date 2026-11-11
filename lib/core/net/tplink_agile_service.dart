@@ -61,6 +61,39 @@ class TpAgileParse {
     return null;
   }
 
+  /// قائمة الأجهزة المتّصلة من قوائم الواجهة (لاسلكيّ مضيف/ضيف + سلكيّ). أسماء الحقول تختلف بالفيرموير ⇒ نقرأ عدّة بدائل.
+  static List<RouterClient> clientList(Map<String, dynamic> d) {
+    final out = <RouterClient>[];
+    const macK = ['mac', 'macaddr', 'MAC', 'mac_addr'];
+    const ipK = ['ipaddr', 'ip', 'ipv4', 'ip_addr'];
+    const nameK = ['hostname', 'name', 'host_name', 'devicename', 'device_name'];
+    String pick(Map m, List<String> keys) {
+      for (final k in keys) {
+        final v = _str(m[k]);
+        if (v.isNotEmpty) return v;
+      }
+      return '';
+    }
+
+    for (final entry in [
+      ('access_devices_wireless_host', false),
+      ('access_devices_wireless_guest', false),
+      ('access_devices_wired', true),
+    ]) {
+      final v = d[entry.$1];
+      if (v is! List) continue;
+      for (final e in v) {
+        if (e is! Map) continue;
+        final mac = pick(e, macK);
+        if (mac.isEmpty) continue;
+        final ip = pick(e, ipK);
+        final name = pick(e, nameK);
+        out.add(RouterClient(mac: mac, ip: ip.isEmpty ? null : ip, name: name.isEmpty ? null : name, wired: entry.$2));
+      }
+    }
+    return out;
+  }
+
   /// نوع اتّصال الإنترنت كما تسمّيه الواجهة («pppoe» ⇒ PPPoE).
   static String wanType(Map<String, dynamic> d) {
     final t = _str(d['wan_ipv4_conntype']).isNotEmpty
@@ -127,6 +160,7 @@ class TpAgileParse {
       wanOnlineSeconds: wanOnline(m),
       dhcpCount: null,
       wanType: wanType(m),
+      clients: clientList(m),
     );
   }
 }
@@ -266,7 +300,11 @@ class TplinkAgileService {
       req.headers.set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded');
       req.headers.set(HttpHeaders.refererHeader, '$base/');
       headers?.forEach(req.headers.set);
-      req.write(body);
+      // 🐛 (١١ نوفمبر، حيّاً على Archer AX10): بلا Content-Length يرسل Dart الجسم **chunked**، وخادم TP-Link المضمَّن لا يقرأ
+      // جسماً chunked ⇒ يردّ «no such callback» (لا يرى form/operation). ضبط الطول صراحةً = إرسالٌ عاديّ يقبله الجهاز.
+      final payload = utf8.encode(body);
+      req.contentLength = payload.length;
+      req.add(payload);
       final res = await req.close().timeout(timeout ?? _readTimeout);
       final bytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b)).timeout(timeout ?? _readTimeout);
       return (status: res.statusCode, body: utf8.decode(bytes, allowMalformed: true));
@@ -335,7 +373,10 @@ class TplinkAgileService {
     final dataEnc = AgileCrypto.aesEncrypt('password=$pwdEnc', aesKey, aesIv);
     final s = seq + dataEnc.length;
     final signEnc = AgileCrypto.rsaEncrypt('key=$aesKey&iv=$aesIv&h=$hashed&s=$s', '${signKey[0]}', '${signKey[1]}');
-    final body = 'sign=$signEnc&data=${Uri.encodeQueryComponent(dataEnc)}';
+    // 🐛 (١١ نوفمبر، حيّاً على Archer AX10): operation=login يجب أن يكون في الجسم **الخارجيّ** نصّاً. عند `;stok=/login`
+    // لا جلسةَ بعدُ، فلا يفكّ الجهاز الحمولة المعمّاة ليوجّه ⇒ لا بدّ من العمليّة ظاهرة. داخل data ⇒ «no such callback».
+    // (القراءات بعد الدخول تُفكّ بجلسة الـstok، فعمليّتها `operation=read` تبقى **داخل** الحمولة — سليمة في `_read`.)
+    final body = 'sign=$signEnc&data=${Uri.encodeQueryComponent(dataEnc)}&operation=login';
     final r = await _post(base, '/cgi-bin/luci/;stok=/login?form=login', body);
     if (r == null) {
       _note(h, AgileIssue.unreachable, 'login no-reply');
