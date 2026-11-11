@@ -499,7 +499,8 @@ class VpnNow {
   /// يشغّل الوضع ويفحص [from] فوراً (والأقسام الظاهرة).
   static Future<void> enterMode({VpnNowKind? from}) async {
     // مشتركو الوطنيّ/فايبر اكس لا يُفحصون عبر الـVPN ⇒ الضغطة من قسمهم تشغّل الوضع بلا فحصٍ لهم (الأجهزة وحدها)
-    final runFrom = from != null && (from != VpnNowKind.subscribers || subscribersOk) ? from : null;
+    // ...وأجهزة صفحةٍ بلا طريقٍ لها (مشتركوها عبر VPN مديرها) كذلك: الوضع يفحص المشتركين وحدهم
+    final runFrom = from != null && (from != VpnNowKind.subscribers || subscribersOk) && (from != VpnNowKind.devices || devicesOk) ? from : null;
     if (mode.value) {
       if (runFrom != null) unawaited(jobOf(runFrom).run());
       return;
@@ -595,6 +596,7 @@ class VpnNow {
     for (final k in _attached.keys.toList()) {
       // مشتركو الوطنيّ/فايبر اكس على شبكة الشركة ⇒ لا فحص لهم عبر الـVPN (الأجهزة تُفحص)
       if (k == VpnNowKind.subscribers && !subscribersOk) continue;
+      if (k == VpnNowKind.devices && !devicesOk) continue;
       final job = jobOf(k);
       if (job.busy) continue;
       final last = job.startedAt;
@@ -784,6 +786,14 @@ class VpnNow {
   /// مشتركوه يُفحصون عبر الـVPN؟ (الخادم بـ«الطريق» — الوطنيّ وفايبر اكس لا: زرّ المشتركين وهنتهم وفحصهم بالوضع يختفون).
   /// «كل الشركات»: نعم — كلّ شركةٍ يقول الخادم عنها، ومن مشتركوها على شبكة الشركة تُسمّى بسببها.
   static bool get subscribersOk => _mergedNow != null || VpnNowApi.lastSubscribers;
+
+  /// لأجهزته طريق عبر الـVPN؟ (الخادم بـ«الطريق» — ١١ نوفمبر: المدير الفرعيّ الداخل بحسابه يمرّ فحص مشتركيه من VPN مديره
+  /// الرئيسيّ، وأجهزة صفحته تحتاج VPN لها) ⇒ لا زرّ ولا وضع ولا ممرّ بقسم الأجهزة حين لا.
+  static bool get devicesOk => VpnNowApi.lastDevices;
+
+  /// «وضع VPN» كما يراه قسم الأجهزة وقرّاؤها ([DeviceNet]): شغّالٌ ولأجهزته طريق — وإلّا فالقسم كما لو كان الوضع مطفأً
+  /// (خارج شبكته: «غير معروف»، لا «مفصول» من ممرٍّ مغلق).
+  static bool get devicesMode => mode.value && devicesOk;
   static Future<({bool linked, String? via})?>? _routeP;
 
   @visibleForTesting
@@ -857,6 +867,7 @@ class VpnNow {
     _route = null;
     _routeAt = null;
     VpnNowApi.lastSubscribers = true;
+    VpnNowApi.lastDevices = true;
     subscribers.reset();
     devices.reset();
     version.value++;

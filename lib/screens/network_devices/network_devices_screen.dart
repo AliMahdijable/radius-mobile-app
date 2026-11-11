@@ -243,7 +243,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (!mounted) return;
     setState(() {
       _vpnAvailable = r != null;
-      _vpnLinked = r?.linked == true;
+      // «مربوط» لهذا القسم = لأجهزته طريق (صفحةٌ يمرّ مشتركوها من VPN مديرها وحدهم ليست مربوطةً هنا — ١١ نوفمبر)
+      _vpnLinked = r?.linked == true && VpnNow.devicesOk;
     });
   }
 
@@ -260,7 +261,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// خارج شبكة الوكيل: من جولة هذا القسم، أو من قسم المشتركين (الحال المشتركة). بـ«وضع VPN» لا (٧ نوفمبر — المالك: «كانما الوكيل
   /// يفعل vpn خارجي»): كلّ ما يقرؤه القسم يمرّ عبر الـVPN فهو على شبكته.
-  bool get _offNet => !VpnNow.mode.value && (_offNetwork || AgentNetPresence.isOff);
+  bool get _offNet => !VpnNow.devicesMode && (_offNetwork || AgentNetPresence.isOff);
 
   /// «وضع VPN» شُغّل أو أُطفئ (زرّه، أو الحارس رأى شبكتك) ⇒ جولةٌ فوريّة بطريقه الجديد: عبر الـVPN (كأنّه على شبكته) أو مباشرة.
   void _onVpnMode() {
@@ -315,7 +316,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final base = focus == null ? _all : [for (final d in _all) if (_companyOf[d.id] == focus) d];
     if (_overlay) return [for (final d in base) _shown(d)];
     // «وضع VPN» لشبكة الشركة المفتوحة: أجهزة غيرها لا تُفحص فيه ⇒ «غير معروف» لا آخر حالٍ رأيناه قبله
-    if (_merged && VpnNow.mode.value) {
+    if (_merged && VpnNow.devicesMode) {
       return [for (final d in base) _isMine(d) || d.lastStatus == 'unknown' ? d : d.withLive(status: 'unknown')];
     }
     return base;
@@ -757,7 +758,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     setState(() => _probing = true);
     _probeRoundCount++;
     // جولةٌ عبر الـVPN (DeviceNet يمرّرها) — نتائجها لا تقول أين الموبايل
-    final vpnRound = VpnNow.mode.value;
+    final vpnRound = VpnNow.devicesMode;
     try {
       // اجمع الـtransitions المُحتملة + التحديثات (بلا setState لكل جهاز).
       // كان: N setState = N × rebuild كامل للـCustomScrollView (dropped frames)
@@ -1391,7 +1392,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     // والمناطق، نحو ثلث شاشة الهاتف قبل أوّل جهاز (المالك ١ نوفمبر). وحسابٌ بلا أجهزة لا شريط له:
                     // «الكلّ ٠ · متّصل ٠ · مفصول ٠» فوق «لا توجد أجهزة» ضجيجٌ لا معلومة.
                     if (_all.isNotEmpty) SliverToBoxAdapter(child: _filterStrip(facets)),
-                    if (_offNet && !VpnNow.mode.value && _view == DevicesView.big)
+                    if (_offNet && !VpnNow.devicesMode && _view == DevicesView.big)
                       const SliverPadding(
                         padding: EdgeInsets.symmetric(horizontal: Sp.md),
                         sliver: SliverToBoxAdapter(child: _OffNetworkBanner()),
@@ -1672,7 +1673,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// زرّ «وضع VPN»: مطفأ ⇒ درعٌ بإطار؛ شغّال ⇒ ممتلئ بلون العلامة. الضغط يشغّله (ويفحص أجهزتك فوراً) أو يطفئه.
   /// «الفحص الشامل»: عبر الـVPN بوضعه أو وأنت خارج شبكتك ولك طريق؛ وخارجها بلا طريق لا فحص (المحلّيّ سيقول «طافي» كذباً).
   void _openDeepCheck() {
-    var viaVpn = VpnNow.mode.value || (_vpnLinked && !AgentNetPresence.isOn);
+    var viaVpn = VpnNow.devicesMode || (_vpnLinked && !AgentNetPresence.isOn);
     // الموظّف بوجهٍ واحد (٨ نوفمبر): «عبر VPN» وحده ⇒ عبر الـVPN ولو على شبكته؛ وما لا يملكه يُقال
     if (!viaVpn && !PermissionsService.deepCheckNet && PermissionsService.deepCheckVpn && _vpnLinked) viaVpn = true;
     if (viaVpn && !PermissionsService.deepCheckVpn) {
@@ -1724,7 +1725,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Widget _vpnButton() {
-    final on = VpnNow.mode.value;
+    final on = VpnNow.devicesMode;
     return _ToolButton(
       key: const ValueKey('devices-vpn-mode'),
       tooltip: on ? 'إيقاف الفحص عبر VPN' : 'الفحص عبر VPN',
@@ -1840,7 +1841,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   if (slim && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
                   if (slim || _all.isNotEmpty)
                     _menuItem('refresh', LucideIcons.refreshCw,
-                      _probing ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث (عبر VPN)' : 'تحديث فوري')),
+                      _probing ? 'يُحدّث الآن…' : (VpnNow.devicesMode ? 'تحديث (عبر VPN)' : 'تحديث فوري')),
                   // «نوع العرض» مجموعةً بعلامةٍ على المختار (لا «جدول» على الهاتف).
                   if (slim) ...[
                     const PopupMenuDivider(),

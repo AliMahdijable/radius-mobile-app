@@ -429,7 +429,7 @@ class DeviceVitals {
     // ٥ نوفمبر: خارج شبكة الوكيل لا جلسة تصل الجهاز من الموبايل — محاولاتٌ تفشل وتحجز الخانات، وتُظهر «راجع الإعدادات» لجهازٍ
     // سليم. ٧ نوفمبر (المالك: «بمجرد نقر الوكيل ع وضع vpn كل الفحصوات تمر من vpn»): بـ«وضع VPN» القرّاء نفسها تمرّ عبر ممرّ الخادم
     // (DeviceNet) ⇒ لا امتناع؛ وخارج الشبكة بلا الوضع يبقى.
-    if (!VpnNow.mode.value && AgentNetPresence.isOff) return offNetworkReason;
+    if (!VpnNow.devicesMode && AgentNetPresence.isOff) return offNetworkReason;
     // «غير متّصل» لا «معطّل»: الثانية تعني مُوقَفاً بقرار المدير،
     // وهذا جهازٌ لا يردّ فحسب. وبقيّة التطبيق تستعمل الأولى.
     if (d.lastStatus == 'offline') return 'غير متّصل';

@@ -62,7 +62,7 @@ class TowerLinkProbe extends ChangeNotifier {
   Object _ownerOf(int id) => _owners[id] ??= Object();
 
   /// خارج شبكة الأجهزة ولا «وضع VPN» — لا شيء يُقرأ ولا يُحكم.
-  bool get offNetwork => !VpnNow.mode.value && AgentNetPresence.isOff;
+  bool get offNetwork => !VpnNow.devicesMode && AgentNetPresence.isOff;
 
   /// قراءة جهازٍ إن كانت حيّة: لم تفشل بعدها قراءة، وعمرها ضمن [freshFor].
   TowerReading? readingOf(int id) {

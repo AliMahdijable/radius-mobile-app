@@ -15,8 +15,9 @@ import 'vpn_pipe.dart';
 class DeviceNet {
   DeviceNet._();
 
-  /// «وضع VPN» مفعّل ([VpnNow.mode]) — يُحقن في الاختبار.
-  static bool Function() vpnOn = () => VpnNow.mode.value;
+  /// «وضع VPN» مفعّل ولأجهزته طريق ([VpnNow.devicesMode]) — يُحقن في الاختبار. صفحةٌ يمرّ مشتركوها من VPN مديرها بلا ممرٍّ
+  /// لأجهزتها: لا ممرّ (الخادم يرفضه) فلا يُطلب.
+  static bool Function() vpnOn = () => VpnNow.devicesMode;
 
   static const _directKey = #deviceNetDirect;
   static const _vpnKey = #deviceNetVpn;

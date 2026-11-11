@@ -236,9 +236,10 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       bool viaVpn;
       try {
         final r = await VpnNow.route();
-        viaVpn = VpnNow.mode.value || (r?.linked == true && !AgentNetPresence.isOn);
+        // لأجهزته طريق عبر الـVPN؟ (صفحةٌ يمرّ مشتركوها من VPN مديرها وحدهم: لا — VpnNow.devicesOk)
+        viaVpn = VpnNow.devicesMode || (r?.linked == true && VpnNow.devicesOk && !AgentNetPresence.isOn);
       } catch (_) {
-        viaVpn = VpnNow.mode.value;
+        viaVpn = VpnNow.devicesMode;
       }
       if (!mounted || token != _devGen || _dev?.id != d.id) return;
       if (!viaVpn && AgentNetPresence.isOff) {
@@ -654,7 +655,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     try {
       devs = await NetworkDevicesApi.list();
       final r = await VpnNow.route();
-      viaVpn = VpnNow.mode.value || (r?.linked == true && !AgentNetPresence.isOn);
+      viaVpn = VpnNow.devicesMode || (r?.linked == true && VpnNow.devicesOk && !AgentNetPresence.isOn);
     } catch (_) {
       if (mounted) setState(() => _busy = false);
       messenger?.showSnackBar(const SnackBar(content: Text('تعذّر جلب الأجهزة الآن — حاول بعد قليل')));

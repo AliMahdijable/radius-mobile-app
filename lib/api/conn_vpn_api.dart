@@ -32,6 +32,7 @@ class ConnVpnStatus {
     this.autoLabel,
     this.autoUser,
     this.mainLabel,
+    this.mainKin,
     this.profileSaved = false,
     this.profileHasAuth = false,
     this.profileError,
@@ -54,6 +55,10 @@ class ConnVpnStatus {
 
   /// صفحته الرئيسيّة التي تمرّ هذه الصفحة من VPNها (١١ نوفمبر — الحساب نفسه، من مدرائها بساس الشركة): اسمها، ولا ملفّ هنا.
   final String? mainLabel;
+
+  /// `manager`: ليست صفحةً من حسابه بل مديره الرئيسيّ (بالنسب وحده — ١١ نوفمبر، المالك: «خليها بلا موافقة يفتح تلقائي»): مشتركوه
+  /// وتنبيههم وحدهما يمرّان من VPNه، وأجهزة صفحته تحتاج ملفّاً لها.
+  final String? mainKin;
   final bool profileSaved;
   final bool profileHasAuth;
   final String? profileError;
@@ -71,6 +76,9 @@ class ConnVpnStatus {
 
   /// تمرّ من VPN صفحته الرئيسيّة (لا نفق شركةٍ يصلها ولا ملفّ لها) — فحصها بلا ملفّ، والفحص التلقائيّ يتبع الرئيسيّة.
   bool get viaMain => !covered && !profileSaved && mainLabel != null;
+
+  /// تمرّ من VPN مديره الرئيسيّ (المدير الفرعيّ الداخل بحسابه هو) — «مديرك» لا «صفحتك»، ومشتركوه وحدهم.
+  bool get viaManager => viaMain && mainKin == 'manager';
   bool get autoLinked => !covered && !profileSaved && !viaMain && autoLabel != null;
   bool get canTest => covered || profileSaved || autoLinked || viaMain;
 
@@ -91,6 +99,7 @@ class ConnVpnStatus {
       autoLabel: a is Map ? '${a['label'] ?? ''}' : null,
       autoUser: a is Map ? a['user']?.toString() : null,
       mainLabel: m is Map ? '${m['label'] ?? ''}' : null,
+      mainKin: m is Map ? m['kin']?.toString() : null,
       profileSaved: p is Map && p['saved'] == true,
       profileHasAuth: p is Map && p['has_auth'] == true,
       profileError: p is Map ? p['last_error']?.toString() : null,

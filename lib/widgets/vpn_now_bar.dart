@@ -107,9 +107,11 @@ class _VpnNowBarState extends State<VpnNowBar> {
     if (widget.kind == VpnNowKind.subscribers && !VpnNow.subscribersOk) {
       return const SizedBox(width: double.infinity);
     }
-    if (VpnNow.mode.value && VpnNow.isHidden(widget.kind) && job.phase != VpnBarPhase.failed) {
+    // قسم الأجهزة لصفحةٍ بلا طريقٍ لأجهزتها (مشتركوها عبر VPN مديرها): الوضع ليس وضعه — يبقى هنت «خارج شبكتك» بـ«ربط VPN»
+    final modeOn = widget.kind == VpnNowKind.devices ? VpnNow.devicesMode : VpnNow.mode.value;
+    if (modeOn && VpnNow.isHidden(widget.kind) && job.phase != VpnBarPhase.failed) {
       child = null; // أُخفي — الوضع شغّال ودرعه بالأدوات يقول ذلك
-    } else if (VpnNow.mode.value) {
+    } else if (modeOn) {
       switch (job.phase) {
         case VpnBarPhase.running:
           child = _running(job, stop: true);
@@ -133,7 +135,7 @@ class _VpnNowBarState extends State<VpnNowBar> {
         case VpnBarPhase.idle:
           // الميزة غير مفتوحة لحسابه/لا صلاحيّة (route == null) ⇒ لا هنت
           if (widget.offNetwork && !_dismissed && _routeKnown && _route != null) {
-            child = _route!.linked ? _offer() : _link();
+            child = _route!.linked && (widget.kind != VpnNowKind.devices || VpnNow.devicesOk) ? _offer() : _link();
           }
       }
     }

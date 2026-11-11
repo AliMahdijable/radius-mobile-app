@@ -389,6 +389,25 @@ void main() {
     expect(devVpn, findsOneWidget, reason: 'أجهزة الوكيل تُفحص عبر ملفّه');
     await close(t);
   });
+
+  // ١١ نوفمبر (المالك: «خليها بلا موافقة يفتح تلقائي»): المدير الفرعيّ الداخل بحسابه — مشتركوه يُفحصون عبر VPN مديره الرئيسيّ، وأجهزة
+  // صفحته بلا طريق («الطريق»: devices=false)
+  testWidgets('١١ نوفمبر: الطريق devices=false ⇒ زرّ VPN بالمشتركين كما هو، ولا زرّ بقسم الأجهزة — وهنته «ربط VPN» لا «تشغيل VPN»', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'main');
+    VpnNowApi.lastDevices = false;
+    AgentNetPresence.debugSet(NetPresence.off);
+    await openSubscribers(t);
+    expect(subsVpn, findsOneWidget, reason: 'مشتركوه عبر VPN مديره');
+    await close(t);
+    VpnNowApi.lastDevices = false;
+    addTearDown(() => VpnNowApi.lastDevices = true);
+    AgentNetPresence.debugSet(NetPresence.off);
+    await openDevices(t);
+    expect(devVpn, findsNothing, reason: 'لا طريق لأجهزته عبر VPN مديره');
+    expect(find.text('تشغيل VPN'), findsNothing);
+    expect(find.text('ربط VPN'), findsOneWidget, reason: 'أجهزته تحتاج VPN لصفحته');
+    await close(t);
+  });
   testWidgets('٧ نوفمبر: بوضع VPN الضغط على الجهاز يفتح صفحته الحيّة نفسها — قرّاؤها عبر ممرّ الـVPN (المالك: «كل الفحصوات تمر من vpn»)', (t) async {
     final pipes = _NoPipe();
     final orig = VpnPipe.transport;

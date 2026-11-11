@@ -166,6 +166,10 @@ class VpnNowApi {
   /// خادمٌ أقدم بلا الحقل ⇒ true كما كان.
   static bool lastSubscribers = true;
 
+  /// لأجهزته طريق عبر الـVPN؟ من آخر جوابٍ لـ[route] (١١ نوفمبر: صفحةٌ يمرّ مشتركوها من VPN مديرها بالنسب وحده لا ممرّ لأجهزتها
+  /// عبره ⇒ false). خادمٌ أقدم بلا الحقل ⇒ true كما كان.
+  static bool lastDevices = true;
+
   /// هل للوكيل طريق VPN؟ ⇒ (linked, via) — أو null حين الميزة مغلقة لحسابه/لا صلاحيّة/تعذّر (لا هنت).
   static Future<({bool linked, String? via})?> route() async {
     try {
@@ -175,6 +179,7 @@ class VpnNowApi {
       final d = r.data?['data'];
       if (d is! Map) return null;
       lastSubscribers = d['subscribers'] != false;
+      lastDevices = d['devices'] != false;
       return (linked: d['linked'] == true, via: d['via'] == null ? null : '${d['via']}');
     } catch (_) {
       return null;

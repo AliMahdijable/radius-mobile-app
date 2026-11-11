@@ -299,7 +299,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
           Expanded(
             child: Text(
               st.viaMain
-                  ? 'تمرّ من VPN صفحتك الرئيسيّة${st.mainLabel!.isEmpty ? '' : ' ${iso(st.mainLabel!)}'}'
+                  ? 'تمرّ من VPN ${st.viaManager ? 'مديرك الرئيسيّ' : 'صفحتك الرئيسيّة'}${st.mainLabel!.isEmpty ? '' : ' ${iso(st.mainLabel!)}'}'
                   : st.remoteScan
                       ? 'النظام يفحص شبكتك عبر الـVPN وأنت بعيد'
                       : 'الفحص الآن من موبايلك وأنت على شبكتك فقط',
@@ -336,10 +336,17 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
           const SizedBox(height: Sp.sm),
         ],
         if (st.viaMain && _analysis == null) ...[
-          _note(
-            text: 'فحص مشتركي هذه الصفحة وأجهزتها يمرّ من VPN صفحتك الرئيسيّة بلا ملفٍّ هنا، والفحص التلقائيّ وأنت بعيد يتبع «الاتصال العكسي» فيها.',
-            hint: 'شبكة هذه الصفحة غير شبكة الرئيسيّة؟ ارفع ملفّ VPN لها ويُستعمل هو.',
-          ),
+          // المدير الفرعيّ الداخل بحسابه هو: مشتركوه وتنبيههم وحدهما عبر VPN مديره — أجهزته تحتاج ملفّاً لها
+          if (st.viaManager)
+            _note(
+              text: 'فحص مشتركي هذه الصفحة وتنبيههم يمرّ من VPN مديرك الرئيسيّ بلا ملفٍّ هنا، والفحص التلقائيّ وأنت بعيد يتبع «الاتصال العكسي» عنده.',
+              hint: 'أجهزة هذه الصفحة تحتاج ملفّ VPN لها — ارفعه ويُستعمل هو لكلّ شيء.',
+            )
+          else
+            _note(
+              text: 'فحص مشتركي هذه الصفحة وأجهزتها يمرّ من VPN صفحتك الرئيسيّة بلا ملفٍّ هنا، والفحص التلقائيّ وأنت بعيد يتبع «الاتصال العكسي» فيها.',
+              hint: 'شبكة هذه الصفحة غير شبكة الرئيسيّة؟ ارفع ملفّ VPN لها ويُستعمل هو.',
+            ),
           const SizedBox(height: Sp.sm),
         ],
         if (st.profileSaved && _analysis == null)

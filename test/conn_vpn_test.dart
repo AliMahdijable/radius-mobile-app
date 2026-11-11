@@ -58,6 +58,11 @@ void main() {
     expect((co.viaMain, co.covered), (false, true));
     expect(of(_status(auto: {'label': 'VPN-ALL', 'user': '@s'})).viaMain, false, reason: 'خادمٌ أقدم بلا الحقل ⇒ كما كان');
     expect(of(_status(main: {'label': null})).viaMain, true, reason: 'بلا اسم ⇒ تمرّ منها والسطر بلا اسم');
+    // ١١ نوفمبر (المالك: «خليها بلا موافقة يفتح تلقائي»): المدير الفرعيّ الداخل بحسابه هو ⇒ kin manager — «مديرك» لا «صفحتك»
+    expect((via.viaManager, via.mainKin), (false, null), reason: 'صفحة حسابه — خادمٌ أقدم بلا الحقل كذلك');
+    final mgr = of(_status(auto: {'label': 'VPN-ALL', 'user': '@s'}, main: {'label': 'main100', 'kin': 'manager'}));
+    expect((mgr.viaMain, mgr.viaManager, mgr.autoLinked, mgr.canTest), (true, true, false, true));
+    expect(of(_status(main: {'label': 'main100', 'kin': 'manager'}, profile: {'saved': true})).viaManager, false, reason: 'ملفّه هو يغلب');
   });
 
   group('الشاشة', () {
@@ -123,6 +128,23 @@ void main() {
       await t.pump(const Duration(seconds: 3));
       await t.pumpAndSettle();
       expect(find.textContaining('اتّصل عبر VPN صفحتك الرئيسيّة'), findsOneWidget);
+      await simDrain(t);
+    });
+
+    testWidgets('المدير الفرعيّ بحسابه (kin manager): «تمرّ من VPN مديرك الرئيسيّ» — مشتركوه وتنبيههم، وأجهزته تحتاج ملفّاً لها؛ بلا «الاتصال العكسي»', (t) async {
+      server.reply('GET', '/api/v2/conn-vpn/status', 200,
+          _status(auto: {'label': 'سوبرنت الثالث (VPN-ALL)', 'user': '@s'}, main: {'label': 'main100', 'kin': 'manager'}));
+      await pumpSim(t, _v, home: (_) => const ConnVpnScreen());
+      await t.pumpAndSettle();
+      expect(find.textContaining('تمرّ من VPN مديرك الرئيسيّ'), findsOneWidget);
+      expect(find.textContaining('main100'), findsOneWidget);
+      expect(find.textContaining('فحص مشتركي هذه الصفحة وتنبيههم يمرّ من VPN مديرك الرئيسيّ'), findsOneWidget);
+      expect(find.textContaining('أجهزة هذه الصفحة تحتاج ملفّ VPN لها'), findsOneWidget);
+      expect(find.textContaining('صفحتك الرئيسيّة'), findsNothing, reason: 'ليست صفحةً من حسابه');
+      expect(find.textContaining('متاحٌ ربطك عبر'), findsNothing);
+      expect(find.byType(Switch), findsNothing, reason: 'الفحص التلقائيّ يتبع «الاتصال العكسي» عند مديره');
+      expect(find.text('ارفع ملفّ VPN لهذه الصفحة (اختياريّ)'), findsOneWidget);
+      expect(find.text('فحص الاتصال'), findsOneWidget);
       await simDrain(t);
     });
 

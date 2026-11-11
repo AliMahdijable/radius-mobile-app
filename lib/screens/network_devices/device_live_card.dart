@@ -137,7 +137,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
       return;
     }
     final st = widget.vitals.value;
-    if (VpnNow.mode.value && (st.vitals == null || st.error != null)) widget.onVitals(DeviceVitals.fromVpn(v));
+    if (VpnNow.devicesMode && (st.vitals == null || st.error != null)) widget.onVitals(DeviceVitals.fromVpn(v));
   }
 
   /// «وضع VPN» شُغّل أو أُطفئ ⇒ قراءةٌ الآن بطريقه الجديد (الممرّ أو الشبكة) — لا تنتظر النبضة.
@@ -264,7 +264,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     final skip = DeviceVitals.skipReason(widget.device);
     if (skip != null) {
       // خارج شبكتك / «وضع VPN» (٥ نوفمبر): المعلومات الحيّة من آخر فحصٍ عبر الـVPN إن وُجدت، وإلّا السطر
-      final vpn = skip == DeviceVitals.offNetworkReason || VpnNow.mode.value ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
+      final vpn = skip == DeviceVitals.offNetworkReason || VpnNow.devicesMode ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
       widget.onVitals(vpn != null ? DeviceVitals.fromVpn(vpn) : VitalsState(error: skip, at: DateTime.now()));
       return;
     }
@@ -335,7 +335,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
         DeviceReadHealth.instance.failed(widget.device.id, 'تعذّر الاتّصال');
         if (!mounted) return;
         // «وضع VPN» (٧ نوفمبر): الممرّ تعذّر ⇒ ما قرأه الخادم عبر الـVPN إن وُجد (لا سطر خطأ لجهازٍ معلوماته عندنا)
-        final vpn = VpnNow.mode.value ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
+        final vpn = VpnNow.devicesMode ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
         if (vpn != null) {
           widget.onVitals(DeviceVitals.fromVpn(vpn));
           return;

@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/vpn_now_api.dart';
+import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
@@ -598,6 +599,40 @@ void main() {
       expect(routeCalls, 1, reason: 'الأجهزة وحدها (طريقها)');
       expect(posts(), 0);
       VpnNow.exitMode();
+    });
+
+    // ١١ نوفمبر (المالك: «خليها بلا موافقة يفتح تلقائي»): المدير الفرعيّ الداخل بحسابه يمرّ فحص مشتركيه من VPN مديره، وأجهزة صفحته بلا
+    // طريق («الطريق»: devices=false) ⇒ الوضع يفحص المشتركين وحدهم، وقسم الأجهزة وقرّاؤه كما لو كان مطفأً
+    test('«الطريق» devices=false: الوضع لا يفحص الأجهزة ولو كان قسمها ظاهراً أو الضغطة منه؛ [devicesMode] مطفأ وقرّاء الأجهزة لا تطلب الممرّ؛ والمشتركون كما هم', () async {
+      VpnNowApi.lastDevices = false;
+      addTearDown(() => VpnNowApi.lastDevices = true);
+      expect(VpnNow.devicesOk, isFalse);
+      VpnNow.attach(VpnNowKind.devices);
+      VpnNow.attach(VpnNowKind.subscribers);
+      addTearDown(() {
+        VpnNow.detach(VpnNowKind.devices);
+        VpnNow.detach(VpnNowKind.subscribers);
+      });
+      await VpnNow.enterMode(from: VpnNowKind.devices);
+      await settleJobs();
+      expect(VpnNow.mode.value, isTrue, reason: 'الوضع يشتغل (للمشتركين)');
+      expect(VpnNow.devicesMode, isFalse, reason: 'وقسم الأجهزة لا يراه');
+      expect(DeviceNet.vpnOn(), isFalse, reason: 'لا ممرّ يُطلب (الخادم يرفضه)');
+      expect(DeviceNet.viaPipe('10.1.2.3'), isFalse);
+      expect(VpnNow.devices.startedAt, isNull, reason: 'لا «فحص» للأجهزة');
+      expect(VpnNow.subscribers.startedAt, isNotNull, reason: 'المشتركون يُفحصون');
+      clock = clock.add(const Duration(minutes: 6));
+      await VpnNow.tick();
+      await settleJobs();
+      expect(VpnNow.devices.startedAt, isNull);
+      VpnNow.exitMode();
+      // عاد له طريق (ربط ملفّه) ⇒ كما كان
+      VpnNowApi.lastDevices = true;
+      await VpnNow.enterMode(from: VpnNowKind.devices);
+      await settleJobs();
+      expect(VpnNow.devicesMode, isTrue);
+      expect(DeviceNet.vpnOn(), isTrue);
+      expect(VpnNow.devices.startedAt, isNotNull);
     });
 
     test('ملفّه أو قالب شركته (غرفةٌ تبقى) ⇒ المشتركون أبطأ؛ الأجهزة تأكّد طريقها كلّ دقيقة (يُبقي غرفته حيّة)', () async {
