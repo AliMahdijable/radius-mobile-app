@@ -337,10 +337,15 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   child: Icon(icon, size: 14, color: AppColors.brand),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 14),
+                // العناوين صارت أطول («TP-Link — يوزر + باسورد (CPE / راوتر قديم)»): تلتفّ لسطرين بالهاتف الضيّق بدل أن تُقصّ.
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.title(color: AppColors.textHi)
+                        .copyWith(fontSize: 14),
+                  ),
                 ),
               ],
             ),
@@ -444,6 +449,8 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                 Expanded(
                   child: Text(
                     title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 14),
                   ),
                 ),
