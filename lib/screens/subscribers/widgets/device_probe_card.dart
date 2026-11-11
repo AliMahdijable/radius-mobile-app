@@ -1053,7 +1053,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         DeviceKind.ont => 'ONT',
         DeviceKind.ubiquiti => (snap.ubnt?.isTplink ?? false)
             ? 'TP-Link'
-            : (snap.ubnt?.isTpClassic ?? false)
+            : (snap.ubnt?.isRouter ?? false)
                 ? 'راوتر'
                 : 'UBNT',
         _ => 'متصل',
@@ -2016,7 +2016,7 @@ CopyField _ubntCcq(UbiquitiStatus u) => CopyField('CCQ', '${u.ccqPercent}%');
 CopyField _ubntKind(UbiquitiStatus u) {
   final brand = u.isTplink
       ? (u.model.isEmpty ? 'TP-Link' : 'TP-Link ${u.model}')
-      : u.isTpClassic
+      : u.isRouter
           ? (u.model.isEmpty ? 'راوتر TP-Link' : 'راوتر TP-Link ${u.model}')
           : null;
   return CopyField(

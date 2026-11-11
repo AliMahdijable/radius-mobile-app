@@ -189,8 +189,12 @@ class UbiquitiStatus {
   /// = أجهزة الوايرلس المتّصلة **الآن** (صفحة Wireless Statistics — لا إيجارات DHCP)، ولا حالة منافذ يصدّرها.
   bool get isTpClassic => vendor == 'tpclassic';
 
+  /// راوتر TP-Link الحديث «Agile» (Archer AX10 & kin — واجهة SPA، دخول RSA+AES، ١١ نوفمبر): كذلك راوترٌ منزليّ، [peerCount] من
+  /// قائمتَي الأجهزة اللاسلكيّة والسلكيّة، ومدّة الاتصال من WAN.
+  bool get isTpAgile => vendor == 'tpagile';
+
   /// جهاز المشترك راوترٌ منزليّ (لا راديو) — ما يُعرض له يختلف: المتّصلون ومدّة الاتصال لا الإشارة والمنافذ.
-  bool get isRouter => isTpClassic;
+  bool get isRouter => isTpClassic || isTpAgile;
 
   /// مدّة اتّصال الإنترنت (PPPoE) بالثواني كما يعدّها الراوتر («Online Time») — غير [uptimeSeconds] (تشغيل الجهاز). null = غير معروفة.
   final int? wanOnlineSeconds;

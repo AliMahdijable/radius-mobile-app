@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/zte_ont_service.dart';
+import '../core/net/tplink_agile_service.dart';
 import '../core/net/tplink_classic_service.dart';
 import '../core/net/tplink_pharos_service.dart';
 import '../core/net/ubiquiti_service.dart';
@@ -259,8 +260,10 @@ class DeviceProbeApi {
     _radioVendorByKey.clear();
     _tplinkSeen.clear();
     _tpClassicSeen.clear();
+    _tpAgileSeen.clear();
     TplinkPharosService.reset();
     TplinkClassicService.reset();
+    TplinkAgileService.reset();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -371,6 +374,7 @@ class DeviceProbeApi {
       ZteOntService.forget(effectiveIp);
       TplinkPharosService.forget(effectiveIp, manual: true);
       TplinkClassicService.forget(effectiveIp);
+      TplinkAgileService.forget(effectiveIp);
     }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
@@ -528,10 +532,12 @@ class DeviceProbeApi {
     _radioVendorByKey.remove(k);
     _tplinkSeen.remove(ip.trim());
     _tpClassicSeen.remove(ip.trim());
+    _tpAgileSeen.remove(ip.trim());
     // اعتماداتٌ جديدة تُجرَّب: الرفض السابق على هذا العنوان يُنسى (لا يُعاد إلّا المرفوض نفسه بلا تغيير).
     ZteOntService.forget(ip.trim());
     TplinkPharosService.forget(ip.trim());
     TplinkClassicService.forget(ip.trim());
+    TplinkAgileService.forget(ip.trim());
     _schedulePersist();
   }
 
@@ -847,6 +853,8 @@ class DeviceProbeApi {
     if (_radioVendorByKey[kindKey] == 'tplink') return _probeTplinkAny(ip, c.tplink, kindKey);
     // راوتر TP-Link كلاسيكيّ (١١ نوفمبر) — كذلك فرعه وحده.
     if (_radioVendorByKey[kindKey] == 'tpclassic') return _probeTpClassicAny(ip, c.tplink, kindKey);
+    // راوتر TP-Link الحديث Agile (١١ نوفمبر) — كذلك فرعه وحده.
+    if (_radioVendorByKey[kindKey] == 'tpagile') return _probeTpAgileAny(ip, c.tplink, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -869,12 +877,14 @@ class DeviceProbeApi {
     // والراوتر الكلاسيكيّ (١١ نوفمبر) كذلك يعرّف نفسه بطلبٍ بلا دخول (401 + realm) — بعد أن يقول تعرّف Pharos «ليس أنا».
     final hello = _helloTplink(ip);
     final classic = _helloTpClassic(ip);
+    final agile = _helloTpAgile(ip);
     final done = Completer<DeviceHealthSnapshot?>();
     var othersDone = false;
     var helloDone = false;
     var classicDone = false;
+    var agileDone = false;
     void noneYet() {
-      if (!done.isCompleted && othersDone && helloDone && classicDone) done.complete(null);
+      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone) done.complete(null);
     }
     others.then((snap) {
       othersDone = true;
@@ -899,6 +909,15 @@ class DeviceProbeApi {
       if (done.isCompleted) return;
       if (h != null) {
         done.complete(_probeTpClassicAny(ip, c.tplink, kindKey, hello: h));
+      } else {
+        noneYet();
+      }
+    });
+    agile.then((yes) {
+      agileDone = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(_probeTpAgileAny(ip, c.tplink, kindKey));
       } else {
         noneYet();
       }
@@ -975,6 +994,66 @@ class DeviceProbeApi {
     return null;
   }
 
+  /// تعرّف الراوتر الحديث Agile (HTTPS، مصافحة keys العامّة) الجاري لكلّ عنوان — نصف دقيقة كغيره. مستقلٌّ عن تعرّف Pharos (HTTPS لا
+  /// يمسّ nonce الـHTTP).
+  static final _tpAgileHello = <String, Future<bool>>{};
+  static final _tpAgileSeen = <String, ({bool yes, DateTime at})>{};
+
+  static Future<bool> _helloTpAgile(String ip) {
+    final running = _tpAgileHello[ip];
+    if (running != null) return running;
+    final seen = _tpAgileSeen[ip];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
+    final f = TplinkAgileService.detect(ip).catchError((Object _) => false);
+    _tpAgileHello[ip] = f;
+    f.then((y) => _tpAgileSeen[ip] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _tpAgileHello.remove(ip));
+    return f;
+  }
+
+  static Future<bool> _isTpAgile(String ip) => _helloTpAgile(ip);
+
+  /// راوتر TP-Link الحديث Agile: مرشّحو قائمة TP-Link (الباسورد المحلّيّ؛ اليوزر يُمرَّر لمن تطلبه فيرموَيره، والافتراضيّ فارغ) —
+  /// دخولٌ RSA+AES ثمّ قراءة `/admin/status` ([TplinkAgileService.readOnce]). لا افتراض مصنّع، والمرفوض لا يُعاد.
+  static Future<DeviceHealthSnapshot?> _probeTpAgileAny(String ip, List<DeviceCred> cands, String kindKey) async {
+    _radioVendorByKey[kindKey] = 'tpagile';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'agile no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkAgileService.readOnce(ip, list[i].password, username: list[i].username);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'agile error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkAgileService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          AgileIssue.rejected => ProbeIssue.loginRejected,
+          AgileIssue.busy => ProbeIssue.busy,
+          AgileIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'agile ${why?.trace ?? '?'}',
+      );
+      if (why?.issue == AgileIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != AgileIssue.rejected) break;
+    }
+    return null;
+  }
+
   /// تعرّف TP-Link الجاري لكلّ عنوان — فرعه وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
   static final _tplinkHello = <String, Future<PharosHello?>>{};
 
@@ -1015,10 +1094,12 @@ class DeviceProbeApi {
     if (known == 'ubnt') return _probeUbntAny(ip, ubnt, kindKey);
     if (known == 'tplink') return _probeTplinkAny(ip, tplink, kindKey);
     if (known == 'tpclassic') return _probeTpClassicAny(ip, tplink, kindKey);
+    if (known == 'tpagile') return _probeTpAgileAny(ip, tplink, kindKey);
     final hello = await _helloTplink(ip);
     if (hello != null) return _probeTplinkAny(ip, tplink, kindKey, hello: hello);
     final classic = await _helloTpClassic(ip);
     if (classic != null) return _probeTpClassicAny(ip, tplink, kindKey, hello: classic);
+    if (await _helloTpAgile(ip)) return _probeTpAgileAny(ip, tplink, kindKey);
     return _probeUbntAny(ip, ubnt, kindKey);
   }
 
@@ -1419,7 +1500,7 @@ class DeviceProbeApi {
       String ip, String user, String pass, {bool unlessOther = false}) async {
     if (unlessOther) {
       // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها.
-      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip)]);
+      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip)]);
       if (other.contains(true)) return null;
     }
     final session =
