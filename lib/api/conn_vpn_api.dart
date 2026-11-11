@@ -31,6 +31,7 @@ class ConnVpnStatus {
     this.companyHealthy = false,
     this.autoLabel,
     this.autoUser,
+    this.mainLabel,
     this.profileSaved = false,
     this.profileHasAuth = false,
     this.profileError,
@@ -50,6 +51,9 @@ class ConnVpnStatus {
   /// الربط التلقائيّ بقالب الشركة (سوبرنت VPN-ALL)
   final String? autoLabel;
   final String? autoUser;
+
+  /// صفحته الرئيسيّة التي تمرّ هذه الصفحة من VPNها (١١ نوفمبر — الحساب نفسه، من مدرائها بساس الشركة): اسمها، ولا ملفّ هنا.
+  final String? mainLabel;
   final bool profileSaved;
   final bool profileHasAuth;
   final String? profileError;
@@ -64,8 +68,11 @@ class ConnVpnStatus {
   final int sweepReadable;
 
   bool get covered => companyLabel != null;
-  bool get autoLinked => !covered && !profileSaved && autoLabel != null;
-  bool get canTest => covered || profileSaved || autoLinked;
+
+  /// تمرّ من VPN صفحته الرئيسيّة (لا نفق شركةٍ يصلها ولا ملفّ لها) — فحصها بلا ملفّ، والفحص التلقائيّ يتبع الرئيسيّة.
+  bool get viaMain => !covered && !profileSaved && mainLabel != null;
+  bool get autoLinked => !covered && !profileSaved && !viaMain && autoLabel != null;
+  bool get canTest => covered || profileSaved || autoLinked || viaMain;
 
   /// يفحص الخادم شبكتك عبر الـVPN؟ (المالك ٤ نوفمبر: «منخلي النظام يفحص اذا وكيل… مرابط vpn مالتنا بنظامه») — ربطٌ قائم + «الاتصال
   /// العكسي» مفعّلاً، كقاعدة الخادم (remote_scan). غيره: الفحص من موبايلك وأنت على شبكتك فقط.
@@ -74,6 +81,7 @@ class ConnVpnStatus {
   factory ConnVpnStatus.fromJson(Map<String, dynamic> j) {
     final c = j['company_tunnel'];
     final a = j['auto_link'];
+    final m = j['main'];
     final p = j['profile'];
     final s = j['last_sweep'];
     int n(Object? v) => (v as num?)?.toInt() ?? 0;
@@ -82,6 +90,7 @@ class ConnVpnStatus {
       companyHealthy: c is Map && c['healthy'] == true,
       autoLabel: a is Map ? '${a['label'] ?? ''}' : null,
       autoUser: a is Map ? a['user']?.toString() : null,
+      mainLabel: m is Map ? '${m['label'] ?? ''}' : null,
       profileSaved: p is Map && p['saved'] == true,
       profileHasAuth: p is Map && p['has_auth'] == true,
       profileError: p is Map ? p['last_error']?.toString() : null,

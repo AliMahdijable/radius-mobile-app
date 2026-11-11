@@ -11,6 +11,7 @@ const _v = SimVariant(390, dark: false);
 Map<String, dynamic> _status({
   Map<String, dynamic>? company,
   Map<String, dynamic>? auto,
+  Map<String, dynamic>? main,
   Map<String, dynamic>? profile,
   bool reverse = false,
   Map<String, dynamic>? lastTest,
@@ -20,6 +21,7 @@ Map<String, dynamic> _status({
       'data': {
         'company_tunnel': company,
         'auto_link': auto,
+        'main': main,
         'profile': profile,
         'reverse_enabled': reverse,
         'last_test': lastTest,
@@ -43,6 +45,19 @@ void main() {
     expect(none.sweepReachable, 3);
     final a = ConnVpnAnalysis.fromJson({'ok': true, 'errors': [], 'needs_auth': false, 'embedded_auth': true, 'needs_key_password': true, 'servers': 1});
     expect((a.needsKeyPassword, a.embeddedAuth), (true, true));
+  });
+
+  test('صفحةٌ تمرّ من VPN صفحتها الرئيسيّة: الفحص متاحٌ بلا ملفّ، وليست «ربطاً تلقائيّاً»؛ ملفّها هي أو نفق شركتها يغلبان', () {
+    ConnVpnStatus of(Map<String, dynamic> j) => ConnVpnStatus.fromJson(Map<String, dynamic>.from(j['data'] as Map));
+    final via = of(_status(auto: {'label': 'VPN-ALL', 'user': '@s'}, main: {'label': 'main100'}));
+    expect((via.viaMain, via.autoLinked, via.canTest, via.mainLabel), (true, false, true, 'main100'));
+    expect(via.remoteScan, false, reason: 'مفتاحها هي مطفأ — حالها تقوله الشاشة: «تمرّ من VPN صفحتك الرئيسيّة»');
+    final own = of(_status(main: {'label': 'main100'}, profile: {'saved': true, 'has_auth': true}));
+    expect((own.viaMain, own.profileSaved), (false, true));
+    final co = of(_status(main: {'label': 'main100'}, company: {'label': 'x', 'healthy': true}));
+    expect((co.viaMain, co.covered), (false, true));
+    expect(of(_status(auto: {'label': 'VPN-ALL', 'user': '@s'})).viaMain, false, reason: 'خادمٌ أقدم بلا الحقل ⇒ كما كان');
+    expect(of(_status(main: {'label': null})).viaMain, true, reason: 'بلا اسم ⇒ تمرّ منها والسطر بلا اسم');
   });
 
   group('الشاشة', () {
@@ -81,6 +96,33 @@ void main() {
       await t.pumpAndSettle();
       expect(find.textContaining('وصل 3 من 4'), findsOneWidget);
       expect(server.calls('GET', '/api/v2/conn-vpn/test/abc'), hasLength(1));
+      await simDrain(t);
+    });
+
+    testWidgets('صفحةٌ فرعيّة: «تمرّ من VPN صفحتك الرئيسيّة» باسمها، بلا «الاتصال العكسي» ولا «ربطك عبر…»، و«فحص الاتصال» يقول من أين مرّ', (t) async {
+      server.reply('GET', '/api/v2/conn-vpn/status', 200, _status(auto: {'label': 'سوبرنت الثالث (VPN-ALL)', 'user': '@s'}, main: {'label': 'main100'}));
+      server.reply('POST', '/api/v2/conn-vpn/test', 200, {'success': true, 'data': {'test_id': 'm1'}});
+      server.reply('GET', '/api/v2/conn-vpn/test/m1', 200, {
+        'success': true,
+        'data': {
+          'state': 'done',
+          'result': {'connected': true, 'via': 'main', 'message': 'اتّصل عبر VPN صفحتك الرئيسيّة «main100» ✓ — وصل 3 من 4 من مشتركيك، وقُرئ جهاز 2', 'at_ms': DateTime.now().millisecondsSinceEpoch},
+        },
+      });
+      await pumpSim(t, _v, home: (_) => const ConnVpnScreen());
+      await t.pumpAndSettle();
+      expect(find.textContaining('تمرّ من VPN صفحتك الرئيسيّة'), findsOneWidget);
+      expect(find.textContaining('main100'), findsOneWidget);
+      expect(find.textContaining('يمرّ من VPN صفحتك الرئيسيّة بلا ملفٍّ هنا'), findsOneWidget);
+      expect(find.textContaining('متاحٌ ربطك عبر'), findsNothing, reason: 'ليست ربطاً تلقائيّاً بيوزرها');
+      expect(find.text('الفحص الآن من موبايلك وأنت على شبكتك فقط'), findsNothing);
+      expect(find.byType(Switch), findsNothing, reason: 'الفحص التلقائيّ يتبع الرئيسيّة — لا مفتاح هنا');
+      expect(find.text('ارفع ملفّ VPN لهذه الصفحة (اختياريّ)'), findsOneWidget);
+      await t.tap(find.text('فحص الاتصال'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 3));
+      await t.pumpAndSettle();
+      expect(find.textContaining('اتّصل عبر VPN صفحتك الرئيسيّة'), findsOneWidget);
       await simDrain(t);
     });
 

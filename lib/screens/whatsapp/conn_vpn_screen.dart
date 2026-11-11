@@ -264,7 +264,9 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
     return [
       Text(
         'ملفٌّ واحد يفحص مشتركينك وأجهزتك وأنت خارج شبكتك — حين تضغط «فحص الآن» بقسم المشتركين أو الأجهزة. '
-        'وعلى شبكتك يفحص موبايلك بنفسه. وإن فعّلت «الاتصال العكسي» أدناه يقيس النظام وحده للتنبيهات كلّ نصف ساعة نهاراً وساعة ليلاً.',
+        'وعلى شبكتك يفحص موبايلك بنفسه.'
+        // صفحةٌ تمرّ من VPN رئيسيّتها لا مفتاح «اتصال عكسي» لها أدناه (يتبع الرئيسيّة)
+        '${st.viaMain ? '' : ' وإن فعّلت «الاتصال العكسي» أدناه يقيس النظام وحده للتنبيهات كلّ نصف ساعة نهاراً وساعة ليلاً.'}',
         style: AppType.muted(color: AppColors.textMid),
       ),
       const SizedBox(height: Sp.sm),
@@ -285,17 +287,22 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
           ),
       ]),
       const SizedBox(height: Sp.sm),
-      // ⛔ المالك ٤ نوفمبر: النظام يفحص من ربط VPN وفعّل «الاتصال العكسي» وحده — الحال بكلمةٍ واحدة
+      // ⛔ المالك ٤ نوفمبر: النظام يفحص من ربط VPN وفعّل «الاتصال العكسي» وحده — الحال بكلمةٍ واحدة.
+      // ١١ نوفمبر: صفحةٌ تمرّ من VPN صفحتها الرئيسيّة ⇒ حالها هذا (لا «من موبايلك فقط»)
       _box(
-        color: st.remoteScan ? AppColors.successSoftBg : null,
-        border: st.remoteScan ? AppColors.successSoftBorder : null,
+        color: st.remoteScan || st.viaMain ? AppColors.successSoftBg : null,
+        border: st.remoteScan || st.viaMain ? AppColors.successSoftBorder : null,
         child: Row(children: [
-          Icon(st.remoteScan ? LucideIcons.shieldCheck : LucideIcons.smartphone, size: 18,
-              color: st.remoteScan ? AppColors.success : AppColors.textMid),
+          Icon(st.remoteScan || st.viaMain ? LucideIcons.shieldCheck : LucideIcons.smartphone, size: 18,
+              color: st.remoteScan || st.viaMain ? AppColors.success : AppColors.textMid),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              st.remoteScan ? 'النظام يفحص شبكتك عبر الـVPN وأنت بعيد' : 'الفحص الآن من موبايلك وأنت على شبكتك فقط',
+              st.viaMain
+                  ? 'تمرّ من VPN صفحتك الرئيسيّة${st.mainLabel!.isEmpty ? '' : ' ${iso(st.mainLabel!)}'}'
+                  : st.remoteScan
+                      ? 'النظام يفحص شبكتك عبر الـVPN وأنت بعيد'
+                      : 'الفحص الآن من موبايلك وأنت على شبكتك فقط',
               style: AppType.bodyStrong(color: AppColors.textHi),
             ),
           ),
@@ -325,6 +332,13 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
           _note(
             text: 'متاحٌ ربطك عبر ${st.autoLabel} بحسابك ${iso(st.autoUser ?? '')} بلا ملف — جرّب «فحص الاتصال» ثمّ فعّل «الاتصال العكسي».',
             hint: 'يوزرك هناك مختلف؟ ارفع ملفّك بيوزرك وباسوردك.',
+          ),
+          const SizedBox(height: Sp.sm),
+        ],
+        if (st.viaMain && _analysis == null) ...[
+          _note(
+            text: 'فحص مشتركي هذه الصفحة وأجهزتها يمرّ من VPN صفحتك الرئيسيّة بلا ملفٍّ هنا، والفحص التلقائيّ وأنت بعيد يتبع «الاتصال العكسي» فيها.',
+            hint: 'شبكة هذه الصفحة غير شبكة الرئيسيّة؟ ارفع ملفّ VPN لها ويُستعمل هو.',
           ),
           const SizedBox(height: Sp.sm),
         ],
@@ -364,7 +378,11 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
             icon: _busy == 'analyze'
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(LucideIcons.upload, size: 18),
-            label: Text(st.autoLinked ? 'ارفع ملفّك بيوزرك (اختياريّ)' : 'ارفع ملفّ VPN (‎.ovpn)'),
+            label: Text(st.autoLinked
+                ? 'ارفع ملفّك بيوزرك (اختياريّ)'
+                : st.viaMain
+                    ? 'ارفع ملفّ VPN لهذه الصفحة (اختياريّ)'
+                    : 'ارفع ملفّ VPN (‎.ovpn)'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
         if (_analysis != null) ...[const SizedBox(height: Sp.sm), _analysisBox(_analysis!)],
@@ -390,24 +408,27 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
             ),
           ),
         ],
-        const SizedBox(height: Sp.md),
-        _box(
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('الاتصال العكسي عند الخروج من الشبكة', style: AppType.bodyStrong(color: AppColors.textHi)),
-                const SizedBox(height: 2),
-                Text('مفعّلاً: حين لا يقيس تطبيقك من شبكتك ٢٠ دقيقة، يقيس النظام عبر الـVPN. مطفأً: الفحص من موبايلك وأنت على شبكتك فقط.',
-                    style: AppType.micro(color: AppColors.textMid)),
-              ]),
-            ),
-            Switch.adaptive(
-              value: st.reverse,
-              activeTrackColor: AppColors.brand,
-              onChanged: _busy == null ? _reverse : null,
-            ),
-          ]),
-        ),
+        // صفحةٌ تمرّ من VPN رئيسيّتها: فحصها التلقائيّ يتبع «الاتصال العكسي» بالرئيسيّة — لا مفتاح هنا يوهم بغير ذلك
+        if (!st.viaMain) ...[
+          const SizedBox(height: Sp.md),
+          _box(
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('الاتصال العكسي عند الخروج من الشبكة', style: AppType.bodyStrong(color: AppColors.textHi)),
+                  const SizedBox(height: 2),
+                  Text('مفعّلاً: حين لا يقيس تطبيقك من شبكتك ٢٠ دقيقة، يقيس النظام عبر الـVPN. مطفأً: الفحص من موبايلك وأنت على شبكتك فقط.',
+                      style: AppType.micro(color: AppColors.textMid)),
+                ]),
+              ),
+              Switch.adaptive(
+                value: st.reverse,
+                activeTrackColor: AppColors.brand,
+                onChanged: _busy == null ? _reverse : null,
+              ),
+            ]),
+          ),
+        ],
         if (st.sweepAtMs != null) ...[
           const SizedBox(height: Sp.sm),
           Text(
