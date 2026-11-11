@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/payment_voids_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
@@ -191,7 +192,8 @@ class ReportLogTile extends StatelessWidget {
                 ],
                 const SizedBox(height: 3),
                 Text(
-                  description.isNotEmpty ? description : (targetName ?? '—'),
+                  // وسم الإلغاء الداخليّ (ملاحظة دفتر ايرث لنك) لا يُعرض
+                  description.isNotEmpty ? PaymentVoidsApi.cleanNote(description) : (targetName ?? '—'),
                   style: AppType.muted(color: AppColors.textMid)
                       .copyWith(fontSize: 11.5, height: 1.3),
                   maxLines: 2,
@@ -419,14 +421,28 @@ _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
       if (desc.startsWith('إلغاء بيع')) {
         return _ActionMeta('إنقاص دين (إلغاء بيع)', LucideIcons.undo2, _kPositive);
       }
+      // «إلغاء تسديد» في كشف دفتر ايرث لنك (١١ نوفمبر): حركة الإرجاع تُعرض «إضافة دين» بمبلغها ووصفها يبدأ باسمها.
+      if (desc.startsWith('إلغاء تسديد')) {
+        return _ActionMeta('إلغاء تسديد', LucideIcons.undo2, AppColors.error,
+            debit: true);
+      }
+      // «إلغاء تسديد» بالربط (١١ نوفمبر): الدين كان أُعيد يدويّاً بإضافة دين — سطر تسويته بمبلغٍ سالب يُسقط تلك الإضافة من
+      // «ديون جديدة» (دين المشترك نفسه لم يتغيّر).
+      if (desc.startsWith('تسوية إلغاء تسديد')) {
+        return _ActionMeta('تسوية إلغاء تسديد', LucideIcons.undo2, AppColors.textMid);
+      }
       // إضافة دين = سالب أحمر (مبلغ يزيد على المشترك، خسارة للمدير).
       return _ActionMeta('إضافة دين', LucideIcons.plus, AppColors.error,
           debit: true);
     case 'BALANCE_DEDUCT':
+    case 'DEBT_PAY':
+      // «إلغاء تسديد» (١١ نوفمبر): تسديدٌ بمبلغٍ سالب — رجع دينه وخرج مبلغه من الصندوق. سالبٌ أحمر.
+      if (amount < 0 || desc.startsWith('إلغاء تسديد')) {
+        return _ActionMeta('إلغاء تسديد', LucideIcons.undo2, AppColors.error,
+            debit: true);
+      }
       // BALANCE_DEDUCT + description "تسديد دين …" = تسديد دين فعلياً
       // (مطابق web _shared.tsx:520-522). لون موجب أخضر.
-      return _ActionMeta('تسديد دين', LucideIcons.banknote, _kPositive);
-    case 'DEBT_PAY':
       return _ActionMeta('تسديد دين', LucideIcons.banknote, _kPositive);
     case 'PAYMENT_ADD':
       return _ActionMeta('دفعة', LucideIcons.banknote, AppColors.success);

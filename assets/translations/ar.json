@@ -1457,7 +1457,14 @@
     "kind_purchase_void": "إلغاء شراء",
     "supplier_refund": "استرجاع من المورّد",
     "kind_supplier_refund": "استرجاع من المورّد",
-    "kind_supplier_refund_void": "إلغاء استرجاع"
+    "kind_supplier_refund_void": "إلغاء استرجاع",
+    "kind_debt_payment_void": "إلغاء تسديد",
+    "pay_void_done": "ملغى",
+    "pay_void_unknown": "بانتظار حسم",
+    "pay_void_pending": "قيد الإلغاء",
+    "pay_void_action": "إلغاء التسديد",
+    "pay_void_continue": "إكمال إلغاء التسديد",
+    "pay_void_locked": "إلغاء التسديد — لا صلاحيّة"
   },
   "archive": {
     "showing_current": "يُعرض ما بعد آخر تسوية (#{} · {}) — المسوّى محفوظ في الأرشيف.",

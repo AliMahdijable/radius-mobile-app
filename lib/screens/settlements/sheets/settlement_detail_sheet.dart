@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/company_route.dart';
+import '../../../api/payment_voids_api.dart';
 import '../../../api/settlements_api.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -14,18 +15,23 @@ import '../../../theme/typography.dart';
 import '../settle_widgets.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/print_feedback.dart';
+import '../../subscribers/sheets/payment_void_sheet.dart';
 
 /// سند التسوية: اللقطة، وحصص المنفّذين، والحركات، والطباعة، والإلغاء.
 /// يُرجع `true` حين أُلغي السجلّ (فتعيد الشاشة الحساب).
 ///
 /// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصندوق لحظة فتح السند (null = المفتوحة) — قراءته وإلغاؤه لها
 /// صراحةً مهما تبدّل تحته وهو مفتوح.
+///
+/// [onMoneyChanged] («إلغاء تسديد»، ١١ نوفمبر): تسديدٌ من حركات السند أُلغي — مبلغه خرج من **الحساب الحاليّ** (السند كما هو)،
+/// فتعيد الشاشة حسابه فوراً ولو بقي السند مفتوحاً أو أُغلق بالسحب.
 Future<bool?> showSettlementDetailSheet(
   BuildContext context, {
   required int id,
   required int? headId,
   required bool canVoid,
   required String? companyKey,
+  VoidCallback? onMoneyChanged,
 }) {
   return showAppSheet<bool>(
     context: context,
@@ -33,7 +39,13 @@ Future<bool?> showSettlementDetailSheet(
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => _DetailSheet(id: id, headId: headId, canVoid: canVoid, companyKey: companyKey),
+    builder: (_) => _DetailSheet(
+      id: id,
+      headId: headId,
+      canVoid: canVoid,
+      companyKey: companyKey,
+      onMoneyChanged: onMoneyChanged,
+    ),
   );
 }
 
@@ -43,11 +55,13 @@ class _DetailSheet extends StatefulWidget {
     required this.headId,
     required this.canVoid,
     required this.companyKey,
+    this.onMoneyChanged,
   });
   final int id;
   final int? headId;
   final bool canVoid;
   final String? companyKey;
+  final VoidCallback? onMoneyChanged;
 
   @override
   State<_DetailSheet> createState() => _DetailSheetState();
@@ -63,6 +77,10 @@ class _DetailSheetState extends State<_DetailSheet> {
   bool _movesMore = false;
   bool _printing = false;
   bool _voiding = false;
+
+  /// «إلغاء تسديد»: حال تسديدات حركات السند وهل يلغي هذا الفاعل — للشركة المفتوحة وحدها.
+  PaymentVoidStatus _voids = PaymentVoidStatus.off;
+  int _voidsGen = 0;
 
   @override
   void initState() {
@@ -103,6 +121,36 @@ class _DetailSheetState extends State<_DetailSheet> {
       _movesMore = r.hasMore;
       _movesLoading = false;
     });
+    _loadVoids(r.items);
+  }
+
+  Future<void> _loadVoids(List<BoxMovement> moves) async {
+    final gen = ++_voidsGen;
+    final ids = widget.companyKey != null
+        ? const <int>[]
+        : [
+            for (final m in moves)
+              if (m.paymentActivityId != null) m.paymentActivityId!,
+          ];
+    final st = ids.isEmpty ? PaymentVoidStatus.off : await PaymentVoidsApi.status(ids);
+    if (!mounted || gen != _voidsGen) return;
+    setState(() => _voids = st);
+  }
+
+  PaymentVoidAction _voidActionFor(BoxMovement m) {
+    if (widget.companyKey != null || (m.subscriber ?? '').isEmpty) return PaymentVoidAction.none;
+    return _voids.actionFor(m.paymentActivityId);
+  }
+
+  Future<void> _openVoid(BoxMovement m) async {
+    final id = m.paymentActivityId;
+    final sub = m.subscriber ?? '';
+    if (id == null || sub.isEmpty) return;
+    final changed = await showPaymentVoidSheet(context, paymentId: id, amount: m.amount, subscriber: sub);
+    if (!mounted) return;
+    // السند نفسه لا يتغيّر (الإلغاء يقع في الحساب الحاليّ): شارة التسديد هنا، والصندوق عند الشاشة
+    if (changed == true) widget.onMoneyChanged?.call();
+    _loadVoids(_moves);
   }
 
   Future<void> _print() async {
@@ -348,7 +396,13 @@ class _DetailSheetState extends State<_DetailSheet> {
                 child: Text('settle.no_moves_in_voucher'.tr(), style: AppType.muted()),
               )
             else ...[
-              for (final m in _moves) MovementTile(m: m),
+              for (final m in _moves)
+                MovementTile(
+                  m: m,
+                  voided: widget.companyKey == null ? _voids.of(m.paymentActivityId) : null,
+                  voidAction: _voidActionFor(m),
+                  onVoid: () => _openVoid(m),
+                ),
               if (_movesMore)
                 Padding(
                   padding: const EdgeInsets.all(Sp.md),

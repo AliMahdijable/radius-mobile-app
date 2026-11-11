@@ -456,6 +456,7 @@ class ElEmployeePerms {
     'subscribers.view_credentials',
     'subscribers.add_debt',
     'subscribers.pay_debt',
+    voidPaymentKey,
     'subscribers.add_credit',
     'subscribers.send_whatsapp',
     'subscribers.view_activity',
@@ -510,6 +511,7 @@ class ElEmployeePerms {
     'subscribers.extend',
     'subscribers.add_debt',
     'subscribers.pay_debt',
+    voidPaymentKey,
     'subscribers.send_whatsapp',
     'subscribers.view_activity',
     'packages.view',
@@ -590,6 +592,8 @@ class ElEmployeePerms {
     'deleted_debts.write_off',
     // إلغاء بيعٍ نقديّ — يُرجع مالاً من الصندوق، فيُمنح وحده (خارج «موظّف عام»).
     'sales.void',
+    // «إلغاء تسديد» (١١ نوفمبر) — يُرجع دين المشترك ويُخرج مبلغه من الصندوق، فيُمنح وحده (خارج «موظّف عام»).
+    voidPaymentKey,
     // «التذاكر» (٩ نوفمبر) — تُمنح وحدها (خارج «موظّف عام»).
     ...ticketKeys,
     // الفحصان (مفعّلان افتراضاً) وما عبر VPN والتنبيهات (٩ نوفمبر) — خارج الأدوار الجاهزة ([roleFreeKeys]).
@@ -654,8 +658,14 @@ class ElEmployeePerms {
   /// — ما خارجها يُرسَل `false` فيُطفئ المساعد عن الموظّف بصمت ([outgoing]).
   static const assistantKey = 'assistant.use';
 
+  /// «إلغاء تسديد دين» (١١ نوفمبر — المالك: «أعطيها صلاحيّة للمدير يخصّصها للموظّف أو لا»؛ الخادم `server/paymentVoids.js`):
+  /// الموظّف يلغي تسديداً سجّله هو فقط. مطفأٌ افتراضاً عند الخادم وخارج كلّ دورٍ جاهز ([presets])، وكتالوجه لا يعرضه حتى تُفتح
+  /// الميزة للحساب ([offered]). وفي قوائم الشركات الثلاث ليُرسَل كما اختاره المالك — ما خارجها لا يُرسل، والخادم يُبقيه على المحفوظ.
+  static const voidPaymentKey = 'subscribers.void_payment';
+
   /// ما يشمله المفتاح عند ايرث لنك ولا تقوله تسميته في الكتالوج.
   static const hints = <String, String>{
+    voidPaymentKey: 'تسديدٌ سجّله هو فقط — يرجع دين المشترك وينقص المبلغ من الصندوق',
     'subscribers.add': 'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
     'subscribers.toggle': 'يشمل قطع اتصال المشترك',
     'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',

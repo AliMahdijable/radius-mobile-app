@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/payment_voids_api.dart';
 import '../../api/settlements_api.dart';
 import '../../core/util/ar_date.dart';
 import '../../core/util/bidi.dart';
@@ -12,6 +13,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/payment_void_bits.dart';
 
 /// مبلغٌ بإشارته: `formatIQD` يُسقطها عمداً، والصندوق قد يكون سالباً.
 String settleMoney(num n) =>
@@ -114,9 +116,23 @@ class CollectorsList extends StatelessWidget {
 }
 
 /// حركةٌ في الصندوق: نقدٌ داخل أخضر، وصرفيةٌ خارجة حمراء.
+///
+/// «إلغاء تسديد» (١١ نوفمبر): حركة التسديد تحمل زرّ إلغائها ([voidAction] · [onVoid]) وشارة حالها ([voided] — «ملغى» بمبلغٍ
+/// مشطوب)، وحركة الإلغاء نفسها (`debt_payment_void`) خارجةٌ بمبلغها. بلا المعاملات الثلاثة السطر كما كان حرفاً.
 class MovementTile extends StatelessWidget {
-  const MovementTile({super.key, required this.m});
+  const MovementTile({
+    super.key,
+    required this.m,
+    this.voided,
+    this.voidAction = PaymentVoidAction.none,
+    this.onVoid,
+  });
   final BoxMovement m;
+
+  /// حال هذا التسديد في قيد الإلغاء — أو null.
+  final PaymentVoidItem? voided;
+  final PaymentVoidAction voidAction;
+  final VoidCallback? onVoid;
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +146,7 @@ class MovementTile extends StatelessWidget {
       'purchase' => LucideIcons.packagePlus,
       'purchase_void' => LucideIcons.undo2,
       'supplier_refund_void' => LucideIcons.undo2,
+      'debt_payment_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
@@ -141,6 +158,7 @@ class MovementTile extends StatelessWidget {
       'purchase_void' => 'settle.kind_purchase_void'.tr(),
       'supplier_refund' => 'settle.kind_supplier_refund'.tr(),
       'supplier_refund_void' => 'settle.kind_supplier_refund_void'.tr(),
+      'debt_payment_void' => 'settle.kind_debt_payment_void'.tr(),
       _ => 'settle.kind_debt_payment'.tr(),
     };
     // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
@@ -161,6 +179,24 @@ class MovementTile extends StatelessWidget {
         ? 'settle.manager'.tr()
         : (m.employeeName ?? m.employeeUsername ?? 'settle.employee'.tr());
     final written = m.expenseDate ?? '';
+    final v = voided;
+    final voidedDone = v != null && v.isDone;
+    final details = Text(
+      isoJoin([
+        kindLabel,
+        if ((m.packageName ?? '').isNotEmpty) m.packageName!,
+        // ما بيع (الوصف بلا بادئة «بيع:»/«إلغاء بيع:»).
+        if (isSale && (m.description ?? '').isNotEmpty)
+          m.description!.replaceFirst(RegExp(r'^(?:إلغاء بيع|بيع):\s*'), ''),
+        who,
+        settleWhen(m.createdAt),
+      ], ' · '),
+      style: AppType.muted(),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    // زرّ الفتح بلا معالجٍ لا يُعرض؛ والمقفل («لا صلاحيّة») لا يحتاج معالجاً.
+    final action = voidAction == PaymentVoidAction.open && onVoid == null ? PaymentVoidAction.none : voidAction;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -189,19 +225,16 @@ class MovementTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: Sp.xxs),
-                Text(
-                  isoJoin([
-                    kindLabel,
-                    if ((m.packageName ?? '').isNotEmpty) m.packageName!,
-                    // ما بيع (الوصف بلا بادئة «بيع:»/«إلغاء بيع:»).
-                    if (isSale && (m.description ?? '').isNotEmpty)
-                      m.description!.replaceFirst(RegExp(r'^(?:إلغاء بيع|بيع):\s*'), ''),
-                    who,
-                    settleWhen(m.createdAt),
-                  ], ' · '),
-                  style: AppType.muted(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // شارة الإلغاء أوّل سطر التفاصيل — لا سطر جديد ولا كرت يكبر، والاسم فوقها يبقى كاملاً بأضيق هاتف
+                // (التفاصيل هي التي تُختصر).
+                Row(
+                  children: [
+                    if (v != null) ...[
+                      PaymentVoidBadge(item: v),
+                      const SizedBox(width: Sp.x6),
+                    ],
+                    Expanded(child: details),
+                  ],
                 ),
                 if (m.backdated && written.isNotEmpty) ...[
                   const SizedBox(height: Sp.xs),
@@ -220,8 +253,22 @@ class MovementTile extends StatelessWidget {
           Text(
             '${m.isIn ? '+' : '−'}${formatIQD(m.amount)}',
             textDirection: TextDirection.ltr,
-            style: AppType.bodyBold(color: tone.fill),
+            // الملغى: مبلغه مشطوبٌ خافت — لم يعد في الصندوق (سطر إلغائه يُخرجه)
+            style: voidedDone
+                ? AppType.bodyBold(color: AppColors.textLow).copyWith(
+                    decoration: TextDecoration.lineThrough,
+                    decorationColor: AppColors.textLow,
+                  )
+                : AppType.bodyBold(color: tone.fill),
           ),
+          if (action != PaymentVoidAction.none) ...[
+            const SizedBox(width: Sp.xxs),
+            PaymentVoidRowButton(
+              action: action,
+              resume: v != null,
+              onOpen: onVoid ?? () {},
+            ),
+          ],
         ],
       ),
     );

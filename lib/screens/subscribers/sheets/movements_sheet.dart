@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../services/merged_mode.dart';
+import '../../../api/payment_voids_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
@@ -12,6 +13,8 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/server_time.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../widgets/payment_void_bits.dart';
+import 'payment_void_sheet.dart';
 
 /// Subscriber movements / account-statement sheet — direct port of
 /// v1's _SubscriberMovementsSheetContent from
@@ -26,6 +29,10 @@ import '../../../core/widgets/app_sheet.dart';
 /// Horizontally-scrollable filter chips at the top mirror v1: الكل /
 /// تفعيل / تمديد / تسديد / إضافة دين. Refresh icon retries the same
 /// fetch (no pagination — the window is wide enough by design).
+///
+/// «إلغاء تسديد» (١١ نوفمبر ٢٠٢٦): سطر التسديد يحمل زرّ إلغائه حين تُفتح الميزة للصفحة (والموظّف بلا صلاحيّتها يراه مقفلاً)،
+/// والملغى بشارته ومبلغه مشطوب، وسطر الإلغاء نفسه (تسديدٌ بمبلغٍ سالب: رجع دينه) باسمه «إلغاء تسديد» تحت فلتر الديون.
+/// مشتركٌ من شركةٍ أخرى في «كل الشركات» بلا زرّ — الخادم لا يوجّه الإلغاء.
 Future<void> showMovementsSheet(BuildContext context, Subscriber sub) {
   return showAppSheet(
     context: context,
@@ -50,6 +57,13 @@ class _MovementsSheetState extends State<_MovementsSheet> {
   String? _error;
   List<Map<String, dynamic>> _all = const [];
   String _typeFilter = 'all';
+
+  /// «إلغاء تسديد»: حال التسديدات المعروضة وهل يلغي هذا الفاعل.
+  PaymentVoidStatus _voids = PaymentVoidStatus.off;
+  int _voidsGen = 0;
+
+  /// الإلغاء للشركة المفتوحة وحدها: صفٌّ بمفتاح شركة («كل الشركات») كشفه موجَّهٌ لها، والخادم لا يوجّه الإلغاء.
+  bool get _voidHere => widget.sub.companyKey == null;
 
   @override
   void initState() {
@@ -77,14 +91,50 @@ class _MovementsSheetState extends State<_MovementsSheet> {
       }
       _loading = false;
     });
+    if (txs != null) _loadVoids(txs);
+  }
+
+  Future<void> _loadVoids(List<Map<String, dynamic>> txs) async {
+    final gen = ++_voidsGen;
+    final ids = <int>[
+      if (_voidHere)
+        for (final t in txs)
+          if (PaymentVoidsApi.paymentIdOf(t) != null) PaymentVoidsApi.paymentIdOf(t)!,
+    ];
+    final st = ids.isEmpty ? PaymentVoidStatus.off : await PaymentVoidsApi.status(ids);
+    if (!mounted || gen != _voidsGen) return;
+    setState(() => _voids = st);
+  }
+
+  Future<void> _openVoid(Map<String, dynamic> txn) async {
+    final id = PaymentVoidsApi.paymentIdOf(txn);
+    if (id == null || !_voidHere) return;
+    final changed = await showPaymentVoidSheet(
+      context,
+      paymentId: id,
+      amount: _MovementTile.readAmount(txn['amount']),
+      subscriber: widget.sub.username,
+    );
+    if (!mounted) return;
+    // أُلغي أو حُسم ⇒ الكشف من جديد (سطر الإلغاء والدين بعده)؛ وإلّا الحال وحده
+    if (changed == true) {
+      await _load();
+    } else {
+      _loadVoids(_all);
+    }
+  }
+
+  /// نوع الحركة للفلتر: إلغاء التسديد يعيد الدين فيُفرز مع «إضافة دين» لا مع «تسديد»؛ وDEBT_PAY (كشف الدفتر) تسديد.
+  static String _kindOf(Map<String, dynamic> t) {
+    final type = (t['action_type'] ?? '').toString().toUpperCase();
+    if (PaymentVoidsApi.isVoidRow(t)) return 'BALANCE_ADD';
+    if (type == 'DEBT_PAY') return 'BALANCE_DEDUCT';
+    return type;
   }
 
   List<Map<String, dynamic>> get _filtered {
     if (_typeFilter == 'all') return _all;
-    return _all
-        .where((t) =>
-            (t['action_type'] ?? '').toString().toUpperCase() == _typeFilter)
-        .toList();
+    return _all.where((t) => _kindOf(t) == _typeFilter).toList();
   }
 
   @override
@@ -187,7 +237,16 @@ class _MovementsSheetState extends State<_MovementsSheet> {
           if (i == 0) return _DateHeader(label: key);
           i--;
           final group = grouped[key]!;
-          if (i < group.length) return _MovementTile(txn: group[i]);
+          if (i < group.length) {
+            final t = group[i];
+            final pid = _voidHere ? PaymentVoidsApi.paymentIdOf(t) : null;
+            return _MovementTile(
+              txn: t,
+              voided: _voids.of(pid),
+              voidAction: _voids.actionFor(pid),
+              onVoid: () => _openVoid(t),
+            );
+          }
           i -= group.length;
         }
         return const SizedBox.shrink();
@@ -403,19 +462,34 @@ class _DateHeader extends StatelessWidget {
 }
 
 class _MovementTile extends StatelessWidget {
-  const _MovementTile({required this.txn});
+  const _MovementTile({
+    required this.txn,
+    this.voided,
+    this.voidAction = PaymentVoidAction.none,
+    this.onVoid,
+  });
   final Map<String, dynamic> txn;
+
+  /// حال هذا التسديد في قيد الإلغاء («ملغى» · «بانتظار حسم») — أو null.
+  final PaymentVoidItem? voided;
+
+  /// زرّ «إلغاء التسديد»: يفتح النافذة · مقفلٌ لموظّفٍ بلا صلاحيّة · لا زرّ.
+  final PaymentVoidAction voidAction;
+  final VoidCallback? onVoid;
+
+  /// أقلّ عرضٍ لسطر النوع يتّسع فيه الوقت مع شارة الإلغاء (النوع ~٦٦ + أطول شارة ~٧٤ + الوقت ~٣٤ وفواصلها).
+  static const double _timeWithBadgeMin = 190;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final type = (txn['action_type'] ?? '').toString().toUpperCase();
-    final desc =
-        (txn['description'] ?? txn['action_description'] ?? '').toString();
+    final desc = PaymentVoidsApi.cleanNote(
+        (txn['description'] ?? txn['action_description'] ?? '').toString());
     final admin = (txn['admin_name'] ?? txn['admin_username'] ?? '').toString();
     final createdAt = txn['created_at']?.toString() ?? '';
     final rawAmt = txn['amount'];
-    final amount = _readAmount(rawAmt);
+    final amount = readAmount(rawAmt);
 
     // 🐛 بلاغ ٢٠٢٦-٠٩-٠٤: «من أسدّد دين أو أفعّل ما يطلع لي الدين
     // الباقي وراء الحركة».
@@ -426,11 +500,22 @@ class _MovementTile extends StatelessWidget {
     //
     // ⚠️ و`null` ليس صفراً: سجلٌّ قديم بلا القيمة يجب أن **يُخفي**
     // السطر لا أن يعرض «الدين: 0» — وهو رقمٌ يكذب.
+    //
+    // 🐛 ١١ نوفمبر: كانت تُقرأ بـ`readAmount` وهو يُسقط الإشارة — فالدين (سالبٌ عند الخادم) يظهر «رصيد دائن» أخضر، وسطر
+    // «إلغاء تسديد» يقول عكس ما جرى. الرصيد **موقَّع**: سالبٌ = دينٌ عليه.
     final rawBalance = txn['balance_after'];
-    final double? balanceAfter =
-        rawBalance == null ? null : _readAmount(rawBalance);
+    final double? balanceAfter = rawBalance == null ? null : _readSigned(rawBalance);
 
-    final (icon, color, label) = _visualFor(type, desc);
+    final (icon, color, label) = _visualFor(
+      type,
+      desc,
+      isVoid: PaymentVoidsApi.isVoidRow(txn),
+      negative: (_readSigned(rawAmt) ?? 0) < 0,
+    );
+    final v = voided;
+    final voidedDone = v != null && v.isDone;
+    // زرّ الفتح بلا معالجٍ لا يُعرض؛ والمقفل («لا صلاحيّة») لا يحتاج معالجاً.
+    final action = voidAction == PaymentVoidAction.open && onVoid == null ? PaymentVoidAction.none : voidAction;
 
     // ⚠️ نفس السبب: UTC عارٍ يُقرأ محلّيّاً فيتأخّر ثلاث ساعات.
     final dt = parseServerUtc(createdAt);
@@ -438,7 +523,7 @@ class _MovementTile extends StatelessWidget {
         ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
         : '';
 
-    return Container(
+    final card = Container(
       margin: const EdgeInsets.only(bottom: 6),
       // Bottom padding generous (12) so Arabic descenders (ع، ج، ق)
       // in the description text don't get clipped by the card border.
@@ -469,40 +554,63 @@ class _MovementTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.sm),
-                      ),
-                      child: Text(
-                        label,
-                        style: AppType.label(color: color).copyWith(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
+                    // النوع وشارة الإلغاء والوقت في ما يتّسع: حين يضيق (أضيق هاتف + شارة) يُسقَط الوقت أوّلاً — الشارة
+                    // تقول حال المال والوقت لا — وما بقي يضيق ولا يفيض.
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, box) => Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(R.sm),
+                              ),
+                              child: Text(
+                                label,
+                                style: AppType.label(color: color).copyWith(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (v != null) ...[
+                              const SizedBox(width: 4),
+                              Flexible(child: PaymentVoidBadge(item: v)),
+                            ],
+                            if (timeStr.isNotEmpty && (v == null || box.maxWidth >= _timeWithBadgeMin)) ...[
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  timeStr,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.fade,
+                                  style: AppType.muted(color: AppColors.textLow).copyWith(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
-                    if (timeStr.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        timeStr,
-                        style: AppType.muted(color: AppColors.textLow).copyWith(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
                     if (amount != 0)
                       Text(
                         '${formatIQD(amount.round())} د.ع',
-                        style: AppType.label(color: color).copyWith(
+                        // الملغى: مبلغه مشطوبٌ خافت — سطر إلغائه أعاد دينه
+                        style: AppType.label(color: voidedDone ? AppColors.textLow : color).copyWith(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
+                          decoration: voidedDone ? TextDecoration.lineThrough : null,
+                          decorationColor: voidedDone ? AppColors.textLow : null,
                         ),
                       ),
+                    // مكان زرّ الإلغاء (يُرسم فوق الكرت — انظر آخر build): فراغٌ بعرضه فلا يغطّي المبلغ
+                    if (action != PaymentVoidAction.none) const SizedBox(width: 26),
                   ],
                 ),
                 if (desc.isNotEmpty) ...[
@@ -584,9 +692,34 @@ class _MovementTile extends StatelessWidget {
         ],
       ),
     );
+    if (action == PaymentVoidAction.none) return card;
+    // الزرّ فوق الكرت بمحاذاة سطره الأوّل: مساحة لمسٍ ٣٢ بلا أن يكبر الكرت (سطر النوع أقصر منها).
+    return Stack(
+      children: [
+        card,
+        PositionedDirectional(
+          top: 3,
+          end: 5,
+          child: PaymentVoidRowButton(
+            action: action,
+            resume: v != null,
+            onOpen: onVoid ?? () {},
+          ),
+        ),
+      ],
+    );
   }
 
-  static (IconData, Color, String) _visualFor(String type, String desc) {
+  static (IconData, Color, String) _visualFor(
+    String type,
+    String desc, {
+    bool isVoid = false,
+    bool negative = false,
+  }) {
+    // «إلغاء تسديد»: تسديدٌ بمبلغٍ سالب (أو معلَّمٌ من دفتر ايرث لنك) — رجع دينه.
+    if (isVoid) return (LucideIcons.undo2, AppColors.error, 'إلغاء تسديد');
+    // «إضافة دين» بمبلغٍ سالب تُنقص الدين (إلغاء بيعٍ على الدين، إضافة رصيد، تسوية إلغاء تسديد).
+    if (type == 'BALANCE_ADD' && negative) return (LucideIcons.minus, AppColors.success, 'إنقاص دين');
     switch (type) {
       case 'SUBSCRIBER_ACTIVATE':
         // Cash vs non-cash differs in the description text only.
@@ -610,11 +743,14 @@ class _MovementTile extends StatelessWidget {
     }
   }
 
-  static double _readAmount(dynamic raw) {
-    if (raw == null) return 0;
-    if (raw is num) return raw.toDouble().abs();
+  /// مبلغ الحركة **بلا إشارته** — العرض يسمّي الاتّجاه بنوع الحركة لا بالسالب.
+  static double readAmount(dynamic raw) => _readSigned(raw)?.abs() ?? 0;
+
+  /// القيمة بإشارتها — للرصيد بعد الحركة (سالبٌ = دين) ولتمييز المبلغ السالب. null إن لم تُقرأ.
+  static double? _readSigned(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is num) return raw.toDouble();
     final s = raw.toString().replaceAll(RegExp(r'[^0-9.\-]'), '');
-    final v = double.tryParse(s);
-    return v?.abs() ?? 0;
+    return double.tryParse(s);
   }
 }

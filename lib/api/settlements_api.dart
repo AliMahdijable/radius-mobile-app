@@ -389,6 +389,7 @@ class BoxMovement {
     required this.employeeId,
     required this.employeeUsername,
     required this.employeeName,
+    this.paymentActivityId,
   });
 
   final String source;
@@ -396,7 +397,8 @@ class BoxMovement {
 
   /// `cash_activation` · `debt_payment` · `expense` · `sale` (بيع مواد — داخل) ·
   /// `sale_void` (إلغاء بيع — إرجاع المبلغ، خارج) · `purchase` (شراء مخزونٍ من الصندوق —
-  /// خارج) · `purchase_void` (إلغاؤه — يعود، داخل)
+  /// خارج) · `purchase_void` (إلغاؤه — يعود، داخل) · `debt_payment_void` («إلغاء تسديد» —
+  /// تسديدٌ أُلغي فخرج مبلغه من الصندوق باسم من استلمه، ١١ نوفمبر)
   final String kind;
   final bool isIn;
   final num amount;
@@ -413,6 +415,10 @@ class BoxMovement {
   final int? employeeId;
   final String? employeeUsername;
   final String? employeeName;
+
+  /// رقم سطر التسديد في السجلّ — لزرّ «إلغاء التسديد». الخادم يرسله لحركات `debt_payment` وحدها (عند ايرث لنك أرقام
+  /// الحركات أرقام دفتر، فهذا الحقل لا [id] هو ما يُلغى به).
+  final int? paymentActivityId;
 
   static BoxMovement? fromJson(Map<String, dynamic> j) {
     final id = _intOrNull(j['id']);
@@ -432,7 +438,15 @@ class BoxMovement {
       employeeId: _intOrNull(j['employee_id']),
       employeeUsername: _str(j['employee_username']),
       employeeName: _str(j['employee_name']),
+      paymentActivityId: _paymentId(j),
     );
+  }
+
+  /// رقمٌ موجب لحركة تسديدٍ وحدها — وإلّا null (لا زرّ).
+  static int? _paymentId(Map<String, dynamic> j) {
+    if (j['kind']?.toString() != 'debt_payment') return null;
+    final id = _intOrNull(j['payment_activity_id']);
+    return id != null && id > 0 ? id : null;
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/company_route.dart';
+import '../../api/payment_voids_api.dart';
 import '../../api/settlements_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
@@ -15,6 +16,7 @@ import '../../theme/typography.dart';
 import 'settle_widgets.dart';
 import 'sheets/settle_sheet.dart';
 import 'sheets/settlement_detail_sheet.dart';
+import '../subscribers/sheets/payment_void_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../widgets/merged_section.dart';
 import '../../services/merged_text.dart';
@@ -53,6 +55,13 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   int _movesLimit = 100;
   List<SettlementRecord> _history = const [];
   int _historyTotal = 0;
+
+  /// «إلغاء تسديد» (١١ نوفمبر): حال تسديدات الحركات المعروضة وهل يلغي هذا الفاعل — للشركة المفتوحة وحدها (الخادم لا يوجّه
+  /// الإلغاء في «كل الشركات»، فقسمٌ يعرض شركةً أخرى بلا زرّ ولا شارة).
+  PaymentVoidStatus _voids = PaymentVoidStatus.off;
+
+  /// عدّاد طلبات الحال: ردٌّ متأخّرٌ لقائمةٍ سابقة يُهمَل.
+  int _voidsGen = 0;
 
   /// سبب خلوّ السجلّ أو الحركات — إن كان منعاً أو عطلاً لا فراغاً.
   ///
@@ -152,6 +161,41 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       _historyMsg = histMsg;
       _movesMsg = movMsg;
     });
+    _loadVoids(moves, key);
+  }
+
+  /// حال تسديدات [moves] — بلا تسديداتٍ أو لشركةٍ موجَّهة ⇒ مطفأة (لا نداء).
+  Future<void> _loadVoids(List<BoxMovement> moves, String? key) async {
+    final gen = ++_voidsGen;
+    final ids = key != null
+        ? const <int>[]
+        : [
+            for (final m in moves)
+              if (m.paymentActivityId != null) m.paymentActivityId!,
+          ];
+    final st = ids.isEmpty ? PaymentVoidStatus.off : await PaymentVoidsApi.status(ids);
+    if (!mounted || gen != _voidsGen) return;
+    setState(() => _voids = st);
+  }
+
+  /// زرّ «إلغاء التسديد» على حركة: للشركة المفتوحة، ولتسديدٍ يحمل رقم سطره ومشتركه.
+  PaymentVoidAction _voidActionFor(BoxMovement m) {
+    if (_companyKey != null || (m.subscriber ?? '').isEmpty) return PaymentVoidAction.none;
+    return _voids.actionFor(m.paymentActivityId);
+  }
+
+  Future<void> _openVoid(BoxMovement m) async {
+    final id = m.paymentActivityId;
+    final sub = m.subscriber ?? '';
+    if (id == null || sub.isEmpty) return;
+    final changed = await showPaymentVoidSheet(context, paymentId: id, amount: m.amount, subscriber: sub);
+    if (!mounted) return;
+    // أُلغي أو حُسم ⇒ الصندوق وحركاته من جديد؛ وإلّا الحال وحده (قد يكون صار «بانتظار حسم»)
+    if (changed == true) {
+      await _load();
+    } else {
+      _loadVoids(_moves, _companyKey);
+    }
   }
 
   Future<void> _moreMoves() async {
@@ -167,6 +211,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       _movesMore = m.hasMore;
       _movesLoading = false;
     });
+    _loadVoids(m.items, _companyKey);
   }
 
   /// معاينة البداية — طلبٌ لكلّ قيمةٍ جديدة. النتيجة السابقة تبقى
@@ -276,6 +321,10 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       headId: (cur != null && cur.started) ? cur.head?.id : null,
       canVoid: (cur?.canVoid ?? false) && !_locked,
       companyKey: _companyKey,
+      // تسديدٌ من حركات السند أُلغي ⇒ الحساب الحاليّ يتغيّر الآن
+      onMoneyChanged: () {
+        if (mounted) _load();
+      },
     );
     if (changed == true && mounted) _load();
   }
@@ -436,7 +485,13 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                       : AppType.muted(color: AppTone.danger.fill),
                 ),
               ),
-            for (final m in _moves) MovementTile(m: m),
+            for (final m in _moves)
+              MovementTile(
+                m: m,
+                voided: _companyKey == null ? _voids.of(m.paymentActivityId) : null,
+                voidAction: _voidActionFor(m),
+                onVoid: () => _openVoid(m),
+              ),
             if (_movesMore)
               Padding(
                 padding: const EdgeInsets.all(Sp.sm),
