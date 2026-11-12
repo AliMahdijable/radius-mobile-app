@@ -1744,9 +1744,16 @@ class DeviceProbeApi {
     effectiveIp = slotTarget.ip;
     cfg = slotTarget.cfg;
     if (effectiveIp.isEmpty) return null;
-    final won = _tplinkWinner[_k(company, effectiveIp)];
+    final key = _k(company, effectiveIp);
+    final won = _tplinkWinner[key];
     if (won != null) return (ip: effectiveIp, user: won.username, pass: won.password);
-    final cands = candidatesFor(cfg, await _loadAdminDefaults(company)).tplink;
+    // 🐛 ١٢ نوفمبر: بلا فائزٍ في هذا التشغيل (فتحٌ من الكاش قبل أن يكمل الفحص) كان الاحتياط قائمة TP-Link (يوزر وباسورد) دائماً —
+    // وراوترات كلمة السرّ وحدها (Tenda · C64/C80 · AX53) قائمتها «راوتر»، فالنبضة والواي فاي يقولان «لا كلمة سرّ» حتى فحصٍ جديد.
+    final c = candidatesFor(cfg, await _loadAdminDefaults(company));
+    final cands = switch (_radioVendorByKey[key] ?? _snapCache[key]?.snap?.ubnt?.vendor) {
+      'tenda' || 'tpmer' || 'tpagile' => c.tprouter,
+      _ => c.tplink,
+    };
     if (cands.isEmpty) return null;
     return (ip: effectiveIp, user: cands.first.username, pass: cands.first.password);
   }
