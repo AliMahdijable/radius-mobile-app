@@ -19,12 +19,16 @@ typedef RouterCreds = ({String ip, String user, String pass});
 /// القراءة دخولٌ على الراوتر لا تجري مع كلّ فتحٍ للكرت. لكلّ شبكة: الاسم وكلمة السرّ (مخفيّةٌ حتى تُكشف، وتُنسخ)، و«تغيير كلمة السرّ»
 /// بتأكيدٍ صريح (الأجهزة المتّصلة تنقطع وتحتاج الكلمة الجديدة). صلاحيّة «إدارة الأجهزة» — بلاها يبقى السطر مقفلاً لا مخفيّاً.
 class RouterWifiPanel extends StatefulWidget {
-  const RouterWifiPanel({super.key, required this.vendor, required this.creds, this.onBusy});
+  const RouterWifiPanel({super.key, required this.vendor, required this.creds, this.onBusy, this.onRebooted});
 
   final String vendor;
 
-  /// قبل كلّ عمليّة (true) وبعدها (false): الكرت يوقف نبضته الحيّة — دخولٌ آخر على راوترٍ بجلسةٍ واحدة يُسقط جلستها.
-  final void Function(bool busy)? onBusy;
+  /// قبل كلّ عمليّة (true — تُنتظر: النبضة الجارية تكمل والجلسة الحيّة تُغلق) وبعدها (false): دخولٌ آخر على راوترٍ بجلسةٍ واحدة
+  /// يُسقط جلستها.
+  final Future<void> Function(bool busy)? onBusy;
+
+  /// أُرسل أمر الإقلاع بعد تغيير كلمة السرّ: الكرت لا يطرق الراوتر وهو يقلع.
+  final VoidCallback? onRebooted;
 
   /// الاعتماد الذي دخل به الفحص على هذا الراوتر (أو null حين لا اعتماد).
   final Future<RouterCreds?> Function() creds;
@@ -49,11 +53,11 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       _busy = true;
       _error = null;
     });
-    widget.onBusy?.call(true);
+    await widget.onBusy?.call(true);
     try {
       await _loadInner();
     } finally {
-      widget.onBusy?.call(false);
+      await widget.onBusy?.call(false);
     }
   }
 
@@ -99,11 +103,12 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
     if (list == null) return;
     final next = await showDialog<String>(context: context, builder: (_) => _ChangeWifiDialog(networks: list));
     if (next == null || !mounted) return;
-    widget.onBusy?.call(true);
+    setState(() => _busy = true);
+    await widget.onBusy?.call(true);
     try {
       await _changeInner(next);
     } finally {
-      widget.onBusy?.call(false);
+      await widget.onBusy?.call(false);
     }
   }
 
@@ -144,6 +149,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       if (now == true && mounted) {
         setState(() => _busy = true);
         final rb = await RouterOps.reboot(widget.vendor, c.ip, c.user, c.pass);
+        if (rb.ok) widget.onRebooted?.call();
         if (!mounted) return;
         setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -1,6 +1,7 @@
 // راوتر TP-Link الكلاسيكيّ بالفيرموير الأحدث (TL-WR940N v6، 3.18.1 Build 171030 — قِيس حيّاً ١٢ نوفمبر بدخولٍ واحد): صفحة دخولٍ
 // 200 بـhttpAutErrorArray (3 جاهز · 2 خطأ · 1 مقفل · 0 مديرٌ آخر)، كوكي Authorization (MD5)، التوكن في المسار، مديرٌ واحد ⇒ خروجٌ
 // دائماً، statistList نصوصٌ بفواصل، وhostList خمسة حقول. راوترٌ وهميّ محلّيّ بهذه القواعد (أسماءٌ وماكاتٌ وهميّة).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -11,6 +12,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/device_probe_api.dart';
+import 'package:rad_mysvcs/core/net/router_types.dart';
 import 'package:rad_mysvcs/core/net/tplink_classic_service.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,6 +69,20 @@ var DHCPDynPara = new Array(
 3, 4, 0, 0 );
 </SCRIPT>''';
 
+// صفحة WlanSecurityRpm بشكلها الحيّ (قيمٌ وهميّة).
+const _secPage = '''<SCRIPT language="javascript" type="text/javascript">
+var wlanPara = new Array(
+8, 1, 3, "332", 1, 0, "", 1812, "", "fake-pass-1", 1, 0, 0, 1, 3, 0, 0, 0, 6, 0, 1, "", 0, 0, 0 );
+</SCRIPT>
+<SCRIPT language="javascript" type="text/javascript">
+var wlanList = new Array(
+"", 0, "", 0, "", 0, "", 0, 0, 0 );
+</SCRIPT>
+<SCRIPT language="javascript" type="text/javascript">
+var ssidList = new Array(
+"Fake-WR940", 0, 0 );
+</SCRIPT>''';
+
 /// راوترٌ وهميّ بقواعد WR940N v6 المقيسة.
 class _FakeWr940 {
   late HttpServer server;
@@ -81,6 +97,11 @@ class _FakeWr940 {
   int logins = 0;
   int logouts = 0;
   bool failStatus = false;
+  Duration delay = Duration.zero; // بطء الردّ — يجعل عمليّتين متزامنتين تتداخلان كما على الشبكة
+  bool noTokenOnce = false; // الدخول التالي يعود بلا توكن ولا سبب (حيّاً: دخولٌ سريع بعد خروج)
+  bool kickNextSecurity = false; // صفحة الأمان التالية: الجلسة سقطت (سكربت الخروج)
+  int refused = 0; // دخولٌ رُدّ لأنّ جلسةً مفتوحة
+  int reboots = 0;
   final paths = <String>[];
   final referers = <String?>[];
   final _rnd = Random(7);
@@ -107,6 +128,7 @@ class _FakeWr940 {
       final path = req.uri.path;
       paths.add(path);
       referers.add(req.headers.value(HttpHeaders.refererHeader));
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
       final res = req.response..headers.set('Server', 'Router Webserver');
       if (path == '/') {
         res.headers.set(HttpHeaders.wwwAuthenticateHeader, 'Basic realm="$_realm"');
@@ -114,11 +136,15 @@ class _FakeWr940 {
       } else if (path == '/userRpm/LoginRpm.htm') {
         logins++;
         if (locked || otherAdmin || token != null) {
+          if (token != null) refused++;
           res.write(_loginPage(state, host));
         } else if (_cookieAuth(req) != _expectedCookie()) {
           wrong++;
           lastWrong = true;
           res.write(_loginPage(locked ? 1 : 2, host));
+        } else if (noTokenOnce) {
+          noTokenOnce = false;
+          res.write('<HTML><BODY>login</BODY></HTML>');
         } else {
           lastWrong = false;
           token = String.fromCharCodes(List.generate(16, (_) => 65 + _rnd.nextInt(26)));
@@ -138,8 +164,18 @@ class _FakeWr940 {
             res.write('<HTML><BODY>bye</BODY></HTML>');
           } else if (page == '/userRpm/StatusRpm.htm' && failStatus) {
             res.statusCode = 500;
+          } else if (page == '/userRpm/WlanSecurityRpm.htm' && kickNextSecurity) {
+            kickNextSecurity = false;
+            token = null;
+            res.write('<script language="javaScript">document.cookie="Authorization=;path=/";</script>');
+          } else if (page == '/userRpm/SysRebootRpm.htm' && req.uri.queryParameters['Reboot'] == 'Reboot') {
+            reboots++;
+            token = null;
+            // ردّ صفحة الإقلاع غير مقيس — قد يمسح الكوكي: لا يُحكم منه بـ«لم يُنفَّذ»
+            res.write('<script language="javaScript">document.cookie="Authorization=;path=/";</script>Restarting');
           } else {
             res.write(switch (page) {
+              '/userRpm/WlanSecurityRpm.htm' => _secPage,
               '/userRpm/StatusRpm.htm' => _statusPage(rx, tx),
               '/userRpm/WlanStationRpm.htm' => _wlanPage,
               '/userRpm/AssignedIpAddrListRpm.htm' => _dhcpPage,
@@ -290,6 +326,80 @@ void main() {
       d.failStatus = true;
       expect(await TplinkClassicService.readOnce(d.host, 'admin', '9999'), isNull);
       expect([d.logins, d.logouts, d.token], [1, 1, null]);
+    });
+  });
+
+  // حيّاً ١٢ نوفمبر (WR940N saidnaser، هاتف المالك): «كلمة سرّ الواي فاي» ⇒ «الراوتر ما قبل الأمر» ونبضة الترافيك تدور — نبضةٌ
+  // بدأت قبل القراءة خرجت وسطها فأسقطت جلستها (مديرٌ واحد).
+  group('مديرٌ واحد: العمليّات بالدور وإعادةٌ مرّة', () {
+    late _FakeWr940 d;
+    setUp(() async {
+      TplinkClassicService.reset();
+      final pause = TplinkClassicService.retryPause;
+      final relogin = TplinkClassicService.reloginPause;
+      TplinkClassicService.retryPause = () => const Duration(milliseconds: 80);
+      TplinkClassicService.reloginPause = () => Duration.zero;
+      addTearDown(() {
+        TplinkClassicService.retryPause = pause;
+        TplinkClassicService.reloginPause = relogin;
+      });
+      d = _FakeWr940()..delay = const Duration(milliseconds: 15);
+      await d.start();
+      await TplinkClassicService.detect(d.host);
+    });
+    tearDown(() => d.stop());
+
+    test('نبضة الكرت وقراءة الواي فاي باللحظة نفسها ⇒ كلتاهما تنجح، جلسةً بعد جلسة (لا دخول يُردّ)', () async {
+      final both = await Future.wait<Object?>([
+        TplinkClassicService.pulse(d.host, 'admin', '9999', clients: true),
+        TplinkClassicService.readWifi(d.host, 'admin', '9999'),
+        TplinkClassicService.pulse(d.host, 'admin', '9999'),
+      ]);
+      final p1 = both[0] as ({TpClassicLive? live, int? clients});
+      final w = both[1] as RouterResult<List<RouterWifi>>;
+      final p2 = both[2] as ({TpClassicLive? live, int? clients});
+      expect([p1.live != null, p1.clients, p2.live != null], [true, 1, true]);
+      expect(w.ok, isTrue);
+      expect(w.value!.single.ssid, 'Fake-WR940');
+      expect(d.refused, 0, reason: 'لا دخول وجلسةٌ مفتوحة');
+      expect([d.logins, d.logouts, d.token], [3, 3, null]);
+    });
+
+    test('دخولٌ بلا توكن ولا سبب ⇒ دخولٌ ثانٍ مرّة فينجح، وعدّاد القفل لا يزيد', () async {
+      d.noTokenOnce = true;
+      final w = await TplinkClassicService.readWifi(d.host, 'admin', '9999');
+      expect(w.ok, isTrue);
+      expect([d.logins, d.logouts, d.wrong], [2, 1, 0]);
+    });
+
+    test('مديرٌ آخر داخل لحظتها ⇒ لا دخول، ثمّ إعادةٌ بعد مهلةٍ تنجح حين خرج؛ وإن بقي ⇒ «مشغول» بلا دخول', () async {
+      d.otherAdmin = true;
+      Timer(const Duration(milliseconds: 40), () => d.otherAdmin = false);
+      final w = await TplinkClassicService.readWifi(d.host, 'admin', '9999');
+      expect(w.ok, isTrue);
+      expect(d.logins, 1);
+      d.otherAdmin = true;
+      final busy = await TplinkClassicService.readWifi(d.host, 'admin', '9999');
+      expect(busy.fail, RouterFail.busy);
+      expect(d.logins, 1, reason: 'لا نطرد من يعمل على الراوتر');
+    });
+
+    test('جلسةٌ سقطت وسط القراءة (سكربت الخروج) ⇒ إعادةٌ مرّة تنجح', () async {
+      d.kickNextSecurity = true;
+      final w = await TplinkClassicService.readWifi(d.host, 'admin', '9999');
+      expect(w.ok, isTrue);
+      expect(d.logins, 2);
+    });
+
+    test('إعادة التشغيل: «مشغول» قبل الدخول ⇒ تُعاد؛ وما بعد الإرسال لا يُعاد أبداً ولو مسح الردّ الكوكي', () async {
+      d.otherAdmin = true;
+      Timer(const Duration(milliseconds: 40), () => d.otherAdmin = false);
+      final r = await TplinkClassicService.reboot(d.host, 'admin', '9999');
+      expect(r.ok, isTrue);
+      expect(d.reboots, 1);
+      final again = await TplinkClassicService.reboot(d.host, 'admin', '9999');
+      expect(again.ok, isTrue);
+      expect(d.reboots, 2, reason: 'كلّ طلبٍ إقلاعٌ واحد — لا إعادة بعد الإرسال');
     });
   });
 

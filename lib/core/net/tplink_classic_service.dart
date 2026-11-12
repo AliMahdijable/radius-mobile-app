@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart' show visibleForTesting;
@@ -390,6 +391,35 @@ class TplinkClassicService {
   /// الفيرموير الأحدث لكلّ عنوان (عُرف بالتعرّف أو بقراءة): MD5 كلمة السرّ؟ — النبضة الحيّة تدخل بالكوكي بلا طلب الحالة أوّلاً.
   static final _cookieHosts = <String, bool>{};
 
+  /// جلسات الفيرموير الأحدث لكلّ عنوانٍ واحدةً بعد واحدة داخل التطبيق: مديرٌ واحد على الراوتر، وكلّ عمليّة (نبضة الكرت، الفحص،
+  /// الواي فاي، إعادة التشغيل) تدخل وتخرج — خروج إحداها وسط الأخرى يُسقطها (حيّاً ١٢ نوفمبر على WR940N: «كلمة سرّ الواي فاي»
+  /// ⇒ «الراوتر ما قبل الأمر» ونبضة الترافيك تدور). كقفل Pharos.
+  static final _locks = <String, Future<void>>{};
+
+  static Future<T> _serial<T>(String host, Future<T> Function() fn) {
+    final prev = _locks[host] ?? Future<void>.value();
+    final done = Completer<void>();
+    _locks[host] = done.future;
+    return prev.then((_) => fn()).whenComplete(() {
+      done.complete();
+      if (identical(_locks[host], done.future)) _locks.remove(host);
+    });
+  }
+
+  static final _rng = math.Random();
+
+  /// مهلة ما قبل إعادة عمليّةٍ زاحمها مديرٌ آخر (هاتفٌ ثانٍ تنبض بطاقته على الراوتر نفسه: دخولٌ وخروج كلّ ثلاث ثوانٍ) —
+  /// عشوائيّةٌ قصيرة تكسر التناوب.
+  @visibleForTesting
+  static Duration Function() retryPause = () => Duration(milliseconds: 1200 + _rng.nextInt(800));
+
+  /// مهلة ما قبل دخولٍ ثانٍ حين يعود الأوّل بلا توكن ولا سبب (حيّاً: دخولٌ سريع بعد خروجٍ لتوّه).
+  @visibleForTesting
+  static Duration Function() reloginPause = () => const Duration(milliseconds: 900);
+
+  /// ردّ صفحةٍ في جلسةٍ سقطت (دخل مديرٌ آخر أو خرجت جلسةٌ أخرى): سكربت الخروج أو صفحة الدخول بدل الصفحة المطلوبة.
+  static bool _sessionLost(String body) => body.contains('Authorization=;path=/') || TpClassicParse.loginState(body) != null;
+
   /// أهو راوتر TP-Link كلاسيكيّ؟ طلبٌ واحد بلا اعتماد: 401 + realm فيه «TP-LINK» (القديم)، أو 200 بصفحة دخولٍ فيها
   /// `httpAutErrorArray` (الأحدث — realm في الترويسة إن وُجد). غيره (أو لا ردّ) ⇒ null.
   static Future<TpClassicHello?> detect(String host) async {
@@ -440,7 +470,17 @@ class TplinkClassicService {
 
   /// جلسة الفيرموير الأحدث: الحالة بلا اعتماد ([checkFront] — مقفل/مديرٌ آخر ⇒ لا إرسال) ⇒ الدخول ⇒ التوكن ⇒ [fn] ⇒ **الخروج دائماً**
   /// (مديرٌ واحد: جلسةٌ تبقى تحجب صاحب الراوتر). كلمة سرٍّ مرفوضة لا تُرسل ثانيةً. null ⇒ السبب في [lastIssue].
+  /// جلسات العنوان الواحد بالدور ([_serial]).
   static Future<T?> _withCookie<T>(
+    String h,
+    String user,
+    String pass,
+    Future<T?> Function(String tok, String cookie, String ref) fn, {
+    bool checkFront = true,
+  }) =>
+      _serial<T?>(h, () => _withCookieOnce<T>(h, user, pass, fn, checkFront: checkFront));
+
+  static Future<T?> _withCookieOnce<T>(
     String h,
     String user,
     String pass,
@@ -475,13 +515,15 @@ class TplinkClassicService {
       _note(h, TpClassicIssue.rejected, 'remembered');
       return null;
     }
-    final r = await _get(h, '/userRpm/LoginRpm.htm?Save=Save', cookie: cookie);
-    if (r == null) {
-      _note(h, TpClassicIssue.unreachable, 'login no-reply');
-      return null;
-    }
-    final tok = TpClassicParse.loginToken(r.body);
-    if (tok == null) {
+    String? tok;
+    for (var attempt = 0; tok == null; attempt++) {
+      final r = await _get(h, '/userRpm/LoginRpm.htm?Save=Save', cookie: cookie);
+      if (r == null) {
+        _note(h, TpClassicIssue.unreachable, 'login no-reply');
+        return null;
+      }
+      tok = TpClassicParse.loginToken(r.body);
+      if (tok != null) break;
       var st = TpClassicParse.loginState(r.body);
       if (st == null) {
         final f = await _get(h, '/');
@@ -491,14 +533,26 @@ class TplinkClassicService {
         case 2:
           _reject(h, cookie);
           _note(h, TpClassicIssue.rejected, 'login rejected');
+          return null;
         case 1:
           _note(h, TpClassicIssue.locked, 'locked');
+          return null;
         case 0:
           _note(h, TpClassicIssue.busy, 'another admin is logged in');
-        default:
-          _note(h, TpClassicIssue.readFailed, 'login without token');
+          return null;
       }
-      return null;
+      // بلا توكن ولا سبب (لا رفض ⇒ لا عدّاد قفلٍ زاد): دخولٌ ثانٍ مرّةً بعد لحظة، بعد صفحة الدخول التي تهيّئه.
+      if (attempt >= 1) {
+        _note(h, TpClassicIssue.readFailed, 'login without token');
+        return null;
+      }
+      await Future<void>.delayed(reloginPause());
+      final f = await _get(h, '/');
+      final fs = f == null ? null : TpClassicParse.loginState(f.body);
+      if (fs?.code == 0 || fs?.code == 1) {
+        _note(h, fs!.code == 0 ? TpClassicIssue.busy : TpClassicIssue.locked, fs.code == 0 ? 'another admin is logged in' : 'locked');
+        return null;
+      }
     }
     final ref = '${baseFor(h)}/$tok/userRpm/MenuRpm.htm';
     try {
@@ -684,27 +738,39 @@ class TplinkClassicService {
     });
   }
 
+  /// زاحمها مديرٌ آخر (جلسةٌ سقطت وسطها، أو «مديرٌ آخر داخل» قبل الدخول) ⇒ لم يُنفَّذ شيء — تُعاد مرّةً بعد لحظة.
+  static bool _crowded(RouterResult<Object?> r) => !r.ok && (r.detail == 'session lost' || r.fail == RouterFail.busy);
+
+  /// مرّتان على الأكثر ([_crowded] وحده يُعاد)؛ جلسةٌ سقطت مرّتين ⇒ «مشغول» (مديرٌ آخر يعمل على الراوتر الآن).
+  static Future<RouterResult<T>> _twice<T>(Future<RouterResult<T>> Function() op) async {
+    final first = await op();
+    if (!_crowded(first)) return first;
+    await Future<void>.delayed(retryPause());
+    final second = await op();
+    return !second.ok && second.detail == 'session lost' ? RouterResult.fail(RouterFail.busy, 'session lost') : second;
+  }
+
   /// كلمة سرّ الواي فاي من صفحة الأمان (قراءةٌ وحدها).
-  static Future<RouterResult<List<RouterWifi>>> readWifi(String host, String user, String pass) async {
+  static Future<RouterResult<List<RouterWifi>>> readWifi(String host, String user, String pass) =>
+      _twice(() => _readWifiOnce(host, user, pass));
+
+  static Future<RouterResult<List<RouterWifi>>> _readWifiOnce(String host, String user, String pass) async {
     final h = host.trim();
     final got = await _inSession<RouterResult<List<RouterWifi>>>(h, user, pass, (get) async {
       final r = await get('WlanSecurityRpm.htm');
       final w = r == null || r.status != 200 ? null : TpClassicParse.wifi(r.body);
-      return w == null ? const RouterResult.fail(RouterFail.failed, 'security page') : RouterResult.ok(w);
+      if (w != null) return RouterResult.ok(w);
+      return RouterResult.fail(RouterFail.failed, r != null && _sessionLost(r.body) ? 'session lost' : 'security page');
     });
     return got ?? RouterResult.fail(_fail(h), _issues[h]?.trace);
   }
 
   /// كلمة سرّ جديدة بزرّ «Save» في صفحة الأمان (حقول النموذج بقيمها المقروءة — [TpClassicParse.wifiSaveQuery])، والصفحة التي تعود
   /// تؤكّد الحفظ. هذه الفيرموَيرات تقول «لا يسري حتى يُعاد التشغيل» ⇒ detail = `needs-reboot` (الكرت يعرض الإقلاع).
-  static Future<RouterResult<List<RouterWifi>>> setWifiPassword(String host, String user, String pass, String newPass) async {
-    // مديرٌ واحد على الراوتر: دخولٌ من هاتفٍ آخر (نبضة كرتٍ مفتوح) يُسقط جلستنا وسط الحفظ ⇒ الصفحة تعود «خروجاً». الحفظ نفسه يُعاد
-    // مرّةً بعد لحظة (كلمة السرّ نفسها — إعادةٌ لا تضرّ).
-    final first = await _setWifiOnce(host, user, pass, newPass);
-    if (first.ok || first.detail != 'session lost') return first;
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    return _setWifiOnce(host, user, pass, newPass);
-  }
+  /// مديرٌ واحد على الراوتر: دخولٌ من هاتفٍ آخر (نبضة كرتٍ مفتوح) يُسقط جلستنا وسط الحفظ ⇒ الصفحة تعود «خروجاً». الحفظ نفسه يُعاد
+  /// مرّةً بعد لحظة (كلمة السرّ نفسها — إعادةٌ لا تضرّ).
+  static Future<RouterResult<List<RouterWifi>>> setWifiPassword(String host, String user, String pass, String newPass) =>
+      _twice(() => _setWifiOnce(host, user, pass, newPass));
 
   static Future<RouterResult<List<RouterWifi>>> _setWifiOnce(String host, String user, String pass, String newPass) async {
     final h = host.trim();
@@ -712,7 +778,7 @@ class TplinkClassicService {
       final page = await get('WlanSecurityRpm.htm');
       trace?.add('page http=${page?.status} len=${page?.body.length} setCookie=${lastSetCookieNames ?? '-'}');
       if (page == null || page.status != 200 || TpClassicParse.wifi(page.body) == null) {
-        return const RouterResult.fail(RouterFail.failed, 'security page');
+        return RouterResult.fail(RouterFail.failed, page != null && _sessionLost(page.body) ? 'session lost' : 'security page');
       }
       final q = TpClassicParse.wifiSaveQuery(page.body, newPass);
       if (q == null) return const RouterResult.fail(RouterFail.noPsk);
@@ -728,7 +794,7 @@ class TplinkClassicService {
       }
       final w = body == null ? null : TpClassicParse.wifi(body);
       if (w == null) {
-        final lost = (saved?.body.contains('Authorization=;path=/') ?? false);
+        final lost = saved != null && _sessionLost(saved.body);
         return RouterResult.fail(RouterFail.failed, lost ? 'session lost' : 'verify read');
       }
       if (w.first.password != newPass) return const RouterResult.fail(RouterFail.failed, 'not saved');
@@ -748,7 +814,11 @@ class TplinkClassicService {
 
   /// إعادة التشغيل بزرّ صفحة «Reboot» نفسها (GET `SysRebootRpm.htm?Reboot=Reboot` — النموذج في الجهاز، ١٢ نوفمبر).
   /// ⛔ جارتها RestoreDefaultCfgRpm.htm إعادة ضبط المصنع — لا تُطلب أبداً.
-  static Future<RouterResult<RouterReboot>> reboot(String host, String user, String pass) async {
+  /// «مديرٌ آخر داخل» قبل الدخول (لم يُرسل شيء) ⇒ يُعاد مرّةً ([_twice]). ما بعد الإرسال لا يُعاد أبداً — ردّ صفحة الإقلاع لم يُقَس
+  /// حيّاً (قد يمسح الكوكي كصفحة الخروج)، فلا نحكم من نصّه بـ«لم يُنفَّذ» ولا إقلاعٌ مضاعف.
+  static Future<RouterResult<RouterReboot>> reboot(String host, String user, String pass) => _twice(() => _rebootOnce(host, user, pass));
+
+  static Future<RouterResult<RouterReboot>> _rebootOnce(String host, String user, String pass) async {
     final h = host.trim();
     final got = await _inSession<RouterResult<RouterReboot>>(h, user, pass, (get) async {
       final r = await get('SysRebootRpm.htm', query: 'Reboot=Reboot', refPage: 'SysRebootRpm.htm');

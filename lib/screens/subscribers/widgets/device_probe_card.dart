@@ -191,16 +191,35 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   RouterSample? _rlPrev;
   DateTime? _rlRetryAt;
 
-  /// عمليّة واي فاي جارية على الراوتر: النبضات تتوقّف (دخولها يُسقط جلسة العمليّة أو العكس)، وبعدها تُفتح جلسةٌ حيّة جديدة فوراً.
+  /// عمليّة على الراوتر (الواي فاي، إعادة التشغيل): النبضات تتوقّف (دخولها يُسقط جلسة العمليّة أو العكس)، وبعدها تُفتح جلسةٌ حيّة
+  /// جديدة فوراً.
   bool _routerOp = false;
 
-  void _routerOpBusy(bool busy) {
+  /// قبل العمليّة (true): لا نبضة جديدة، والجارية تكمل أوّلاً (خروجها وسط العمليّة يُسقطها — حيّاً ١٢ نوفمبر على WR940N: الواي فاي
+  /// «ما قبل الأمر»)، والجلسة الحيّة (MER) تُغلق قبل دخول العمليّة. بعدها (false): النبضة التالية بلا مهلة.
+  Future<void> _routerOpBusy(bool busy) async {
     _routerOp = busy;
-    if (!busy) {
-      _closeRouterLive(); // جلستها سقطت بدخول العمليّة — تُفتح غيرها في النبضة التالية بلا مهلة
-      _rlRetryAt = null;
-      _tcRetryAt = null;
+    if (busy) {
+      final until = DateTime.now().add(const Duration(seconds: 12));
+      while (_pulsing && DateTime.now().isBefore(until)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      final s = _rlSession;
+      _rlSession = null;
+      _rlPrev = null;
+      if (s != null) await s.close().timeout(const Duration(seconds: 5), onTimeout: () {});
+      return;
     }
+    _rlRetryAt = null;
+    _tcRetryAt = null;
+  }
+
+  /// أُرسل أمر إعادة التشغيل (من الكرت أو بعد تغيير كلمة سرّ الواي فاي): لا نطرق الراوتر وهو يقلع، ولا رقمٌ قديم.
+  void _routerRebooting() {
+    _closeRouterLive();
+    _rlRetryAt = DateTime.now().add(const Duration(seconds: 120));
+    _tcRetryAt = DateTime.now().add(const Duration(seconds: 120));
+    _loseTraffic();
   }
 
   void _closeRouterLive() {
@@ -1108,12 +1127,15 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   Future<({bool ok, String text})> _rebootRouter(String vendor) async {
     final c = await _routerCreds();
     if (c == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا كلمة سرٍّ للراوتر — اكتبها من «الاعتمادات»');
-    final r = await RouterOps.reboot(vendor, c.ip, c.user, c.pass);
+    await _routerOpBusy(true);
+    final RouterResult<RouterReboot> r;
+    try {
+      r = await RouterOps.reboot(vendor, c.ip, c.user, c.pass);
+    } finally {
+      await _routerOpBusy(false);
+    }
     if (!r.ok) return (ok: false, text: 'تعذّرت إعادة التشغيل: ${routerFailText(r.fail!)}');
-    _closeRouterLive();
-    _rlRetryAt = DateTime.now().add(const Duration(seconds: 120));
-    _tcRetryAt = DateTime.now().add(const Duration(seconds: 120));
-    _loseTraffic();
+    _routerRebooting();
     return (ok: true, text: r.value!.confirmed
         ? 'أُرسل أمر إعادة التشغيل — الراوتر يقلع الآن ويرجع الإنترنت خلال دقيقتين تقريباً'
         : 'أُرسل أمر إعادة التشغيل وانقطع الاتّصال — الراوتر يقلع غالباً، ويرجع خلال دقيقتين');
@@ -1793,7 +1815,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         if (u.isRouter && RouterOps.canWifi(u.vendor)) ...[
           const SizedBox(height: Sp.sm),
           Divider(height: 1, color: AppColors.divider),
-          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds, onBusy: _routerOpBusy),
+          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds, onBusy: _routerOpBusy, onRebooted: _routerRebooting),
         ],
       ],
     );
