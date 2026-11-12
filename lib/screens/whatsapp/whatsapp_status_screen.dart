@@ -154,8 +154,51 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
         _qrData = null;
         _pairCode = null;
       });
-      final ss = await WhatsAppApi.startSessionCode(phone: digits);
+      var ss = await WhatsAppApi.startSessionCode(phone: digits);
       if (!mounted) return;
+      // ١٢ نوفمبر (بلاغ وكيل: «فصل نهائياً ومجاي يربط»): الحساب مربوطٌ على رقمٍ آخر — كان الخادم يعيد الربط
+      // القديم بصمت فتكتب الشاشة «خطأ» مرّةً بعد مرّة. الآن نسأل: تفكّ المربوط وتربط الجديد؟
+      if (ss.linkedToOtherNumber) {
+        final go = await _confirmSwitchNumber(ss, digits);
+        if (!mounted) return;
+        if (go != true) {
+          setState(() => _busy = false);
+          return;
+        }
+        final u = await WhatsAppApi.unlink();
+        if (!mounted) return;
+        if (!u.ok) {
+          setState(() => _busy = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            explainableSnackBar(
+              context,
+              u.message ?? 'common.error'.tr(),
+              error: true,
+              backgroundColor: AppColors.errorFill,
+            ),
+          );
+          return;
+        }
+        ss = await WhatsAppApi.startSessionCode(phone: digits);
+        if (!mounted) return;
+      }
+      if (ss.alreadyConnected) {
+        // الرقم نفسه مربوطٌ وشغّال — لا رمز ولا «خطأ».
+        final s = await WhatsAppApi.connectionStatus();
+        if (!mounted) return;
+        setState(() {
+          _status = s;
+          _busy = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('wa.already_linked_same'.tr()),
+            backgroundColor: AppColors.brand,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (!ss.ok || ss.code == null) {
         setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -371,6 +414,78 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
       _qrData = null;
     });
     await _bootstrap();
+  }
+
+  /// ١٢ نوفمبر: «فكّ الربط» — الطريق الوحيد لتبديل رقمٍ مربوطٍ شغّال (القطع يُبقي الربط، والتهيئة إعادة تشغيل).
+  Future<void> _unlink() async {
+    final phone = WaPairCodeStart.localPhone(_status?.phone);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text('wa.unlink_title'.tr()),
+        content: Text('wa.unlink_body'.tr(namedArgs: {'phone': phone.isEmpty ? '—' : phone})),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text('wa.unlink_confirm'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    final r = await WhatsAppApi.unlink();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _qrData = null;
+      _pairCode = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(r.ok ? 'wa.unlinked'.tr() : (r.message ?? 'common.error'.tr())),
+        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (r.ok) {
+      final s = await WhatsAppApi.connectionStatus();
+      if (mounted) setState(() => _status = s);
+    }
+  }
+
+  /// الحساب مربوطٌ على رقمٍ آخر وطُلب رمزٌ لرقمٍ جديد ⇒ تأكيدٌ صريح قبل الفكّ.
+  Future<bool?> _confirmSwitchNumber(WaPairCodeStart ss, String requestedDigits) {
+    final linked = WaPairCodeStart.localPhone(ss.linkedPhone);
+    final requested = WaPairCodeStart.localPhone(ss.requestedPhone ?? requestedDigits);
+    final who = (ss.pushname ?? '').isEmpty ? '' : ' («${ss.pushname}»)';
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text('wa.switch_title'.tr()),
+        content: Text('wa.switch_body'.tr(namedArgs: {
+          'linked': linked.isEmpty ? '—' : linked,
+          'who': who,
+          'requested': requested,
+        })),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text('wa.switch_confirm'.tr()),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _updateFeatures(WhatsFeatures next) async {
@@ -1032,24 +1147,39 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
         onTap: _busy ? null : _connect,
       );
     }
-    // عند الاتصال: قطع + إعادة تهيئة كاملة
-    return Row(
+    // عند الاتصال: قطع + إعادة تهيئة كاملة، وتحتهما «فكّ الربط» (١٢ نوفمبر: الطريق الوحيد لتبديل الرقم —
+    // ثلاثة بسطرٍ واحد لا تتّسع بعرض ٣٢٠–٣٦٠).
+    return Column(
       children: [
-        Expanded(
-          child: _btn(
-            icon: LucideIcons.powerOff,
-            label: 'wa.disconnect_short'.tr(),
-            color: AppColors.error,
-            onTap: _busy ? null : _disconnect,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _btn(
+                icon: LucideIcons.powerOff,
+                label: 'wa.disconnect_short'.tr(),
+                color: AppColors.error,
+                onTap: _busy ? null : _disconnect,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _btn(
+                icon: LucideIcons.refreshCw,
+                label: 'wa.full_reset_btn'.tr(),
+                color: AppColors.warning,
+                onTap: _busy ? null : _softReset,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
           child: _btn(
-            icon: LucideIcons.refreshCw,
-            label: 'wa.full_reset_btn'.tr(),
-            color: AppColors.warning,
-            onTap: _busy ? null : _softReset,
+            icon: LucideIcons.unlink,
+            label: 'wa.unlink_btn'.tr(),
+            color: AppColors.textMid,
+            onTap: _busy ? null : _unlink,
           ),
         ),
       ],
@@ -1185,18 +1315,22 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     required ValueChanged<bool> onChanged,
     bool enabled = true,
   }) {
-    return SwitchListTile.adaptive(
-      contentPadding: EdgeInsets.zero,
-      dense: true,
-      activeThumbColor: AppColors.channelWhatsApp,
-      title: Text(
-        label,
-        style:
-            AppType.label(color: enabled ? AppColors.textHi : AppColors.textLow)
-                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+    // Material شفّافٌ خاصّ: الكرت (Container ملوّن) كان يخفي حبر الضغط ويرمي تنبيه ListTile بنسخة الفحص.
+    return Material(
+      type: MaterialType.transparency,
+      child: SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        activeThumbColor: AppColors.channelWhatsApp,
+        title: Text(
+          label,
+          style:
+              AppType.label(color: enabled ? AppColors.textHi : AppColors.textLow)
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+        ),
+        value: enabled ? value : false,
+        onChanged: enabled ? onChanged : null,
       ),
-      value: enabled ? value : false,
-      onChanged: enabled ? onChanged : null,
     );
   }
 

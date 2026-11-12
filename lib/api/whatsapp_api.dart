@@ -15,6 +15,61 @@ import 'package_names_api.dart';
 import 'portal_settings_api.dart';
 import 'subscribers_api.dart';
 
+/// ردّ POST /api/whatsapp/start-session-code (١٢ نوفمبر، بلاغ وكيل «فصل نهائياً ومجاي يربط»): رمز اقتران،
+/// أو «متّصل أصلاً» على الرقم نفسه، أو 409 LINKED_TO_OTHER_NUMBER حين يكون الحساب مربوطاً على رقمٍ آخر —
+/// يلزم «فكّ الربط» قبل رمز الرقم الجديد (كان الخادم يعيد الربط القديم بصمت فتكتب الشاشة «خطأ»).
+class WaPairCodeStart {
+  final bool ok;
+  final String? code;
+  final String? message;
+  final bool alreadyConnected;
+  final bool linkedToOtherNumber;
+  final String? linkedPhone;
+  final String? pushname;
+  final String? requestedPhone;
+
+  const WaPairCodeStart({
+    required this.ok,
+    this.code,
+    this.message,
+    this.alreadyConnected = false,
+    this.linkedToOtherNumber = false,
+    this.linkedPhone,
+    this.pushname,
+    this.requestedPhone,
+  });
+
+  static bool isLinkedToOtherNumber(Map<dynamic, dynamic> body) =>
+      body['linkedToOtherNumber'] == true || body['code'] == 'LINKED_TO_OTHER_NUMBER';
+
+  factory WaPairCodeStart.fromBody(Map<String, dynamic> body) {
+    String? s(Object? v) {
+      final t = v?.toString().trim();
+      return (t == null || t.isEmpty) ? null : t;
+    }
+
+    final linkedOther = isLinkedToOtherNumber(body);
+    final success = body['success'] == true;
+    return WaPairCodeStart(
+      ok: success && !linkedOther,
+      // ⚠️ «code» في ردّ الرفض رمزُ سبب (LINKED_TO_OTHER_NUMBER) لا رمز اقتران.
+      code: linkedOther ? null : (s(body['pairCode']) ?? (success ? s(body['code']) : null)),
+      message: s(body['message']),
+      alreadyConnected: body['alreadyConnected'] == true && !linkedOther,
+      linkedToOtherNumber: linkedOther,
+      linkedPhone: s(body['linkedPhone']),
+      pushname: s(body['pushname']),
+      requestedPhone: s(body['requestedPhone']),
+    );
+  }
+
+  /// 9647xxxxxxxxx ⇒ 07xxxxxxxxx للعرض؛ غيرها أرقامه كما هي.
+  static String localPhone(String? v) {
+    final d = (v ?? '').split('@').first.replaceAll(RegExp(r'\D'), '');
+    return RegExp(r'^9647\d{9}$').hasMatch(d) ? '0${d.substring(3)}' : d;
+  }
+}
+
 /// A WhatsApp template row as the backend returns from
 /// /api/whatsapp/templates/:adminId. We only need a tiny subset of
 /// the fields the v1 web shows.
@@ -526,13 +581,16 @@ class WhatsAppApi {
 
   /// POST /api/whatsapp/start-session-code — يطلق pair code (8 أرقام)
   /// بدل QR. ينتج رمز يكتبه المستخدم في واتساب الويب على الجهاز.
-  static Future<({bool ok, String? code, String? message})> startSessionCode({
+  ///
+  /// ١٢ نوفمبر: الحساب مربوطٌ على رقمٍ آخر ⇒ 409 LINKED_TO_OTHER_NUMBER (يُقرأ هنا لا يُرمى) فتسأل الشاشة
+  /// «تفكّه وتربط الجديد؟»؛ والرقم نفسه ⇒ «متّصل أصلاً» (كان بلا رمزٍ فيكتب «خطأ»).
+  static Future<WaPairCodeStart> startSessionCode({
     required String phone,
   }) async {
     final adminId = await AuthStorage.readAdminId();
     final adminUsername = await AuthStorage.readAdminUsername();
     if (adminId == null || adminUsername == null) {
-      return (ok: false, code: null, message: 'لا توجد جلسة دخول');
+      return const WaPairCodeStart(ok: false, message: 'لا توجد جلسة دخول');
     }
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -543,20 +601,45 @@ class WhatsAppApi {
           'phone': phone,
         },
       );
-      final body = r.data ?? const {};
-      return (
-        ok: body['success'] == true,
-        code: body['code']?.toString() ?? body['pairCode']?.toString(),
-        message: body['message']?.toString(),
-      );
+      return WaPairCodeStart.fromBody(r.data ?? const {});
     } on DioException catch (e) {
       _log('whatsapp/start-session-code', e);
+      final data = e.response?.data;
+      if (data is Map && WaPairCodeStart.isLinkedToOtherNumber(data)) {
+        return WaPairCodeStart.fromBody(Map<String, dynamic>.from(data));
+      }
       // ٢٣ أكتوبر (بلاغ وكيل): طلبٌ لم يصل للخادم كان يُعرض «تعذّر إنشاء الرمز» فيُظنّ عطلاً عندنا —
       // الآن «تعذّر الوصول إلى الخادم — تحقّق من الإنترنت» / «انتهت مهلة الاتصال»، ورسالة الخادم العربيّة أوّلاً.
-      return (ok: false, code: null, message: humanError(e, fallback: 'تعذّر إنشاء الرمز'));
+      return WaPairCodeStart(ok: false, message: humanError(e, fallback: 'تعذّر إنشاء الرمز'));
     } catch (e) {
       _log('whatsapp/start-session-code', e);
-      return (ok: false, code: null, message: humanError(e, fallback: 'تعذّر إنشاء الرمز'));
+      return WaPairCodeStart(ok: false, message: humanError(e, fallback: 'تعذّر إنشاء الرمز'));
+    }
+  }
+
+  /// POST /api/whatsapp/unlink — «فكّ الربط» (١٢ نوفمبر): يُخرج الرقم المربوط من «الأجهزة المرتبطة» ويحذف
+  /// الجلسة حتى يُربط رقمٌ آخر. «قطع» إيقافٌ مؤقّت يُبقي الربط، و«تهيئة كاملة» إعادة تشغيل — ولا أحدهما يبدّل الرقم.
+  static Future<({bool ok, String? message})> unlink() async {
+    final adminId = await AuthStorage.readAdminId();
+    final adminUsername = await AuthStorage.readAdminUsername();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/unlink',
+        data: {
+          'adminId': adminId,
+          if (adminUsername != null) 'adminUsername': adminUsername,
+          'confirm': true,
+        },
+      );
+      final body = r.data ?? const {};
+      return (ok: body['success'] == true, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('whatsapp/unlink', e);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر فكّ الربط'));
+    } catch (e) {
+      _log('whatsapp/unlink', e);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر فكّ الربط'));
     }
   }
 
@@ -632,8 +715,8 @@ class WhatsAppApi {
     }
   }
 
-  /// POST /api/whatsapp/soft-reset — يمسح الـauth ويبدأ جلسة جديدة
-  /// (يجبر إعادة QR). يُستعمل لما الجلسة عالقة.
+  /// POST /api/whatsapp/soft-reset — يعيد تشغيل اتصال الجلسة نفسها بالاعتماد المحفوظ (لا يحذف الربط ولا
+  /// يطلب QR). يُستعمل لما الجلسة عالقة. تبديل الرقم = [unlink].
   static Future<({bool ok, String? message})> softReset() async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
