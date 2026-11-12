@@ -10,6 +10,7 @@ import '../services/auth_storage.dart';
 import '../services/manual_wa_sender.dart';
 import '../widgets/manual_wa_chip.dart';
 import 'api_client.dart';
+import 'broadcast_api.dart';
 import 'company_route.dart';
 import 'package_names_api.dart';
 import 'portal_settings_api.dart';
@@ -849,7 +850,11 @@ class WhatsAppApi {
   /// GET /api/whatsapp/schedules/:adminId — يرجع قائمة WhatsAppSchedule
   /// (نوع واحد لكل schedule_type: expiry_warning + debt_reminder + service_end).
   /// نُرجع null على فشل الشبكة، [] على استجابة فارغة (مثلاً مدير جديد).
-  static Future<List<WhatsAppSchedule>?> loadSchedules() async {
+  static Future<List<WhatsAppSchedule>?> loadSchedules() async => (await loadSchedulesBundle())?.schedules;
+
+  /// الجدولات ومعها ما يدعمه الخادم من «تحديد المدينين» لتذكير الديون (debtFilter في الردّ نفسه) — null للقدرة حين لا يعرف
+  /// الخادم التحديد بعد: الشاشة كما كانت (لا لوحة، والحفظ بلا المفتاح).
+  static Future<({List<WhatsAppSchedule> schedules, DebtFilterCapability? debtCap})?> loadSchedulesBundle() async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return null;
     try {
@@ -858,10 +863,13 @@ class WhatsAppApi {
       );
       final data = r.data;
       List<dynamic> rows;
+      DebtFilterCapability? cap;
       if (data is List) {
         rows = data;
       } else if (data is Map && data['schedules'] is List) {
         rows = data['schedules'] as List;
+        final c = data['debtFilter'];
+        if (c is Map) cap = DebtFilterCapability.fromJson(Map<String, dynamic>.from(c));
       } else {
         rows = const [];
       }
@@ -876,10 +884,35 @@ class WhatsAppApi {
           // صف تالف — نتخطّاه بدل إسقاط كل القائمة
         }
       }
-      return list;
+      return (schedules: list, debtCap: cap);
     } catch (e) {
       _log('whatsapp/schedules GET', e);
       return null;
+    }
+  }
+
+  /// GET /api/whatsapp/schedule-debt-preview/:adminId — «يطابق الآن»: مدينو تذكير الديون كما يجمعهم المجدول بعد هذا التحديد
+  /// (العدد والقائمة بشكل معاينة التبليغ). قراءةٌ وحدها — لا رسالة ولا حفظ. تعذّر العدّ لا يعطّل التحديد: يُحسب عند كلّ تنفيذ.
+  static Future<({BroadcastPreview? preview, String? message, String? code})> scheduleDebtPreview(DebtFilter filter) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (preview: null, message: 'لا توجد جلسة دخول', code: null);
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/whatsapp/schedule-debt-preview/$adminId',
+        queryParameters: filter.toJson(),
+      );
+      final data = r.data ?? const {};
+      if (r.statusCode != 200 || data['success'] == false || data['dryRun'] != true) {
+        return (preview: null, message: data['message']?.toString(), code: data['code']?.toString());
+      }
+      return (preview: BroadcastPreview.fromJson(data), message: null, code: null);
+    } on DioException catch (e) {
+      _log('whatsapp/schedule-debt-preview', e);
+      final d = e.response?.data is Map ? (e.response!.data as Map) : null;
+      return (preview: null, message: d?['message']?.toString(), code: d?['code']?.toString());
+    } catch (e) {
+      _log('whatsapp/schedule-debt-preview', e);
+      return (preview: null, message: null, code: null);
     }
   }
 

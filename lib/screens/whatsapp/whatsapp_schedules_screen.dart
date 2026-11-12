@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
@@ -5,12 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/broadcast_api.dart';
 import '../../api/whatsapp_api.dart';
+import '../../core/util/amount_input.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../models/whatsapp_schedule.dart';
 import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/debt_filter_panel.dart';
+import '../../widgets/list_kit.dart';
 import '../desktop/desk_widgets.dart';
 
 /// جدولة إشعارات WhatsApp — كارت لكل نوع (تحذير قرب انتهاء + تذكير ديون).
@@ -52,6 +59,21 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   bool _savingDebt = false;
   int? _debtScheduleId;
 
+  // «تحديد المدينين» داخل تذكير الديون (المالك ١٢ نوفمبر: الفلتر الذي في «التبليغات» يُضاف هنا بضبطه). اللوحة تظهر بما يعلنه
+  // الخادم وحده (_debtCap — خادمٌ أقدم ⇒ لا لوحة والحفظ كما كان). _debtFilterSaved = ما على الخادم؛ المفتاح يُرسَل مع الحفظ
+  // حين يختلف عنه _debtFilter وحده، فحفظُ الوقت أو الأيّام لا يمسّ التحديد. العدّ («يطابق الآن») من الخادم: مدينو المجدول أنفسهم.
+  DebtFilterCapability? _debtCap;
+  DebtFilter _debtFilter = DebtFilter.none;
+  DebtFilter _debtFilterSaved = DebtFilter.none;
+  bool _debtFilterInvalid = false;
+  BroadcastPreview? _dfPreview;
+  bool _dfBusy = false;
+  String? _dfError;
+  Timer? _dfTimer;
+  int _dfSeq = 0;
+
+  static const _dfCountDown = 'تعذّر العدّ الآن — التحديد يُطبَّق عند كلّ تنفيذ';
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +82,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
 
   @override
   void dispose() {
+    _dfTimer?.cancel();
     _daysBeforeCtrl.dispose();
     super.dispose();
   }
@@ -68,22 +91,81 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     setState(() => _loading = true);
     final results = await Future.wait([
       AuthStorage.readAdminId(),
-      WhatsAppApi.loadSchedules(),
+      WhatsAppApi.loadSchedulesBundle(),
     ]);
     if (!mounted) return;
     _adminId = results[0] as String?;
-    final schedules = (results[1] as List<WhatsAppSchedule>?) ?? const [];
-    _hydrateFromSchedules(schedules);
+    final bundle = results[1] as ({List<WhatsAppSchedule> schedules, DebtFilterCapability? debtCap})?;
+    _debtCap = bundle?.debtCap;
+    _hydrateFromSchedules(bundle?.schedules ?? const []);
     setState(() => _loading = false);
+    _queueDebtPreview(now: true);
   }
 
   /// Silent reload — نستعمله بعد save/toggle عشان نحصل على schedule id
   /// بدون spinner كامل يمسح الشاشة. الـUI يبقى مرئي أثناء إعادة الجلب.
   Future<void> _silentReload() async {
-    final schedules = await WhatsAppApi.loadSchedules();
+    final bundle = await WhatsAppApi.loadSchedulesBundle();
     if (!mounted) return;
-    _hydrateFromSchedules(schedules ?? const []);
+    if (bundle != null) _debtCap = bundle.debtCap;
+    _hydrateFromSchedules(bundle?.schedules ?? const []);
     setState(() {}); // لتحديث IDs في الـstate
+    _queueDebtPreview(now: true);
+  }
+
+  static DebtFilter _filterOf(Map<String, int> m) =>
+      DebtFilter(minAgeDays: m['minAgeDays'], minAmount: m['minAmount'], maxAmount: m['maxAmount']);
+
+  bool get _debtFilterDirty => _debtCap != null && (_debtFilterInvalid || _debtFilter != _debtFilterSaved);
+
+  void _onDebtFilterChanged(DebtFilter f) {
+    setState(() => _debtFilter = f);
+    _queueDebtPreview();
+  }
+
+  /// يعدّ من يطابق التحديد الحاليّ — بتأخيرٍ قصير أثناء الكتابة. بلا تحديدٍ (أو بتحديدٍ فيه خطأ) لا عدّ.
+  void _queueDebtPreview({bool now = false}) {
+    _dfTimer?.cancel();
+    _dfSeq++;
+    final cap = _debtCap;
+    final f = _debtFilter;
+    if (!mounted) return;
+    if (cap == null || !f.active || f.problem(maxAgeDays: cap.maxAgeDays) != null) {
+      setState(() {
+        _dfPreview = null;
+        _dfBusy = false;
+        _dfError = null;
+      });
+      return;
+    }
+    // عمرٌ محفوظ والدفتر غير متاحٍ لحظيّاً (أو الشركة بلا مصدر أعمار): لا عدّ الآن — المحفوظ يُطبَّق عند التنفيذ
+    if (!cap.age && f.minAgeDays != null) {
+      setState(() {
+        _dfPreview = null;
+        _dfBusy = false;
+        _dfError = 'عمر الدين المحفوظ يُطبَّق عند التنفيذ — العدّ غير متاحٍ الآن';
+      });
+      return;
+    }
+    setState(() {
+      _dfBusy = true;
+      _dfError = null;
+    });
+    final seq = _dfSeq;
+    _dfTimer = Timer(now ? Duration.zero : const Duration(milliseconds: 600), () => _loadDebtPreview(seq, f));
+  }
+
+  Future<void> _loadDebtPreview(int seq, DebtFilter f) async {
+    final r = await WhatsAppApi.scheduleDebtPreview(f);
+    if (!mounted || seq != _dfSeq) return;
+    setState(() {
+      _dfBusy = false;
+      _dfPreview = r.preview;
+      // العدّ للاطّلاع وحده: تعذّره لا يعطّل التحديد — سطرٌ قصير يقول ذلك (ونصّ الخادم لما سواه)
+      _dfError = r.preview != null
+          ? null
+          : (r.code == 'SCHEDULE_DEBT_PREVIEW_UNAVAILABLE' ? _dfCountDown : (r.message ?? _dfCountDown));
+    });
   }
 
   void _hydrateFromSchedules(List<WhatsAppSchedule> list) {
@@ -105,6 +187,9 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         _debtMonthDays =
             s.monthDays.isNotEmpty ? List<int>.from(s.monthDays) : const [1];
         _debtChannel = s.channelPreference;
+        _debtFilterSaved = _filterOf(s.debtFilter);
+        _debtFilter = _debtFilterSaved;
+        _debtFilterInvalid = s.debtFilterInvalid;
       }
     }
   }
@@ -163,6 +248,15 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
 
   Future<void> _saveDebt() async {
     if (_adminId == null) return;
+    // تحديدٌ فيه خطأ (حدٌّ أدنى أكبر من الأعلى…) لا يُحفظ — يُقال قبل الطلب (والخادم يرفضه أيضاً)
+    final cap = _debtCap;
+    if (cap != null && _debtFilterDirty && _debtFilter.active) {
+      final problem = _debtFilter.problem(maxAgeDays: cap.maxAgeDays);
+      if (problem != null) {
+        _showSnack(problem, error: true);
+        return;
+      }
+    }
     setState(() => _savingDebt = true);
     final schedule = WhatsAppSchedule(
       id: _debtScheduleId,
@@ -176,6 +270,9 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           ? (List<int>.from(_debtMonthDays)..sort())
           : const [],
       channelPreference: _debtChannel,
+      // يُرسَل حين تغيّر وحده (كائنٌ أو null للمسح) — وإلّا يبقى المحفوظ على الخادم كما هو
+      debtFilter: _debtFilter.toJson(),
+      sendDebtFilter: _debtFilterDirty,
     );
     final r = await WhatsAppApi.saveSchedule(schedule);
     if (!mounted) return;
@@ -258,6 +355,11 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             ? (List<int>.from(_debtMonthDays)..sort())
             : const [],
         channelPreference: _debtChannel,
+        // أوّل تفعيلٍ ينشئ الصفّ: بالتحديد الذي على الشاشة إن كان سليماً — لا يُفعَّل تذكيرٌ لكلّ المدينين والمدير حدّد غيرهم
+        debtFilter: _debtFilter.toJson(),
+        sendDebtFilter: _debtCap != null &&
+            _debtFilter.active &&
+            _debtFilter.problem(maxAgeDays: _debtCap!.maxAgeDays) == null,
       );
       final r = await WhatsAppApi.saveSchedule(schedule);
       if (!mounted) return;
@@ -669,6 +771,10 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             current: _debtChannel,
             onChanged: (v) => setState(() => _debtChannel = v),
           ),
+          if (_debtCap != null) ...[
+            const SizedBox(height: Sp.md),
+            ..._debtFilterSection(_debtCap!),
+          ],
           const SizedBox(height: Sp.md),
           _saveButton(
             saving: _savingDebt,
@@ -678,6 +784,69 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         ],
       ),
     );
+  }
+
+  // ─── «تحديد المدينين» داخل تذكير الديون ────────────────
+  // اللوحة نفسها التي في «التبليغات» (DebtFilterPanel) + ما يقوله المحفوظ + قائمة من يطابق الآن.
+  List<Widget> _debtFilterSection(DebtFilterCapability cap) {
+    final pv = _dfPreview;
+    final showList = _debtFilter.active && !_dfBusy && _dfError == null && pv != null && pv.rows.isNotEmpty;
+    return [
+      if (_debtFilterInvalid) ...[
+        Container(
+          key: const ValueKey('sched-df-invalid'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.dangerSoftBg,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: AppColors.dangerSoftBorder),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(LucideIcons.circleAlert, size: 14, color: AppColors.dangerOnSoft),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text('التحديد المحفوظ غير مقروء — تذكير الديون متوقّف حتى تحفظ من جديد.',
+                  style: AppType.micro(color: AppColors.dangerOnSoft).copyWith(height: 1.5, fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        ),
+        const SizedBox(height: Sp.sm),
+      ],
+      if (_debtFilterSaved.active) ...[
+        Text('يصل الآن لمن: ${_debtFilterSaved.describe()}',
+            key: const ValueKey('sched-df-saved'), style: AppType.micro(color: AppColors.textMid).copyWith(height: 1.5)),
+        const SizedBox(height: Sp.sm),
+      ],
+      DebtFilterPanel(
+        cap: cap,
+        value: _debtFilter,
+        onChanged: _onDebtFilterChanged,
+        busy: _dfBusy,
+        error: _dfError,
+        preview: pv,
+        // العمر المحجوب: السبب في قدرة الخادم لا في العدّ — يُعاد جلبها مع الجدولات
+        onRetry: () => (!cap.age && _debtFilter.minAgeDays != null) ? _silentReload() : _queueDebtPreview(now: true),
+      ),
+      if (showList)
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton.icon(
+            key: const ValueKey('sched-df-list'),
+            onPressed: () => showScheduleDebtMatchesSheet(context, filter: _debtFilter, preview: pv),
+            icon: Icon(LucideIcons.listChecks, size: 16, color: AppColors.brand),
+            label: Text('عرض من يطابق الآن', style: AppType.labelBold(color: AppColors.brand)),
+          ),
+        )
+      else
+        const SizedBox(height: Sp.xs),
+      Text(
+        _debtFilter.active
+            ? 'يُحسب من جديد عند كلّ تنفيذ: من سدّد يخرج، ومن قدُم دينه أو كبر يدخل.'
+            : 'بلا تحديد: يصل التذكير لكلّ من عليه دين.',
+        key: const ValueKey('sched-df-hint'),
+        style: AppType.micro(color: AppColors.textMid).copyWith(height: 1.5),
+      ),
+    ];
   }
 
   Widget _modeChip({
@@ -868,6 +1037,72 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// من يطابق تحديد تذكير الديون **الآن** — للاطّلاع: الاسم واليوزر والدين وعمر أقدم دينٍ لم يُسدَّد («دين قديم» = أقدم من سجلّاتنا).
+Future<void> showScheduleDebtMatchesSheet(BuildContext context, {required DebtFilter filter, required BroadcastPreview preview}) {
+  return showAppSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
+    builder: (_) => _DebtMatchesSheet(filter: filter, preview: preview),
+  );
+}
+
+class _DebtMatchesSheet extends StatelessWidget {
+  const _DebtMatchesSheet({required this.filter, required this.preview});
+  final DebtFilter filter;
+  final BroadcastPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final pv = preview;
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.funnel,
+        title: 'من يطابق التحديد الآن',
+        subtitle: filter.describe(),
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(R.md)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(children: [
+              for (var i = 0; i < pv.rows.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: AppColors.border),
+                ListSubscriberRow(
+                  title: pv.rows[i].name ?? pv.rows[i].username,
+                  subtitle: pv.rows[i].name == null ? '' : pv.rows[i].username,
+                  subtitleLtr: true,
+                  selectable: false,
+                  selected: false,
+                  trailing: ListAmountCell(
+                    amount: AmountShorthand.format(pv.rows[i].debt.round()).isEmpty ? '0' : AmountShorthand.format(pv.rows[i].debt.round()),
+                    amountColor: AppColors.warningOnSoft,
+                    badge: pv.rows[i].legacy
+                        ? 'دين قديم'
+                        : (pv.rows[i].days == null ? null : (pv.rows[i].days == 0 ? 'اليوم' : arDaysCount(pv.rows[i].days!))),
+                    badgeTone: pv.rows[i].legacy ? ListTone.info : ((pv.rows[i].days ?? 0) > 30 ? ListTone.danger : ListTone.warning),
+                  ),
+                ),
+              ],
+            ]),
+          ),
+          if (pv.truncated) ...[
+            const SizedBox(height: Sp.xs),
+            Text('تُعرض أوّل ${pv.rows.length} من ${pv.audience}',
+                textAlign: TextAlign.center, style: AppType.micro(color: AppColors.textMid)),
+          ],
+        ],
       ),
     );
   }

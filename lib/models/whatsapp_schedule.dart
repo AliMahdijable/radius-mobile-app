@@ -34,6 +34,17 @@ class WhatsAppSchedule {
   /// 'telegram' = يجبر تلغرام (المشترك يجب يكون مربوطاً).
   final String channelPreference;
 
+  /// «تحديد المدينين» المحفوظ مع تذكير الديون (١٢ نوفمبر): مفاتيحه minAgeDays · minAmount · maxAmount بأرقامٍ صحيحة،
+  /// وفارغٌ = بلا تحديد (التذكير لكلّ المدينين). الخادم يعيده كائناً نظيفاً أو null.
+  final Map<String, int> debtFilter;
+
+  /// المخزَّن على الخادم تالف: المجدول لا يرسل حتى يُحفظ من جديد.
+  final bool debtFilterInvalid;
+
+  /// هل يُرسَل مفتاح التحديد مع الحفظ؟ false ⇒ لا يُرسَل فيبقى ما على الخادم كما هو (الخادم: الغائب = «لا تمسّه»).
+  /// يُضبط true حين غيّر المدير التحديد وحده — فحفظُ الوقت أو الأيّام لا يمسّ التحديد أبداً.
+  final bool sendDebtFilter;
+
   const WhatsAppSchedule({
     this.id,
     required this.adminId,
@@ -47,6 +58,9 @@ class WhatsAppSchedule {
     this.scheduleMode = 'weekly',
     this.monthDays = const [],
     this.channelPreference = 'auto',
+    this.debtFilter = const {},
+    this.debtFilterInvalid = false,
+    this.sendDebtFilter = false,
   });
 
   factory WhatsAppSchedule.fromJson(Map<String, dynamic> json) {
@@ -75,7 +89,22 @@ class WhatsAppSchedule {
         final raw = (json['channel_preference'] ?? 'auto').toString();
         return ['auto', 'whatsapp', 'telegram'].contains(raw) ? raw : 'auto';
       }(),
+      debtFilter: _parseDebtFilter(json['debt_filter']),
+      debtFilterInvalid: json['debt_filter_invalid'] == true,
     );
+  }
+
+  static const _debtFilterKeys = ['minAgeDays', 'minAmount', 'maxAmount'];
+
+  /// كائن الخادم ⇒ أرقامٌ صحيحة غير سالبة للمفاتيح المعروفة وحدها — غير ذلك يُهمَل (لا تحديد يُختلق).
+  static Map<String, int> _parseDebtFilter(dynamic raw) {
+    if (raw is! Map) return const {};
+    final out = <String, int>{};
+    for (final k in _debtFilterKeys) {
+      final v = raw[k];
+      if (v is num && v.isFinite && v >= 0 && v == v.roundToDouble()) out[k] = v.toInt();
+    }
+    return out;
   }
 
   /// Payload لـPOST /api/whatsapp/save-schedule (camelCase مثل web/v1).
@@ -94,6 +123,8 @@ class WhatsAppSchedule {
         'scheduleMode': scheduleMode,
         'monthDays': monthDays,
         'channelPreference': channelPreference,
+        // كائنٌ بحدوده أو null للمسح — ولا يُرسَل كائنٌ فارغ (الخادم يرفضه: لا يُفهم «امسح» من جسمٍ أسقط قيمه)
+        if (sendDebtFilter) 'debtFilter': debtFilter.isEmpty ? null : debtFilter,
       },
     };
   }
@@ -111,6 +142,9 @@ class WhatsAppSchedule {
     String? scheduleMode,
     List<int>? monthDays,
     String? channelPreference,
+    Map<String, int>? debtFilter,
+    bool? debtFilterInvalid,
+    bool? sendDebtFilter,
   }) {
     return WhatsAppSchedule(
       id: id ?? this.id,
@@ -125,6 +159,9 @@ class WhatsAppSchedule {
       scheduleMode: scheduleMode ?? this.scheduleMode,
       monthDays: monthDays ?? this.monthDays,
       channelPreference: channelPreference ?? this.channelPreference,
+      debtFilter: debtFilter ?? this.debtFilter,
+      debtFilterInvalid: debtFilterInvalid ?? this.debtFilterInvalid,
+      sendDebtFilter: sendDebtFilter ?? this.sendDebtFilter,
     );
   }
 
