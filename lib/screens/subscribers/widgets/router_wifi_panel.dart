@@ -19,9 +19,12 @@ typedef RouterCreds = ({String ip, String user, String pass});
 /// القراءة دخولٌ على الراوتر لا تجري مع كلّ فتحٍ للكرت. لكلّ شبكة: الاسم وكلمة السرّ (مخفيّةٌ حتى تُكشف، وتُنسخ)، و«تغيير كلمة السرّ»
 /// بتأكيدٍ صريح (الأجهزة المتّصلة تنقطع وتحتاج الكلمة الجديدة). صلاحيّة «إدارة الأجهزة» — بلاها يبقى السطر مقفلاً لا مخفيّاً.
 class RouterWifiPanel extends StatefulWidget {
-  const RouterWifiPanel({super.key, required this.vendor, required this.creds});
+  const RouterWifiPanel({super.key, required this.vendor, required this.creds, this.onBusy});
 
   final String vendor;
+
+  /// قبل كلّ عمليّة (true) وبعدها (false): الكرت يوقف نبضته الحيّة — دخولٌ آخر على راوترٍ بجلسةٍ واحدة يُسقط جلستها.
+  final void Function(bool busy)? onBusy;
 
   /// الاعتماد الذي دخل به الفحص على هذا الراوتر (أو null حين لا اعتماد).
   final Future<RouterCreds?> Function() creds;
@@ -46,6 +49,15 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       _busy = true;
       _error = null;
     });
+    widget.onBusy?.call(true);
+    try {
+      await _loadInner();
+    } finally {
+      widget.onBusy?.call(false);
+    }
+  }
+
+  Future<void> _loadInner() async {
     final c = await widget.creds();
     if (!mounted) return;
     if (c == null) {
@@ -87,6 +99,15 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
     if (list == null) return;
     final next = await showDialog<String>(context: context, builder: (_) => _ChangeWifiDialog(networks: list));
     if (next == null || !mounted) return;
+    widget.onBusy?.call(true);
+    try {
+      await _changeInner(next);
+    } finally {
+      widget.onBusy?.call(false);
+    }
+  }
+
+  Future<void> _changeInner(String next) async {
     setState(() => _busy = true);
     final c = await widget.creds();
     if (!mounted) return;

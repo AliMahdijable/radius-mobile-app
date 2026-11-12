@@ -191,6 +191,18 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   RouterSample? _rlPrev;
   DateTime? _rlRetryAt;
 
+  /// عمليّة واي فاي جارية على الراوتر: النبضات تتوقّف (دخولها يُسقط جلسة العمليّة أو العكس)، وبعدها تُفتح جلسةٌ حيّة جديدة فوراً.
+  bool _routerOp = false;
+
+  void _routerOpBusy(bool busy) {
+    _routerOp = busy;
+    if (!busy) {
+      _closeRouterLive(); // جلستها سقطت بدخول العمليّة — تُفتح غيرها في النبضة التالية بلا مهلة
+      _rlRetryAt = null;
+      _tcRetryAt = null;
+    }
+  }
+
   void _closeRouterLive() {
     final s = _rlSession;
     _rlSession = null;
@@ -524,7 +536,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// [_tcClientsEvery] نبضات. بالاعتماد الذي دخل به الفحص ([DeviceProbeApi.resolveTplinkCreds]). تعثّرٌ ⇒ لا رقمٌ قديم يُعرض
   /// كأنّه الآن، ومهلة [_tpRetry] قبل السؤال ثانيةً.
   Future<void> _pulseTpClassic() async {
-    if (_pulsing || !mounted || _trafficPaused) return;
+    if (_pulsing || !mounted || _trafficPaused || _routerOp) return;
     final epoch = _trafficEpoch;
     final retryAt = _tcRetryAt;
     if (retryAt != null && DateTime.now().isBefore(retryAt)) return;
@@ -590,7 +602,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// نبضة Tenda: دخول ⇒ صفحة الحالة ⇒ خروج (الراوتر يقبل أربع جلساتٍ معاً فلا نطرد أحداً، ولا جلسةٌ تبقى لو أُغلق التطبيق).
   /// الترافيك جاهزٌ منه (KB/s ⇒ بت/ثانية)، ومعه عدد المتّصلين ومدّة الاتّصال. تعثّرٌ ⇒ لا رقمٌ قديم، ومهلةٌ قبل السؤال ثانيةً.
   Future<void> _pulseTenda() async {
-    if (_pulsing || !mounted || _trafficPaused) return;
+    if (_pulsing || !mounted || _trafficPaused || _routerOp) return;
     final epoch = _trafficEpoch;
     final retryAt = _tcRetryAt;
     if (retryAt != null && DateTime.now().isBefore(retryAt)) return;
@@ -644,7 +656,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// نبضة الراوتر الحيّة (MER): الجلسة تُفتح مرّةً بالاعتماد الذي دخل به الفحص، ثمّ عيّنةٌ كلّ نبضة؛ المعدّل فرق عيّنتين. تعثّرٌ
   /// مكرّر أو طردٌ ⇒ تُغلق ومهلةٌ قبل فتح غيرها — ولا رقمٌ قديم يُعرض كأنّه الآن.
   Future<void> _pulseRouterLive() async {
-    if (_pulsing || _probing || !mounted || _trafficPaused) return;
+    if (_pulsing || _probing || !mounted || _trafficPaused || _routerOp) return;
     final epoch = _trafficEpoch;
     final retryAt = _rlRetryAt;
     if (_rlSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
@@ -1764,7 +1776,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         if (u.isRouter && RouterOps.canWifi(u.vendor)) ...[
           const SizedBox(height: Sp.sm),
           Divider(height: 1, color: AppColors.divider),
-          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds),
+          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds, onBusy: _routerOpBusy),
         ],
       ],
     );

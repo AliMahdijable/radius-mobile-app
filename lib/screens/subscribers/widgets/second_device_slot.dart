@@ -21,6 +21,9 @@ class SecondDeviceSlot extends StatefulWidget {
 class _SecondDeviceSlotState extends State<SecondDeviceSlot> {
   bool _has = false;
 
+  /// رقم آخر حفظٍ للإعداد — جزءٌ من مفتاح الكرت: حفظٌ جديد (عنوانٌ أو اعتمادٌ آخر) يعيد بناءه فيفحص بالإعداد الجديد.
+  int _rev = DeviceConfigApi.revision.value;
+
   @override
   void initState() {
     super.initState();
@@ -45,7 +48,13 @@ class _SecondDeviceSlotState extends State<SecondDeviceSlot> {
     final cfg = await DeviceConfigApi.fetchConfig(widget.username, company: widget.company);
     if (!mounted) return;
     final has = cfg?.hasSecond ?? false;
-    if (has != _has) setState(() => _has = has);
+    final rev = DeviceConfigApi.revision.value;
+    if (has != _has || rev != _rev) {
+      setState(() {
+        _has = has;
+        _rev = rev;
+      });
+    }
   }
 
   @override
@@ -54,7 +63,7 @@ class _SecondDeviceSlotState extends State<SecondDeviceSlot> {
     return Padding(
       padding: const EdgeInsets.only(top: Sp.md),
       child: DeviceProbeCard(
-        key: ValueKey('second-device-${widget.company ?? ''}-${widget.username}'),
+        key: ValueKey('second-device-${widget.company ?? ''}-${widget.username}-$_rev'),
         ip: widget.ip,
         username: widget.username,
         company: widget.company,
