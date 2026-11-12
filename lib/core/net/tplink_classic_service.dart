@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
@@ -20,17 +21,30 @@ import '../../models/device_health.dart';
 /// * ⛔ `PPPoECfgRpm.htm` تحمل يوزر PPPoE وكلمة سرّه نصّاً — لا تُطلب أبداً. ⛔ `RestoreDefaultCfgRpm` = ضبط مصنع، `SysRebootRpm` = إقلاع.
 /// * سرعة ربط منفذ WAN (10/100) **لا يصدّرها** هذا الفيرموير — السرعة الحيّة = فرق عدّادات WAN ÷ الزمن.
 /// * القفل بعد كلماتٍ غلط لم يُجرَّب (لا نرسل تخميناً) ⇒ اعتمادات الوكيل وحدها، لا افتراض مصنّع.
+///
+/// **الفيرموير الأحدث (TL-WR940N v6، 3.18.1 Build 171030 — قِيس حيّاً ١٢ نوفمبر):** «/» ⇒ 200 بصفحة دخولٍ فيها
+/// `httpAutErrorArray = new Array(حالة, md5?, url)`: 3 جاهز · 2 الأخيرة خطأ · **1 مقفلٌ ساعتين (عشر محاولات)** · **0 مديرٌ آخر داخل
+/// (واحدٌ فقط)**. الدخول: كوكي `Authorization=escape("Basic "+base64(user+":"+md5(pass)))` ثمّ `GET /userRpm/LoginRpm.htm?Save=Save` ⇒
+/// التوكن في المسار (`/<16 حرفاً>/userRpm/Index.htm`)، والصفحات نفسها تحت `/<TOKEN>/userRpm/…` بالكوكي، والخروج
+/// `/<TOKEN>/userRpm/LogoutRpm.htm` **دائماً** (مديرٌ واحد: جلسةٌ تبقى تحجب صاحب الراوتر). المصفوفات نفسها، لكنّ `statistList`
+/// نصوصٌ بفواصل الآلاف («4,266,809,196») و`hostList` خمسة حقولٍ للمحطّة (`wlanHostPara[4]`).
 
 /// تعرّفٌ ناجح: الراوتر يقول اسمه في realm المصادقة.
 class TpClassicHello {
-  const TpClassicHello({required this.realm, required this.model});
+  const TpClassicHello({required this.realm, required this.model, this.cookieAuth = false, this.md5 = true});
   final String realm;
 
   /// من realm («WR741ND») — الطراز الكامل بإصداره يأتي من صفحة الحالة بعد الدخول.
   final String model;
+
+  /// الفيرموير الأحدث: دخولٌ بالكوكي والتوكن (لا Basic مع كلّ طلب).
+  final bool cookieAuth;
+
+  /// كلمة السرّ تُرسل MD5 (`httpAutErrorArray[1] == 1`).
+  final bool md5;
 }
 
-enum TpClassicIssue { rejected, unreachable, readFailed }
+enum TpClassicIssue { rejected, unreachable, readFailed, busy, locked }
 
 /// عيّنة حيّة واحدة (صفحة الحالة وحدها): عدّادات WAN + المدّتان.
 class TpClassicLive {
@@ -72,7 +86,25 @@ class TpClassicParse {
     return out;
   }
 
-  static int? _int(List<Object>? a, int i) => (a != null && i < a.length && a[i] is int) ? a[i] as int : null;
+  /// عددٌ صحيح من المصفوفة: عددٌ صريح، أو نصٌّ أرقامه بفواصل الآلاف («4,266,809,196» — الفيرموير الأحدث).
+  static int? _int(List<Object>? a, int i) {
+    if (a == null || i >= a.length) return null;
+    final v = a[i];
+    if (v is int) return v;
+    if (v is String && RegExp(r'^\d{1,3}(,\d{3})*$|^\d+$').hasMatch(v.trim())) return int.tryParse(v.trim().replaceAll(',', ''));
+    return null;
+  }
+
+  /// حالة صفحة الدخول (الفيرموير الأحدث): `httpAutErrorArray[0]` (3 جاهز · 2 خطأ · 1 مقفل · 0 مديرٌ آخر) و`[1]` (MD5). غيابها ⇒ null.
+  static ({int code, bool md5})? loginState(String html) {
+    final a = array(html, 'httpAutErrorArray');
+    final code = _int(a, 0);
+    if (code == null) return null;
+    return (code: code, md5: _int(a, 1) == 1);
+  }
+
+  /// التوكن من ردّ الدخول (`…/<TOKEN>/userRpm/Index.htm`) — ستّة عشر حرفاً كبيراً؛ غيابه ⇒ null.
+  static String? loginToken(String html) => RegExp(r'/([A-Z]{16})/userRpm/Index\.htm').firstMatch(html)?.group(1);
   static String _str(List<Object>? a, int i) => (a != null && i < a.length && a[i] is String) ? a[i] as String : '';
 
   /// «0 day(s) 03:43:03» · «3 days 14:31:49» · «03:43:03» ⇒ ثوانٍ؛ غير مفهوم ⇒ null (لا صفرٌ كاذب).
@@ -142,9 +174,12 @@ class TpClassicParse {
     final out = <RouterClient>[];
     if (wlanHtml != null) {
       final h = array(wlanHtml, 'hostList');
+      // حقول المحطّة كما يقولها الراوتر (`wlanHostPara[4]`): ٤ في القديم (ماك، حالة، مستلَم، مُرسَل)، ٥ في WR940N v6.
+      final f = _int(array(wlanHtml, 'wlanHostPara'), 4);
+      final stride = f != null && f >= 4 && f <= 8 ? f : 4;
       if (h != null) {
-        // كلّ محطّةٍ ٤ حقول: ماك، حالة، مستلَم، مُرسَل. الذيل 0,0 ليس نصّاً ⇒ يُتخطّى.
-        for (var i = 0; i + 3 < h.length; i += 4) {
+        // الذيل 0,0 ليس نصّاً ⇒ يُتخطّى.
+        for (var i = 0; i + 3 < h.length; i += stride) {
           final mac = h[i] is String ? h[i] as String : '';
           if (!mac.contains('-') && !mac.contains(':')) continue;
           final d = dhcp[mac.toUpperCase()];
@@ -243,6 +278,7 @@ class TplinkClassicService {
   static void reset() {
     _issues.clear();
     _rejected.clear();
+    _cookieHosts.clear();
   }
 
   static bool _wasRejected(String host, String auth) => _rejected[host]?.contains(auth) ?? false;
@@ -255,6 +291,8 @@ class TplinkClassicService {
     String host,
     String path, {
     String? auth,
+    String? cookie,
+    String? referer,
     Duration? timeout,
   }) async {
     final base = baseFor(host);
@@ -263,8 +301,9 @@ class TplinkClassicService {
       final req = await client.getUrl(Uri.parse('$base$path')).timeout(_connect);
       req.followRedirects = false;
       if (auth != null) req.headers.set(HttpHeaders.authorizationHeader, auth);
+      if (cookie != null) req.headers.set(HttpHeaders.cookieHeader, cookie);
       // حارس هذه الفيرموَيرات: طلبٌ بلا Referer من الجهاز نفسه يُجاب بصفحة «لا صلاحيّة».
-      req.headers.set(HttpHeaders.refererHeader, '$base/');
+      req.headers.set(HttpHeaders.refererHeader, referer ?? '$base/');
       final res = await req.close().timeout(timeout ?? _read);
       final bytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b)).timeout(timeout ?? _read);
       // الصفحات iso-8859-1 لكنّ الـSSID/الأسماء قد تكون UTF-8 ⇒ UTF-8 متسامح (ما يخصّنا كلّه ASCII أو UTF-8 سليم).
@@ -276,24 +315,190 @@ class TplinkClassicService {
     }
   }
 
-  /// أهو راوتر TP-Link كلاسيكيّ؟ طلبٌ واحد بلا اعتماد: 401 + realm فيه «TP-LINK». غيره (أو لا ردّ) ⇒ null.
+  /// الفيرموير الأحدث لكلّ عنوان (عُرف بالتعرّف أو بقراءة): MD5 كلمة السرّ؟ — النبضة الحيّة تدخل بالكوكي بلا طلب الحالة أوّلاً.
+  static final _cookieHosts = <String, bool>{};
+
+  /// أهو راوتر TP-Link كلاسيكيّ؟ طلبٌ واحد بلا اعتماد: 401 + realm فيه «TP-LINK» (القديم)، أو 200 بصفحة دخولٍ فيها
+  /// `httpAutErrorArray` (الأحدث — realm في الترويسة إن وُجد). غيره (أو لا ردّ) ⇒ null.
   static Future<TpClassicHello?> detect(String host) async {
-    final r = await _get(host.trim(), '/', timeout: const Duration(seconds: 5));
-    if (r == null || r.status != 401) return null;
+    final h0 = host.trim();
+    final r = await _get(h0, '/', timeout: const Duration(seconds: 5));
+    if (r == null) return null;
     final h = r.headers.value(HttpHeaders.wwwAuthenticateHeader) ?? '';
     final m = RegExp(r'Basic\s+realm="([^"]*)"', caseSensitive: false).firstMatch(h);
-    if (m == null) return null;
-    final realm = m.group(1)!;
-    if (!realm.toUpperCase().contains('TP-LINK')) return null;
-    return TpClassicHello(realm: realm, model: TpClassicParse.modelFromRealm(realm));
+    final realm = m?.group(1) ?? '';
+    if (r.status == 401) {
+      if (m == null || !realm.toUpperCase().contains('TP-LINK')) return null;
+      return TpClassicHello(realm: realm, model: TpClassicParse.modelFromRealm(realm));
+    }
+    if (r.status == 200) {
+      final st = TpClassicParse.loginState(r.body);
+      if (st == null) return null;
+      if (realm.isNotEmpty && !realm.toUpperCase().contains('TP-LINK')) return null;
+      if (realm.isEmpty && !r.body.contains('/userRpm/LoginRpm.htm')) return null;
+      _cookieHosts[h0] = st.md5;
+      return TpClassicHello(realm: realm, model: TpClassicParse.modelFromRealm(realm), cookieAuth: true, md5: st.md5);
+    }
+    return null;
+  }
+
+  /// `escape()` في JavaScript (ما يفعله الجهاز نفسه بالكوكي): تبقى الحروف والأرقام و`@*_+-./`، وغيرها `%XX`.
+  @visibleForTesting
+  static String jsEscape(String s) {
+    final b = StringBuffer();
+    for (final c in s.codeUnits) {
+      final ok = (c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) || '@*_+-./'.codeUnits.contains(c);
+      if (ok) {
+        b.writeCharCode(c);
+      } else if (c < 0x100) {
+        b.write('%${c.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+      } else {
+        b.write('%u${c.toRadixString(16).toUpperCase().padLeft(4, '0')}');
+      }
+    }
+    return b.toString();
+  }
+
+  /// كوكي الدخول كما تبنيه صفحة الجهاز (MD5 كلمة السرّ حين يطلبه).
+  @visibleForTesting
+  static String cookieAuth(String user, String pass, {required bool md5}) {
+    final p = md5 ? crypto.md5.convert(utf8.encode(pass)).toString() : pass;
+    return 'Authorization=${jsEscape('Basic ${base64.encode(utf8.encode('$user:$p'))}')}';
+  }
+
+  /// جلسة الفيرموير الأحدث: الحالة بلا اعتماد ([checkFront] — مقفل/مديرٌ آخر ⇒ لا إرسال) ⇒ الدخول ⇒ التوكن ⇒ [fn] ⇒ **الخروج دائماً**
+  /// (مديرٌ واحد: جلسةٌ تبقى تحجب صاحب الراوتر). كلمة سرٍّ مرفوضة لا تُرسل ثانيةً. null ⇒ السبب في [lastIssue].
+  static Future<T?> _withCookie<T>(
+    String h,
+    String user,
+    String pass,
+    Future<T?> Function(String tok, String cookie, String ref) fn, {
+    bool checkFront = true,
+  }) async {
+    var md5 = _cookieHosts[h] ?? true;
+    if (checkFront) {
+      final front = await _get(h, '/');
+      if (front == null) {
+        _note(h, TpClassicIssue.unreachable, 'front no-reply');
+        return null;
+      }
+      final st = TpClassicParse.loginState(front.body);
+      if (st == null) {
+        _note(h, TpClassicIssue.readFailed, 'front without login state');
+        return null;
+      }
+      if (st.code == 1) {
+        _note(h, TpClassicIssue.locked, 'locked (ten wrong tries — two hours)');
+        return null;
+      }
+      if (st.code == 0) {
+        _note(h, TpClassicIssue.busy, 'another admin is logged in');
+        return null;
+      }
+      md5 = st.md5;
+      _cookieHosts[h] = md5;
+    }
+    final cookie = cookieAuth(user, pass, md5: md5);
+    if (_wasRejected(h, cookie)) {
+      _note(h, TpClassicIssue.rejected, 'remembered');
+      return null;
+    }
+    final r = await _get(h, '/userRpm/LoginRpm.htm?Save=Save', cookie: cookie);
+    if (r == null) {
+      _note(h, TpClassicIssue.unreachable, 'login no-reply');
+      return null;
+    }
+    final tok = TpClassicParse.loginToken(r.body);
+    if (tok == null) {
+      var st = TpClassicParse.loginState(r.body);
+      if (st == null) {
+        final f = await _get(h, '/');
+        st = f == null ? null : TpClassicParse.loginState(f.body);
+      }
+      switch (st?.code) {
+        case 2:
+          _reject(h, cookie);
+          _note(h, TpClassicIssue.rejected, 'login rejected');
+        case 1:
+          _note(h, TpClassicIssue.locked, 'locked');
+        case 0:
+          _note(h, TpClassicIssue.busy, 'another admin is logged in');
+        default:
+          _note(h, TpClassicIssue.readFailed, 'login without token');
+      }
+      return null;
+    }
+    final ref = '${baseFor(h)}/$tok/userRpm/MenuRpm.htm';
+    try {
+      return await fn(tok, cookie, ref);
+    } finally {
+      await _get(h, '/$tok/userRpm/LogoutRpm.htm', cookie: cookie, referer: ref, timeout: const Duration(seconds: 4));
+    }
+  }
+
+  /// قراءةٌ كاملة بالفيرموير الأحدث (جلسةٌ واحدة: الحالة ثمّ الوايرلس وDHCP).
+  static Future<UbiquitiStatus?> _readOnceCookie(String h, String user, String pass, String realmModel) =>
+      _withCookie<UbiquitiStatus>(h, user, pass, (tok, cookie, ref) async {
+        final st = await _get(h, '/$tok/userRpm/StatusRpm.htm', cookie: cookie, referer: ref);
+        if (st == null) {
+          _note(h, TpClassicIssue.unreachable, 'status no-reply');
+          return null;
+        }
+        if (st.status != 200) {
+          _note(h, TpClassicIssue.readFailed, 'status http ${st.status}');
+          return null;
+        }
+        final more = await Future.wait([
+          _get(h, '/$tok/userRpm/WlanStationRpm.htm', cookie: cookie, referer: ref),
+          _get(h, '/$tok/userRpm/AssignedIpAddrListRpm.htm', cookie: cookie, referer: ref),
+        ]);
+        String? ok(({int status, HttpHeaders headers, String body})? r) => r != null && r.status == 200 ? r.body : null;
+        final snap = TpClassicParse.status(
+          statusHtml: st.body,
+          wlanHtml: ok(more[0]),
+          dhcpHtml: ok(more[1]),
+          baseUrl: baseFor(h),
+          realmModel: realmModel,
+        );
+        if (snap == null) {
+          _note(h, TpClassicIssue.readFailed, 'status page without data');
+          return null;
+        }
+        _issues.remove(h);
+        return snap;
+      });
+
+  /// نبضة الكرت الحيّة: عيّنة الحالة (+ عدّ الوايرلس حين [clients]) — للقديم طلبٌ أو اثنان بـBasic، وللأحدث جلسةٌ واحدة («/» ثمّ
+  /// دخول، صفحة أو اثنتان، خروج). حيّاً على WR940N: دخولٌ بلا طلب «/» قبله لا يعطي توكناً (صفحة الدخول تُهيّئه) — فـ«/» دائماً،
+  /// وهو نفسه يقول «مديرٌ آخر داخل» قبل أيّ اعتماد.
+  static Future<({TpClassicLive? live, int? clients})> pulse(String host, String user, String pass, {bool clients = false}) async {
+    final h = host.trim();
+    if (_cookieHosts.containsKey(h)) {
+      final r = await _withCookie<({TpClassicLive? live, int? clients})>(h, user, pass, (tok, cookie, ref) async {
+        final st = await _get(h, '/$tok/userRpm/StatusRpm.htm', cookie: cookie, referer: ref);
+        final live = st != null && st.status == 200 ? TpClassicParse.live(st.body, DateTime.now()) : null;
+        int? n;
+        if (clients && live != null) {
+          final w = await _get(h, '/$tok/userRpm/WlanStationRpm.htm', cookie: cookie, referer: ref);
+          n = w != null && w.status == 200 ? TpClassicParse.wifiClients(w.body) : null;
+        }
+        return (live: live, clients: n);
+      });
+      return r ?? (live: null, clients: null);
+    }
+    final live = await sample(h, user, pass);
+    final n = clients && live != null ? await sampleClients(h, user, pass) : null;
+    return (live: live, clients: n);
   }
 
   static void _note(String host, TpClassicIssue issue, String trace) =>
       _issues[host] = (issue: issue, trace: trace, at: DateTime.now());
 
   /// قراءةٌ كاملة: صفحة الحالة أوّلاً (تحسم الاعتماد: 401 = رفض)، ثمّ الوايرلس وDHCP معاً. null ⇒ السبب في [lastIssue].
-  static Future<UbiquitiStatus?> readOnce(String host, String user, String pass, {String realmModel = ''}) async {
+  static Future<UbiquitiStatus?> readOnce(String host, String user, String pass, {String realmModel = '', TpClassicHello? hello}) async {
     final h = host.trim();
+    if (hello != null && hello.cookieAuth) _cookieHosts[h] ??= hello.md5;
+    if (_cookieHosts.containsKey(h)) return _readOnceCookie(h, user, pass, realmModel);
     final auth = _basic(user, pass);
     if (_wasRejected(h, auth)) {
       _note(h, TpClassicIssue.rejected, 'remembered');
@@ -312,6 +517,12 @@ class TplinkClassicService {
     if (st.status != 200) {
       _note(h, TpClassicIssue.readFailed, 'status http ${st.status}');
       return null;
+    }
+    // صفحة دخول الفيرموير الأحدث بدل الحالة (لم يُعرف نوعه — كاش التعرّف بعد إعادة الضبط) ⇒ جلسة الكوكي
+    final ls = TpClassicParse.loginState(st.body);
+    if (ls != null && TpClassicParse.array(st.body, 'statusPara') == null) {
+      _cookieHosts[h] = ls.md5;
+      return _readOnceCookie(h, user, pass, realmModel);
     }
     final more = await Future.wait([
       _get(h, '/userRpm/WlanStationRpm.htm', auth: auth),

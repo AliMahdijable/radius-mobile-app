@@ -198,6 +198,7 @@ class UbiquitiStatus {
     this.dhcpCount,
     this.wanType = '',
     this.clients = const [],
+    this.wanLinkMbps,
   });
 
   /// المورّد: `ubnt` (الأصل — airOS) أو `tplink` (TP-Link Pharos: CPE/WBS، ١٠ نوفمبر) أو `tpclassic` (راوتر TP-Link المنزليّ
@@ -217,8 +218,15 @@ class UbiquitiStatus {
   /// قائمتَي الأجهزة اللاسلكيّة والسلكيّة، ومدّة الاتصال من WAN.
   bool get isTpAgile => vendor == 'tpagile';
 
+  /// راوتر Tenda (واجهة GoAhead — F3 وأخواته، ١٢ نوفمبر): دخولٌ بكلمة سرٍّ وحدها، والمتّصلون ومدّة الاتصال والترافيك الحيّ وسرعة منفذ
+  /// الإنترنت من صفحتي الحالة والتحكّم بالشبكة.
+  bool get isTenda => vendor == 'tenda';
+
   /// جهاز المشترك راوترٌ منزليّ (لا راديو) — ما يُعرض له يختلف: المتّصلون ومدّة الاتصال لا الإشارة والمنافذ.
-  bool get isRouter => isTpClassic || isTpAgile;
+  bool get isRouter => isTpClassic || isTpAgile || isTenda;
+
+  /// سرعة ربط منفذ الإنترنت (WAN) بالميغابت كما يقولها الراوتر («100») — null حين لا يصدّرها (TP-Link الكلاسيكيّ وAgile).
+  final int? wanLinkMbps;
 
   /// مدّة اتّصال الإنترنت (PPPoE) بالثواني كما يعدّها الراوتر («Online Time») — غير [uptimeSeconds] (تشغيل الجهاز). null = غير معروفة.
   final int? wanOnlineSeconds;
@@ -326,6 +334,7 @@ class UbiquitiStatus {
         if (dhcpCount != null) 'dh': dhcpCount,
         if (wanType.isNotEmpty) 'wt': wanType,
         if (clients.isNotEmpty) 'cl': clients.map((c) => c.toJson()).toList(),
+        if (wanLinkMbps != null) 'wl': wanLinkMbps,
       };
 
   static UbiquitiStatus fromJson(Map<String, dynamic> j) => UbiquitiStatus(
@@ -357,6 +366,7 @@ class UbiquitiStatus {
             .whereType<Map>()
             .map((m) => RouterClient.fromJson(Map<String, dynamic>.from(m)))
             .toList(),
+        wanLinkMbps: j['wl'] is int ? j['wl'] as int : null,
       );
 
   /// نسخةٌ بقراءاتٍ حيّة أحدث (نبضة الكرت) — ما لم يُعطَ يبقى كما هو؛ والمنافذ تُستبدل كلّها حين تُعطى.
@@ -397,6 +407,7 @@ class UbiquitiStatus {
         dhcpCount: dhcpCount ?? this.dhcpCount,
         wanType: wanType,
         clients: clients ?? this.clients,
+        wanLinkMbps: wanLinkMbps,
       );
 }
 

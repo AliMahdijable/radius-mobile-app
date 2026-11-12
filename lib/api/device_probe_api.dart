@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
+import '../core/net/tenda_service.dart';
 import '../core/net/zte_ont_service.dart';
 import '../core/net/tplink_agile_service.dart';
 import '../core/net/tplink_classic_service.dart';
@@ -264,6 +265,7 @@ class DeviceProbeApi {
     TplinkPharosService.reset();
     TplinkClassicService.reset();
     TplinkAgileService.reset();
+    TendaService.reset();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -375,6 +377,7 @@ class DeviceProbeApi {
       TplinkPharosService.forget(effectiveIp, manual: true);
       TplinkClassicService.forget(effectiveIp);
       TplinkAgileService.forget(effectiveIp, manual: true);
+      TendaService.forget(effectiveIp);
     }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
@@ -452,7 +455,8 @@ class DeviceProbeApi {
     final t = _tplinkIssue[effectiveIp];
     final freshT = t != null && !t.at.isBefore(started) ? t : null;
     final fresh = freshT ?? (z != null && !z.at.isBefore(started) ? z : null);
-    final vendor = fresh == null ? null : (freshT != null ? 'tplink' : 'zte');
+    // فرع Tenda يكتب في سجلّ TP-Link نفسه (بأثرٍ يبدأ بـ«tplink tenda») — جملة الكرت باسمه لا باسم TP-Link.
+    final vendor = fresh == null ? null : (freshT != null ? (freshT.trace.startsWith('tplink tenda') ? 'tenda' : 'tplink') : 'zte');
     if (snap == null) {
       final issue = (issue: fresh?.issue ?? ProbeIssue.unreachable, lockLeft: fresh?.lockLeft, at: now, vendor: vendor);
       _issueByKey[ipKey] = issue;
@@ -538,6 +542,7 @@ class DeviceProbeApi {
     TplinkPharosService.forget(ip.trim());
     TplinkClassicService.forget(ip.trim());
     TplinkAgileService.forget(ip.trim());
+    TendaService.forget(ip.trim());
     _schedulePersist();
   }
 
@@ -847,7 +852,7 @@ class DeviceProbeApi {
 
     // Admin pinned kind → probe واحد فقط. «Ubiquiti» = جهاز المشترك اللاسلكيّ: يوبيكويتي أو TP-Link ([_probeRadio]).
     if (overridesOnt) return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
-    if (overridesUbnt) return _probeRadio(ip, c.ubnt, c.tplink, kindKey);
+    if (overridesUbnt) return _probeRadio(ip, c.ubnt, c.tplink, c.tprouter, kindKey);
 
     // جهازٌ عُرف أنّه TP-Link (ولو فشل دخوله: رفضٌ أو مشغول) ⇒ فرعه وحده — لا تطرقه طلبات هواوي وUBNT كلّ موجة.
     if (_radioVendorByKey[kindKey] == 'tplink') return _probeTplinkAny(ip, c.tplink, kindKey);
@@ -855,6 +860,8 @@ class DeviceProbeApi {
     if (_radioVendorByKey[kindKey] == 'tpclassic') return _probeTpClassicAny(ip, c.tplink, kindKey);
     // راوتر TP-Link الحديث Agile (١١ نوفمبر) — كذلك فرعه وحده.
     if (_radioVendorByKey[kindKey] == 'tpagile') return _probeTpAgileAny(ip, c.tprouter, kindKey);
+    // راوتر Tenda (١٢ نوفمبر) — كذلك فرعه وحده (كلمة سرٍّ وحدها).
+    if (_radioVendorByKey[kindKey] == 'tenda') return _probeTendaAny(ip, c.tprouter, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -865,7 +872,7 @@ class DeviceProbeApi {
       return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
     }
     if (knownKind == DeviceKind.ubiquiti) {
-      return _probeRadio(ip, c.ubnt, c.tplink, kindKey);
+      return _probeRadio(ip, c.ubnt, c.tplink, c.tprouter, kindKey);
     }
 
     // First-time أو kind cache cleared — parallel race.
@@ -878,13 +885,15 @@ class DeviceProbeApi {
     final hello = _helloTplink(ip);
     final classic = _helloTpClassic(ip);
     final agile = _helloTpAgile(ip);
+    final tenda = _helloTenda(ip);
     final done = Completer<DeviceHealthSnapshot?>();
     var othersDone = false;
     var helloDone = false;
     var classicDone = false;
     var agileDone = false;
+    var tendaDone = false;
     void noneYet() {
-      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone) done.complete(null);
+      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone && tendaDone) done.complete(null);
     }
     others.then((snap) {
       othersDone = true;
@@ -922,7 +931,80 @@ class DeviceProbeApi {
         noneYet();
       }
     });
+    tenda.then((yes) {
+      tendaDone = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(_probeTendaAny(ip, c.tprouter, kindKey));
+      } else {
+        noneYet();
+      }
+    });
     return done.future;
+  }
+
+  /// تعرّف Tenda الجاري لكلّ عنوان (صفحة الدخول وحدها) — نصف دقيقة كغيره. **بعد** أن يقول تعرّف Pharos «ليس أنا» (طلبٌ على Pharos قد
+  /// يُبدّل الـnonce الذي حفظه تعرّفه).
+  static final _tendaHello = <String, Future<bool>>{};
+  static final _tendaSeen = <String, ({bool yes, DateTime at})>{};
+
+  static Future<bool> _helloTenda(String ip) {
+    final running = _tendaHello[ip];
+    if (running != null) return running;
+    final seen = _tendaSeen[ip];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
+    final f = (() async {
+      if (await _isTplink(ip)) return false;
+      return TendaService.detect(ip);
+    })()
+        .catchError((Object _) => false);
+    _tendaHello[ip] = f;
+    f.then((y) => _tendaSeen[ip] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _tendaHello.remove(ip));
+    return f;
+  }
+
+  static Future<bool> _isTenda(String ip) => _helloTenda(ip);
+
+  /// راوتر Tenda: كلمات السرّ وحدها (قائمة «باسورد فقط»: كلمة سرّ المشترك ثمّ المدير ثمّ TP-Link احتياطاً) — دخولٌ ⇒ الحالة والمتّصلون ⇒
+  /// خروج ([TendaService.readOnce]). المرفوضة لا تُعاد، والتالية بعد رفضٍ صريحٍ وحده؛ «حتى ٤ مدراء» ⇒ مشغول بلا تجربة غيرها.
+  static Future<DeviceHealthSnapshot?> _probeTendaAny(String ip, List<DeviceCred> cands, String kindKey) async {
+    _radioVendorByKey[kindKey] = 'tenda';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'tenda no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TendaService.readOnce(ip, list[i].password);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'tenda error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TendaService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          TendaIssue.rejected => ProbeIssue.loginRejected,
+          TendaIssue.busy => ProbeIssue.busy,
+          TendaIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'tenda ${why?.trace ?? '?'}',
+      );
+      if (why?.issue == TendaIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != TendaIssue.rejected) break;
+    }
+    return null;
   }
 
   /// تعرّف الراوتر الكلاسيكيّ الجاري لكلّ عنوان — فرعه وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
@@ -966,7 +1048,7 @@ class DeviceProbeApi {
     for (var i = 0; i < list.length; i++) {
       UbiquitiStatus? status;
       try {
-        status = await TplinkClassicService.readOnce(ip, list[i].username, list[i].password, realmModel: model);
+        status = await TplinkClassicService.readOnce(ip, list[i].username, list[i].password, realmModel: model, hello: hello);
       } catch (_) {
         _tplinkNote(ip, ProbeIssue.unreachable, 'classic $model error');
         break;
@@ -981,6 +1063,8 @@ class DeviceProbeApi {
         switch (why?.issue) {
           TpClassicIssue.rejected => ProbeIssue.loginRejected,
           TpClassicIssue.readFailed => ProbeIssue.readFailed,
+          TpClassicIssue.busy => ProbeIssue.busy,
+          TpClassicIssue.locked => ProbeIssue.locked,
           _ => ProbeIssue.unreachable,
         },
         'classic $model ${why?.trace ?? '?'}',
@@ -1090,17 +1174,20 @@ class DeviceProbeApi {
   /// جهاز المشترك اللاسلكيّ (النوع «Ubiquiti» مثبَّتاً أو معروفاً من قبل): يوبيكويتي أو TP-Link. المورّد المحفوظ وحده —
   /// يوبيكويتي كما كان حرفاً بلا أيّ طلبٍ زائد — وإلّا التعرّف أوّلاً (طلبٌ بلا دخول) ثمّ فرعٌ واحد.
   static Future<DeviceHealthSnapshot?> _probeRadio(
-      String ip, List<DeviceCred> ubnt, List<DeviceCred> tplink, String kindKey) async {
+      String ip, List<DeviceCred> ubnt, List<DeviceCred> tplink, List<DeviceCred> tprouter, String kindKey) async {
     final known = _radioVendorByKey[kindKey];
     if (known == 'ubnt') return _probeUbntAny(ip, ubnt, kindKey);
     if (known == 'tplink') return _probeTplinkAny(ip, tplink, kindKey);
     if (known == 'tpclassic') return _probeTpClassicAny(ip, tplink, kindKey);
-    if (known == 'tpagile') return _probeTpAgileAny(ip, tplink, kindKey);
+    // راوترات «كلمة السرّ وحدها» بقائمتها (كانت Agile هنا تأخذ قائمة اليوزر+الباسورد).
+    if (known == 'tpagile') return _probeTpAgileAny(ip, tprouter, kindKey);
+    if (known == 'tenda') return _probeTendaAny(ip, tprouter, kindKey);
     final hello = await _helloTplink(ip);
     if (hello != null) return _probeTplinkAny(ip, tplink, kindKey, hello: hello);
     final classic = await _helloTpClassic(ip);
     if (classic != null) return _probeTpClassicAny(ip, tplink, kindKey, hello: classic);
-    if (await _helloTpAgile(ip)) return _probeTpAgileAny(ip, tplink, kindKey);
+    if (await _helloTpAgile(ip)) return _probeTpAgileAny(ip, tprouter, kindKey);
+    if (await _helloTenda(ip)) return _probeTendaAny(ip, tprouter, kindKey);
     return _probeUbntAny(ip, ubnt, kindKey);
   }
 
@@ -1258,7 +1345,10 @@ class DeviceProbeApi {
       tprouter.add(DeviceCred('', p));
     }
 
-    if (ubntOwn) addRouterPass(cfg?.password ?? '');
+    // راوترات «كلمة السرّ وحدها» (Agile، Tenda): كلمة سرّ المشترك تكفي بلا يوزر (١٢ نوفمبر — المالك حفظ لمشتركَي Tenda كلمة سرٍّ
+    // وحدها، وكانت تُهمَل لأنّ «اعتماد المشترك» كان مشروطاً باليوزر).
+    final subPass = cfg?.password ?? '';
+    if ((kind == null || kind == DeviceKind.ubiquiti) && subPass.isNotEmpty) addRouterPass(subPass);
     addRouterPass(defaults.tprouterPassword ?? '');
     for (final p in defaults.tprouterExtra) {
       addRouterPass(p);
@@ -1518,7 +1608,7 @@ class DeviceProbeApi {
       String ip, String user, String pass, {bool unlessOther = false}) async {
     if (unlessOther) {
       // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها.
-      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip)]);
+      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip)]);
       if (other.contains(true)) return null;
     }
     final session =

@@ -9,6 +9,7 @@ import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
+import '../../../core/net/tenda_service.dart';
 import '../../../core/net/tplink_classic_service.dart';
 import '../../../core/net/tplink_pharos_service.dart';
 import '../../../services/agent_net_presence.dart';
@@ -172,6 +173,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   TpClassicLive? _tcLast;
   int _tcPulses = 0;
   DateTime? _tcRetryAt;
+
+  /// راوتر Tenda (١٢ نوفمبر): النبضة جلسةٌ قصيرة (دخول، الحالة، خروج) — الترافيك جاهزٌ منه، والمتّصلون ومدّة الاتّصال معه.
+  bool get _isTenda => _snap?.kind == DeviceKind.ubiquiti && (_snap?.ubnt?.isTenda ?? false);
   int? _lastRx;
   int? _lastTx;
   DateTime? _lastSample;
@@ -352,8 +356,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // TP-Link: الفحص الدوريّ يقرأ بجلسة الكرت الحيّة (طلبٌ واحد). بلاها يكون دخولاً وخروجاً كاملين كلّ عشر ثوانٍ على
       // معالج الجهاز — والنبضة الحيّة نفسها تعيد فتح الجلسة وتحدّث الإشارة، فلا حاجة له.
       if (_isTplink && !TplinkPharosService.hasLive(_snap!.ip)) return;
-      // الراوتر الكلاسيكيّ: نبضته الحيّة تحدّث المتّصلين والمدّتين — فحصٌ كاملٌ فوقها حملٌ بلا فائدة على معالجٍ قديم.
-      if (_isTpClassic && _trafficTimer != null) return;
+      // الراوتر الكلاسيكيّ وTenda: نبضتهما الحيّة تحدّث المتّصلين والمدّة — فحصٌ كاملٌ فوقها حملٌ بلا فائدة على معالجٍ صغير.
+      if ((_isTpClassic || _isTenda) && _trafficTimer != null) return;
       _refreshQuietly(force: true);
     });
     // عدّاد «آخر تحديث» يتقدّم بنفسه ولو لم يصل جديد — وإلّا جمد
@@ -395,6 +399,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _tcPulses = 0;
       _pulseTpClassic();
       _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTpClassic());
+      return;
+    }
+    if (snap.ubnt?.isTenda ?? false) {
+      // Tenda: الترافيك جاهزٌ من صفحة الحالة (KB/s) — لا فرق عدّادات.
+      _pulseTenda();
+      _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTenda());
       return;
     }
     _pulseTraffic(); // نبضة فوريّة تزرع المرجع بلا انتظار 3 ثوانٍ
@@ -495,8 +505,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         _tcRetryAt = DateTime.now().add(_tpRetry);
         return;
       }
-      final live = await TplinkClassicService.sample(creds.ip, creds.user, creds.pass);
+      // عيّنة الحالة (+ الوايرلس كلّ [_tcClientsEvery]) — الفيرموير الأحدث بجلسةٍ واحدةٍ لكلّ نبضة (دخول، صفحة، خروج).
+      final wantClients = _tcPulses % _tcClientsEvery == 0;
+      final got = await TplinkClassicService.pulse(creds.ip, creds.user, creds.pass, clients: wantClients);
       if (!_trafficCurrent(epoch)) return;
+      final live = got.live;
       if (live == null) {
         _tcLast = null;
         _loseTraffic();
@@ -504,9 +517,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         return;
       }
       _tcRetryAt = null;
-      final wantClients = _tcPulses++ % _tcClientsEvery == 0;
-      final clients = wantClients ? await TplinkClassicService.sampleClients(creds.ip, creds.user, creds.pass) : null;
-      if (!_trafficCurrent(epoch)) return;
+      _tcPulses++;
+      final clients = got.clients;
       final snap = _snap;
       final u = snap?.ubnt;
       if (snap != null && u != null && u.isTpClassic) {
@@ -530,6 +542,59 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     } catch (_) {
       if (_trafficCurrent(epoch)) {
         _tcLast = null;
+        _tcRetryAt = DateTime.now().add(_tpRetry);
+        _loseTraffic();
+      }
+    } finally {
+      _pulsing = false;
+    }
+  }
+
+  /// نبضة Tenda: دخول ⇒ صفحة الحالة ⇒ خروج (الراوتر يقبل أربع جلساتٍ معاً فلا نطرد أحداً، ولا جلسةٌ تبقى لو أُغلق التطبيق).
+  /// الترافيك جاهزٌ منه (KB/s ⇒ بت/ثانية)، ومعه عدد المتّصلين ومدّة الاتّصال. تعثّرٌ ⇒ لا رقمٌ قديم، ومهلةٌ قبل السؤال ثانيةً.
+  Future<void> _pulseTenda() async {
+    if (_pulsing || !mounted || _trafficPaused) return;
+    final epoch = _trafficEpoch;
+    final retryAt = _tcRetryAt;
+    if (retryAt != null && DateTime.now().isBefore(retryAt)) return;
+    _pulsing = true;
+    try {
+      final creds = await DeviceProbeApi.resolveTplinkCreds(
+        fallbackIp: widget.ip,
+        subscriberUsername: widget.username,
+        company: widget.company,
+      );
+      if (!_trafficCurrent(epoch)) return;
+      if (creds == null) {
+        _loseTraffic();
+        _tcRetryAt = DateTime.now().add(_tpRetry);
+        return;
+      }
+      final live = await TendaService.sample(creds.ip, creds.pass);
+      if (!_trafficCurrent(epoch)) return;
+      if (live == null) {
+        _loseTraffic();
+        _tcRetryAt = DateTime.now().add(_tpRetry);
+        return;
+      }
+      _tcRetryAt = null;
+      final snap = _snap;
+      final u = snap?.ubnt;
+      if (snap != null && u != null && u.isTenda) {
+        setState(() {
+          _snap = DeviceHealthSnapshot(
+            kind: snap.kind,
+            ip: snap.ip,
+            ubnt: u.withLive(wanOnlineSeconds: live.wanOnlineSeconds, peerCount: live.online),
+          );
+          _lastAt = DateTime.now();
+        });
+      }
+      final down = live.downBps;
+      final up = live.upBps;
+      if (down != null && up != null) _recordTraffic(down, up);
+    } catch (_) {
+      if (_trafficCurrent(epoch)) {
         _tcRetryAt = DateTime.now().add(_tpRetry);
         _loseTraffic();
       }
@@ -1193,6 +1258,25 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       final tp = _whyNoTplink(why!.issue, left);
       if (tp != null) return tp;
     }
+    // Tenda (١٢ نوفمبر): كلمة سرٍّ وحدها، ولا قفل معروف — جملتان بكلماته.
+    if (why?.vendor == 'tenda') {
+      final t = switch (why!.issue) {
+        ProbeIssue.needsCredentials => (
+            title: 'راوتر Tenda يحتاج باسورده',
+            hint: 'اكتبه بقسم «راوتر — باسورد فقط» من «الاعتمادات» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
+          ),
+        ProbeIssue.busy => (
+            title: 'الراوتر عليه أربع جلسات مفتوحة',
+            hint: 'صفحته مفتوحة بأماكن ثانية — سكّر وحدة منها وحدّث',
+          ),
+        ProbeIssue.readFailed => (
+            title: 'دخلنا للراوتر بس ما رجعت قراءاته',
+            hint: 'حدّث بعد لحظات',
+          ),
+        _ => null,
+      };
+      if (t != null) return t;
+    }
     return switch (why?.issue) {
       ProbeIssue.loginRejected => (
           title: 'الجهاز رفض اليوزر أو الباسورد',
@@ -1495,6 +1579,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           _DetailRow(field: _routerOnline(u), rtlValue: true),
         if (u.isRouter && u.wanType.isNotEmpty)
           _DetailRow(field: _routerWan(u), small: true),
+        // سرعة منفذ الإنترنت (المالك ١١ نوفمبر: «سرعه المنفذ wan») — حين يصدّرها الراوتر (Tenda).
+        if (u.isRouter && u.wanLinkMbps != null)
+          _DetailRow(field: _routerWanLink(u), small: true),
         if (u.firmware.isNotEmpty)
           _DetailRow(field: _ubntFirmware(u), small: true),
         if (u.ssid.isNotEmpty)
@@ -2156,9 +2243,11 @@ CopyField _ubntCcq(UbiquitiStatus u) => CopyField('CCQ', '${u.ccqPercent}%');
 CopyField _ubntKind(UbiquitiStatus u) {
   final brand = u.isTplink
       ? (u.model.isEmpty ? 'TP-Link' : 'TP-Link ${u.model}')
-      : u.isRouter
-          ? (u.model.isEmpty ? 'راوتر TP-Link' : 'راوتر TP-Link ${u.model}')
-          : null;
+      : u.isTenda
+          ? (u.model.isEmpty ? 'راوتر Tenda' : 'راوتر Tenda ${u.model}')
+          : u.isRouter
+              ? (u.model.isEmpty ? 'راوتر TP-Link' : 'راوتر TP-Link ${u.model}')
+              : null;
   return CopyField(
     'نوع الجهاز',
     brand != null
@@ -2197,6 +2286,8 @@ CopyField _routerOnline(UbiquitiStatus u) => CopyField(
     );
 
 CopyField _routerWan(UbiquitiStatus u) => CopyField('الإنترنت', u.wanType);
+
+CopyField _routerWanLink(UbiquitiStatus u) => CopyField('منفذ الإنترنت', '${u.wanLinkMbps}Mbps');
 
 /// إيجارات DHCP (سلكيّ + لاسلكيّ) — تبقى بعد خروج الجهاز، فاسمها «أجهزة DHCP» لا «متّصلون».
 CopyField _routerDhcp(UbiquitiStatus u) => CopyField('أجهزة DHCP', '${u.dhcpCount}');
@@ -2241,6 +2332,7 @@ List<CopyField> deviceCopyFields(DeviceHealthSnapshot snap, {DateTime? at}) {
       if (u.isRouter && u.peerCount != null) _routerClients(u),
       if (u.isRouter && u.wanOnlineSeconds != null) _routerOnline(u),
       if (u.isRouter && u.wanType.isNotEmpty) _routerWan(u),
+      if (u.isRouter && u.wanLinkMbps != null) _routerWanLink(u),
       if (u.isRouter && u.dhcpCount != null) _routerDhcp(u),
       if (u.signalDbm != null) _ubntSignal(u),
       if (u.ccqPercent != null) _ubntCcq(u),

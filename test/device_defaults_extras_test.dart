@@ -177,7 +177,7 @@ void main() {
     await open(t);
     final section = find.byKey(const ValueKey('creds-tprouter'));
     expect(section, findsOneWidget);
-    expect(find.descendant(of: section, matching: find.text('راوتر TP-Link حديث — باسورد فقط (Archer)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('راوتر — باسورد فقط (TP-Link Archer · Tenda)')), findsOneWidget);
     expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'r-old')), findsOneWidget);
     // باسورد فقط: حقلٌ نصّيٌّ واحد قبل الإضافة (لا خانة يوزر).
     expect(find.descendant(of: section, matching: find.byType(TextField)), findsOneWidget);

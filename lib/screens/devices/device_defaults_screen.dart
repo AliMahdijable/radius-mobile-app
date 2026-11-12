@@ -244,7 +244,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   // راوتر TP-Link الحديث (Agile/Archer): كلمة سرٍّ محلّيّة فقط بلا يوزر (المالك ١١ نوفمبر: «النوع الي يدور فقط باسورد»).
                   _passwordSection(
                     key: const ValueKey('creds-tprouter'),
-                    title: 'راوتر TP-Link حديث — باسورد فقط (Archer)',
+                    title: 'راوتر — باسورد فقط (TP-Link Archer · Tenda)',
                     subtitle: 'devices.tprouter_default_hint'.tr(),
                   ),
                   const SizedBox(height: Sp.lg),

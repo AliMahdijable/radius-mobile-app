@@ -876,7 +876,7 @@
     "ubnt_default_hint": "System default: ubnt / ubnt. Leave empty to use it.",
     "tplink_default_hint": "For TP-Link devices (CPE) and home routers. No built-in default: enter your devices' login — the CPE locks its page after ten wrong tries, so nothing is ever guessed on it.",
     "tplink_extra_hint": "If the first is rejected, the next ones are tried in order and the one that works is remembered per device. A rejected login is never retried on a device, so it does not lock.",
-    "tprouter_default_hint": "For modern TP-Link routers (Archer and kin) that log in with a local password only, no username. Enter the router page's own password (not the ONT's). They are tried in order and the one that works is remembered.",
+    "tprouter_default_hint": "For routers that log in with a password only, no username: modern TP-Link (Archer and kin) and Tenda. Enter the router page's own password (not the ONT's). They are tried in order and the one that works is remembered.",
     "save_creds": "Save credentials",
     "add_cred": "Add another login",
     "extra_cred": "Login {}",
