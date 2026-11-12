@@ -127,7 +127,9 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     if (cfg.customIp != null && cfg.customIp!.isNotEmpty) {
       DeviceProbeApi.invalidateIp(DeviceProbeApi.addressOf(widget.sessionIp, cfg.customIp));
     }
-    // الجهاز الثاني: عنوانه القديم والجديد (بعد حلّ «:منفذ» على آيبي الجلسة) — اعتمادٌ جديد يُجرَّب ولو رُفض قبله.
+    // الجهاز الثاني: نتيجته القديمة لا تُعرض لجهازٍ آخر، وعنوانه القديم والجديد (بعد حلّ «:منفذ» على آيبي الجلسة) — اعتمادٌ جديد
+    // يُجرَّب ولو رُفض قبله.
+    if (_originalSecond != cfg.secondAddress) DeviceProbeApi.forgetUser(widget.username, slot: 2);
     for (final a in {_originalSecond, cfg.secondAddress}) {
       final eff = a == null || a.isEmpty ? '' : DeviceProbeApi.addressOf(widget.sessionIp, a);
       if (eff.isNotEmpty) DeviceProbeApi.invalidateIp(eff);

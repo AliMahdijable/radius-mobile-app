@@ -578,6 +578,14 @@ class DeviceProbeApi {
     _schedulePersist();
   }
 
+  /// يُنسى ما في الكاش لمشتركٍ بخانته (نتيجةً وسبب فشل) — بعد حفظ إعدادٍ يغيّر جهاز الخانة (عنوانٌ ثانٍ آخر) كي لا يُعرض جهازٌ قديم.
+  static void forgetUser(String username, {String? company, int slot = 1}) {
+    final k = _k(company, _slotUser(username, slot));
+    _snapByUser.remove(k);
+    _issueByUser.remove(k);
+    _schedulePersist();
+  }
+
   /// Read-only peek بالـIP.
   /// لماذا فشل آخر فحصٍ لهذا المشترك (بالمشترك أوّلاً ثمّ بالعنوان) — null: نجح أو لم يُفحص. [lockLeft] ما بقي من القفل الآن.
   /// [vendor] من سجّل السبب (`zte` · `tplink`) أو null — لصياغة الجملة.

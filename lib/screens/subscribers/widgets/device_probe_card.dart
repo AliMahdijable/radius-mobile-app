@@ -890,6 +890,16 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     }
   }
 
+  /// هويّة الجهاز في اللقطة (النوع والمورّد) — تغيّرها (عنوانٌ آخر حُفظ، جهازٌ بُدّل) يعني نبضة ترافيكٍ أخرى.
+  static String _identity(DeviceHealthSnapshot? s) => s == null ? '' : '${s.kind.name}/${s.ubnt?.vendor ?? s.ont?.vendor ?? ''}';
+
+  /// لقطةٌ جديدة لجهازٍ غير الذي تنبض له النبضة الحاليّة ⇒ تُوقف وتبدأ نبضته هو (كانت نبضة C64 تبقى على Tenda بعد تبديل العنوان).
+  void _restartTrafficIfChanged(DeviceHealthSnapshot? before, DeviceHealthSnapshot? after) {
+    if (after == null || _identity(before) == _identity(after) || _identity(before).isEmpty) return;
+    _stopTraffic(clear: true);
+    _maybeStartTraffic();
+  }
+
   Future<void> _refreshQuietlyInner({bool force = false}) async {
     final snap = await DeviceProbeApi.probe(
       fallbackIp: widget.ip,
@@ -899,10 +909,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       company: widget.company,
     );
     if (!mounted || snap == null) return;
+    final before = _snap;
     setState(() {
       _snap = snap;
       _lastAt = DateTime.now();
     });
+    _restartTrafficIfChanged(before, snap);
     // من يقرأ الكاش نفسه (بلاطة «تنبيه» فوق، وبطاقة القائمة تحت) لا يعرف
     // أنّ قراءةً جديدة وصلت إلّا بهذا.
     DeviceProbeBus.bump();
@@ -950,6 +962,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     if (!mounted) return;
     final snap = results[0] as DeviceHealthSnapshot?;
     final cfg = results[1] as DeviceConfig?;
+    final before = _snap;
     setState(() {
       _snap = snap;
       _notes = cfg?.notes?.trim();
@@ -959,6 +972,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     DeviceProbeBus.bump();
     // أُعيد البنگ بعد أن عُرف الإعداد (customIp) — فيُصحَّح عنوانه إن لزم.
     unawaited(_checkReach(force: force));
+    _restartTrafficIfChanged(before, snap);
     _maybeStartTraffic();
     _maybeStartSignal();
   }
