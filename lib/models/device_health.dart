@@ -222,8 +222,14 @@ class UbiquitiStatus {
   /// الإنترنت من صفحتي الحالة والتحكّم بالشبكة.
   bool get isTenda => vendor == 'tenda';
 
+  /// راوتر TP-Link بواجهة CGI وتعمية GDPR (Archer C50 v4 وأخواته، ١٢ نوفمبر) — يوزر وباسورد.
+  bool get isTpCgi => vendor == 'tpcgi';
+
+  /// راوتر TP-Link بواجهة «$.su» وبروتوكول MER (Archer C64 وأخواته على https:8443، ١٢ نوفمبر) — كلمة سرٍّ وحدها.
+  bool get isTpMer => vendor == 'tpmer';
+
   /// جهاز المشترك راوترٌ منزليّ (لا راديو) — ما يُعرض له يختلف: المتّصلون ومدّة الاتصال لا الإشارة والمنافذ.
-  bool get isRouter => isTpClassic || isTpAgile || isTenda;
+  bool get isRouter => isTpClassic || isTpAgile || isTenda || isTpCgi || isTpMer;
 
   /// سرعة ربط منفذ الإنترنت (WAN) بالميغابت كما يقولها الراوتر («100») — null حين لا يصدّرها (TP-Link الكلاسيكيّ وAgile).
   final int? wanLinkMbps;

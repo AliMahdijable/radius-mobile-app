@@ -9,7 +9,9 @@ import '../core/net/huawei_ont_service.dart';
 import '../core/net/tenda_service.dart';
 import '../core/net/zte_ont_service.dart';
 import '../core/net/tplink_agile_service.dart';
+import '../core/net/tplink_cgi_service.dart';
 import '../core/net/tplink_classic_service.dart';
+import '../core/net/tplink_mer_service.dart';
 import '../core/net/tplink_pharos_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../core/net/tcp_reachability.dart';
@@ -266,6 +268,8 @@ class DeviceProbeApi {
     TplinkClassicService.reset();
     TplinkAgileService.reset();
     TendaService.reset();
+    TplinkCgiService.reset();
+    TplinkMerService.reset();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -378,6 +382,8 @@ class DeviceProbeApi {
       TplinkClassicService.forget(effectiveIp);
       TplinkAgileService.forget(effectiveIp, manual: true);
       TendaService.forget(effectiveIp);
+      TplinkCgiService.forget(effectiveIp);
+      TplinkMerService.forget(effectiveIp);
     }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
@@ -543,6 +549,8 @@ class DeviceProbeApi {
     TplinkClassicService.forget(ip.trim());
     TplinkAgileService.forget(ip.trim());
     TendaService.forget(ip.trim());
+    TplinkCgiService.forget(ip.trim());
+    TplinkMerService.forget(ip.trim());
     _schedulePersist();
   }
 
@@ -862,6 +870,9 @@ class DeviceProbeApi {
     if (_radioVendorByKey[kindKey] == 'tpagile') return _probeTpAgileAny(ip, c.tprouter, kindKey);
     // راوتر Tenda (١٢ نوفمبر) — كذلك فرعه وحده (كلمة سرٍّ وحدها).
     if (_radioVendorByKey[kindKey] == 'tenda') return _probeTendaAny(ip, c.tprouter, kindKey);
+    // راوترا TP-Link: CGI+GDPR (Archer C50) بيوزر وباسورد، و$.su/MER (Archer C64) بكلمة سرٍّ وحدها (١٢ نوفمبر).
+    if (_radioVendorByKey[kindKey] == 'tpcgi') return _probeTpCgiAny(ip, c.tplink, kindKey);
+    if (_radioVendorByKey[kindKey] == 'tpmer') return _probeTpMerAny(ip, c.tprouter, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -886,14 +897,18 @@ class DeviceProbeApi {
     final classic = _helloTpClassic(ip);
     final agile = _helloTpAgile(ip);
     final tenda = _helloTenda(ip);
+    final cgi = _helloTpCgi(ip);
+    final mer = _helloTpMer(ip);
     final done = Completer<DeviceHealthSnapshot?>();
     var othersDone = false;
     var helloDone = false;
     var classicDone = false;
     var agileDone = false;
     var tendaDone = false;
+    var cgiDone = false;
+    var merDone = false;
     void noneYet() {
-      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone && tendaDone) done.complete(null);
+      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone && tendaDone && cgiDone && merDone) done.complete(null);
     }
     others.then((snap) {
       othersDone = true;
@@ -940,7 +955,135 @@ class DeviceProbeApi {
         noneYet();
       }
     });
+    cgi.then((yes) {
+      cgiDone = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(_probeTpCgiAny(ip, c.tplink, kindKey));
+      } else {
+        noneYet();
+      }
+    });
+    mer.then((yes) {
+      merDone = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(_probeTpMerAny(ip, c.tprouter, kindKey));
+      } else {
+        noneYet();
+      }
+    });
     return done.future;
+  }
+
+  /// تعرّف عائلات الراوترات الجديدة (CGI، MER) الجاري لكلّ عنوان — نصف دقيقة كغيره، و**بعد** أن يقول تعرّف Pharos «ليس أنا».
+  static final _familyHello = <String, Future<bool>>{};
+  static final _familySeen = <String, ({bool yes, DateTime at})>{};
+
+  static Future<bool> _helloFamily(String family, String ip, Future<bool> Function(String ip) detect) {
+    final key = '$family|$ip';
+    final running = _familyHello[key];
+    if (running != null) return running;
+    final seen = _familySeen[key];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
+    final f = (() async {
+      if (await _isTplink(ip)) return false;
+      return detect(ip);
+    })()
+        .catchError((Object _) => false);
+    _familyHello[key] = f;
+    f.then((y) => _familySeen[key] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _familyHello.remove(key));
+    return f;
+  }
+
+  static Future<bool> _helloTpCgi(String ip) => _helloFamily('cgi', ip, TplinkCgiService.detect);
+  static Future<bool> _isTpCgi(String ip) => _helloTpCgi(ip);
+  static Future<bool> _helloTpMer(String ip) => _helloFamily('mer', ip, TplinkMerService.detect);
+  static Future<bool> _isTpMer(String ip) => _helloTpMer(ip);
+
+  /// راوتر TP-Link بواجهة CGI+GDPR: مرشّحو قائمة TP-Link (يوزر وباسورد) — دخولٌ بجلسةٍ على اتّصالٍ واحد، القراءة، الخروج
+  /// ([TplinkCgiService.readOnce]). المرفوض لا يُعاد، والتالي بعد رفضٍ صريحٍ وحده (عشرٌ غلط تقفل الصفحة ساعتين).
+  static Future<DeviceHealthSnapshot?> _probeTpCgiAny(String ip, List<DeviceCred> cands, String kindKey) async {
+    _radioVendorByKey[kindKey] = 'tpcgi';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'cgi no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkCgiService.readOnce(ip, list[i].username, list[i].password);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'cgi error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkCgiService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          CgiIssue.rejected => ProbeIssue.loginRejected,
+          CgiIssue.locked => ProbeIssue.locked,
+          CgiIssue.busy => ProbeIssue.busy,
+          CgiIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'cgi ${why?.trace ?? '?'}',
+      );
+      if (why?.issue == CgiIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != CgiIssue.rejected) break;
+    }
+    return null;
+  }
+
+  /// راوتر TP-Link بواجهة $.su/MER: كلمات السرّ وحدها (قائمة «باسورد فقط») — حالة الدخول تُقرأ قبل أيّ إرسال (مقفل/ممتلئ/خمس محاولاتٍ غلط
+  /// ⇒ لا إرسال)، ثمّ دخول وقراءة وخروج ([TplinkMerService.readOnce]).
+  static Future<DeviceHealthSnapshot?> _probeTpMerAny(String ip, List<DeviceCred> cands, String kindKey) async {
+    _radioVendorByKey[kindKey] = 'tpmer';
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'mer no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkMerService.readOnce(ip, list[i].password);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'mer error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkMerService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          MerIssue.rejected => ProbeIssue.loginRejected,
+          MerIssue.locked => ProbeIssue.locked,
+          MerIssue.busy => ProbeIssue.busy,
+          MerIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'mer ${why?.trace ?? '?'}',
+      );
+      if (why?.issue == MerIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != MerIssue.rejected) break;
+    }
+    return null;
   }
 
   /// تعرّف Tenda الجاري لكلّ عنوان (صفحة الدخول وحدها) — نصف دقيقة كغيره. **بعد** أن يقول تعرّف Pharos «ليس أنا» (طلبٌ على Pharos قد
@@ -1182,12 +1325,16 @@ class DeviceProbeApi {
     // راوترات «كلمة السرّ وحدها» بقائمتها (كانت Agile هنا تأخذ قائمة اليوزر+الباسورد).
     if (known == 'tpagile') return _probeTpAgileAny(ip, tprouter, kindKey);
     if (known == 'tenda') return _probeTendaAny(ip, tprouter, kindKey);
+    if (known == 'tpcgi') return _probeTpCgiAny(ip, tplink, kindKey);
+    if (known == 'tpmer') return _probeTpMerAny(ip, tprouter, kindKey);
     final hello = await _helloTplink(ip);
     if (hello != null) return _probeTplinkAny(ip, tplink, kindKey, hello: hello);
     final classic = await _helloTpClassic(ip);
     if (classic != null) return _probeTpClassicAny(ip, tplink, kindKey, hello: classic);
     if (await _helloTpAgile(ip)) return _probeTpAgileAny(ip, tprouter, kindKey);
     if (await _helloTenda(ip)) return _probeTendaAny(ip, tprouter, kindKey);
+    if (await _helloTpCgi(ip)) return _probeTpCgiAny(ip, tplink, kindKey);
+    if (await _helloTpMer(ip)) return _probeTpMerAny(ip, tprouter, kindKey);
     return _probeUbntAny(ip, ubnt, kindKey);
   }
 
@@ -1608,7 +1755,7 @@ class DeviceProbeApi {
       String ip, String user, String pass, {bool unlessOther = false}) async {
     if (unlessOther) {
       // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها.
-      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip)]);
+      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip), _isTpCgi(ip), _isTpMer(ip)]);
       if (other.contains(true)) return null;
     }
     final session =
