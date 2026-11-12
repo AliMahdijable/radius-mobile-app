@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter, LengthLimitingTextInputFormatter;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/device_config_api.dart';
@@ -18,8 +19,11 @@ import '../../../core/widgets/sheet_scaffold.dart';
 /// credentials, custom IP, and a free-form note. All fields optional;
 /// empties fall through to admin defaults + library defaults.
 class DeviceConfigSheet extends StatefulWidget {
-  const DeviceConfigSheet({super.key, required this.username});
+  const DeviceConfigSheet({super.key, required this.username, this.sessionIp = ''});
   final String username;
+
+  /// آيبي جلسة المشترك الآن — لإبطال فحص «الجهاز الثاني» المكتوب «:منفذ» بعد الحفظ.
+  final String sessionIp;
 
   @override
   State<DeviceConfigSheet> createState() => _DeviceConfigSheetState();
@@ -30,7 +34,15 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
   final _user = TextEditingController();
   final _pass = TextEditingController();
   final _ip = TextEditingController();
+  final _port = TextEditingController();
   final _notes = TextEditingController();
+  // «الجهاز الثاني» (نانو + راوتر، ١٢ نوفمبر)
+  final _ip2 = TextEditingController();
+  final _port2 = TextEditingController();
+  final _user2 = TextEditingController();
+  final _pass2 = TextEditingController();
+  bool _obscure2 = true;
+  String? _originalSecond;
   bool _loading = true;
   bool _saving = false;
   bool _obscure = true;
@@ -47,7 +59,12 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     _user.dispose();
     _pass.dispose();
     _ip.dispose();
+    _port.dispose();
     _notes.dispose();
+    _ip2.dispose();
+    _port2.dispose();
+    _user2.dispose();
+    _pass2.dispose();
     super.dispose();
   }
 
@@ -58,21 +75,42 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
       _kind = cfg?.deviceType;
       _user.text = cfg?.username ?? '';
       _pass.text = cfg?.password ?? '';
-      _ip.text = cfg?.customIp ?? '';
+      final a1 = splitAddress(cfg?.customIp);
+      _ip.text = a1.ip;
+      _port.text = a1.port;
       _notes.text = cfg?.notes ?? '';
       _originalIp = cfg?.customIp;
+      final a2 = splitAddress(cfg?.secondAddress);
+      _ip2.text = a2.ip;
+      _port2.text = a2.port;
+      _user2.text = cfg?.secondUsername ?? '';
+      _pass2.text = cfg?.secondPassword ?? '';
+      _originalSecond = cfg?.secondAddress;
       _loading = false;
     });
   }
 
   Future<void> _save() async {
+    final main = joinAddress(_ip.text, _port.text);
+    if (main.error != null) {
+      showSheetSnack(context, 'IP المخصّص: ${main.error}', isError: true);
+      return;
+    }
+    final second = joinAddress(_ip2.text, _port2.text);
+    if (second.error != null) {
+      showSheetSnack(context, 'الجهاز الثاني: ${second.error}', isError: true);
+      return;
+    }
     setState(() => _saving = true);
     final cfg = DeviceConfig(
       deviceType: _kind,
       username: _user.text.trim().isEmpty ? null : _user.text.trim(),
       password: _pass.text.isEmpty ? null : _pass.text,
-      customIp: _ip.text.trim().isEmpty ? null : _ip.text.trim(),
+      customIp: main.value,
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+      secondAddress: second.value,
+      secondUsername: second.value == null || _user2.text.trim().isEmpty ? null : _user2.text.trim(),
+      secondPassword: second.value == null || _pass2.text.isEmpty ? null : _pass2.text,
     );
     final ok = await DeviceConfigApi.saveConfig(widget.username, cfg);
     if (!mounted) return;
@@ -87,7 +125,12 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
       DeviceProbeApi.invalidateIp(_originalIp!);
     }
     if (cfg.customIp != null && cfg.customIp!.isNotEmpty) {
-      DeviceProbeApi.invalidateIp(cfg.customIp!);
+      DeviceProbeApi.invalidateIp(DeviceProbeApi.addressOf(widget.sessionIp, cfg.customIp));
+    }
+    // الجهاز الثاني: عنوانه القديم والجديد (بعد حلّ «:منفذ» على آيبي الجلسة) — اعتمادٌ جديد يُجرَّب ولو رُفض قبله.
+    for (final a in {_originalSecond, cfg.secondAddress}) {
+      final eff = a == null || a.isEmpty ? '' : DeviceProbeApi.addressOf(widget.sessionIp, a);
+      if (eff.isNotEmpty) DeviceProbeApi.invalidateIp(eff);
     }
     Navigator.of(context).pop(true);
   }
@@ -203,25 +246,57 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                 const SizedBox(height: Sp.lg),
                 SheetSection(
                   label: 'IP مخصص (اختياري)',
-                  footnote: 'مفيد للأجهزة خلف NAT',
-                  child: SheetBox(
-                    icon: LucideIcons.network,
-                    child: TextField(
-                      controller: _ip,
-                      // على الآيفون TextInputType.number بلا نقطة ⇒ لوحةٌ عشريّة + تحويل «٫/،» والأرقام العربيّة
-                      keyboardType: ipKeyboard,
-                      inputFormatters: const [IpInputFormatter()],
-                      textDirection: ui.TextDirection.ltr,
-                      style: AppType.input(),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        hintText: 'يستخدم IP الساس إذا فارغ',
-                        hintStyle:
-                            AppType.input(color: AppColors.textPlaceholder),
+                  footnote: 'مفيد للأجهزة خلف NAT · المنفذ للإدارة عن بعد على منفذٍ غير 80 (مثل 8080)',
+                  child: _addressRow(_ip, _port, hint: 'يستخدم IP الساس إذا فارغ'),
+                ),
+                const SizedBox(height: Sp.lg),
+                // «الجهاز الثاني» (١٢ نوفمبر — المالك: «المشترك اكو عدهم نانو وراوتر… لازم نضيف فحصين»)
+                SheetSection(
+                  label: 'الجهاز الثاني — نانو + راوتر (اختياري)',
+                  hint: 'الاتّصال على النانو والراوتر خلفه ⇒ اكتب المنفذ المحوّل للراوتر (بورت فورورد بالنانو) وحده · '
+                      'الاتّصال على الراوتر ⇒ اكتب آيبي النانو الثابت',
+                  gap: Sp.sm,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _addressRow(_ip2, _port2, hint: 'آيبي المشترك إذا فارغ'),
+                      const SizedBox(height: Sp.sm),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(R.lg),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Column(
+                          children: [
+                            _credRow(
+                              icon: LucideIcons.user,
+                              label: 'اسم المستخدم',
+                              controller: _user2,
+                              hint: 'من «الاعتمادات» إذا فارغ',
+                            ),
+                            Divider(height: 1, color: AppColors.divider),
+                            _credRow(
+                              icon: LucideIcons.lock,
+                              label: 'كلمة السر',
+                              controller: _pass2,
+                              hint: 'من «الاعتمادات» إذا فارغ',
+                              obscure: _obscure2,
+                              trailing: InkWell(
+                                onTap: () => setState(() => _obscure2 = !_obscure2),
+                                borderRadius: BorderRadius.circular(R.pill),
+                                child: Icon(
+                                  _obscure2 ? LucideIcons.eye : LucideIcons.eyeOff,
+                                  size: 18,
+                                  color: AppColors.brandAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: Sp.lg),
@@ -248,6 +323,58 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                 ),
               ],
             ),
+    );
+  }
+
+  /// عنوان: آيبي (لوحة أرقامٍ بنقطة) + منفذٌ بحقلٍ مستقلّ (لوحة الأرقام على الآيفون بلا «:»).
+  Widget _addressRow(TextEditingController ip, TextEditingController port, {required String hint}) {
+    return Row(
+      textDirection: ui.TextDirection.ltr,
+      children: [
+        Expanded(
+          child: SheetBox(
+            icon: LucideIcons.network,
+            child: TextField(
+              controller: ip,
+              keyboardType: ipKeyboard,
+              inputFormatters: const [IpInputFormatter()],
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.input(),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: hint,
+                hintStyle: AppType.input(color: AppColors.textPlaceholder),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.x6),
+          child: Text(':', style: AppType.input(color: AppColors.textHint)),
+        ),
+        SizedBox(
+          width: 96,
+          child: SheetBox(
+            child: TextField(
+              controller: port,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(5)],
+              textDirection: ui.TextDirection.ltr,
+              textAlign: TextAlign.center,
+              style: AppType.input(),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: 'منفذ',
+                hintStyle: AppType.input(color: AppColors.textPlaceholder),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -290,4 +417,32 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
       ),
     );
   }
+}
+
+/// «IP» أو «IP:منفذ» أو «:منفذ» ⇒ حقلا الشاشة.
+({String ip, String port}) splitAddress(String? raw) {
+  final r = (raw ?? '').trim();
+  final i = r.lastIndexOf(':');
+  if (i < 0) return (ip: r, port: '');
+  return (ip: r.substring(0, i), port: r.substring(i + 1));
+}
+
+/// حقلا الشاشة ⇒ العنوان المحفوظ (null = فارغ) أو سبب الرفض.
+({String? value, String? error}) joinAddress(String ipText, String portText) {
+  final ip = IpInputFormatter.normalize(ipText.trim());
+  final port = portText.trim();
+  if (ip.isEmpty && port.isEmpty) return (value: null, error: null);
+  if (ip.isNotEmpty) {
+    final parts = ip.split('.');
+    if (parts.length != 4 || parts.any((p) => p.isEmpty || int.parse(p) > 255)) {
+      return (value: null, error: 'الآيبي غير صحيح (مثل 10.0.0.5)');
+    }
+  }
+  if (port.isNotEmpty) {
+    final n = int.tryParse(port);
+    if (n == null || n < 1 || n > 65535) return (value: null, error: 'المنفذ بين 1 و65535');
+  }
+  final cleanIp = ip.isEmpty ? '' : ip.split('.').map((p) => int.parse(p).toString()).join('.');
+  if (port.isEmpty) return (value: cleanIp, error: null);
+  return (value: '$cleanIp:$port', error: null);
 }

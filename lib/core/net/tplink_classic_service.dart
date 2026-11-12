@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
+import 'router_types.dart';
 
 /// راوتر TP-Link المنزليّ القديم (واجهة `userRpm` — TL-WR741ND v4 بفيرموير 3.16.6، قِيس حيّاً ١١ نوفمبر على راوتر مشترك):
 ///
@@ -245,6 +246,76 @@ class TpClassicParse {
       clients: clientList(wlanHtml: wlanHtml, dhcpHtml: dhcpHtml),
     );
   }
+
+  /// الواي فاي من صفحة WlanSecurityRpm (WR940N، ١٢ نوفمبر — من شيفرة الصفحة نفسها): wlanPara[2] نوع الأمان (قيمة الراديو:
+  /// 3 WPA/WPA2-Personal · 2 Enterprise · 1 WEP · 0 مطفأ)، [3] خيارات WEP/WPA/PSK حرفاً حرفاً، [9] كلمة سرّ PSK، [16] 1 = تغييرٌ
+  /// ينتظر إعادة التشغيل، والاسم ssidList[0]. null حين ليست الصفحة.
+  static List<RouterWifi>? wifi(String html) {
+    final p = array(html, 'wlanPara');
+    if (p == null || p.length < 17) return null;
+    final ssid = array(html, 'ssidList');
+    final sec = _int(p, 2);
+    final opt = '${p[3]}';
+    final pskOpt = opt.length > 2 ? opt[2] : '';
+    final label = switch (sec) {
+      0 => 'مفتوحة',
+      1 => 'WEP',
+      2 => 'Enterprise',
+      3 => switch (pskOpt) { '1' => 'WPA', '2' => 'WPA2', _ => 'WPA/WPA2' },
+      _ => '',
+    };
+    return [
+      RouterWifi(
+        band: '',
+        ssid: ssid != null && ssid.isNotEmpty ? '${ssid[0]}' : '',
+        password: sec == 3 ? '${p[9]}' : null,
+        enabled: true,
+        security: label,
+        ref: 'main',
+      ),
+    ];
+  }
+
+  /// الصفحة تقول «التغيير لا يسري حتى يُعاد تشغيل الجهاز» (wlanPara[16] == 1).
+  static bool wifiNeedsReboot(String html) => _int(array(html, 'wlanPara'), 16) == 1;
+
+  /// استعلام زرّ «Save» في نموذج الصفحة (GET بحقوله بترتيبه): كلّ القيم كما قرأتها الصفحة (wlanPara/wlanList) وكلمة السرّ الجديدة
+  /// وحدها تتغيّر. null حين ليس الأمان WPA/WPA2-Personal (لا كلمة سرٍّ شخصيّة تُغيَّر).
+  static String? wifiSaveQuery(String html, String newPass) {
+    final p = array(html, 'wlanPara');
+    if (p == null || p.length < 18 || _int(p, 2) != 3) return null;
+    final l = array(html, 'wlanList') ?? const <Object>[];
+    String at(List<Object> a, int i) => i < a.length ? '${a[i]}' : '';
+    final opt = at(p, 3);
+    final vap = _int(p, 17);
+    final q = <(String, String)>[
+      ('vapIdx', vap != null && vap >= 1 && vap <= 4 ? '$vap' : ''),
+      ('wepSecOpt', opt.isNotEmpty ? opt[0] : ''),
+      ('keytype', at(p, 4)),
+      ('keynum', at(p, 10)),
+      ('key1', at(l, 0)),
+      ('length1', at(l, 1)),
+      ('key2', at(l, 2)),
+      ('length2', at(l, 3)),
+      ('key3', at(l, 4)),
+      ('length3', at(l, 5)),
+      ('key4', at(l, 6)),
+      ('length4', at(l, 7)),
+      ('wpaSecOpt', opt.length > 1 ? opt[1] : ''),
+      ('wpaCipher', at(p, 13)),
+      ('radiusIp', at(p, 6)),
+      ('radiusPort', at(p, 7)),
+      ('radiusSecret', at(p, 8)),
+      ('intervalWpa', at(p, 15)),
+      ('secType', '3'),
+      ('pskSecOpt', opt.length > 2 ? opt[2] : ''),
+      ('pskCipher', at(p, 14)),
+      ('pskSecret', newPass),
+      ('interval', at(p, 11)),
+      ('Save', 'Save'),
+    ];
+    return q.map((e) => '${e.$1}=${Uri.encodeQueryComponent(e.$2)}').join('&');
+  }
 }
 
 class TplinkClassicService {
@@ -305,6 +376,7 @@ class TplinkClassicService {
       // حارس هذه الفيرموَيرات: طلبٌ بلا Referer من الجهاز نفسه يُجاب بصفحة «لا صلاحيّة».
       req.headers.set(HttpHeaders.refererHeader, referer ?? '$base/');
       final res = await req.close().timeout(timeout ?? _read);
+      lastSetCookieNames = (res.headers[HttpHeaders.setCookieHeader] ?? const <String>[]).map((c) => c.split('=').first).join(',');
       final bytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b)).timeout(timeout ?? _read);
       // الصفحات iso-8859-1 لكنّ الـSSID/الأسماء قد تكون UTF-8 ⇒ UTF-8 متسامح (ما يخصّنا كلّه ASCII أو UTF-8 سليم).
       return (status: res.statusCode, headers: res.headers, body: utf8.decode(bytes, allowMalformed: true));
@@ -436,6 +508,18 @@ class TplinkClassicService {
     }
   }
 
+  /// للأدوات الحيّة: صفحاتٌ بعينها في جلسةٍ واحدة (الفيرموير الأحدث) ⇒ نصوصها — الأداة تقرر ما تطبع.
+  @visibleForTesting
+  static Future<Map<String, String>?> debugPages(String host, String user, String pass, List<String> paths) =>
+      _withCookie<Map<String, String>>(host.trim(), user, pass, (tok, cookie, ref) async {
+        final out = <String, String>{};
+        for (final p in paths) {
+          final r = await _get(host.trim(), '/$tok/userRpm/$p', cookie: cookie, referer: ref);
+          out[p] = r == null ? '<no-reply>' : 'HTTP ${r.status}\n${r.body}';
+        }
+        return out;
+      });
+
   /// قراءةٌ كاملة بالفيرموير الأحدث (جلسةٌ واحدة: الحالة ثمّ الوايرلس وDHCP).
   static Future<UbiquitiStatus?> _readOnceCookie(String h, String user, String pass, String realmModel) =>
       _withCookie<UbiquitiStatus>(h, user, pass, (tok, cookie, ref) async {
@@ -554,6 +638,124 @@ class TplinkClassicService {
   static Future<int?> sampleClients(String host, String user, String pass) async {
     final r = await _authedGet(host.trim(), '/userRpm/WlanStationRpm.htm', _basic(user, pass));
     return r == null ? null : TpClassicParse.wifiClients(r);
+  }
+
+  /// للأدوات الحيّة: أسماء الكوكي في آخر Set-Cookie (بلا قيم).
+  @visibleForTesting
+  static String? lastSetCookieNames;
+
+  /// للأدوات الحيّة: أثر خطوات الحفظ (حالةٌ وأطوال — بلا قيم).
+  @visibleForTesting
+  static List<String>? trace;
+
+  static RouterFail _fail(String h) => switch (_issues[h]?.issue) {
+        TpClassicIssue.rejected => RouterFail.rejected,
+        TpClassicIssue.busy => RouterFail.busy,
+        TpClassicIssue.locked => RouterFail.locked,
+        TpClassicIssue.unreachable => RouterFail.unreachable,
+        _ => RouterFail.failed,
+      };
+
+  /// صفحةٌ في جلسة الراوتر (الفيرموير الأحدث بالكوكي والتوكن، والقديم بـBasic) — [fn] تتلقّى جالب الصفحات ومرجع الصفحة.
+  static Future<T?> _inSession<T>(String h, String user, String pass,
+      Future<T?> Function(Future<({int status, String body})?> Function(String page, {String? query, String? refPage}) get) fn) async {
+    if (!_cookieHosts.containsKey(h)) await detect(h);
+    if (_cookieHosts.containsKey(h)) {
+      return _withCookie<T>(h, user, pass, (tok, cookie, ref) => fn((page, {query, refPage}) async {
+            final r = await _get(h, '/$tok/userRpm/$page${query == null ? '' : '?$query'}',
+                cookie: cookie, referer: refPage == null ? ref : '${baseFor(h)}/$tok/userRpm/$refPage', timeout: const Duration(seconds: 15));
+            return r == null ? null : (status: r.status, body: r.body);
+          }));
+    }
+    final auth = _basic(user, pass);
+    if (_wasRejected(h, auth)) {
+      _note(h, TpClassicIssue.rejected, 'remembered');
+      return null;
+    }
+    return fn((page, {query, refPage}) async {
+      final r = await _get(h, '/userRpm/$page${query == null ? '' : '?$query'}',
+          auth: auth, referer: refPage == null ? null : '${baseFor(h)}/userRpm/$refPage', timeout: const Duration(seconds: 15));
+      if (r != null && r.status == 401) {
+        _reject(h, auth);
+        _note(h, TpClassicIssue.rejected, '$page 401');
+        return null;
+      }
+      return r == null ? null : (status: r.status, body: r.body);
+    });
+  }
+
+  /// كلمة سرّ الواي فاي من صفحة الأمان (قراءةٌ وحدها).
+  static Future<RouterResult<List<RouterWifi>>> readWifi(String host, String user, String pass) async {
+    final h = host.trim();
+    final got = await _inSession<RouterResult<List<RouterWifi>>>(h, user, pass, (get) async {
+      final r = await get('WlanSecurityRpm.htm');
+      final w = r == null || r.status != 200 ? null : TpClassicParse.wifi(r.body);
+      return w == null ? const RouterResult.fail(RouterFail.failed, 'security page') : RouterResult.ok(w);
+    });
+    return got ?? RouterResult.fail(_fail(h), _issues[h]?.trace);
+  }
+
+  /// كلمة سرّ جديدة بزرّ «Save» في صفحة الأمان (حقول النموذج بقيمها المقروءة — [TpClassicParse.wifiSaveQuery])، والصفحة التي تعود
+  /// تؤكّد الحفظ. هذه الفيرموَيرات تقول «لا يسري حتى يُعاد التشغيل» ⇒ detail = `needs-reboot` (الكرت يعرض الإقلاع).
+  static Future<RouterResult<List<RouterWifi>>> setWifiPassword(String host, String user, String pass, String newPass) async {
+    // مديرٌ واحد على الراوتر: دخولٌ من هاتفٍ آخر (نبضة كرتٍ مفتوح) يُسقط جلستنا وسط الحفظ ⇒ الصفحة تعود «خروجاً». الحفظ نفسه يُعاد
+    // مرّةً بعد لحظة (كلمة السرّ نفسها — إعادةٌ لا تضرّ).
+    final first = await _setWifiOnce(host, user, pass, newPass);
+    if (first.ok || first.detail != 'session lost') return first;
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    return _setWifiOnce(host, user, pass, newPass);
+  }
+
+  static Future<RouterResult<List<RouterWifi>>> _setWifiOnce(String host, String user, String pass, String newPass) async {
+    final h = host.trim();
+    final got = await _inSession<RouterResult<List<RouterWifi>>>(h, user, pass, (get) async {
+      final page = await get('WlanSecurityRpm.htm');
+      trace?.add('page http=${page?.status} len=${page?.body.length} setCookie=${lastSetCookieNames ?? '-'}');
+      if (page == null || page.status != 200 || TpClassicParse.wifi(page.body) == null) {
+        return const RouterResult.fail(RouterFail.failed, 'security page');
+      }
+      final q = TpClassicParse.wifiSaveQuery(page.body, newPass);
+      if (q == null) return const RouterResult.fail(RouterFail.noPsk);
+      final saved = await get('WlanSecurityRpm.htm', query: q, refPage: 'WlanSecurityRpm.htm');
+      trace?.add('save http=${saved?.status} len=${saved?.body.length} sec=${saved != null && TpClassicParse.wifi(saved.body) != null} '
+          'logout=${saved?.body.contains('Authorization=;path=/') ?? false}');
+      // الردّ نفسه صفحة الأمان بعد الحفظ — وإن ضاع: قراءةٌ ثانية تحسم
+      var body = saved != null && saved.status == 200 && TpClassicParse.wifi(saved.body) != null ? saved.body : null;
+      if (body == null) {
+        final again = await get('WlanSecurityRpm.htm');
+        trace?.add('again http=${again?.status} len=${again?.body.length} logout=${again?.body.contains('Authorization=;path=/') ?? false}');
+        body = again != null && again.status == 200 ? again.body : null;
+      }
+      final w = body == null ? null : TpClassicParse.wifi(body);
+      if (w == null) {
+        final lost = (saved?.body.contains('Authorization=;path=/') ?? false);
+        return RouterResult.fail(RouterFail.failed, lost ? 'session lost' : 'verify read');
+      }
+      if (w.first.password != newPass) return const RouterResult.fail(RouterFail.failed, 'not saved');
+      return RouterResult.ok(w, TpClassicParse.wifiNeedsReboot(body!) ? RouterResult.needsRebootTag : null);
+    });
+    return got ?? RouterResult.fail(_fail(h), _issues[h]?.trace);
+  }
+
+  /// بعد [setWifiPassword]: أتنتظر الصفحة إعادة التشغيل؟ (wlanPara[16]) — قراءةٌ وحدها.
+  static Future<bool?> wifiPendingReboot(String host, String user, String pass) async {
+    final h = host.trim();
+    return _inSession<bool>(h, user, pass, (get) async {
+      final r = await get('WlanSecurityRpm.htm');
+      return r == null || r.status != 200 ? null : TpClassicParse.wifiNeedsReboot(r.body);
+    });
+  }
+
+  /// إعادة التشغيل بزرّ صفحة «Reboot» نفسها (GET `SysRebootRpm.htm?Reboot=Reboot` — النموذج في الجهاز، ١٢ نوفمبر).
+  /// ⛔ جارتها RestoreDefaultCfgRpm.htm إعادة ضبط المصنع — لا تُطلب أبداً.
+  static Future<RouterResult<RouterReboot>> reboot(String host, String user, String pass) async {
+    final h = host.trim();
+    final got = await _inSession<RouterResult<RouterReboot>>(h, user, pass, (get) async {
+      final r = await get('SysRebootRpm.htm', query: 'Reboot=Reboot', refPage: 'SysRebootRpm.htm');
+      if (r == null) return const RouterResult.ok(RouterReboot(confirmed: false));
+      return r.status == 200 ? const RouterResult.ok(RouterReboot(confirmed: true)) : RouterResult.fail(RouterFail.failed, 'reboot ${r.status}');
+    });
+    return got ?? RouterResult.fail(_fail(h), _issues[h]?.trace);
   }
 
   /// قراءةٌ بالاعتماد للنبضة الحيّة: المرفوض لا يُرسل، و401 يُحفظ رفضاً (كلمة السرّ تبدّلت ⇒ لا طرقٌ كلّ ثلاث ثوانٍ).

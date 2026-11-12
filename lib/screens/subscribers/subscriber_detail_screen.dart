@@ -50,6 +50,7 @@ import 'widgets/device_chip_micro.dart';
 import '../../services/subscriber_refresh_signal.dart';
 import '../sales/sales_screen.dart' show showSellToSubscriber;
 import 'widgets/device_probe_card.dart';
+import 'widgets/second_device_slot.dart';
 import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
 import 'widgets/kit_fiber_card.dart';
@@ -563,6 +564,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       username: sub.username,
                       company: sub.companyKey,
                     ),
+                    // «الجهاز الثاني» (نانو + راوتر) — يظهر حين يُحفظ له عنوانٌ في إعداد الجهاز.
+                    SecondDeviceSlot(ip: sub.ipAddress ?? '', username: sub.username, company: sub.companyKey),
                     const SizedBox(height: Sp.sm),
                     // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                     // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)

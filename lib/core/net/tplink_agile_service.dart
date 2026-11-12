@@ -24,6 +24,7 @@ import 'package:pointycastle/export.dart'
         SecureRandom;
 
 import '../../models/device_health.dart';
+import 'router_types.dart';
 
 /// TP-Link «Agile» modern router (Archer AX10 & kin — واجهة الـSPA الحديثة):
 /// جهاز المشترك راوترٌ منزليّ (لا راديو)، بروتوكولٌ **مختلف عن userRpm الكلاسيكيّ** ([TplinkClassicService]):
@@ -683,6 +684,121 @@ class TplinkAgileService {
       }
     }
     return j;
+  }
+
+  /// طلبٌ بجلسةٍ كواجهة الجهاز بنصٍّ صريح [plain] (`operation=read|write&…`) على [path] (`admin/<module>?form=<x>`) — مُعمّىً موقَّعاً
+  /// أو صريحاً حسب الجلسة ([_read] نفسه بنصٍّ آخر). ⇒ JSON المفكوك أو null.
+  static Future<Map<String, dynamic>?> _call(AgileSession ss, String path, String plain) async {
+    final base = baseFor(ss.host);
+    final headers = ss.cookie.isEmpty ? null : {HttpHeaders.cookieHeader: ss.cookie};
+    if (ss.plain) {
+      final r = await _post(base, '/cgi-bin/luci/;stok=${ss.stok}/$path', plain, headers: headers, timeout: const Duration(seconds: 20));
+      if (r == null || r.status != 200) return null;
+      return _json(r.body);
+    }
+    final dataEnc = AgileCrypto.aesEncrypt(plain, ss.aesKey, ss.aesIv);
+    final hash = ss.flags.replaceHash ? AgileCrypto.sha256Hex(dataEnc) : ss.hash;
+    final sign = AgileCrypto.signature('h=$hash&s=${ss.seq + dataEnc.length}',
+        login: false, flags: ss.flags, nHex: ss.signN, eHex: ss.signE, aesKey: ss.aesKey, aesIv: ss.aesIv);
+    final r = await _post(base, '/cgi-bin/luci/;stok=${ss.stok}/$path', 'sign=$sign&data=${Uri.encodeQueryComponent(dataEnc)}',
+        headers: headers, timeout: const Duration(seconds: 20));
+    if (r == null || r.status != 200) return null;
+    final j = _json(r.body);
+    final data = j?['data'];
+    if (data is String) {
+      try {
+        return _json(AgileCrypto.aesDecrypt(data, ss.aesKey, ss.aesIv));
+      } catch (_) {
+        return null;
+      }
+    }
+    return j;
+  }
+
+  static RouterFail _fail(String h) => switch (_issues[h]?.issue) {
+        AgileIssue.rejected => RouterFail.rejected,
+        AgileIssue.busy => RouterFail.busy,
+        AgileIssue.locked => RouterFail.locked,
+        AgileIssue.unreachable => RouterFail.unreachable,
+        _ => RouterFail.failed,
+      };
+
+  /// نموذج الشبكة (`admin/wireless?form=wireless_2g|wireless_5g` — قِيس حيّاً على AX53 ١٢ نوفمبر: ssid · psk_key · encryption
+  /// (psk/none/wpa/wep) · psk_version (rsn = WPA2، wpa، auto) · enable) ⇒ الشبكة. null حين لا نموذج.
+  static RouterWifi? wifiOf(Map<String, dynamic>? j, String band) {
+    final d = j == null ? null : (j['data'] is Map ? Map<String, dynamic>.from(j['data'] as Map) : j);
+    if (d == null || !d.containsKey('ssid')) return null;
+    final enc = '${d['encryption'] ?? ''}'.toLowerCase();
+    final ver = '${d['psk_version'] ?? ''}'.toLowerCase();
+    final label = switch (enc) {
+      'none' => 'مفتوحة',
+      'psk' => switch (ver) { 'rsn' => 'WPA2', 'wpa' => 'WPA', 'sae' || 'wpa3' => 'WPA3', 'sae_transition' || 'rsn_sae' => 'WPA2/WPA3', _ => 'WPA/WPA2' },
+      'wpa' => 'Enterprise',
+      'wep' => 'WEP',
+      _ => enc,
+    };
+    return RouterWifi(
+      band: band,
+      ssid: '${d['ssid'] ?? ''}',
+      password: enc == 'psk' ? '${d['psk_key'] ?? ''}' : null,
+      enabled: '${d['enable'] ?? 'on'}' != 'off',
+      security: label,
+      ref: band == '5G' ? 'wireless_5g' : 'wireless_2g',
+    );
+  }
+
+  static Future<List<RouterWifi>?> _wifiIn(AgileSession ss) async {
+    final out = <RouterWifi>[];
+    for (final (form, band) in const [('wireless_2g', '2.4G'), ('wireless_5g', '5G')]) {
+      final w = wifiOf(await _read(ss, 'wireless', form), band);
+      if (w != null) out.add(w);
+    }
+    return out.isEmpty ? null : out;
+  }
+
+  /// كلمة سرّ الواي فاي لكلّ نطاق: دخول ⇒ نموذجا 2.4G و5G.
+  static Future<RouterResult<List<RouterWifi>>> readWifi(String host, String password, {String username = ''}) async {
+    final h = host.trim();
+    final ss = await login(h, password, username: username);
+    if (ss == null) return RouterResult.fail(_fail(h), _issues[h]?.trace);
+    final w = await _wifiIn(ss);
+    return w == null ? const RouterResult.fail(RouterFail.failed, 'wifi forms') : RouterResult.ok(w);
+  }
+
+  /// كلمة سرٍّ جديدة لكلّ شبكةٍ مفعّلة بـPSK: `operation=write&wireless_2g_psk_key=…` على `admin/wireless?&form=guest&form=wireless_2g`
+  /// (كتابةٌ جزئيّة بالأسماء المسبوقة — طريقة هذه الواجهة)، ثمّ قراءةٌ تؤكّد كلمة السرّ **والاسم** (كتابةٌ مسحت غيرها لا تُعدّ نجاحاً).
+  static Future<RouterResult<List<RouterWifi>>> setWifiPassword(String host, String password, String newPass, {String username = ''}) async {
+    final h = host.trim();
+    final ss = await login(h, password, username: username);
+    if (ss == null) return RouterResult.fail(_fail(h), _issues[h]?.trace);
+    final before = await _wifiIn(ss);
+    if (before == null) return const RouterResult.fail(RouterFail.failed, 'wifi forms');
+    final targets = before.where((w) => w.enabled && w.canChange && w.ref != null).toList();
+    if (targets.isEmpty) return const RouterResult.fail(RouterFail.noPsk);
+    for (final w in targets) {
+      final form = w.ref!;
+      final j = await _call(ss, 'admin/wireless?&form=guest&form=$form', 'operation=write&${form}_psk_key=${Uri.encodeQueryComponent(newPass)}');
+      if (j != null && j['success'] == false) return RouterResult.fail(RouterFail.failed, 'write $form ${j['errorcode']}');
+    }
+    final after = await _wifiIn(ss);
+    if (after == null) return const RouterResult.fail(RouterFail.failed, 'verify read');
+    for (final w in targets) {
+      final a = after.where((x) => x.ref == w.ref).firstOrNull;
+      if (a == null || a.password != newPass || a.ssid != w.ssid) return RouterResult.fail(RouterFail.failed, 'not saved ${w.ref}');
+    }
+    return RouterResult.ok(after);
+  }
+
+  /// إعادة التشغيل: `admin/system?form=reboot` بـ`operation=write`. ⛔ إعادة ضبط المصنع (form=factory/restore) لا تُطلب أبداً.
+  static Future<RouterResult<RouterReboot>> reboot(String host, String password, {String username = ''}) async {
+    final h = host.trim();
+    final ss = await login(h, password, username: username);
+    if (ss == null) return RouterResult.fail(_fail(h), _issues[h]?.trace);
+    final j = await _call(ss, 'admin/system?form=reboot', 'operation=write');
+    if (j == null) return const RouterResult.ok(RouterReboot(confirmed: false));
+    if (j['success'] == false) return RouterResult.fail(RouterFail.failed, 'reboot ${j['errorcode']}');
+    final wait = j['data'] is Map ? int.tryParse('${(j['data'] as Map)['reboot_time'] ?? ''}') : null;
+    return RouterResult.ok(RouterReboot(confirmed: true, seconds: wait));
   }
 
   /// قراءةٌ خام (لأدوات الفحص الحيّ وحدها).

@@ -9,6 +9,8 @@ import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
+import '../../../core/net/router_ops.dart';
+import '../../../core/net/router_types.dart';
 import '../../../core/net/tenda_service.dart';
 import '../../../core/net/tplink_classic_service.dart';
 import '../../../core/net/tplink_pharos_service.dart';
@@ -25,6 +27,7 @@ import '../../../services/permissions_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
+import 'router_wifi_panel.dart';
 import 'subscriber_traffic_chart.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -54,7 +57,11 @@ class DeviceProbeCard extends StatefulWidget {
     this.ip = '',
     required this.username,
     this.company,
+    this.slot = 1,
   });
+
+  /// 1 = جهاز المشترك (آيبي الجلسة أو المخصّص)، 2 = «الجهاز الثاني» (نانو + راوتر — عنوانه واعتماده من إعداد المشترك).
+  final int slot;
 
   /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
   /// يجرّب customIp من DeviceConfig أوّلاً، فحتى المشتركون بلا session
@@ -176,6 +183,20 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   /// راوتر Tenda (١٢ نوفمبر): النبضة جلسةٌ قصيرة (دخول، الحالة، خروج) — الترافيك جاهزٌ منه، والمتّصلون ومدّة الاتّصال معه.
   bool get _isTenda => _snap?.kind == DeviceKind.ubiquiti && (_snap?.ubnt?.isTenda ?? false);
+
+  /// راوترٌ بنبضةٍ حيّة بجلسةٍ مفتوحة (MER — Archer C64/C80، ١٢ نوفمبر): دخولٌ مرّة، ثمّ كلّ نبضةٍ عدّادات WAN (المعدّل فرق عيّنتين)
+  /// ومدّة الاتّصال، والمتّصلون كلّ بضع نبضات ([RouterOps.openLive]).
+  bool get _isRouterLive => _snap?.kind == DeviceKind.ubiquiti && RouterOps.hasLive(_snap?.ubnt?.vendor ?? '');
+  RouterLive? _rlSession;
+  RouterSample? _rlPrev;
+  DateTime? _rlRetryAt;
+
+  void _closeRouterLive() {
+    final s = _rlSession;
+    _rlSession = null;
+    _rlPrev = null;
+    if (s != null) unawaited(s.close());
+  }
   int? _lastRx;
   int? _lastTx;
   DateTime? _lastSample;
@@ -222,6 +243,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     _ontRetryAt = null;
     _closeTplink();
     _tpRetryAt = null;
+    _closeRouterLive();
     _rxBps = null;
     _txBps = null;
     _lastRx = null;
@@ -258,6 +280,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // يبدو مجهولاً بعدها. إن كانت قديمة نُحدّثها في الخلفيّة بلا دوّارة.
     final hit = DeviceProbeApi.peek(
       username: widget.username,
+      slot: widget.slot,
       ip: widget.ip.trim(),
       company: widget.company,
     );
@@ -298,6 +321,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final r = await DeviceProbeApi.reachable(
       fallbackIp: widget.ip,
       subscriberUsername: widget.username,
+      slot: widget.slot,
       company: widget.company,
       force: force,
     );
@@ -357,7 +381,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // معالج الجهاز — والنبضة الحيّة نفسها تعيد فتح الجلسة وتحدّث الإشارة، فلا حاجة له.
       if (_isTplink && !TplinkPharosService.hasLive(_snap!.ip)) return;
       // الراوتر الكلاسيكيّ وTenda: نبضتهما الحيّة تحدّث المتّصلين والمدّة — فحصٌ كاملٌ فوقها حملٌ بلا فائدة على معالجٍ صغير.
-      if ((_isTpClassic || _isTenda) && _trafficTimer != null) return;
+      if ((_isTpClassic || _isTenda || _isRouterLive) && _trafficTimer != null) return;
       _refreshQuietly(force: true);
     });
     // عدّاد «آخر تحديث» يتقدّم بنفسه ولو لم يصل جديد — وإلّا جمد
@@ -407,6 +431,17 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTenda());
       return;
     }
+    if (RouterOps.hasLive(snap.ubnt?.vendor ?? '')) {
+      _rlPrev = null;
+      _pulseRouterLive();
+      _trafficTimer = Timer.periodic(_pulse, (_) => _pulseRouterLive());
+      return;
+    }
+    if (snap.ubnt?.isRouter ?? false) {
+      // راوترٌ بلا نبضةٍ حيّة بعد: لا جلسة SSH النانو عليه (منفذٌ مقفول ودخولٌ بـubnt) — «تعذّرت قراءة الترافيك» صراحةً.
+      _loseTraffic();
+      return;
+    }
     _pulseTraffic(); // نبضة فوريّة تزرع المرجع بلا انتظار 3 ثوانٍ
     _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTraffic());
   }
@@ -423,6 +458,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         final creds = await DeviceProbeApi.resolveTplinkCreds(
           fallbackIp: widget.ip,
           subscriberUsername: widget.username,
+      slot: widget.slot,
           company: widget.company,
         );
         if (!_trafficCurrent(epoch)) return;
@@ -497,6 +533,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       final creds = await DeviceProbeApi.resolveTplinkCreds(
         fallbackIp: widget.ip,
         subscriberUsername: widget.username,
+      slot: widget.slot,
         company: widget.company,
       );
       if (!_trafficCurrent(epoch)) return;
@@ -562,6 +599,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       final creds = await DeviceProbeApi.resolveTplinkCreds(
         fallbackIp: widget.ip,
         subscriberUsername: widget.username,
+      slot: widget.slot,
         company: widget.company,
       );
       if (!_trafficCurrent(epoch)) return;
@@ -603,6 +641,80 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     }
   }
 
+  /// نبضة الراوتر الحيّة (MER): الجلسة تُفتح مرّةً بالاعتماد الذي دخل به الفحص، ثمّ عيّنةٌ كلّ نبضة؛ المعدّل فرق عيّنتين. تعثّرٌ
+  /// مكرّر أو طردٌ ⇒ تُغلق ومهلةٌ قبل فتح غيرها — ولا رقمٌ قديم يُعرض كأنّه الآن.
+  Future<void> _pulseRouterLive() async {
+    if (_pulsing || _probing || !mounted || _trafficPaused) return;
+    final epoch = _trafficEpoch;
+    final retryAt = _rlRetryAt;
+    if (_rlSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
+    final vendor = _snap?.ubnt?.vendor ?? '';
+    _pulsing = true;
+    try {
+      if (_rlSession == null) {
+        final c = await _routerCreds();
+        if (!_trafficCurrent(epoch)) return;
+        if (c == null) {
+          _loseTraffic();
+          _rlRetryAt = DateTime.now().add(_tpRetry);
+          return;
+        }
+        final s = await RouterOps.openLive(vendor, c.ip, c.user, c.pass);
+        if (!_trafficCurrent(epoch)) {
+          if (s != null) unawaited(s.close());
+          return;
+        }
+        if (s == null) {
+          _loseTraffic();
+          _rlRetryAt = DateTime.now().add(_tpRetry);
+          return;
+        }
+        _rlSession = s;
+        _rlPrev = null;
+      }
+      final sess = _rlSession!;
+      final x = await sess.sample();
+      if (!_trafficCurrent(epoch)) return;
+      if (x == null) {
+        if (sess.lost) {
+          _closeRouterLive();
+          _rlRetryAt = DateTime.now().add(_tpRetry);
+        }
+        _loseTraffic();
+        return;
+      }
+      _rlRetryAt = null;
+      final snap = _snap;
+      final u = snap?.ubnt;
+      if (snap != null && u != null && u.vendor == vendor && (x.wanOnlineSeconds != null || x.clients != null)) {
+        setState(() {
+          _snap = DeviceHealthSnapshot(
+            kind: snap.kind,
+            ip: snap.ip,
+            ubnt: u.withLive(wanOnlineSeconds: x.wanOnlineSeconds, peerCount: x.clients?.length, clients: x.clients),
+          );
+          _lastAt = DateTime.now();
+        });
+      }
+      final prev = _rlPrev;
+      _rlPrev = x;
+      if (x.downBps != null && x.upBps != null) {
+        _recordTraffic(x.downBps!, x.upBps!);
+      } else if (prev != null) {
+        final r = routerRate(prev, x);
+        if (r != null) _recordTraffic(r.down, r.up);
+      }
+    } catch (_) {
+      if (_trafficCurrent(epoch)) {
+        _closeRouterLive();
+        _rlRetryAt = DateTime.now().add(_tpRetry);
+        _loseTraffic();
+      }
+    } finally {
+      _pulsing = false;
+    }
+  }
+
   /// نبضة ترافيك الـONU: جلسةٌ تُفتح مرّةً (باعتمادات شركة المشترك وعنوانه المثبَّت — كالفحص حرفاً)، ثمّ قراءةٌ ومعدّل.
   Future<void> _pulseOntTraffic() async {
     // فحصٌ جارٍ يدخل على الجهاز نفسه — دخولنا الآن يطرده (جلسةٌ واحدة) أو يطردنا؛ ننتظر النبضة التالية
@@ -616,6 +728,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         final creds = await DeviceProbeApi.resolveOntCreds(
           fallbackIp: widget.ip,
           subscriberUsername: widget.username,
+      slot: widget.slot,
           company: widget.company,
         );
         if (!_trafficCurrent(epoch)) return;
@@ -683,6 +796,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         final creds = await DeviceProbeApi.resolveUbntCreds(
           fallbackIp: widget.ip,
           subscriberUsername: widget.username,
+      slot: widget.slot,
           company: widget.company,
         );
         if (!_trafficCurrent(epoch)) return;
@@ -768,6 +882,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final snap = await DeviceProbeApi.probe(
       fallbackIp: widget.ip,
       subscriberUsername: widget.username,
+      slot: widget.slot,
       force: force,
       company: widget.company,
     );
@@ -813,6 +928,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       DeviceProbeApi.probe(
         fallbackIp: widget.ip,
         subscriberUsername: widget.username,
+      slot: widget.slot,
         force: force,
         retryLogin: retryLogin,
         company: widget.company,
@@ -842,8 +958,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final k = _snap?.kind;
     // ZTE (٢٥ أكتوبر): مسار إعادة تشغيله لم يُفحص على جهازٍ حقيقيّ — لا زرّ يَعِد بما لم يُجرَّب.
     if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return false;
-    // الراوتر الكلاسيكيّ (١١ نوفمبر): لا SSH له ولا إذن من المالك بإقلاعه — لا زرّ (كان سيُرسل إقلاع النانو بـSSH على منفذٍ مقفول).
-    if (k == DeviceKind.ubiquiti && (_snap?.ubnt?.isRouter ?? false)) return false;
+    // الراوتر (١٢ نوفمبر — المالك: «وعمل ريبوت»): بأمر صفحته نفسها للعائلات المبنيّة ([RouterOps.canReboot])، وغيرها بلا زرّ
+    // (كان سيُرسل إقلاع النانو بـSSH على منفذٍ مقفول).
+    if (k == DeviceKind.ubiquiti && (_snap?.ubnt?.isRouter ?? false)) return RouterOps.canReboot(_snap!.ubnt!.vendor);
     // TP-Link (١٠ نوفمبر): بأمر صفحته نفسها ([TplinkPharosService.reboot]).
     return k == DeviceKind.ubiquiti || k == DeviceKind.ont;
   }
@@ -880,6 +997,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     HapticFeedback.mediumImpact();
     String text;
     Color color;
+    final ru = _snap?.ubnt;
+    if (_snap?.kind == DeviceKind.ubiquiti && ru != null && ru.isRouter) {
+      final done = await _rebootRouter(ru.vendor);
+      if (!mounted) return;
+      setState(() => _rebooting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(done.text),
+        backgroundColor: done.ok ? AppColors.success : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+      ));
+      return;
+    }
     if (_isTplink) {
       final done = await _rebootTplink();
       if (!mounted) return;
@@ -897,11 +1027,13 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ? await DeviceProbeApi.resolveOntCreds(
               fallbackIp: widget.ip,
               subscriberUsername: widget.username,
+      slot: widget.slot,
               company: widget.company,
             )
           : await DeviceProbeApi.resolveUbntCreds(
               fallbackIp: widget.ip,
               subscriberUsername: widget.username,
+      slot: widget.slot,
               company: widget.company,
             );
       if (creds == null) {
@@ -943,11 +1075,27 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     ));
   }
 
+  /// إعادة تشغيل الراوتر بأمر صفحته نفسها ([RouterOps.reboot]) — الجلسة الحيّة تُغلق ولا نطرقه وهو يقلع (~دقيقتين بالإنترنت).
+  Future<({bool ok, String text})> _rebootRouter(String vendor) async {
+    final c = await _routerCreds();
+    if (c == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا كلمة سرٍّ للراوتر — اكتبها من «الاعتمادات»');
+    final r = await RouterOps.reboot(vendor, c.ip, c.user, c.pass);
+    if (!r.ok) return (ok: false, text: 'تعذّرت إعادة التشغيل: ${routerFailText(r.fail!)}');
+    _closeRouterLive();
+    _rlRetryAt = DateTime.now().add(const Duration(seconds: 120));
+    _tcRetryAt = DateTime.now().add(const Duration(seconds: 120));
+    _loseTraffic();
+    return (ok: true, text: r.value!.confirmed
+        ? 'أُرسل أمر إعادة التشغيل — الراوتر يقلع الآن ويرجع الإنترنت خلال دقيقتين تقريباً'
+        : 'أُرسل أمر إعادة التشغيل وانقطع الاتّصال — الراوتر يقلع غالباً، ويرجع خلال دقيقتين');
+  }
+
   /// إعادة تشغيل TP-Link بأمر صفحته نفسها (مُجرَّب حيّاً على CPE610، ١٠ نوفمبر).
   Future<({bool ok, String text})> _rebootTplink() async {
     final creds = await DeviceProbeApi.resolveTplinkCreds(
       fallbackIp: widget.ip,
       subscriberUsername: widget.username,
+      slot: widget.slot,
       company: widget.company,
     );
     if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وباسورد للجهاز — اكتبهن من «الاعتمادات»');
@@ -983,7 +1131,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (_) => DeviceConfigSheet(username: widget.username),
+      builder: (_) => DeviceConfigSheet(username: widget.username, sessionIp: widget.ip),
     );
     if (changed == true && mounted) {
       // The sheet already invalidated per-IP cache when it saved. «حفظ وفحص» = محاولة دخولٍ جديدة حتى باعتماداتٍ رُفضت قبل
@@ -1064,7 +1212,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
               Icon(LucideIcons.router, size: 18, color: AppColors.brandAccent),
               const SizedBox(width: Sp.sm),
               Flexible(
-                child: Text('معلومات الجهاز',
+                child: Text(widget.slot == 2 ? 'الجهاز الثاني' : 'معلومات الجهاز',
                     style: AppType.cardTitle(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
@@ -1175,6 +1323,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// خارج شبكتك / «وضع VPN»: آخر قراءةٍ لهذا المشترك عبر الـVPN (٣٠ د) — null إن لم تُقرأ أو كنت على شبكتك.
   VpnSubReading? _vpnReading() {
     if (!(VpnNow.mode.value || AgentNetPresence.isOff)) return null;
+    if (widget.slot != 1) return null; // قراءة الـVPN للجهاز الأوّل وحده
     return VpnNow.readingFor(widget.username, company: widget.company);
   }
 
@@ -1251,7 +1400,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// ما يقوله الكرت حين لا قراءة — بالسبب لا «لم يُتمكّن» لكلّ شيء (المالك ٢٧ أكتوبر على ZTE MH80: «شوفلي التصحيح من
   /// السيرفر لو من التطبيق؟»): رفضٌ للاعتمادات غير جهازٍ لا يجاوب.
   ({String title, String hint}) _whyNoReading() {
-    final why = DeviceProbeApi.issueFor(username: widget.username, ip: widget.ip, company: widget.company);
+    final why = DeviceProbeApi.issueFor(username: widget.username, ip: widget.ip, company: widget.company, slot: widget.slot);
     final left = why?.lockLeft;
     // TP-Link (١٠ نوفمبر): قفله عشر محاولاتٍ وساعتان (لا ثلاثٌ ودقيقة)، ولا «ضوء» فيه — فجملته بكلماته.
     if (why?.vendor == 'tplink') {
@@ -1611,9 +1760,23 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
         // eth interface بحبّة منفصلة مع plugged/speed.
         if (u.lanPorts.isNotEmpty) _lanPortsRow(u.lanPorts),
+        // «كلمة سرّ الواي فاي» — عرضٌ ونسخٌ وتغيير (١٢ نوفمبر) للعائلات المبنيّة والمجرَّبة.
+        if (u.isRouter && RouterOps.canWifi(u.vendor)) ...[
+          const SizedBox(height: Sp.sm),
+          Divider(height: 1, color: AppColors.divider),
+          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds),
+        ],
       ],
     );
   }
+
+  /// الاعتماد الذي دخل به الفحص على هذا الراوتر (أو مرشّح الوكيل) — للواي فاي والإقلاع والنبضة الحيّة.
+  Future<RouterCreds?> _routerCreds() => DeviceProbeApi.resolveTplinkCreds(
+        fallbackIp: widget.ip,
+        subscriberUsername: widget.username,
+        company: widget.company,
+        slot: widget.slot,
+      );
 
   /// بلاطة «المتّصلون الآن» — قابلةٌ للنقر لفتح/طيّ قائمة الأجهزة حين تتوفّر تفاصيلها (المالك: «توكل بتن… مغلق دائما الا ينقره الوكيل»)،
   /// وإلّا بلاطةٌ عاديّة (عدٌّ بلا تفاصيل).

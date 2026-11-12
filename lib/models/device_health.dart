@@ -149,6 +149,27 @@ class LanPort {
       );
 }
 
+/// شبكة واي فاي في راوتر المشترك (الرئيسيّة لكلّ نطاق — لا شبكة الضيوف) — «كلمة سرّ الواي فاي» في الكرت: عرضٌ ونسخٌ وتغيير.
+class RouterWifi {
+  const RouterWifi({required this.band, required this.ssid, required this.password, required this.enabled, required this.security, this.ref});
+
+  /// «2.4G» · «5G» · '' (راوترٌ بنطاقٍ واحد).
+  final String band;
+  final String ssid;
+
+  /// كلمة السرّ (PSK) كما يحفظها الراوتر — null لشبكةٍ مفتوحة أو Enterprise/WEP (لا كلمةٌ شخصيّة تُعرض أو تُغيَّر).
+  final String? password;
+  final bool enabled;
+
+  /// للعرض: «WPA2» · «WPA/WPA2» · «WPA3» · «مفتوحة» · «Enterprise» — '' حين لا يُعرف.
+  final String security;
+
+  /// معرّف الشبكة عند الجهاز (طبقات MER «1,1,0»، فهرس CGI، رقم الواجهة…) — للكتابة وحدها.
+  final String? ref;
+
+  bool get canChange => password != null;
+}
+
 /// Unified snapshot the UI consumes — same shape regardless of kind.
 /// جهازٌ متّصلٌ بالراوتر المنزليّ (قائمة المتّصلين المنسدلة في البطاقة). [ip]/[name] قد يكونان null حسب ما يصدّره الراوتر.
 class RouterClient {

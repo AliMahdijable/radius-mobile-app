@@ -15,12 +15,29 @@ class DeviceConfig {
     this.password,
     this.customIp,
     this.notes,
+    this.secondAddress,
+    this.secondUsername,
+    this.secondPassword,
   });
   final DeviceKind? deviceType;
   final String? username;
   final String? password;
+
+  /// عنوان الجهاز بدل آيبي الجلسة: «IP» أو «IP:منفذ»، أو «:منفذ» وحده = آيبي الجلسة بهذا المنفذ (راوترٌ يدير عن بعد على 8080).
   final String? customIp;
   final String? notes;
+
+  /// «الجهاز الثاني» (نانو + راوتر، ١٢ نوفمبر — المالك: «فالكارت يطلع معلومات نانو ومعلومات راوترته»): عنوانٌ ثانٍ يُفحص مع الأوّل.
+  /// «:منفذ» = آيبي جلسة المشترك بهذا المنفذ (الاتّصال على النانو والراوتر خلفه ببورت فورورد)، أو «IP[:منفذ]» (الاتّصال على الراوتر
+  /// والنانو بآيبي ثابت). null = لا جهاز ثانٍ.
+  final String? secondAddress;
+  final String? secondUsername;
+  final String? secondPassword;
+
+  bool get hasSecond => (secondAddress ?? '').trim().isNotEmpty;
+
+  /// إعداد الجهاز الثاني بشكل إعدادٍ عاديّ (اعتماده وحده، النوع تلقائيّ، عنوانه في [customIp]) — ليمرّ في مسار الفحص نفسه.
+  DeviceConfig get asSecond => DeviceConfig(username: secondUsername, password: secondPassword, customIp: secondAddress);
 
   static DeviceConfig fromJson(Map<String, dynamic> j) => DeviceConfig(
         deviceType: deviceKindFromString(j['deviceType']?.toString()),
@@ -28,6 +45,9 @@ class DeviceConfig {
         password: _nullIfBlank(j['password']?.toString()),
         customIp: _nullIfBlank(j['customIp']?.toString()),
         notes: _nullIfBlank(j['notes']?.toString()),
+        secondAddress: _nullIfBlank(j['secondAddress']?.toString()),
+        secondUsername: _nullIfBlank(j['secondUsername']?.toString()),
+        secondPassword: _nullIfBlank(j['secondPassword']?.toString()),
       );
 
   Map<String, dynamic> toPutJson() => {
@@ -37,6 +57,10 @@ class DeviceConfig {
         if (customIp != null) 'customIp': customIp,
         // Always send notes (even null) so clearing it persists.
         'notes': notes,
+        // الجهاز الثاني يُرسل دائماً (فراغه مسح) — الخادم لا يمسّه إلّا حين تحمل الطلب مفاتيحه، فنسخةٌ قديمة لا تمحوه.
+        'secondAddress': secondAddress ?? '',
+        'secondUsername': secondUsername ?? '',
+        'secondPassword': secondPassword ?? '',
       };
 
   bool get isEmpty =>
@@ -44,7 +68,10 @@ class DeviceConfig {
       (username == null || username!.isEmpty) &&
       (password == null || password!.isEmpty) &&
       (customIp == null || customIp!.isEmpty) &&
-      (notes == null || notes!.isEmpty);
+      (notes == null || notes!.isEmpty) &&
+      !hasSecond &&
+      (secondUsername == null || secondUsername!.isEmpty) &&
+      (secondPassword == null || secondPassword!.isEmpty);
 }
 
 /// يوزر/باسورد جهاز — الاعتمادان الإضافيّان لكلّ نوع (⑦، ٢٩ أكتوبر).
@@ -372,6 +399,9 @@ class DeviceConfigApi {
     }
   }
 
+  /// يتقدّم بعد كلّ حفظٍ أو مسحٍ لإعداد جهاز مشترك — كرت «الجهاز الثاني» يعيد السؤال به (يظهر/يختفي بلا إعادة فتح الصفحة).
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   /// PUT /api/subscribers/:username/device — saves override.
   static Future<bool> saveConfig(String username, DeviceConfig cfg) async {
     try {
@@ -380,7 +410,10 @@ class DeviceConfigApi {
         data: cfg.toPutJson(),
       );
       final ok = r.data?['success'] == true;
-      if (ok) invalidateCache(username);
+      if (ok) {
+        invalidateCache(username);
+        revision.value++;
+      }
       return ok;
     } catch (_) {
       return false;
@@ -395,7 +428,10 @@ class DeviceConfigApi {
         '/api/subscribers/$username/device',
       );
       final ok = r.data?['success'] == true;
-      if (ok) invalidateCache(username);
+      if (ok) {
+        invalidateCache(username);
+        revision.value++;
+      }
       return ok;
     } catch (_) {
       return false;

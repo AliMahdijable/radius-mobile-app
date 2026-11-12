@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
+import 'router_types.dart';
 
 /// راوتر Tenda (واجهة GoAhead — F3 بفيرموير V12.01.01.42 وراوترٌ آخر بـV02.03.01.110، قِيسا حيّاً ١٢ نوفمبر على راوترَي مشتركَين):
 ///
@@ -123,6 +124,86 @@ class TendaParse {
 }
 
 /// عيّنة النبضة الحيّة: الترافيك + العدّ + مدّة الاتّصال.
+/// الواي فاي في Tenda (وحدة wifiBasicCfg من `goform/getWifi` — F3 بواجهتيه، ١٢ نوفمبر).
+class TendaWifi {
+  TendaWifi._();
+
+  static bool _open(Object? mode) => '${mode ?? ''}'.trim().toLowerCase() == 'none';
+
+  static String _label(Object? mode) {
+    final m = '${mode ?? ''}'.trim();
+    if (m.isEmpty) return '';
+    if (_open(m)) return 'مفتوحة';
+    final u = m.toUpperCase().replaceAll(RegExp(r'[/-](AES|TKIP|TKIPAES|AESTKIP|PSK)$'), '').replaceAll('-PSK', '');
+    return switch (u) { 'WPAWPA2' || 'WPA&WPA2' || 'WPA/WPA2' => 'WPA/WPA2', _ => u };
+  }
+
+  /// الوحدة ⇒ الشبكات. «توحيد النطاقين» مفعّل ⇒ شبكةٌ واحدة للنطاقين.
+  static List<RouterWifi> parse(Map<String, dynamic> w) {
+    final unity = '${w['HasDoubleBandUnity']}' == 'true' && '${w['doubleBandUnityEnable']}' == 'true';
+    final has5 = w.containsKey('wifiSSID_5G') && '${w['wifiSSID_5G'] ?? ''}'.isNotEmpty;
+    final out = <RouterWifi>[
+      RouterWifi(
+        band: unity ? '2.4G/5G' : (has5 ? '2.4G' : ''),
+        ssid: '${w['wifiSSID'] ?? ''}',
+        password: _open(w['wifiSecurityMode']) ? null : '${w['wifiPwd'] ?? ''}',
+        enabled: '${w['wifiEn'] ?? 'true'}' != 'false' && (!unity || '${w['wifiTotalEn'] ?? 'true'}' != 'false'),
+        security: _label(w['wifiSecurityMode']),
+        ref: '24',
+      ),
+    ];
+    if (has5 && !unity) {
+      out.add(RouterWifi(
+        band: '5G',
+        ssid: '${w['wifiSSID_5G'] ?? ''}',
+        password: _open(w['wifiSecurityMode_5G']) ? null : '${w['wifiPwd_5G'] ?? ''}',
+        enabled: '${w['wifiEn_5G'] ?? 'true'}' != 'false',
+        security: _label(w['wifiSecurityMode_5G']),
+        ref: '5',
+      ));
+    }
+    return out;
+  }
+
+  /// حقول وحدة wifiBasicCfg كما ترسلها الصفحة (`getSubmitData`) — بقيمها المقروءة إلّا كلمة السرّ.
+  static const fields = [
+    'doubleBandUnityEnable', 'wifiTotalEn', 'wifiEn', 'wifiSSID', 'wifiSecurityMode', 'wifiPwd', 'wifiHideSSID', //
+    'wifiEn_5G', 'wifiSSID_5G', 'wifiSecurityMode_5G', 'wifiPwd_5G', 'wifiHideSSID_5G',
+  ];
+
+  /// جسم `goform/setWifi`: `module1=wifiBasicCfg` ثمّ الحقول الموجودة في القراءة (encodeURIComponent كـobjToString)، وكلمة السرّ
+  /// الجديدة لكلّ نطاقٍ غير مفتوح. «توحيد النطاقين» ⇒ 5G نسخة 2.4G (كما تفعل الصفحة). null ⇒ لا نطاق بكلمة سرّ.
+  static String? submit(Map<String, dynamic> w, String newPass) {
+    final unityCap = '${w['HasDoubleBandUnity']}' == 'true';
+    final unity = unityCap && '${w['doubleBandUnityEnable']}' == 'true';
+    final v = <String, String>{};
+    for (final f in fields) {
+      if ((f == 'doubleBandUnityEnable' || f == 'wifiTotalEn') && !unityCap) continue;
+      if (!w.containsKey(f) || w[f] == null) continue;
+      v[f] = '${w[f]}';
+    }
+    var any = false;
+    if (v.containsKey('wifiPwd') && !_open(v['wifiSecurityMode'])) {
+      v['wifiPwd'] = newPass;
+      any = true;
+    }
+    if (unity) {
+      for (final f in ['wifiEn', 'wifiSSID', 'wifiSecurityMode', 'wifiPwd', 'wifiHideSSID']) {
+        if (v.containsKey(f)) v['${f}_5G'] = v[f]!;
+      }
+      if (v.containsKey('wifiTotalEn')) {
+        v['wifiEn'] = v['wifiTotalEn']!;
+        v['wifiEn_5G'] = v['wifiTotalEn']!;
+      }
+    } else if (v.containsKey('wifiPwd_5G') && !_open(v['wifiSecurityMode_5G'])) {
+      v['wifiPwd_5G'] = newPass;
+      any = true;
+    }
+    if (!any) return null;
+    return ['module1=wifiBasicCfg', for (final e in v.entries) '${e.key}=${Uri.encodeComponent(e.value)}'].join('&');
+  }
+}
+
 class TendaLive {
   const TendaLive({this.downBps, this.upBps, this.online, this.wanOnlineSeconds});
   final int? downBps;
@@ -315,5 +396,80 @@ class TendaService {
     } finally {
       await _logout(h, cookie);
     }
+  }
+
+  static RouterFail _fail(String h) => switch (_issues[h]?.issue) {
+        TendaIssue.rejected => RouterFail.rejected,
+        TendaIssue.busy => RouterFail.busy,
+        TendaIssue.unreachable => RouterFail.unreachable,
+        _ => RouterFail.failed,
+      };
+
+  static Future<Map<String, dynamic>?> _wifiCfg(String h, String cookie) async {
+    final j = await _json(h, '/goform/getWifi?random=${_r()}&modules=wifiBasicCfg', cookie);
+    final w = j?['wifiBasicCfg'];
+    return w is Map ? Map<String, dynamic>.from(w) : null;
+  }
+
+  /// شبكات الواي فاي بكلمات سرّها: دخول ⇒ وحدة wifiBasicCfg ⇒ خروج.
+  static Future<RouterResult<List<RouterWifi>>> readWifi(String host, String password) async {
+    final h = host.trim();
+    final cookie = await _login(h, password);
+    if (cookie == null) return RouterResult.fail(_fail(h), _issues[h]?.trace);
+    try {
+      final w = await _wifiCfg(h, cookie);
+      return w == null ? const RouterResult.fail(RouterFail.failed, 'wifi read') : RouterResult.ok(TendaWifi.parse(w));
+    } finally {
+      await _logout(h, cookie);
+    }
+  }
+
+  /// كلمة سرّ الواي فاي الجديدة بحفظ الصفحة نفسه (`goform/setWifi` بوحدة wifiBasicCfg وحقولها المقروءة)، ثمّ قراءةٌ تؤكّد.
+  static Future<RouterResult<List<RouterWifi>>> setWifiPassword(String host, String password, String newPass) async {
+    final h = host.trim();
+    final cookie = await _login(h, password);
+    if (cookie == null) return RouterResult.fail(_fail(h), _issues[h]?.trace);
+    try {
+      final w = await _wifiCfg(h, cookie);
+      if (w == null) return const RouterResult.fail(RouterFail.failed, 'wifi read');
+      final body = TendaWifi.submit(w, newPass);
+      if (body == null) return const RouterResult.fail(RouterFail.noPsk);
+      final r = await _send(h, 'POST', '/goform/setWifi', cookie: cookie, form: body, timeout: const Duration(seconds: 15));
+      if (r != null) {
+        final code = _errCode(r.body);
+        if (code != null && code != 0 && code != 100) return RouterResult.fail(RouterFail.failed, 'setWifi $code');
+      }
+      // الحفظ يعيد تشغيل الواي فاي — مهلةٌ قصيرة ثمّ قراءةٌ تحسم (ردٌّ ضائع لا يُحكم عليه)
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      final after = await _wifiCfg(h, cookie);
+      if (after == null) return const RouterResult.fail(RouterFail.failed, 'verify read');
+      final list = TendaWifi.parse(after);
+      final saved = list.where((e) => e.password != null).every((e) => e.password == newPass);
+      return saved ? RouterResult.ok(list) : const RouterResult.fail(RouterFail.failed, 'not saved');
+    } finally {
+      await _logout(h, cookie);
+    }
+  }
+
+  static int? _errCode(String body) {
+    try {
+      final j = jsonDecode(body);
+      if (j is Map) return int.tryParse('${j['errCode']}');
+    } catch (_) {}
+    return null;
+  }
+
+  /// إعادة التشغيل بأمر زرّ الصفحة (`goform/sysReboot` «module1=sysOperate&action=reboot» ⇒ errCode 100).
+  /// ⛔ جاره «action=restore» إعادة ضبط المصنع — لا يُرسل أبداً.
+  static Future<RouterResult<RouterReboot>> reboot(String host, String password) async {
+    final h = host.trim();
+    final cookie = await _login(h, password);
+    if (cookie == null) return RouterResult.fail(_fail(h), _issues[h]?.trace);
+    final r = await _send(h, 'POST', '/goform/sysReboot', cookie: cookie, form: 'module1=sysOperate&action=reboot', timeout: const Duration(seconds: 10));
+    if (r == null) return const RouterResult.ok(RouterReboot(confirmed: false));
+    final code = _errCode(r.body);
+    if (code == 100 || code == 0) return const RouterResult.ok(RouterReboot(confirmed: true));
+    await _logout(h, cookie);
+    return RouterResult.fail(RouterFail.failed, 'sysReboot $code');
   }
 }

@@ -279,6 +279,28 @@ class DeviceProbeApi {
     } catch (_) {}
   }
 
+  /// عنوانٌ مكتوب ⇒ العنوان الفعليّ: فارغ ⇒ [sessionIp]؛ «:منفذ» ⇒ آيبي الجلسة بهذا المنفذ (فارغ إن لا جلسة)؛ وإلّا كما هو.
+  static String addressOf(String sessionIp, String? raw) {
+    final s = sessionIp.trim();
+    final r = (raw ?? '').trim();
+    if (r.isEmpty) return s;
+    if (r.startsWith(':')) return s.isEmpty ? '' : '$s$r';
+    return r;
+  }
+
+  /// الهدف بحسب الخانة: 1 = الجهاز الأوّل (عنوانه [DeviceConfig.customIp] وإلّا آيبي الجلسة، وإعداده كما هو)، 2 = «الجهاز الثاني»
+  /// (نانو + راوتر، ١٢ نوفمبر): عنوانه [DeviceConfig.secondAddress] واعتماده من حقوله ([DeviceConfig.asSecond]) — لا جهاز ثانٍ ⇒ ''.
+  static ({String ip, DeviceConfig? cfg}) _slotTarget(String sessionIp, DeviceConfig? cfg, int slot) {
+    if (slot == 2) {
+      if (cfg == null || !cfg.hasSecond) return (ip: '', cfg: null);
+      return (ip: addressOf(sessionIp, cfg.secondAddress), cfg: cfg.asSecond);
+    }
+    return (ip: addressOf(sessionIp, cfg?.customIp), cfg: cfg);
+  }
+
+  /// مفتاح المشترك في الكاش بخانته — الثاني «اسم#2» كي لا تختلط نتيجتا الجهازين.
+  static String _slotUser(String username, int slot) => slot == 2 ? '$username#2' : username;
+
   // ── فحص وصولٍ سريع (بنگ) ─────────────────────────────────────────
   // لمسة شبكة على عنوان الجهاز وحده — لا دخول ولا قراءة — تُظهر «واصل/لا»
   // خلال ~ثانية، قبل أن يكمل الفحص الكامل (دخولٌ وقراءةٌ ~٤ث). لا تنتظر جلسة
@@ -293,16 +315,16 @@ class DeviceProbeApi {
     String? subscriberUsername,
     String? company,
     bool force = false,
+    int slot = 1,
   }) async {
     var ip = fallbackIp.trim();
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
       // peek فقط — لا جلبٌ شبكيّ: الفحص الكامل يجلب الإعداد، وهذا البنگ لا
       // يضيف طلباً. إن لم يكن customIp مخزَّناً بعد نُبنگ عنوان الساس، ويُعاد
       // البنگ من نهاية [_runInner] بعد أن يُعرف الإعداد.
-      final custom = DeviceConfigApi.peekConfig(subscriberUsername, company: company)
-          ?.customIp
-          ?.trim();
-      if (custom != null && custom.isNotEmpty) ip = custom;
+      ip = _slotTarget(ip, DeviceConfigApi.peekConfig(subscriberUsername, company: company), slot).ip;
+    } else if (slot == 2) {
+      ip = '';
     }
     if (ip.isEmpty) return null;
     final key = _k(company, ip);
@@ -335,6 +357,7 @@ class DeviceProbeApi {
   /// [retryLogin]: الوكيل حفظ إعداد الجهاز للتوّ ⇒ اعتماداتٌ رُفضت قبل تُجرَّب مرّةً أخرى، ولا يُشارَك فحصٌ جارٍ بإعدادٍ
   /// قديم، والنتيجة تُبلَّغ تشخيصاً (مرحلة الفشل بلا اعتمادات).
   static Future<DeviceHealthSnapshot?> probe({
+    int slot = 1,
     required String fallbackIp,
     String? subscriberUsername,
     bool force = false,
@@ -355,7 +378,7 @@ class DeviceProbeApi {
     // قد تُرجع نتيجة جهاز آخر لمشترك له تجاوز عنوان.
     final userKey = subscriberUsername == null || subscriberUsername.isEmpty
         ? null
-        : _k(company, subscriberUsername);
+        : _k(company, _slotUser(subscriberUsername, slot));
     if (!force && userKey != null) {
       final byUser = _snapByUser[userKey];
       if (byUser != null && DateTime.now().difference(byUser.at) < _ttl) {
@@ -367,11 +390,12 @@ class DeviceProbeApi {
     String effectiveIp = ip;
 
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername,
-          company: company);
-      final custom = cfg?.customIp?.trim();
-      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername, company: company);
     }
+    // «الجهاز الثاني» (slot 2) أو «:منفذ» على آيبي الجلسة — العنوان والإعداد الفعليّان
+    final slotTarget = _slotTarget(ip, cfg, slot);
+    effectiveIp = slotTarget.ip;
+    cfg = slotTarget.cfg;
     if (effectiveIp.isEmpty) return null;
     final ipKey = _k(company, effectiveIp);
     // 🐛 ٢٧ أكتوبر: الحفظ يُبطل الـIP المخصّص وحده — ومشتركٌ على IP الساس (الحقل فارغ) بقي رفضه القديم محفوظاً، فـ«حفظ
@@ -557,9 +581,9 @@ class DeviceProbeApi {
   /// Read-only peek بالـIP.
   /// لماذا فشل آخر فحصٍ لهذا المشترك (بالمشترك أوّلاً ثمّ بالعنوان) — null: نجح أو لم يُفحص. [lockLeft] ما بقي من القفل الآن.
   /// [vendor] من سجّل السبب (`zte` · `tplink`) أو null — لصياغة الجملة.
-  static ({ProbeIssue issue, int? lockLeft, String? vendor})? issueFor({String? username, required String ip, String? company}) {
-    final byUser = username == null || username.isEmpty ? null : _issueByUser[_k(company, username)];
-    final e = byUser ?? _issueByKey[_k(company, ip.trim())];
+  static ({ProbeIssue issue, int? lockLeft, String? vendor})? issueFor({String? username, required String ip, String? company, int slot = 1}) {
+    final byUser = username == null || username.isEmpty ? null : _issueByUser[_k(company, _slotUser(username, slot))];
+    final e = byUser ?? (slot == 1 ? _issueByKey[_k(company, ip.trim())] : null);
     if (e == null) return null;
     final left = e.lockLeft == null ? null : e.lockLeft! - DateTime.now().difference(e.at).inSeconds;
     return (issue: e.issue, lockLeft: left == null || left <= 0 ? null : left, vendor: e.vendor);
@@ -600,12 +624,14 @@ class DeviceProbeApi {
     String? username,
     String? ip,
     String? company,
+    int slot = 1,
   }) {
     _Cached? c;
     if (username != null && username.isNotEmpty) {
-      c = _snapByUser[_k(company, username)];
+      c = _snapByUser[_k(company, _slotUser(username, slot))];
     }
-    if (c == null && ip != null && ip.trim().isNotEmpty) {
+    // الجهاز الثاني بمفتاح مشتركه وحده — آيبي الجلسة عنوان الأوّل.
+    if (c == null && slot == 1 && ip != null && ip.trim().isNotEmpty) {
       c = _snapCache[_k(company, ip.trim())];
     }
     if (c == null) return null;
@@ -1656,6 +1682,7 @@ class DeviceProbeApi {
   /// (تجاوز المشترك ← افتراضات المدير ← ubnt/ubnt)، فلا يتفرّع منطقان
   /// يختلفان بصمت فيعمل الفحص ويفشل القياس على الجهاز نفسه.
   static Future<({String ip, String user, String pass})?> resolveUbntCreds({
+    int slot = 1,
     required String fallbackIp,
     String? subscriberUsername,
     String? company,
@@ -1664,11 +1691,12 @@ class DeviceProbeApi {
     DeviceConfig? cfg;
     String effectiveIp = ip;
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername,
-          company: company);
-      final custom = cfg?.customIp?.trim();
-      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername, company: company);
     }
+    // «الجهاز الثاني» (slot 2) أو «:منفذ» على آيبي الجلسة — العنوان والإعداد الفعليّان
+    final slotTarget = _slotTarget(ip, cfg, slot);
+    effectiveIp = slotTarget.ip;
+    cfg = slotTarget.cfg;
     if (effectiveIp.isEmpty) return null;
     // ⑦: الاعتماد الذي دخل به الفحص على هذا العنوان — الترافيك وإعادة التشغيل بالاعتماد العامل نفسه.
     final won = _ubntWinner[_k(company, effectiveIp)];
@@ -1692,6 +1720,7 @@ class DeviceProbeApi {
   /// بيانات دخول TP-Link لجهاز مشترك + عنوانه الفعّال — لجلسة الكرت الحيّة: الاعتماد الذي دخل به الفحص على هذا العنوان،
   /// وإلّا أوّل مرشّحي الوكيل ([candidatesFor])؛ null حين لا اعتماد له (لا افتراض من عندنا).
   static Future<({String ip, String user, String pass})?> resolveTplinkCreds({
+    int slot = 1,
     required String fallbackIp,
     String? subscriberUsername,
     String? company,
@@ -1701,9 +1730,11 @@ class DeviceProbeApi {
     String effectiveIp = ip;
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
       cfg = await DeviceConfigApi.fetchConfig(subscriberUsername, company: company);
-      final custom = cfg?.customIp?.trim();
-      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
+    // «الجهاز الثاني» (slot 2) أو «:منفذ» على آيبي الجلسة — العنوان والإعداد الفعليّان
+    final slotTarget = _slotTarget(ip, cfg, slot);
+    effectiveIp = slotTarget.ip;
+    cfg = slotTarget.cfg;
     if (effectiveIp.isEmpty) return null;
     final won = _tplinkWinner[_k(company, effectiveIp)];
     if (won != null) return (ip: effectiveIp, user: won.username, pass: won.password);
@@ -1716,6 +1747,7 @@ class DeviceProbeApi {
   /// أفضليّة [resolveUbntCreds] حرفاً بحرف، كي لا يعمل الفحص ويفشل
   /// أمرُ إعادة التشغيل على الجهاز نفسه.
   static Future<({String ip, String user, String pass})?> resolveOntCreds({
+    int slot = 1,
     required String fallbackIp,
     String? subscriberUsername,
     String? company,
@@ -1724,11 +1756,12 @@ class DeviceProbeApi {
     DeviceConfig? cfg;
     String effectiveIp = ip;
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername,
-          company: company);
-      final custom = cfg?.customIp?.trim();
-      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername, company: company);
     }
+    // «الجهاز الثاني» (slot 2) أو «:منفذ» على آيبي الجلسة — العنوان والإعداد الفعليّان
+    final slotTarget = _slotTarget(ip, cfg, slot);
+    effectiveIp = slotTarget.ip;
+    cfg = slotTarget.cfg;
     if (effectiveIp.isEmpty) return null;
     // ⑦: الاعتماد الذي دخل به الفحص على هذا العنوان (انظر [resolveUbntCreds]).
     final won = _ontWinner[_k(company, effectiveIp)];
