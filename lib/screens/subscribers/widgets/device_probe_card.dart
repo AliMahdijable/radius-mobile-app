@@ -993,9 +993,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   Future<void> _confirmReboot() async {
     final isOnt = _snap?.kind == DeviceKind.ont;
-    final name = _snap?.ubnt?.hostname.isNotEmpty == true
-        ? _snap!.ubnt!.hostname
-        : (isOnt ? 'ONU المشترك' : 'جهاز المشترك');
+    final u0 = _snap?.ubnt;
+    final name = u0?.hostname.isNotEmpty == true
+        ? u0!.hostname
+        : (isOnt
+            ? 'ONU المشترك'
+            : (u0 != null && u0.isRouter ? (u0.model.isNotEmpty ? u0.model : 'راوتر المشترك') : 'جهاز المشترك'));
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
