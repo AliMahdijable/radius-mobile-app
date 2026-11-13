@@ -7,6 +7,7 @@ import '../../widgets/reveal_password_sheet.dart';
 
 import '../../api/employee_ledger_api.dart';
 import '../../api/employee_limits_api.dart';
+import '../../api/employee_presence_api.dart';
 import '../../api/employees_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/clipboard_helper.dart';
@@ -21,12 +22,14 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'employee_account_screen.dart';
 import 'employee_ledger_widgets.dart';
+import 'employee_presence_widgets.dart';
 import 'sheets/employee_editor_sheet.dart';
 import 'sheets/link_employee_sheet.dart';
 import '../../services/auth_storage.dart';
 import '../../services/linked_companies.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../core/platform/app_platform.dart';
 import '../../widgets/merged_section.dart';
 import '../../models/merged_company.dart';
 
@@ -94,6 +97,38 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     });
   }
 
+  /// «الموظف المتّصل الآن» (١٤ نوفمبر): حال كلّ موظّف (متّصل الآن / آخر ظهور / عمليّات اليوم) — لمدير الصفحة وحده والميزة
+  /// مفتوحة لها. null = مطفأة أو لم تُقرأ ⇒ الشاشة كما كانت. تتجدّد كلّ دقيقة ما دامت الشاشة مفتوحة.
+  PresenceList? _presence;
+  Timer? _presenceTimer;
+
+  Future<void> _loadPresence() async {
+    if (PermissionsService.isEmployee) return;
+    // شركةٌ غير المفتوحة هنا للعرض وحده: هذه المسارات للمفتوحة
+    if (MergedSection.viewOnlyNow(context)) return;
+    final p = await EmployeePresenceApi.list();
+    if (!mounted) return;
+    // تعذّر السؤال أو أُطفئت ⇒ لا حال يُعرض (حالٌ قديم «متّصل الآن» يكذب)
+    if (p != null || _presence != null) setState(() => _presence = p);
+    // لا مؤقّت في اختبارات الواجهة (يُبقيها معلّقة) — وفي التطبيق يبدأ مع أوّل قراءةٍ ناجحة
+    if (p != null && _presenceTimer == null && !AppPlatform.isUnderTest) {
+      _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) => _loadPresence());
+    }
+  }
+
+  /// «نشاط الموظفين»: الجميع بسطرٍ لكلٍّ منهم — من شارة «متّصل» أعلى القسم.
+  Future<void> _openPresence() async {
+    final p = _presence;
+    if (p == null) return;
+    await showEmployeesPresenceSheet(context, list: p);
+    if (mounted) unawaited(_loadPresence());
+  }
+
+  void _openActivity(Employee e) {
+    final name = (e.fullName?.isNotEmpty == true) ? e.fullName! : e.username;
+    showEmployeeActivitySheet(context, employeeId: e.id, name: name);
+  }
+
   Future<void> _openAccount(Employee e) async {
     final name = (e.fullName?.isNotEmpty == true) ? e.fullName! : e.username;
     final me = _ledgerMe;
@@ -143,7 +178,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     _load();
     _loadLimitsFeature();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadLedger();
+      if (!mounted) return;
+      _loadLedger();
+      _loadPresence();
     });
   }
 
@@ -151,6 +188,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   void dispose() {
     ProviderService.changes.removeListener(_onContextChanged);
     ActiveCompany.listenable.removeListener(_onContextChanged);
+    _presenceTimer?.cancel();
     super.dispose();
   }
 
@@ -186,6 +224,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     });
     // السحب للتحديث يحدّث الشارات أيضاً (أوّل تحميل يسأل من initState)
     if (_ledgerMe != null) unawaited(_loadLedger());
+    if (_presence != null) unawaited(_loadPresence());
   }
 
   Future<void> _openEditor({Employee? employee}) async {
@@ -316,6 +355,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     // «حركات الموظف»: للشركة المفتوحة وحدها
     final ledgerOn = _ledgerOn && !viewOnly;
     final limitsOn = _limitsFeature && !viewOnly && !PermissionsService.isEmployee;
+    // «الموظف المتّصل الآن»: للشركة المفتوحة وحدها
+    final presence = viewOnly ? null : _presence;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -420,6 +461,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   // حساب الموظف: حدوده وتسويته (المدير وحده) و/أو «له / عليه» (المدير أو صاحب صلاحيّة الرواتب)
                                   onAccount: limitsOn || ledgerOn ? () => _openAccount(e) : null,
                                   ledger: ledgerOn ? _ledgerRows[e.id] : null,
+                                  // حاله الآن: نقطةٌ على صورته حين يتّصل، والنقر عليها يفتح نشاطه
+                                  presence: presence?.of(e.id),
+                                  onActivity: presence == null ? null : () => _openActivity(e),
                                 ),
                             ]),
                           ],
@@ -480,9 +524,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Widget _heroCounts(int activeCount, int disabledCount) {
+    final presence = MergedSection.viewOnlyNow(context) ? null : _presence;
     return Row(
       children: [
         Expanded(
+          flex: 2,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -509,13 +555,32 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             ],
           ),
         ),
-        _statBadge(
-            label: 'مفعّل', count: activeCount, color: AppColors.success),
-        if (disabledCount > 0) ...[
-          const SizedBox(width: 6),
-          _statBadge(
-              label: 'معطّل', count: disabledCount, color: AppColors.textLow),
-        ],
+        // الشارات تلتفّ لسطرٍ ثانٍ حين يضيق العرض (ثلاث شارات على ٣٢٠) بدل أن تفيض
+        Flexible(
+          flex: 5,
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              // «N متّصل» — النقر يفتح «نشاط الموظفين» (الجميع بسطرٍ لكلٍّ منهم)
+              if (presence != null)
+                InkWell(
+                  key: const ValueKey('employees-presence-badge'),
+                  borderRadius: BorderRadius.circular(R.sm),
+                  onTap: _openPresence,
+                  child: _statBadge(
+                    label: 'متّصل',
+                    count: presence.onlineCount,
+                    color: presence.onlineCount > 0 ? AppColors.success : AppColors.textMid,
+                    dot: true,
+                  ),
+                ),
+              _statBadge(label: 'مفعّل', count: activeCount, color: AppColors.success),
+              if (disabledCount > 0) _statBadge(label: 'معطّل', count: disabledCount, color: AppColors.textLow),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -524,6 +589,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     required String label,
     required int count,
     required Color color,
+    bool dot = false,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -534,6 +600,14 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (dot) ...[
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: count > 0 ? AppColors.successDot : color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 5),
+          ],
           Text(
             '$count',
             style: TextStyle(
@@ -623,8 +697,16 @@ class _EmployeeTile extends StatelessWidget {
     this.onShowPassword,
     this.onAccount,
     this.ledger,
+    this.presence,
+    this.onActivity,
   });
   final Employee emp;
+
+  /// حاله الآن («الموظف المتّصل الآن»): نقطةٌ خضراء على صورته حين يتّصل — بلا سطرٍ جديد؛ والحاسبة تكتب سطره بجانب الصلاحيّات.
+  final PresenceRow? presence;
+
+  /// نقر صورته يفتح «نشاط الموظف» (null ⇒ الميزة مطفأة: الصورة كما كانت).
+  final VoidCallback? onActivity;
 
   /// ملخّص «له / عليه» (حين الميزة مفتوحة): نقطةٌ على زرّ حسابه — كهرمانيّة لراتبٍ مستحقّ، حمراء لما عليه — بلا سطرٍ جديد
   /// في البطاقة؛ والحاسبة (صفٌّ عريض) تكتبها بسطر الصلاحيّات.
@@ -693,18 +775,42 @@ class _EmployeeTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Small avatar 36dp (بدل 40 السابق)
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.card),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  display.characters.isEmpty ? '?' : display.characters.first,
-                  style: AppType.buttonBold(color: accentColor),
+              // Small avatar 36dp (بدل 40 السابق) — ومعها نقطة «متّصل الآن»، ونقرها يفتح نشاطه
+              GestureDetector(
+                key: ValueKey('employee-avatar-${emp.id}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: onActivity,
+                child: Tooltip(
+                  message: presence == null ? display : '${presence!.line()} — اضغط لنشاطه',
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(R.card),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          display.characters.isEmpty ? '?' : display.characters.first,
+                          style: AppType.buttonBold(color: accentColor),
+                        ),
+                      ),
+                      if (presence != null && presence!.online)
+                        PositionedDirectional(
+                          bottom: -2,
+                          end: -2,
+                          child: PresenceDot(
+                            key: ValueKey('employee-online-${emp.id}'),
+                            online: true,
+                            size: 11,
+                            ring: AppColors.surface,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -771,6 +877,19 @@ class _EmployeeTile extends StatelessWidget {
                           '$permsCount صلاحية',
                           style: AppType.pillBold(color: AppColors.brand),
                         ),
+                        // الحاسبة: الصفّ عريض — حاله الآن بجانب الصلاحيّات (الهاتف: نقطة صورته)
+                        if (desk && presence != null) ...[
+                          Text('  ·  ', style: AppType.muted()),
+                          Flexible(
+                            child: Text(
+                              presence!.line(),
+                              key: ValueKey('employee-presence-text-${emp.id}'),
+                              style: AppType.pillBold(color: presence!.online ? AppColors.success : AppColors.textMid),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                         // الحاسبة: الصفّ عريض — تُكتب بجانب الصلاحيّات (الهاتف: نقطة زرّ الحساب)
                         if (desk && ledgerTip != null) ...[
                           Text('  ·  ', style: AppType.muted()),

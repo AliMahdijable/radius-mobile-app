@@ -9,6 +9,7 @@ import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/el_deposit_password.dart';
 import '../api/employee_ledger_api.dart';
+import '../api/employee_presence_api.dart';
 import '../api/jtpay_api.dart';
 import '../api/national_more_api.dart';
 import '../api/national_sheet_api.dart';
@@ -109,6 +110,8 @@ class SessionManager {
     _guardSync('SalesState.reset', () => SalesState.reset());
     // «حركات الموظف» — حال المفتاح وصلاحيّة الرواتب لحساب المدير السابق.
     _guardSync('EmployeeLedgerState.reset', () => EmployeeLedgerState.reset());
+    // «الموظف المتّصل الآن» — نبضة الموظّف السابق تتوقّف (الغلاف الجديد يبدؤها لجلسته إن كان موظّفاً).
+    _guardSync('EmployeePresenceBeat.stop', () => EmployeePresenceBeat.stop());
     _guardSync('ReceiptsArchiveState.reset', () => ReceiptsArchiveState.reset());
     // «طلبات التفعيل» — طلبات حساب المدير السابق وصور تحويلاتهم.
     _guardSync('RenewRequestsState.reset', () => RenewRequestsState.reset());

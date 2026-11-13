@@ -28,6 +28,7 @@ import 'search/quick_search_overlay.dart';
 import 'expenses/sheets/add_expense_sheet.dart';
 import 'employees/employee_ledger_widgets.dart' show quickEmployeeMove;
 import '../api/employee_ledger_api.dart' show EmployeeLedgerState, LedgerMe;
+import '../api/employee_presence_api.dart' show EmployeePresenceBeat;
 import 'subscribers/sheets/activate_sheet.dart';
 import 'subscribers/sheets/add_debt_sheet.dart';
 import 'subscribers/sheets/add_subscriber_sheet.dart';
@@ -377,6 +378,8 @@ class _MainShellState extends State<MainShell> {
       // «حركات الموظف»: حال الميزة أوّل الجلسة (مطفأةً يردّ الخادم فوراً) — فبند «حركة موظف» حاضرٌ مع أوّل فتحٍ للإضافة
       // السريعة، لا يُدرج متأخّراً تحت الإصبع.
       unawaited(EmployeeLedgerState.ensureFresh());
+      // «الموظف المتّصل الآن»: جلسة موظّف ⇒ نبضةٌ كلّ دقيقة والبرنامج مفتوح (لا شيء للمدير، ولا إن أُطفئت لصفحته)
+      EmployeePresenceBeat.start();
       // «كل الشركات»: يعود الوضع إن كان مفعّلاً لهذا الحساب وما زال متاحاً.
       unawaited(MergedMode.restore());
       // فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر): بعد ٨ث، بعمّالٍ أقلّ، يتنحّى للموجة الأماميّة وللخلفيّة.
@@ -388,6 +391,8 @@ class _MainShellState extends State<MainShell> {
     _accessBlockedSeen = accessBlockedSignal.value;
     accessBlockedSignal.addListener(_onAccessBlocked);
     MergedMode.fellBack.addListener(_onMergedFellBack);
+    // الصلاحيّات تصل بعد الغلاف أحياناً (إقلاعٌ بارد): حين تُعرف الجلسة موظّفاً يبدأ النبض
+    PermissionsService.changes.addListener(EmployeePresenceBeat.start);
   }
 
   /// «كل الصفحات» للموظّف (٩ نوفمبر): الخادم أطفأه وهو فيه ⇒ عاد لصفحته — سطرٌ يقول لماذا (رسالة الخادم) مرّةً.
@@ -405,6 +410,8 @@ class _MainShellState extends State<MainShell> {
     authExpiredSignal.removeListener(_onAuthExpired);
     accessBlockedSignal.removeListener(_onAccessBlocked);
     MergedMode.fellBack.removeListener(_onMergedFellBack);
+    PermissionsService.changes.removeListener(EmployeePresenceBeat.start);
+    EmployeePresenceBeat.stop();
     _subsFilterCmd.dispose();
     _devicesActive.dispose();
     _subsActive.dispose();

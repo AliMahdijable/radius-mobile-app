@@ -178,8 +178,112 @@ class LedgerDiskLoader extends AssetLoader {
 }
 
 /// خادمٌ وهميّ على ApiClient.dio: يسجّل الطلبات ويردّ بعقد server/employeeLedger.js.
+/// «الموظف المتّصل الآن»: قائمة الحال (أحمد متّصل، سارة ظهرت قبل ساعتين، والمعطَّل لم يظهر) — الأوقات نسبةً لـ[now].
+Map<String, dynamic> presenceListJson({DateTime? now}) {
+  final t = (now ?? DateTime.now()).toUtc();
+  String ago(Duration d) => t.subtract(d).toIso8601String();
+  return {
+    'feature_enabled': true,
+    'now': t.toIso8601String(),
+    'today': '2026-11-14',
+    'online_window_sec': 150,
+    'online_count': 1,
+    'total': 3,
+    'ops_unavailable': false,
+    'employees': [
+      {
+        'employee': {'id': 7, 'username': 'emp1', 'name': 'أحمد'},
+        'active': true,
+        'online': true,
+        'last_seen_at': ago(const Duration(seconds: 40)),
+        'platform': 'android',
+        'platform_label': 'أندرويد',
+        'app_build': '181',
+        'last_login_at': ago(const Duration(hours: 5)),
+        'first_seen_today_at': ago(const Duration(hours: 4)),
+        'minutes_today': 142,
+        'ops_today': 12,
+        'last_op': {'at': ago(const Duration(minutes: 6)), 'label': 'تفعيل'},
+      },
+      {
+        'employee': {'id': 8, 'username': 'emp2', 'name': 'سارة'},
+        'active': true,
+        'online': false,
+        'last_seen_at': ago(const Duration(hours: 2, minutes: 5)),
+        'platform': 'web',
+        'platform_label': 'الموقع',
+        'app_build': null,
+        'last_login_at': ago(const Duration(hours: 6)),
+        'first_seen_today_at': ago(const Duration(hours: 5)),
+        'minutes_today': 38,
+        'ops_today': 3,
+        'last_op': {'at': ago(const Duration(hours: 2, minutes: 20)), 'label': 'تسديد دين'},
+      },
+      {
+        'employee': {'id': 9, 'username': 'cashier', 'name': 'صراف'},
+        'active': true,
+        'online': false,
+        'last_seen_at': null,
+        'platform': null,
+        'platform_label': null,
+        'app_build': null,
+        'last_login_at': null,
+        'first_seen_today_at': null,
+        'minutes_today': 0,
+        'ops_today': 0,
+        'last_op': null,
+      },
+    ],
+  };
+}
+
+/// نشاط أحمد: اليوم بأنواع عمليّاته وأيّامٌ سابقة.
+Map<String, dynamic> presenceDetailJson({DateTime? now}) {
+  final t = (now ?? DateTime.now()).toUtc();
+  String ago(Duration d) => t.subtract(d).toIso8601String();
+  return {
+    'feature_enabled': true,
+    'now': t.toIso8601String(),
+    'today': '2026-11-14',
+    'employee': {'id': 7, 'username': 'emp1', 'name': 'أحمد'},
+    'active': true,
+    'online': true,
+    'last_seen_at': ago(const Duration(seconds: 40)),
+    'platform': 'android',
+    'platform_label': 'أندرويد',
+    'app_build': '181',
+    'last_login_at': ago(const Duration(hours: 5)),
+    'last_op': {'at': ago(const Duration(minutes: 6)), 'label': 'تفعيل'},
+    'ops_unavailable': false,
+    'today_summary': {
+      'first_seen_at': ago(const Duration(hours: 4)),
+      'last_seen_at': ago(const Duration(seconds: 40)),
+      'minutes': 142,
+      'ops': 12,
+      'ops_by_type': [
+        {'label': 'تفعيل', 'count': 7},
+        {'label': 'تسديد دين', 'count': 3},
+        {'label': 'إضافة مشترك', 'count': 2},
+      ],
+    },
+    'days': [
+      {'day': '2026-11-14', 'first_seen_at': ago(const Duration(hours: 4)), 'last_seen_at': ago(const Duration(seconds: 40)), 'minutes': 142, 'platform_label': 'أندرويد', 'ops': 12},
+      {'day': '2026-11-13', 'first_seen_at': ago(const Duration(hours: 30)), 'last_seen_at': ago(const Duration(hours: 25)), 'minutes': 265, 'platform_label': 'أندرويد', 'ops': 31},
+      {'day': '2026-11-10', 'first_seen_at': null, 'last_seen_at': null, 'minutes': 0, 'platform_label': null, 'ops': 4},
+    ],
+    'keep_days': 30,
+  };
+}
+
 class LedgerServer implements HttpClientAdapter {
   bool ledgerFeature = true;
+
+  /// «الموظف المتّصل الآن» مفتوحةٌ لهذه الصفحة (الافتراض مطفأة: اختبارات الدفتر كما هي).
+  bool presenceOn = false;
+  bool presenceDetailFails = false;
+
+  /// الموظّف ٩ معطَّل في قائمة الموظفين (شارة «معطّل» بالرأس).
+  bool withDisabledEmployee = false;
 
   /// `/me` يردّ كموظّفٍ بهذا الرقم (صاحب صلاحيّة الرواتب حين [meCanManage]) — null = المدير.
   int? meAsEmployee;
@@ -275,7 +379,7 @@ class LedgerServer implements HttpClientAdapter {
         'data': [
           {'id': 7, 'username': 'emp1', 'full_name': 'أحمد', 'is_active': true, 'permissions': {'subscribers.view': true}},
           {'id': 8, 'username': 'emp2', 'full_name': 'سارة', 'is_active': true, 'permissions': {}},
-          {'id': 9, 'username': 'cashier', 'full_name': 'صراف', 'is_active': true, 'permissions': {}},
+          {'id': 9, 'username': 'cashier', 'full_name': 'صراف', 'is_active': !withDisabledEmployee, 'permissions': {}},
         ],
       });
     } else if (p == '/api/v2/employees/permissions-catalog') {
@@ -307,6 +411,18 @@ class LedgerServer implements HttpClientAdapter {
       reply = (200, {'success': true, 'data': ledgerAccountJson()});
     } else if (p.startsWith('$base/7/periods/') && m == 'POST') {
       reply = (200, {'success': true, 'data': ledgerAccountJson()});
+    } else if (p == '/api/v2/employee-presence' && m == 'GET') {
+      reply = meAsEmployee != null
+          ? (403, {'success': false, 'code': 'MANAGER_ONLY', 'message': 'هذا القسم لمدير الصفحة وحده'})
+          : presenceOn
+              ? (200, {'success': true, 'data': presenceListJson()})
+              : (200, {'success': true, 'data': {'feature_enabled': false, 'online_count': 0, 'total': 0, 'employees': []}});
+    } else if (p == '/api/v2/employee-presence/7' && m == 'GET') {
+      reply = presenceDetailFails
+          ? (409, {'success': false, 'code': 'EMPLOYEE_PRESENCE_UNAVAILABLE', 'message': 'تعذّر التحميل الآن — حاول بعد قليل'})
+          : (200, {'success': true, 'data': presenceDetailJson()});
+    } else if (p == '/api/v2/employee-presence/beat' && m == 'POST') {
+      reply = (200, {'success': true, 'data': {'feature_enabled': presenceOn, 'beat_every_sec': 60}});
     } else if (p == '/api/admin/expenses' && m == 'GET') {
       reply = (200, {
         'success': true,
