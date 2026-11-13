@@ -236,6 +236,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   // (Subscriber.companyKey)، والفلاتر والعدّادات والبحث كالوضع العاديّ على الصفوف المدموجة. التحديد الجماعيّ للشركة وحدها.
   MergedListResult? _merged;
   int _mergedTick = 0;
+  /// نبضةٌ صامتة جارية — التالية تتخطّى حتى تنتهي (لا تراكم على ساسٍ بطيء).
+  bool _silentBusy = false;
 
   /// تحميلٌ أحدث يغلب ردّ تحميلٍ أقدم (القائمة ثمّ جلساتها ردّان منفصلان).
   int _mergedGen = 0;
@@ -657,6 +659,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // لا نُفعّل _refreshing حتى ما تظهر أي مؤشرات UI — تحديث خفي بالكامل.
     // _fetchAndMerge يستفيد من cache الـ45 ثانية على قائمة المشتركين لكن
     // يجيب online status حديث في كل مرة (loadOnline لا يُخزَّن).
+    //
+    // لا نبضة فوق نبضة (١٣ نوفمبر — بلاغ «فايبر لنك كربلاء»): على ساسٍ بطيء
+    // يأخذ الجلب ٢٠ثانية فأكثر، فكانت كلّ ٥ثوانٍ تبدأ جولةٌ جديدة والسابقة
+    // ما زالت تنتظر — طلباتٌ تتراكم على سيرفر الشركة فيزداد بطئاً. النبضة
+    // التالية بعد انتهاء الجارية.
+    if (_silentBusy) return;
+    _silentBusy = true;
     try {
       await _fetchAndMerge(quiet: true);
       // ⚠️ بلا هذا السطر يُدفع ثمن الاستطلاع كاملاً بلا أثر:
@@ -668,6 +677,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     } catch (_) {
       // silent — لا نُشوّش المستخدم بأخطاء polling. الـpull-to-refresh
       // يُعيد المحاولة صريحاً لو الاتصال انقطع.
+    } finally {
+      _silentBusy = false;
     }
   }
 
@@ -2395,8 +2406,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                           else if (page.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
-                              child:
-                                  _EmptyState(filter: _filter, query: _query),
+                              child: _EmptyState(
+                                filter: _filter,
+                                query: _query,
+                                // لم تصل القائمة أصلاً (لا صفوف ولا نسخة محفوظة): السبب
+                                // لا «لا يوجد مشترك» — ١٣ نوفمبر، بلاغ فايبر لنك كربلاء.
+                                error: !_big && !_mergedOn && _all.isEmpty
+                                    ? SubscribersApi.lastListError
+                                    : null,
+                                onRetry: () => _refresh(pull: true),
+                              ),
                             )
                           else ...[
                             if (_paneMode)
@@ -3749,13 +3768,19 @@ class _SecondaryBtn extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.filter, required this.query});
+  const _EmptyState({required this.filter, required this.query, this.error, this.onRetry});
   final SubscriberFilter filter;
   final String query;
+
+  /// لم تصل القائمة (نصّ الخادم أو المهلة — SubscribersApi.lastListError):
+  /// يُعرض السبب وزرّ «أعد المحاولة» بدل «لا يوجد مشترك في هذا الفلتر».
+  final String? error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    if (error != null && query.isEmpty) return _failed(error!);
     final msg = query.isNotEmpty
         ? 'subscribers.no_search_results'.tr(namedArgs: {'q': query})
         : 'subscribers.empty_filter'.tr();
@@ -3795,6 +3820,42 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// القائمة لم تصل: السبب (نصّ الخادم/المهلة) وزرّ «أعد المحاولة» — بلا أيّ عنصرٍ قابلٍ
+  /// للتمرير (انظر التحذير أعلاه)، والسحب للتحديث يعمل من الخارج كما هو.
+  Widget _failed(String text) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.serverOff, size: 40, color: AppColors.warning),
+            const SizedBox(height: Sp.sm),
+            Text(
+              'تعذّر جلب المشتركين من سيرفر الشركة',
+              textAlign: TextAlign.center,
+              style: AppType.label(color: AppColors.textBody)
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: Sp.xs),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: AppType.muted(color: AppColors.textMid).copyWith(height: 1.5),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: Sp.sm),
+              TextButton(
+                onPressed: onRetry,
+                child: Text('common.retry'.tr(), style: AppType.button(color: AppColors.brand)),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

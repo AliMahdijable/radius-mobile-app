@@ -375,6 +375,28 @@ class SubscribersApi {
   static Future<Map<String, OnlineSessionInfo>?> loadOnline() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
+    // طلبٌ جارٍ يُنتظَر ولا يُكرَّر (١٣ نوفمبر — بلاغ «فايبر لنك كربلاء»): نبضة
+    // الشاشة كلّ ٥ثوانٍ كانت تبدأ طلباً جديداً والسابق ما زال ينتظر ساساً
+    // بطيئاً، فتتراكم الطلبات عليه ويزداد بطئاً.
+    final running = _onlineInFlight;
+    if (running != null && _onlineInFlightToken == token) return running;
+    final f = _loadOnline(token);
+    _onlineInFlight = f;
+    _onlineInFlightToken = token;
+    try {
+      return await f;
+    } finally {
+      if (identical(_onlineInFlight, f)) {
+        _onlineInFlight = null;
+        _onlineInFlightToken = null;
+      }
+    }
+  }
+
+  static Future<Map<String, OnlineSessionInfo>?>? _onlineInFlight;
+  static String? _onlineInFlightToken;
+
+  static Future<Map<String, OnlineSessionInfo>?> _loadOnline(String token) async {
     // الحساب الكبير: لا قائمة متصلين كاملة (عشرات الآلاف ⇒ دقائق) — حالة الاتّصال من صفّ المشترك نفسه.
     if (await BigSubscribersApi.probe() > 0) return null;
     try {
@@ -615,8 +637,10 @@ class SubscribersApi {
         if (!kReleaseMode) {
           debugPrint('🟡 subscribers/with-phones: success!=true body=$body');
         }
+        _lastListError = listErrorText(body);
         return null;
       }
+      _lastListError = null;
       final data = (body['data'] as List?) ?? const [];
       // (Removed 5 diagnostic prints — كانت تنفّذ interpolation ثقيل لكل
       //  subscriber على كل load. المشكلة اللي أُضيفت من أجلها انحلّت.)
@@ -632,11 +656,44 @@ class SubscribersApi {
       return maps.map(Subscriber.fromJson).toList();
     } on DioException catch (e) {
       _log('with-phones', e);
+      _lastListError = listErrorText(e.response?.data, timedOut: _isTimeout(e));
       return null;
     } catch (e) {
       _log('with-phones', e);
+      _lastListError = listErrorText(null);
       return null;
     }
+  }
+
+  // ── لماذا لم تصل القائمة (١٣ نوفمبر — بلاغ «فايبر لنك كربلاء») ──
+  //
+  // كانت الشاشة تقول «0 مشترك · لا يوجد مشترك في هذا الفلتر» حين يفشل
+  // الجلب، فيظنّ الوكيل أنّ مشتركيه اختفوا وسيرفر شركته هو البطيء. الآن
+  // نصّ الخادم نفسه («ساس الشركة لا يستجيب الآن…») أو نصّ المهلة يُحفظ
+  // هنا، وتعرضه الشاشة مكان «لا يوجد مشترك» ما دامت القائمة فارغة.
+  // يُمسح مع أوّل جلبٍ ناجح.
+  static String? _lastListError;
+
+  /// نصّ آخر فشلٍ لجلب القائمة الكاملة — null بعد أوّل نجاح.
+  static String? get lastListError => _lastListError;
+
+  static bool _isTimeout(DioException e) =>
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.sendTimeout;
+
+  /// نصّ الفشل للمدير: رسالة الخادم العربيّة إن وُجدت (503 بـ`{code, message}`)،
+  /// وإلّا نصّ المهلة أو الانقطاع. عامّةٌ للاختبار.
+  @visibleForTesting
+  static String listErrorText(Object? body, {bool timedOut = false}) {
+    if (timedOut) {
+      return 'سيرفر الشركة بطيء ولم يُكمل القائمة خلال ٣٠ ثانية — نعيد المحاولة تلقائيّاً';
+    }
+    if (body is Map) {
+      final m = body['message'];
+      if (m is String && m.trim().isNotEmpty) return m.trim();
+    }
+    return 'تعذّر جلب المشتركين الآن — تحقّق من الاتصال، ونعيد المحاولة تلقائيّاً';
   }
 
   /// GET /api/v2/subscribers/:idx/activation-data — pulls everything
