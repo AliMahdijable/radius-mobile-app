@@ -18,6 +18,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../employee_account_screen.dart' show EmployeeLimitsFields;
 import '../employee_ledger_widgets.dart' show EmployeeSalaryFields, EmployeeSalaryForm;
+import '../employee_form_kit.dart';
 
 /// Sheet إنشاء/تعديل موظف. tab1 = معلومات، tab2 = صلاحيات. الـpresets
 /// (3 افتراضية من backend: cashier/assistant_manager/viewer) تطبّق
@@ -628,28 +629,38 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             activeThumbColor: AppColors.brand,
           ),
         ),
+        // ١٤ نوفمبر (المالك: «تصميم تعبان مال الايرادات والنقود بالموظفين حسّنه»): القسمان بطاقتان برأسٍ ملوّن وحقولٍ بصناديق ظاهرة
+        // (employee_form_kit.dart) — كانا عنواناً ونصّاً عارياً.
         if (_limitsShown) ...[
           const SizedBox(height: Sp.lg),
-          Text('حدود الموظف', key: const ValueKey('emp-limits-section'),
-              style: AppType.bodyBold(color: AppColors.textHi)),
-          const SizedBox(height: Sp.sm),
-          EmployeeLimitsFields(
-            debtCtrl: _debtCapCtrl,
-            cashCtrl: _cashCapCtrl,
-            profitCtrl: _profitCtrl,
-            onChanged: () {
-              if (_error != null) setState(() => _error = null);
-            },
+          EmpFormSection(
+            icon: LucideIcons.shieldCheck,
+            tone: EmpTone.profit,
+            title: 'حدود الموظف',
+            titleKey: const ValueKey('emp-limits-section'),
+            subtitle: 'سقف دينه ونقده، وربحه عن كلّ عمليّة',
+            child: EmployeeLimitsFields(
+              debtCtrl: _debtCapCtrl,
+              cashCtrl: _cashCapCtrl,
+              profitCtrl: _profitCtrl,
+              onChanged: () {
+                if (_error != null) setState(() => _error = null);
+              },
+            ),
           ),
         ],
         if (_salary.shown) ...[
-          const SizedBox(height: Sp.lg),
-          Text('راتب الموظف', key: const ValueKey('emp-salary-section'),
-              style: AppType.bodyBold(color: AppColors.textHi)),
-          const SizedBox(height: Sp.sm),
-          EmployeeSalaryFields(
-            form: _salary,
-            onChanged: () => setState(() => _error = null),
+          const SizedBox(height: Sp.md),
+          EmpFormSection(
+            icon: LucideIcons.calendarClock,
+            tone: EmpTone.time,
+            title: 'راتب الموظف',
+            titleKey: const ValueKey('emp-salary-section'),
+            subtitle: 'ثابت أو عمولة أو الاثنان — تصرفه أنت',
+            child: EmployeeSalaryFields(
+              form: _salary,
+              onChanged: () => setState(() => _error = null),
+            ),
           ),
         ],
       ],

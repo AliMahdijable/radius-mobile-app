@@ -11,6 +11,7 @@ import '../../core/widgets/sheet_scaffold.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'employee_form_kit.dart';
 
 /// «حركات الموظف» وراتبه (١٣ نوفمبر): لوحة «له / عليه» داخل «حساب الموظف»، ورقتا «حركة جديدة» و«كشف الراتب»، منتقي الموظف
 /// (للإضافة السريعة)، وحقول الراتب في محرّر الموظف. كلّ رقمٍ من الخادم — الواجهة لا تحسب مالاً، والكشف يُصرف بما عُرض.
@@ -1175,11 +1176,6 @@ class EmployeeSalaryFields extends StatelessWidget {
 
   static const _modes = ['salary', 'commission', 'both'];
 
-  Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: Sp.x6),
-        child: Text(t, style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
-      );
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -1212,19 +1208,23 @@ class EmployeeSalaryFields extends StatelessWidget {
       );
     }
     final days = form.weekly ? [for (var i = 0; i < 7; i++) i] : [for (var i = 1; i <= 28; i++) i];
+    // ١٤ نوفمبر (المالك: «تصميم تعبان… حسّنه»): المبلغ حقلٌ بصندوقٍ ظاهر، ولكلّ اختيارٍ شرحه القصير تحته (شرح «طريقة الأجر» يتبع
+    // المختار)، ومعادلة الكشف ملاحظةٌ ختاميّة — بدل فقرةٍ واحدة طويلة. المعنى كما كان.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _label(form.weekly ? 'الراتب الأسبوعيّ' : 'الراتب الشهريّ'),
-        AmountTextField(
-          key: const ValueKey('emp-salary-amount'),
+        EmpAmountField(
+          fieldKey: const ValueKey('emp-salary-amount'),
           controller: form.amountCtrl,
-          compact: true,
+          label: form.weekly ? 'الراتب الأسبوعيّ' : 'الراتب الشهريّ',
           hint: 'بلا راتب',
+          help: 'اتركه فارغاً = بلا راتب.',
+          icon: LucideIcons.banknote,
+          tone: EmpTone.cash,
           onValue: (_) => onChanged(),
         ),
         const SizedBox(height: Sp.md),
-        _label('يوم الصرف'),
+        const EmpFieldLabel('يوم الصرف'),
         Row(
           children: [
             Expanded(
@@ -1280,8 +1280,9 @@ class EmployeeSalaryFields extends StatelessWidget {
             ),
           ],
         ),
+        const EmpFieldHelp('بهذا اليوم يجهز «كشف الراتب» في حسابه — لا يُصرف شيء تلقائيّاً.'),
         const SizedBox(height: Sp.md),
-        _label('طريقة الأجر'),
+        const EmpFieldLabel('طريقة الأجر'),
         SheetSegmented(
           key: const ValueKey('emp-salary-mode'),
           labels: const ['راتب', 'عمولة', 'الاثنان'],
@@ -1291,11 +1292,15 @@ class EmployeeSalaryFields extends StatelessWidget {
             onChanged();
           },
         ),
-        const SizedBox(height: Sp.sm),
-        Text(
-          'يوم الصرف يجهز «كشف الراتب» في حساب الموظف: الراتب + المكافآت − السلف − قسط القرض − الخصومات، وتضغط «صرف» فينزل في المصاريف. '
-          'العمولة = «ربح الموظف لكلّ عمليّة» عن عمليّاته الكاملة منذ آخر كشف. لا يُصرف شيء تلقائيّاً. فارغ = بلا راتب.',
-          style: AppType.micro(color: AppColors.textLow),
+        EmpFieldHelp(switch (form.mode) {
+          'commission' => 'العمولة وحدها: «ربح الموظف لكلّ عمليّة» عن عمليّاته الكاملة منذ آخر كشف.',
+          'both' => 'الراتب + العمولة («ربح الموظف لكلّ عمليّة» عن عمليّاته الكاملة منذ آخر كشف).',
+          _ => 'الراتب الثابت وحده.',
+        }),
+        const SizedBox(height: Sp.md),
+        const EmpFormNote(
+          icon: LucideIcons.info,
+          text: 'الكشف = الراتب + المكافآت − السلف − قسط القرض − الخصومات، وتضغط «صرف» فينزل في المصاريف.',
         ),
       ],
     );

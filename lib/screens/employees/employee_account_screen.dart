@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/employee_limits_card.dart';
 import 'employee_ledger_widgets.dart';
+import 'employee_form_kit.dart';
 
 /// حساب الموظّف مع مديره (٩ نوفمبر — «حدود الموظّف»): أرقام فترته، حدوده، المحجوز غير المؤكَّد، «تسوية مع الموظف»، وسجلّ تسوياته.
 /// للمدير وحده (الخادم يرفض غيره بـMANAGER_ONLY).
@@ -326,10 +327,26 @@ class _LimitsSummary extends StatelessWidget {
 
   String _v(double? v, {String none = 'بلا حدّ'}) => v == null || v == 0 ? none : '${formatIQD(v)} د.ع';
 
+  /// سطرٌ بأيقونةٍ بلونه: التسمية خافتة والقيمة بارزة (النصّ نفسه «التسمية: القيمة»).
+  Widget _line(IconData icon, EmpTone tone, String label, String value) => Row(
+        children: [
+          EmpToneIcon(icon: icon, tone: tone, size: 26),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: '$label: ', style: AppType.body(color: AppColors.textMid)),
+                TextSpan(text: value, style: AppType.bodyStrong(color: AppColors.textHi)),
+              ]),
+            ),
+          ),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.sm, Sp.sm),
+      padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.md, Sp.xs, Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
@@ -341,9 +358,11 @@ class _LimitsSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('سقف الديون: ${_v(limits.debtCap)}', style: AppType.body(color: AppColors.textHi)),
-                Text('سقف الإيرادات النقديّة: ${_v(limits.cashCap)}', style: AppType.body(color: AppColors.textHi)),
-                Text('ربح الموظف لكلّ عمليّة: ${_v(limits.profitPerOp, none: 'لا ربح')}', style: AppType.body(color: AppColors.textHi)),
+                _line(LucideIcons.handCoins, EmpTone.debt, 'سقف الديون', _v(limits.debtCap)),
+                const SizedBox(height: Sp.x6),
+                _line(LucideIcons.banknote, EmpTone.cash, 'سقف الإيرادات النقديّة', _v(limits.cashCap)),
+                const SizedBox(height: Sp.x6),
+                _line(LucideIcons.coins, EmpTone.profit, 'ربح الموظف لكلّ عمليّة', _v(limits.profitPerOp, none: 'لا ربح')),
               ],
             ),
           ),
@@ -435,31 +454,47 @@ class EmployeeLimitsFields extends StatelessWidget {
 
   static String initialText(double? v) => v == null || v <= 0 ? '' : AmountShorthand.format(v.round());
 
-  Widget _row(String label, String hint, TextEditingController ctrl, Key key) => Padding(
-        padding: const EdgeInsets.only(bottom: Sp.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(label, style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: Sp.x6),
-            AmountTextField(key: key, controller: ctrl, compact: true, allowExact: true, hint: hint, onValue: (_) => onChanged()),
-          ],
-        ),
-      );
-
   @override
   Widget build(BuildContext context) {
+    // ١٤ نوفمبر (المالك: «تصميم تعبان… حسّنه»): كلّ مبلغٍ حقلٌ بصندوقٍ ظاهر وأيقونةٍ بلونه، وشرحه القصير تحته هو — لا نصّ عارٍ
+    // ولا فقرةٌ واحدة تشرح الثلاثة. المعنى كما كان حرفاً بحرف، مقسوماً على حقوله.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _row('سقف الديون', 'بلا حدّ', debtCtrl, const ValueKey('emp-limit-debt')),
-        _row('سقف الإيرادات النقديّة', 'بلا حدّ', cashCtrl, const ValueKey('emp-limit-cash')),
-        _row('ربح الموظف لكلّ عمليّة', 'لا ربح', profitCtrl, const ValueKey('emp-limit-profit')),
-        Text(
-          'سقف الديون على ديونه المفتوحة عند المشتركين (تنقص حين يسدّدون، ولا تصفّرها التسوية): بعده لا بيع ولا تفعيل بالآجل ولا إضافة دين. '
-          'وبعد سقف الإيرادات لا تفعيل نقديّ ولا بيعٌ نقداً ولا استلام دين حتى تسوّي حسابه. '
-          'الربح لكلّ عمليّةٍ كاملة (تفعيلٌ نقديّ كامل، بيعٌ نقداً، تسديدٌ يصفّر الدين). فارغ = بلا حدّ.',
-          style: AppType.micro(color: AppColors.textLow),
+        EmpAmountField(
+          fieldKey: const ValueKey('emp-limit-debt'),
+          controller: debtCtrl,
+          label: 'سقف الديون',
+          hint: 'بلا حدّ',
+          help: 'ديونه المفتوحة عند المشتركين. بعده: لا بيع ولا تفعيل بالآجل ولا إضافة دين. تنقص حين يسدّدون، والتسوية لا تصفّرها.',
+          icon: LucideIcons.handCoins,
+          tone: EmpTone.debt,
+          allowExact: true,
+          onValue: (_) => onChanged(),
+        ),
+        const SizedBox(height: Sp.md),
+        EmpAmountField(
+          fieldKey: const ValueKey('emp-limit-cash'),
+          controller: cashCtrl,
+          label: 'سقف الإيرادات النقديّة',
+          hint: 'بلا حدّ',
+          help: 'النقد الذي بيده. بعده: لا تفعيل نقديّ ولا بيع نقداً ولا استلام دين حتى تسوّي حسابه.',
+          icon: LucideIcons.banknote,
+          tone: EmpTone.cash,
+          allowExact: true,
+          onValue: (_) => onChanged(),
+        ),
+        const SizedBox(height: Sp.md),
+        EmpAmountField(
+          fieldKey: const ValueKey('emp-limit-profit'),
+          controller: profitCtrl,
+          label: 'ربح الموظف لكلّ عمليّة',
+          hint: 'لا ربح',
+          help: 'عن كلّ عمليّةٍ كاملة: تفعيل نقديّ كامل، بيع نقداً، أو تسديد يصفّر الدين.',
+          icon: LucideIcons.coins,
+          tone: EmpTone.profit,
+          allowExact: true,
+          onValue: (_) => onChanged(),
         ),
       ],
     );
