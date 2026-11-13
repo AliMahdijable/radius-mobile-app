@@ -275,8 +275,35 @@ Map<String, dynamic> presenceDetailJson({DateTime? now}) {
   };
 }
 
+/// «راتبٌ واحد للموظف في كلّ صفحاته»: هذا الصفّ بلا راتب، وراتبه الثابت في صفحةٍ أخرى من صفحاته (بعقد salary.elsewhere).
+Map<String, dynamic> elsewhereSalaryJson() => {
+      'amount': null,
+      'cycle': 'monthly',
+      'pay_day': 1,
+      'pay_day_label': null,
+      'comp_mode': 'salary',
+      'configured': false,
+      'due_count': 0,
+      'lapsed': 0,
+      'next_due': null,
+      'elsewhere': {
+        'employee_id': 51,
+        'page_id': 'earthlink:777',
+        'page_name': 'صفحة الراتب',
+        'amount': 400000,
+        'cycle': 'monthly',
+        'pay_day': 25,
+        'pay_day_label': null,
+        'comp_mode': 'salary',
+      },
+    };
+
 class LedgerServer implements HttpClientAdapter {
   bool ledgerFeature = true;
+
+  /// حساب الموظّف ٧ (و«حسابي») براتبٍ في صفحةٍ أخرى من صفحاته بدل راتبه هنا.
+  bool salaryElsewhere = false;
+  Map<String, dynamic> _account() => salaryElsewhere ? (ledgerAccountJson()..['salary'] = elsewhereSalaryJson()) : ledgerAccountJson();
 
   /// «الموظف المتّصل الآن» مفتوحةٌ لهذه الصفحة (الافتراض مطفأة: اختبارات الدفتر كما هي).
   bool presenceOn = false;
@@ -323,7 +350,7 @@ class LedgerServer implements HttpClientAdapter {
                 'is_employee': true,
                 'feature_enabled': ledgerFeature,
                 'can_manage': meCanManage,
-                if (ledgerFeature) ...(ledgerAccountJson()..['employee'] = {'id': meAsEmployee, 'username': 'cashier', 'name': 'صراف'}),
+                if (ledgerFeature) ...(_account()..['employee'] = {'id': meAsEmployee, 'username': 'cashier', 'name': 'صراف'}),
               },
             });
     } else if (p == base && m == 'GET') {
@@ -370,7 +397,7 @@ class LedgerServer implements HttpClientAdapter {
               },
             });
     } else if (p == '$base/7' && m == 'GET') {
-      reply = accountFails ? (409, {'success': false, 'message': 'تعذّر تحميل حساب الموظف الآن'}) : (200, {'success': true, 'data': ledgerAccountJson()});
+      reply = accountFails ? (409, {'success': false, 'message': 'تعذّر تحميل حساب الموظف الآن'}) : (200, {'success': true, 'data': _account()});
     } else if (p == '$base/9' && m == 'GET') {
       reply = (200, {'success': true, 'data': ledgerAccountJson()..['employee'] = {'id': 9, 'username': 'cashier', 'name': 'صراف'}});
     } else if (p == '/api/v2/employees' && m == 'GET') {

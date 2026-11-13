@@ -166,6 +166,46 @@ void main() {
       await down(t);
     });
 
+    // «راتبٌ واحد للموظف في كلّ صفحاته» (١٤ نوفمبر): صفحته الأخرى تعرض أين راتبه بدل الحقول
+    testWidgets('راتبه في صفحةٍ أخرى — المحرّر والحساب ${d.tag}', (t) async {
+      await up();
+      server.salaryElsewhere = true;
+      final catalog = PermissionsCatalog.fromJson({
+        'permissions': {
+          'subscribers.view': {'label': 'عرض المشتركين', 'category': 'subscribers'},
+        },
+        'categories': {
+          'subscribers': {'label': 'المشتركون'},
+        },
+        'defaults': {'subscribers.view': true},
+        'presets': <String, Object>{},
+      });
+      final emp = Employee.fromJson({'id': 7, 'username': 'emp1', 'full_name': 'أحمد', 'is_active': true, 'permissions': {}})!;
+      await pumpVisual(
+        t,
+        d,
+        home: (c) => Scaffold(body: Center(child: TextButton(onPressed: () => showEmployeeEditorSheet(c, catalog: catalog, employee: emp), child: const Text('افتح')))),
+      );
+      await settle(t, seconds: 1);
+      await t.tap(find.text('افتح'));
+      await settle(t, seconds: 2);
+      final list = find.byType(ListView).first;
+      for (var i = 0; i < 12 && find.byKey(const ValueKey('emp-salary-elsewhere')).evaluate().isEmpty; i++) {
+        await t.drag(list, const Offset(0, -260));
+        await settle(t, seconds: 1);
+      }
+      await t.drag(list, const Offset(0, -400));
+      await settle(t, seconds: 1);
+      await _shot(t, '11_editor_elsewhere', d);
+      await down(t);
+      await up();
+      server.salaryElsewhere = true;
+      await pumpVisual(t, d, home: (_) => const EmployeeAccountScreen(employeeId: 7, title: 'أحمد', ledger: (canWrite: true, canVoid: true)));
+      await settle(t, seconds: 2);
+      await _shot(t, '12_account_elsewhere', d);
+      await down(t);
+    });
+
     testWidgets('منتقي الموظف ${d.tag}', (t) async {
       await up();
       await pumpVisual(

@@ -120,6 +120,14 @@ class EmployeeLedgerPanel extends StatelessWidget {
     final a = account;
     final s = a.summary;
     final salary = s.salary.describe(formatIQD);
+    final there = s.salary.elsewhere;
+    final thereText = there == null ? null : '${there.where}: ${there.salary.describe(formatIQD) ?? ''}';
+    final who = selfView ? 'راتبك' : 'الراتب';
+    final salaryLine = thereText != null
+        ? (salary != null ? '$who: $salary · والثابت $thereText' : '$who $thereText')
+        : salary != null
+            ? '$who: $salary'
+            : (selfView ? 'بلا راتبٍ مضبوط' : 'بلا راتب — يُضبط من «تعديل» الموظف');
     final due = s.salary.dueCount;
     final latest = a.latestPaid;
     return Column(
@@ -175,10 +183,10 @@ class EmployeeLedgerPanel extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      salary != null
-                          ? '${selfView ? 'راتبك' : 'الراتب'}: $salary'
-                          : (selfView ? 'بلا راتبٍ مضبوط' : 'بلا راتب — يُضبط من «تعديل» الموظف'),
+                      salaryLine,
                       key: const ValueKey('emp-ledger-salary'),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                       style: AppType.micro(color: AppColors.textMid),
                     ),
                   ),
@@ -1099,6 +1107,9 @@ class EmployeeSalaryForm {
   /// الحقول تُعرض: الميزة مفتوحة، والمستعمل المدير، وقُرئ ضبط الموظّف (أو هو موظّفٌ جديد).
   bool shown = false;
 
+  /// راتبه الثابت في صفحةٍ أخرى من صفحاته (ولا راتب له هنا) ⇒ سطرٌ يقول أين بدل الحقول، ولا حفظ من هنا.
+  LedgerSalaryElsewhere? elsewhere;
+
   /// [employeeId] null = موظّفٌ جديد. يُرجع true إن صارت الحقول تُعرض.
   Future<bool> load(int? employeeId, {Future<LedgerMe?> Function()? me}) async {
     final who = await (me ?? EmployeeLedgerApi.me)();
@@ -1108,6 +1119,7 @@ class EmployeeSalaryForm {
       final s = r.data?.summary.salary;
       if (s == null) return false;
       apply(s);
+      elsewhere = s.configured ? null : s.elsewhere;
     }
     shown = true;
     return true;
@@ -1137,7 +1149,7 @@ class EmployeeSalaryForm {
 
   /// يحفظ إن تغيّر — null نجاح/لا تغيير، وإلّا رسالة الخادم.
   Future<String?> save(int? employeeId) async {
-    if (!shown || employeeId == null) return null;
+    if (!shown || employeeId == null || elsewhere != null) return null;
     final want = read();
     if (want.sameAs(_before)) return null;
     // بلا راتب وبلا عمولة ولم يكن له ضبطٌ ⇒ لا نداء
@@ -1172,6 +1184,33 @@ class EmployeeSalaryFields extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     if (!form.shown) return const SizedBox.shrink();
+    final there = form.elsewhere;
+    if (there != null) {
+      // راتبه الثابت في صفحةٍ أخرى من صفحاته: أين وكم — بلا حقول (الخادم يرفض راتباً ثانياً)
+      return Container(
+        key: const ValueKey('emp-salary-elsewhere'),
+        padding: const EdgeInsets.all(Sp.md),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.icon),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${there.salary.describe(formatIQD) ?? ''} — ${there.where}',
+              style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: Sp.x6),
+            Text(
+              'للموظف راتبٌ واحد لكلّ صفحاته — يُعدَّل ويُصرف من تلك الصفحة.',
+              style: AppType.micro(color: AppColors.textMid),
+            ),
+          ],
+        ),
+      );
+    }
     final days = form.weekly ? [for (var i = 0; i < 7; i++) i] : [for (var i = 1; i <= 28; i++) i];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

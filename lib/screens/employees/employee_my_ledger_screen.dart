@@ -67,6 +67,8 @@ class _EmployeeLedgerCardState extends State<EmployeeLedgerCard> {
     if (s.duePending < 0) return (text: 'خصم ${formatIQD(-s.duePending)}', color: AppColors.error);
     final salary = s.salary.describe(formatIQD);
     if (salary != null) return (text: salary, color: AppColors.textMid);
+    final there = s.salary.elsewhere;
+    if (there != null) return (text: 'راتبك ${there.where}', color: AppColors.textMid);
     return null;
   }
 

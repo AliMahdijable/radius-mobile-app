@@ -148,6 +148,7 @@ class LedgerSalary {
     this.lapsed = 0,
     this.nextLabel,
     this.nextDueDate,
+    this.elsewhere,
   });
 
   /// الراتب (د.ع) — null = بلا راتب.
@@ -166,6 +167,9 @@ class LedgerSalary {
   final int lapsed;
   final String? nextLabel;
   final String? nextDueDate;
+
+  /// راتبه الثابت مضبوطٌ في صفحةٍ أخرى من صفحاته (موظّفٌ بأكثر من صفحة — للموظف راتبٌ واحد) — null = لا.
+  final LedgerSalaryElsewhere? elsewhere;
 
   static const dow = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -200,7 +204,33 @@ class LedgerSalary {
       lapsed: _i(raw['lapsed']),
       nextLabel: next is Map ? _s(next['label']) : null,
       nextDueDate: next is Map ? _s(next['due_date']) : null,
+      elsewhere: LedgerSalaryElsewhere.fromJson(raw['elsewhere']),
     );
+  }
+}
+
+/// «راتبٌ واحد للموظف في كلّ صفحاته» (١٤ نوفمبر): الموظّف المربوط بأكثر من صفحة راتبه الثابت في صفحةٍ واحدة منها — صفحاته
+/// الأخرى تعرضه ولا تطلبه (الخادم يرفض راتباً ثانياً SALARY_ON_OTHER_PAGE).
+class LedgerSalaryElsewhere {
+  const LedgerSalaryElsewhere({this.pageName, required this.salary});
+
+  /// اسم الصفحة كما يسمّيها حسابه — null = غير معروف.
+  final String? pageName;
+
+  /// ضبطه هناك (المبلغ والدورة واليوم وطريقة الأجر).
+  final LedgerSalary salary;
+
+  /// «في صفحة «الاسم»» أو «في صفحةٍ أخرى».
+  String get where {
+    final n = (pageName ?? '').trim();
+    return n.isEmpty ? 'في صفحةٍ أخرى' : 'في صفحة «$n»';
+  }
+
+  static LedgerSalaryElsewhere? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final s = LedgerSalary.fromJson({...raw, 'configured': true, 'elsewhere': null});
+    if (s.amount == null) return null;
+    return LedgerSalaryElsewhere(pageName: _s(raw['page_name']), salary: s);
   }
 }
 

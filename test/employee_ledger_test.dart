@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/api/expenses_api.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/api/settlements_api.dart';
+import 'package:rad_mysvcs/core/util/format.dart';
 import 'package:rad_mysvcs/screens/employees/employee_account_screen.dart';
 import 'package:rad_mysvcs/screens/employees/employee_ledger_widgets.dart';
 import 'package:rad_mysvcs/screens/employees/employee_my_ledger_screen.dart';
@@ -1027,6 +1028,83 @@ void main() {
       expect(r.payslipNumber, 2);
       expect(r.payslipEmployee, 'أحمد');
       expect(ExpenseRow.fromJson({'id': 91, 'amount': 1000, 'expense_date': '2026-11-13'})!.isPayslip, isFalse);
+    });
+  });
+
+  group('راتبٌ واحد للموظف في كلّ صفحاته (المالك ١٤ نوفمبر)', () {
+    test('العقد: salary.elsewhere ⇒ أين وكم؛ بلا مبلغٍ ⇒ لا شيء؛ بلا اسمٍ ⇒ «في صفحةٍ أخرى»', () {
+      final s = LedgerSalary.fromJson(elsewhereSalaryJson());
+      expect(s.configured, isFalse);
+      expect(s.describe((n) => '$n'), isNull);
+      final e = s.elsewhere!;
+      expect(e.pageName, 'صفحة الراتب');
+      expect(e.where, 'في صفحة «صفحة الراتب»');
+      expect(e.salary.describe(formatIQD), '400,000 شهريّاً — يوم 25');
+      expect(LedgerSalaryElsewhere.fromJson({'amount': null, 'cycle': 'monthly'}), isNull);
+      expect(LedgerSalaryElsewhere.fromJson({'amount': 100000, 'cycle': 'weekly', 'pay_day': 4})!.where, 'في صفحةٍ أخرى');
+      expect(LedgerSalary.fromJson(ledgerAccountJson()['salary']).elsewhere, isNull, reason: 'العقد القديم كما هو');
+    });
+
+    testWidgets('اللوحة: «الراتب في صفحة «…»: المبلغ» للمدير و«راتبك …» للموظف', (t) async {
+      await phone(t);
+      Widget panel(bool selfView) => app(Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: EmployeeLedgerPanel(
+                account: LedgerAccount.fromJson(ledgerAccountJson()..['salary'] = elsewhereSalaryJson())!,
+                selfView: selfView,
+              ),
+            ),
+          ));
+      await t.pumpWidget(panel(false));
+      await t.pumpAndSettle();
+      expect(t.widget<Text>(find.byKey(const ValueKey('emp-ledger-salary'))).data, 'الراتب في صفحة «صفحة الراتب»: 400,000 شهريّاً — يوم 25');
+      expect(find.byKey(const ValueKey('emp-ledger-salary-due')), findsNothing);
+      await t.pumpWidget(panel(true));
+      await t.pumpAndSettle();
+      expect(t.widget<Text>(find.byKey(const ValueKey('emp-ledger-salary'))).data, 'راتبك في صفحة «صفحة الراتب»: 400,000 شهريّاً — يوم 25');
+    });
+
+    testWidgets('بطاقة «سلفي وراتبي»: لا شيء عليه ولا له ⇒ «راتبك في صفحة «…»»', (t) async {
+      await phone(t);
+      final a = LedgerAccount.fromJson(ledgerAccountJson()
+        ..['owed'] = 0
+        ..['loans_total'] = 0
+        ..['owes_total'] = 0
+        ..['due_pending'] = 0
+        ..['loans'] = []
+        ..['salary'] = elsewhereSalaryJson())!;
+      await t.pumpWidget(app(Scaffold(body: EmployeeLedgerCard(loader: () async => a))));
+      await t.pumpAndSettle();
+      expect(t.widget<Text>(find.byKey(const ValueKey('emp-ledger-card-headline'))).data, 'راتبك في صفحة «صفحة الراتب»');
+    });
+
+    testWidgets('المحرّر: راتبه في صفحةٍ أخرى ⇒ سطرٌ يقول أين بدل الحقول، والحفظ لا يرسل راتباً', (t) async {
+      await phone(t);
+      PermissionsService.debugSet(isEmployee: false);
+      server.salaryElsewhere = true;
+      final catalog = PermissionsCatalog.fromJson({
+        'permissions': {
+          'subscribers.view': {'label': 'عرض المشتركين', 'category': 'subscribers'},
+        },
+        'categories': {
+          'subscribers': {'label': 'المشتركون'},
+        },
+        'defaults': {'subscribers.view': true},
+        'presets': <String, Object>{},
+      });
+      final emp = Employee.fromJson({'id': 7, 'username': 'emp1', 'full_name': 'أحمد', 'is_active': true, 'permissions': {}})!;
+      await opener(t, (c) => showEmployeeEditorSheet(c, catalog: catalog, employee: emp), (_) {});
+      expect(find.byKey(const ValueKey('emp-salary-section')), findsOneWidget);
+      await t.ensureVisible(find.byKey(const ValueKey('emp-salary-elsewhere')));
+      await settle(t, frames: 5);
+      expect(find.text('400,000 شهريّاً — يوم 25 — في صفحة «صفحة الراتب»'), findsOneWidget);
+      expect(find.text('للموظف راتبٌ واحد لكلّ صفحاته — يُعدَّل ويُصرف من تلك الصفحة.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('emp-salary-amount')), findsNothing);
+      expect(find.text('طريقة الأجر'), findsNothing);
+      await t.tap(find.text('حفظ'));
+      await settle(t, frames: 40);
+      expect(server.bodiesOf('PUT', '/api/v2/employee-ledger/7/salary'), isEmpty);
     });
   });
 }
