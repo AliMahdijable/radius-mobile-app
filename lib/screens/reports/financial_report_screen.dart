@@ -741,6 +741,16 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       _KpiItem('# مصاريف', '${k.expensesCount}', AppColors.error,
           LucideIcons.receipt,
           isCount: true),
+      // «حركات الموظف» (١٣ نوفمبر) — للعرض، حين للحساب حركات: رواتبهم داخلةٌ أصلاً في المصاريف أعلاه، والسلف والقروض
+      // ليست مصروفاً (تُستقطع من رواتبهم) فتُعرض رصيداً قائماً لا خصماً من الصافي.
+      if (k.hasEmployeeMoves && k.empSalariesSum > 0)
+        _KpiItem('منها رواتب ومكافآت', formatIQD(k.empSalariesSum),
+            AppColors.error, LucideIcons.users,
+            isDebit: true),
+      if (k.showEmployeeReceivable)
+        _KpiItem('سلف وقروض الموظفين', formatIQD(k.empOutstanding),
+            AppColors.warning, LucideIcons.handCoins,
+            isCount: true),
     ];
     return Wrap(
       spacing: 8,

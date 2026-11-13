@@ -58,6 +58,7 @@ class SettleCollector {
     required this.net,
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
+    this.employeeMoves = const MoneyCount(0, 0),
   });
 
   final int? employeeId;
@@ -73,6 +74,10 @@ class SettleCollector {
 
   /// شراء المخزون «من الصندوق» (خارجٌ كالصرفيات) — صفرٌ من خادمٍ قبله.
   final MoneyCount goodsPurchases;
+
+  /// «حركات الموظف» (١٣ نوفمبر): صافي أثرها على الصندوق — سالبٌ خرج (سلف وقروض وسحوبات)، موجبٌ عاد (تسديد واستقطاع رواتب).
+  /// داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount employeeMoves;
 
   bool get isManager => employeeId == null;
   int get inCount => cashActivations.count + debtPayments.count + salesCash.count;
@@ -90,6 +95,7 @@ class SettleCollector {
         net: _num(j['net_amount']),
         salesCash: MoneyCount.fromJson(j['sales_cash']),
         goodsPurchases: MoneyCount.fromJson(j['goods_purchases']),
+        employeeMoves: MoneyCount.fromJson(j['employee_moves']),
       );
 }
 
@@ -126,6 +132,7 @@ class SettlementRecord {
     required this.collectors,
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
+    this.employeeMoves = const MoneyCount(0, 0),
   });
 
   final int id;
@@ -156,10 +163,14 @@ class SettlementRecord {
   /// شراء المخزون «من الصندوق» (صافي: شراء − إلغاؤه) — خارجٌ من [expected]؛ صفرٌ قبله.
   final MoneyCount goodsPurchases;
 
+  /// «حركات الموظف» (١٣ نوفمبر): صافي أثرها على الصندوق — سالبٌ خرج (سلف وقروض وسحوبات)، موجبٌ عاد (تسديد واستقطاع رواتب).
+  /// داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount employeeMoves;
+
   bool get isOpening => kind == 'opening';
   bool get isVoided => status == 'voided';
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count;
 
   static SettlementRecord? fromJson(Object? raw) {
     final j = _map(raw);
@@ -189,6 +200,7 @@ class SettlementRecord {
       collectors: _collectors(j['collectors']),
       salesCash: MoneyCount.fromJson(j['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(j['goods_purchases']),
+        employeeMoves: MoneyCount.fromJson(j['employee_moves']),
     );
   }
 }
@@ -244,6 +256,7 @@ class CurrentAccount {
     required this.monthStart,
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
+    this.employeeMoves = const MoneyCount(0, 0),
     this.routedWrites,
   });
 
@@ -276,8 +289,12 @@ class CurrentAccount {
   /// شراء المخزون من الصندوق بالفترة — خارجٌ من [expected].
   final MoneyCount goodsPurchases;
 
+  /// «حركات الموظف» (١٣ نوفمبر): صافي أثرها على الصندوق — سالبٌ خرج (سلف وقروض وسحوبات)، موجبٌ عاد (تسديد واستقطاع رواتب).
+  /// داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount employeeMoves;
+
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count;
   bool get hasEmployees => collectors.any((c) => !c.isManager);
 
   static CurrentAccount? fromJson(Object? raw) {
@@ -304,6 +321,7 @@ class CurrentAccount {
       monthStart: _str(j['month_start']),
       salesCash: MoneyCount.fromJson(t['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
+      employeeMoves: MoneyCount.fromJson(t['employee_moves']),
       routedWrites: j['routed_writes'] is bool ? j['routed_writes'] as bool : null,
     );
   }
@@ -330,6 +348,7 @@ class StartPreview {
     required this.collectors,
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
+    this.employeeMoves = const MoneyCount(0, 0),
   });
 
   /// ما أرسلناه كما ردّه الخادم: `now` أو `YYYY-MM-DD`. تُقرأ منه
@@ -348,9 +367,10 @@ class StartPreview {
   final List<SettleCollector> collectors;
   final MoneyCount salesCash;
   final MoneyCount goodsPurchases;
+  final MoneyCount employeeMoves;
 
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count;
 
   static StartPreview? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -368,6 +388,7 @@ class StartPreview {
       collectors: _collectors(j['collectors']),
       salesCash: MoneyCount.fromJson(t['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
+      employeeMoves: MoneyCount.fromJson(t['employee_moves']),
     );
   }
 }
@@ -399,6 +420,9 @@ class BoxMovement {
   /// `sale_void` (إلغاء بيع — إرجاع المبلغ، خارج) · `purchase` (شراء مخزونٍ من الصندوق —
   /// خارج) · `purchase_void` (إلغاؤه — يعود، داخل) · `debt_payment_void` («إلغاء تسديد» —
   /// تسديدٌ أُلغي فخرج مبلغه من الصندوق باسم من استلمه، ١١ نوفمبر)
+  /// · حركات الموظفين (`source == 'employee'`، ١٣ نوفمبر): `emp_advance` · `emp_withdraw` · `emp_loan` (خارج) ·
+  /// `emp_repayment` (داخل) · إلغاء كلٍّ منها (`…_void` — يعكس اتّجاهه) · `emp_payslip_recover` (استقطاع سلف وأقساط من كشف
+  /// راتب — يعود). الاتّجاه من الخادم ([isIn]).
   final String kind;
   final bool isIn;
   final num amount;

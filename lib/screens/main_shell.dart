@@ -26,6 +26,8 @@ import 'more_modules_screen.dart';
 import 'network_devices/network_devices_screen.dart';
 import 'search/quick_search_overlay.dart';
 import 'expenses/sheets/add_expense_sheet.dart';
+import 'employees/employee_ledger_widgets.dart' show quickEmployeeMove;
+import '../api/employee_ledger_api.dart' show EmployeeLedgerState, LedgerMe;
 import 'subscribers/sheets/activate_sheet.dart';
 import 'subscribers/sheets/add_debt_sheet.dart';
 import 'subscribers/sheets/add_subscriber_sheet.dart';
@@ -372,6 +374,9 @@ class _MainShellState extends State<MainShell> {
       // الإصبع، وزرّه في أزرار الأعلى (جنب الجرس) يظهر مع أوّل إطار،
       // و«اشرحلي» حاضرٌ مع أوّل إشعار خطأ.
       unawaited(AiAssistantState.ensureFresh());
+      // «حركات الموظف»: حال الميزة أوّل الجلسة (مطفأةً يردّ الخادم فوراً) — فبند «حركة موظف» حاضرٌ مع أوّل فتحٍ للإضافة
+      // السريعة، لا يُدرج متأخّراً تحت الإصبع.
+      unawaited(EmployeeLedgerState.ensureFresh());
       // «كل الشركات»: يعود الوضع إن كان مفعّلاً لهذا الحساب وما زال متاحاً.
       unawaited(MergedMode.restore());
       // فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر): بعد ٨ث، بعمّالٍ أقلّ، يتنحّى للموجة الأماميّة وللخلفيّة.
@@ -775,6 +780,15 @@ class _QuickAddSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // «حركة موظف» (١٣ نوفمبر): حين الميزة مفتوحة لهذه الصفحة والمستعمل يسجّل بها (المدير، أو موظّفٌ بصلاحيّة الرواتب) —
+    // غير ذلك لا بند ولا مساحة. الاستماع للحال يسألها إن كانت قديمة.
+    return ValueListenableBuilder<LedgerMe?>(
+      valueListenable: EmployeeLedgerState.gate,
+      builder: (context, ledgerMe, _) => _sheet(context, ledgerMove: ledgerMe?.manages ?? false),
+    );
+  }
+
+  Widget _sheet(BuildContext context, {required bool ledgerMove}) {
     // بلاغ ٢٠٢٦-١٠-١٤: البند المبوّب لا يختفي — يبقى بمكانه **مقفلاً**
     // (القفل مكان السهم، والنقر رسالةٌ لا تغلق الشيت ولا تفتح شيئاً).
     // ويختفي فقط ما لا يُمنح لهذا الدور أصلاً ([permShown]).
@@ -792,7 +806,8 @@ class _QuickAddSheet extends StatelessWidget {
         shown(kActivate) ||
         shown(kPay) ||
         shown(kAddDebt) ||
-        permShown(kExpense);
+        permShown(kExpense) ||
+        ledgerMove;
     return DesignSheet(
       header: SheetHeaderBar(
         icon: Icons.add_rounded,
@@ -913,6 +928,25 @@ class _QuickAddSheet extends StatelessWidget {
                 }
               },
             ),
+          if (ledgerMove)
+            _QuickItem(
+              key: const ValueKey('quick-employee-move'),
+              icon: Icons.badge_rounded,
+              color: AppColors.brand,
+              title: 'حركة موظف',
+              subtitle: 'سلفة، قرض، سحب، مكافأة، خصم أو تسديد',
+              // «كل الشركات»: الموظّف يتبع صفحته — تُسجَّل في المفتوحة، وغيرها «بدّل إليها».
+              onTap: () async {
+                final open = await pickOpenCompanyFor(
+                  rootContext,
+                  action: 'حركة موظف',
+                  reason: 'الموظف يتبع صفحته',
+                );
+                if (open && rootContext.mounted) {
+                  await quickEmployeeMove(rootContext);
+                }
+              },
+            ),
         ],
       ),
     );
@@ -921,6 +955,7 @@ class _QuickAddSheet extends StatelessWidget {
 
 class _QuickItem extends StatelessWidget {
   const _QuickItem({
+    super.key,
     required this.icon,
     required this.color,
     required this.title,

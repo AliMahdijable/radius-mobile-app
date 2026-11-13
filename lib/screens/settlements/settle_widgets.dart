@@ -30,6 +30,17 @@ String settleMoney(num n) =>
   );
 }
 
+/// سطر «الموظفون» بالصندوق («حركات الموظف»، ١٣ نوفمبر): صافيه سالبٌ ⇒ خرج (سلف وقروض وسحوبات)، موجبٌ ⇒ عاد (تسديد
+/// واستقطاع رواتب). القيمة بإشارتها كما تُحسب في المتوقَّع.
+({String label, String value, bool out}) employeeBoxLine(MoneyCount m) {
+  final out = m.sum < 0;
+  return (
+    label: (out ? 'settle.emp_out' : m.sum > 0 ? 'settle.emp_in' : 'settle.emp_zero').tr(),
+    value: '${out ? '−' : '+'}${formatIQD(m.sum.abs())}',
+    out: out,
+  );
+}
+
 /// «الخميس 1 تشرين الأوّل · 21:40» بتوقيت الجهاز (الأجهزة في العراق).
 String settleWhen(DateTime? d, {bool weekday = false}) {
   if (d == null) return '—';
@@ -81,13 +92,17 @@ class CollectorsList extends StatelessWidget {
                         ),
                         const SizedBox(height: Sp.xxs),
                         Text(
-                          collectors[i].outCount > 0
-                              ? 'settle.collector_counts_spent'.tr(namedArgs: {
-                                  'in': '${collectors[i].inCount}',
-                                  'out': '${collectors[i].outCount}',
-                                })
-                              : 'settle.collector_counts'.tr(
-                                  namedArgs: {'in': '${collectors[i].inCount}'}),
+                          (collectors[i].outCount > 0
+                                  ? 'settle.collector_counts_spent'.tr(namedArgs: {
+                                      'in': '${collectors[i].inCount}',
+                                      'out': '${collectors[i].outCount}',
+                                    })
+                                  : 'settle.collector_counts'.tr(
+                                      namedArgs: {'in': '${collectors[i].inCount}'})) +
+                              // حركات الموظفين التي مرّ نقدها بيده (سلفة دفعها، تسديدٌ استلمه…) — داخلةٌ في صافيه
+                              (collectors[i].employeeMoves.count > 0
+                                  ? ' · ${'settle.collector_emp'.tr(namedArgs: {'n': '${collectors[i].employeeMoves.count}'})}'
+                                  : ''),
                           style: AppType.muted(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -147,6 +162,8 @@ class MovementTile extends StatelessWidget {
       'purchase_void' => LucideIcons.undo2,
       'supplier_refund_void' => LucideIcons.undo2,
       'debt_payment_void' => LucideIcons.undo2,
+      'emp_advance' || 'emp_withdraw' || 'emp_loan' || 'emp_repayment' || 'emp_payslip_recover' => LucideIcons.users,
+      'emp_advance_void' || 'emp_withdraw_void' || 'emp_loan_void' || 'emp_repayment_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
@@ -159,6 +176,15 @@ class MovementTile extends StatelessWidget {
       'supplier_refund' => 'settle.kind_supplier_refund'.tr(),
       'supplier_refund_void' => 'settle.kind_supplier_refund_void'.tr(),
       'debt_payment_void' => 'settle.kind_debt_payment_void'.tr(),
+      'emp_advance' => 'settle.kind_emp_advance'.tr(),
+      'emp_withdraw' => 'settle.kind_emp_withdraw'.tr(),
+      'emp_loan' => 'settle.kind_emp_loan'.tr(),
+      'emp_repayment' => 'settle.kind_emp_repayment'.tr(),
+      'emp_advance_void' => 'settle.kind_emp_advance_void'.tr(),
+      'emp_withdraw_void' => 'settle.kind_emp_withdraw_void'.tr(),
+      'emp_loan_void' => 'settle.kind_emp_loan_void'.tr(),
+      'emp_repayment_void' => 'settle.kind_emp_repayment_void'.tr(),
+      'emp_payslip_recover' => 'settle.kind_emp_payslip_recover'.tr(),
       _ => 'settle.kind_debt_payment'.tr(),
     };
     // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
@@ -168,8 +194,15 @@ class MovementTile extends StatelessWidget {
     final buyTitle = isPurchase
         ? (m.description ?? '').replaceFirst(RegExp(r'^(?:إلغاء شراء|شراء مواد|استرجاع من المورّد|إلغاء استرجاع):\s*'), '').trim()
         : '';
+    // حركة موظف: العنوان الموظّف وما قيل فيها (الوصف بلا بادئة نوعه — النوع بسطر التفاصيل).
+    final isEmployee = m.source == 'employee';
+    final empTitle = isEmployee
+        ? (m.description ?? '').replaceFirst(RegExp(r'^[^:]{1,60}:\s*'), '').trim()
+        : '';
     final title = m.kind == 'expense'
         ? (m.description ?? 'settle.kind_expense'.tr())
+        : isEmployee
+            ? (empTitle.isEmpty ? kindLabel : iso(empTitle))
         : isPurchase
             ? (buyTitle.isEmpty ? kindLabel : iso(buyTitle))
             : isSale

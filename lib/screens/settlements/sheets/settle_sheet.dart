@@ -218,6 +218,12 @@ class _SettleSheetState extends State<_SettleSheet> {
               value: goodsBoxLine(p.goodsPurchases).value,
               valueColor: goodsBoxLine(p.goodsPurchases).out ? AppColors.error : AppColors.success,
             ),
+          if (p.employeeMoves.count > 0)
+            SheetRowData(
+              label: '${employeeBoxLine(p.employeeMoves).label} · ${p.employeeMoves.count}',
+              value: employeeBoxLine(p.employeeMoves).value,
+              valueColor: employeeBoxLine(p.employeeMoves).out ? AppColors.error : AppColors.success,
+            ),
           SheetRowData(
             label: 'settle.expected'.tr(),
             value: settleMoney(p.expected),

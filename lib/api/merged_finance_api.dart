@@ -201,6 +201,12 @@ class MergedFinanceApi {
       goodsCount: i((k) => k.goodsCount),
       goodsLossSum: n((k) => k.goodsLossSum),
       goodsLossCount: i((k) => k.goodsLossCount),
+      // «حركات الموظف»: للعرض — تُجمع كما هي (شركةٌ بلا القسم أصفار)
+      hasEmployeeMoves: ks.any((k) => k.hasEmployeeMoves),
+      empSalariesSum: n((k) => k.empSalariesSum),
+      empGivenSum: n((k) => k.empGivenSum),
+      empBackSum: n((k) => k.empBackSum),
+      empOutstanding: n((k) => k.empOutstanding),
       // شركةٌ بلا الحقل (خادمٌ أقدم) ⇒ ديْن مبيعاتها المكتملة مكانه — كقاعدة الشركة الواحدة.
       balanceAddSalesSum: ks.any((k) => k.balanceAddSalesSum != null)
           ? n((k) => k.balanceAddSalesSum ?? k.goodsDebtSum)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/employee_ledger_api.dart';
 import '../../api/employee_limits_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
@@ -11,13 +12,24 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/employee_limits_card.dart';
+import 'employee_ledger_widgets.dart';
 
 /// حساب الموظّف مع مديره (٩ نوفمبر — «حدود الموظّف»): أرقام فترته، حدوده، المحجوز غير المؤكَّد، «تسوية مع الموظف»، وسجلّ تسوياته.
 /// للمدير وحده (الخادم يرفض غيره بـMANAGER_ONLY).
+///
+/// «حركات الموظف» (١٣ نوفمبر): فوقها لوحة «له / عليه» (سلف، قروض، راتب) حين الميزة مفتوحة للصفحة ([ledger]) — يسجّل فيها
+/// المدير أو موظّفٌ بصلاحيّة الرواتب (على غيره)، والإلغاء للمدير وحده. [limitsOn] false ⇒ اللوحة وحدها (صاحب الصلاحيّة لا
+/// يرى حدود زميله ولا يسوّيه).
 class EmployeeAccountScreen extends StatefulWidget {
-  const EmployeeAccountScreen({super.key, required this.employeeId, required this.title});
+  const EmployeeAccountScreen({super.key, required this.employeeId, required this.title, this.limitsOn = true, this.ledger});
   final int employeeId;
   final String title;
+
+  /// حدوده وتسويته مع مديره تُعرض (المدير، والميزة مفتوحة).
+  final bool limitsOn;
+
+  /// «حركات الموظف» مفتوحة لهذه الصفحة: canWrite يسجّل ويصرف، canVoid يلغي (المدير وحده). null ⇒ الشاشة كما كانت.
+  final ({bool canWrite, bool canVoid})? ledger;
 
   @override
   State<EmployeeAccountScreen> createState() => _EmployeeAccountScreenState();
@@ -28,6 +40,10 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
   String? _error;
   bool _loading = true;
 
+  /// حساب «له / عليه» (حين [EmployeeAccountScreen.ledger]) — وسبب تعذّره.
+  LedgerAccount? _a;
+  String? _ledgerError;
+
   @override
   void initState() {
     super.initState();
@@ -36,16 +52,79 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
 
   Future<void> _load() async {
     setState(() {
-      _loading = _s == null;
+      _loading = _s == null && _a == null;
       _error = null;
     });
-    final r = await EmployeeLimitsApi.get(widget.employeeId);
+    final results = await Future.wait<Object?>([
+      widget.limitsOn ? EmployeeLimitsApi.get(widget.employeeId) : Future<Object?>.value(null),
+      widget.ledger != null ? EmployeeLedgerApi.account(widget.employeeId) : Future<Object?>.value(null),
+    ]);
     if (!mounted) return;
+    final r = results[0] as LimitsResult<EmployeeLimitStatus>?;
+    final l = results[1] as LedgerResult<LedgerAccount>?;
     setState(() {
       _loading = false;
-      _s = r.data ?? _s;
-      _error = r.data == null ? (r.message ?? 'تعذّر التحميل') : null;
+      if (r != null) {
+        _s = r.data ?? _s;
+        _error = r.data == null ? (r.message ?? 'تعذّر التحميل') : null;
+      }
+      if (l != null) {
+        _a = l.data ?? _a;
+        _ledgerError = l.data == null ? (l.message ?? 'تعذّر تحميل حساب الموظف') : null;
+      }
     });
+  }
+
+  String get _name => _a?.summary.displayName ?? _s?.displayName ?? widget.title;
+
+  Future<void> _newMove() async {
+    final done = await showEmployeeMoveSheet(context, employeeId: widget.employeeId, name: _name, owes: _a?.summary.owesTotal);
+    if (done == null) return;
+    if (mounted) showSheetSnack(context, done, isError: false);
+    _load();
+  }
+
+  Future<void> _openPayslip() async {
+    final done = await showEmployeePayslipSheet(context, employeeId: widget.employeeId, name: _name, canSkip: widget.ledger?.canVoid ?? false);
+    // تخطّي راتبٍ داخل الورقة يغيّر الحساب ولو أُغلقت بلا صرف
+    if (done != null && mounted) showSheetSnack(context, done, isError: false);
+    _load();
+  }
+
+  Future<void> _voidMove(LedgerMove m) async {
+    final reason = await askLedgerVoidReason(
+      context,
+      title: 'إلغاء ${m.label}',
+      body: '${m.label} ${formatIQD(m.amount)} د.ع — يُسجَّل الإلغاء بسببه ويعود أثرها على حسابه.',
+      confirm: 'إلغاء الحركة',
+    );
+    if (reason == null) return;
+    final r = await EmployeeLedgerApi.voidMovement(widget.employeeId, m.id, reason);
+    if (!mounted) return;
+    if (!r.ok) {
+      showSheetSnack(context, r.message ?? 'تعذّر الإلغاء', isError: true);
+      return;
+    }
+    showSheetSnack(context, 'أُلغيت الحركة', isError: false);
+    _load();
+  }
+
+  Future<void> _voidPayslip(LedgerPayslip p) async {
+    final reason = await askLedgerVoidReason(
+      context,
+      title: 'إلغاء كشف الراتب ${p.number}',
+      body: 'تُحذف صرفيّته من المصاريف وتعود استقطاعاته (السلف والأقساط) على الموظف.',
+      confirm: 'إلغاء الكشف',
+    );
+    if (reason == null) return;
+    final r = await EmployeeLedgerApi.voidPayslip(widget.employeeId, p.id, reason);
+    if (!mounted) return;
+    if (!r.ok) {
+      showSheetSnack(context, r.message ?? 'تعذّر الإلغاء', isError: true);
+      return;
+    }
+    showSheetSnack(context, 'أُلغي الكشف', isError: false);
+    _load();
   }
 
   Future<void> _editLimits() async {
@@ -126,6 +205,8 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final s = _s;
+    final a = _a;
+    final access = widget.ledger;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -134,13 +215,38 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : s == null
-              ? Center(child: Text(_error ?? 'تعذّر التحميل', style: AppType.body(color: AppColors.textMid)))
+          : s == null && a == null
+              ? Center(child: Text(_error ?? _ledgerError ?? 'تعذّر التحميل', style: AppType.body(color: AppColors.textMid)))
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge * 2),
                     children: [
+                      // «له / عليه»: سلفه وقروضه وراتبه — فوق حدوده وتسويته
+                      if (access != null) ...[
+                        if (a != null)
+                          EmployeeLedgerPanel(
+                            account: a,
+                            onMove: access.canWrite ? _newMove : null,
+                            onPayslip: access.canWrite ? _openPayslip : null,
+                            onVoidMove: access.canVoid ? _voidMove : null,
+                            onVoidPayslip: access.canVoid ? _voidPayslip : null,
+                          )
+                        else
+                          _Note(
+                            key: const ValueKey('emp-ledger-unavailable'),
+                            text: _ledgerError ?? 'تعذّر تحميل حساب الموظف الآن — حاول بعد قليل',
+                            warn: true,
+                          ),
+                        if (widget.limitsOn) ...[
+                          const SizedBox(height: Sp.xl),
+                          Text('حدوده وتسويته معك', style: AppType.bodyBold(color: AppColors.textHi)),
+                          const SizedBox(height: Sp.sm),
+                        ],
+                      ],
+                      if (widget.limitsOn && s == null)
+                        _Note(text: _error ?? 'تعذّر التحميل', warn: true)
+                      else if (s != null) ...[
                       if (!s.started)
                         _Note(text: s.limits.isEmpty
                             ? 'لم تُضبط حدودٌ لهذا الموظف بعد — اضبط سقفاً أو ربحاً ليبدأ العدّ من الآن.'
@@ -188,6 +294,7 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                                 ? () => _voidLatest(st)
                                 : null,
                           ),
+                      ],
                       ],
                     ],
                   ),
@@ -541,9 +648,23 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text('النقد الذي يسلّمه الموظف', style: AppType.micro(color: AppColors.textLow)),
-                    Text('${formatIQD(p.cashIn)} د.ع',
+                    Text('${formatIQD(p.toHandOver ?? p.cashIn)} د.ع',
                         key: const ValueKey('emp-settle-cash'), style: AppType.amount(color: AppColors.textHi)),
                     const SizedBox(height: Sp.sm),
+                    // «حركات الموظف»: ما أخذه من النقد الذي بيده يُطرح ممّا يسلّمه (سحب، سلفة أو راتب من يده)
+                    if ((p.handTaken ?? 0) != 0) ...[
+                      _line('النقد الذي استلمه', p.cashIn, 0),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text('أخذ منه (سحب، سلفة، راتب)', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid))),
+                            Text('-${formatIQD(p.handTaken!)} د.ع', key: const ValueKey('emp-settle-hand-taken'), style: AppType.body(color: AppColors.error)),
+                          ],
+                        ),
+                      ),
+                      const Divider(),
+                    ],
                     _line('تفعيل نقديّ', b('cash_activations').sum, b('cash_activations').count),
                     _line('تسديد ديون', b('debt_payments').sum, b('debt_payments').count),
                     _line('بيع مواد نقداً', b('sales_cash').sum, b('sales_cash').count),

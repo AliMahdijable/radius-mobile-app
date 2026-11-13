@@ -8,6 +8,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/server_time.dart';
+import 'action_labels.dart' show employeeMoveLabel;
 
 /// سطر موحَّد لعرض حركة في التقارير المالية + سجل النشاط.
 /// يكشف: الـaction (badge ملوّن) + الوصف + المنفِّذ (موظف لو موجود)
@@ -107,8 +108,8 @@ class ReportLogTile extends StatelessWidget {
                       Text(
                         '${meta.debit ? '-' : ''}${formatIQD(amount.abs())} د.ع',
                         style: TextStyle(
-                          // debit → أحمر (سالب)، عكسه → أخضر (موجب).
-                          color: meta.debit ? AppColors.error : _kPositive,
+                          // debit → أحمر (سالب)، عكسه → أخضر (موجب)؛ والمحايد (لا نقد فيه) بلون النصّ.
+                          color: meta.neutral ? AppColors.textMid : (meta.debit ? AppColors.error : _kPositive),
                           fontSize: 12.5, height: 1.4,
                           fontWeight: FontWeight.w700,
                         ),
@@ -340,11 +341,14 @@ class ReportLogTile extends StatelessWidget {
 /// خصائص العرض حسب نوع العملية. نفس الـmapping في
 /// client-v2/src/pages/reports/_shared.tsx mapActionType.
 class _ActionMeta {
-  const _ActionMeta(this.label, this.icon, this.color, {this.debit = false});
+  const _ActionMeta(this.label, this.icon, this.color, {this.debit = false, this.neutral = false});
   final String label;
   final IconData icon;
   final Color color;
   final bool debit;
+
+  /// مبلغٌ بلا نقد (مكافأة أو خصم يدخلان كشف الراتب): يُكتب بلون النصّ لا أخضر ولا أحمر.
+  final bool neutral;
 }
 
 /// ألوان اتفاقية:
@@ -466,6 +470,15 @@ _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
           undo ? LucideIcons.undo2 : LucideIcons.packageX,
           amount > 0 ? AppColors.error : _kPositive,
           debit: amount > 0);
+    // «حركات الموظف» (١٣ نوفمبر — سطرٌ يحقنه الخادم بالتقرير الماليّ، ووصفه يبدأ بنوعه): سلفة/قرض/سحب نقدٌ خرج،
+    // تسديدٌ دخل؛ المكافأة والخصم لا نقد فيهما (يدخلان كشف راتبه).
+    case 'EMPLOYEE_MOVE':
+      final label = employeeMoveLabel(desc);
+      if (desc.startsWith('تسديد')) return _ActionMeta(label, LucideIcons.handCoins, _kPositive);
+      if (desc.startsWith('مكافأة') || desc.startsWith('خصم')) {
+        return _ActionMeta(label, LucideIcons.handCoins, AppColors.textMid, neutral: true);
+      }
+      return _ActionMeta(label, LucideIcons.handCoins, AppColors.error, debit: true);
     case 'EXPENSE_EDIT':
       return _ActionMeta('تعديل صرفية', LucideIcons.receipt, AppColors.error);
     case 'EXPENSE_DELETE':

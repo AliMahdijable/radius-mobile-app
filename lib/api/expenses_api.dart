@@ -17,6 +17,8 @@ class ExpenseRow {
     this.settlementNumber,
     this.recurringName,
     this.recurringPeriod,
+    this.payslipNumber,
+    this.payslipEmployee,
   });
   final int id;
   final num amount;
@@ -39,6 +41,12 @@ class ExpenseRow {
   final String? recurringName;
   final String? recurringPeriod;
   bool get isRecurring => recurringName != null;
+
+  /// «حركات الموظف» (١٣ نوفمبر): صرفيّة كشف راتب (`payslip` من الخادم) — رقم الكشف واسم الموظف. لا تُعدَّل ولا تُحذف من
+  /// الصرفيات (الخادم يرفضها 409 PAYSLIP_EXPENSE): يُلغى الكشف من حساب الموظف فتُحذف معه.
+  final int? payslipNumber;
+  final String? payslipEmployee;
+  bool get isPayslip => payslipNumber != null;
 
   static ExpenseRow? fromJson(Map<String, dynamic> j) {
     final id = j['id'];
@@ -65,6 +73,8 @@ class ExpenseRow {
       settlementNumber: int.tryParse(j['settlement_number']?.toString() ?? ''),
       recurringName: j['recurring'] is Map ? (j['recurring'] as Map)['name']?.toString() : null,
       recurringPeriod: j['recurring'] is Map ? (j['recurring'] as Map)['period']?.toString() : null,
+      payslipNumber: j['payslip'] is Map ? int.tryParse('${(j['payslip'] as Map)['number'] ?? ''}') : null,
+      payslipEmployee: j['payslip'] is Map ? (j['payslip'] as Map)['employee_name']?.toString() : null,
     );
   }
 }

@@ -134,6 +134,11 @@ class SettlementPrint {
           s.goodsPurchases.sum >= 0
               ? row('− شراء مواد (${s.goodsPurchases.count})', _money(s.goodsPurchases.sum))
               : row('+ استرجاع من المورّد (${s.goodsPurchases.count})', _money(-s.goodsPurchases.sum)),
+        // «حركات الموظف»: صافيها على الصندوق — خرج (سلف وقروض) أو عاد (تسديد، استقطاع رواتب)
+        if (s.employeeMoves.count > 0)
+          s.employeeMoves.sum < 0
+              ? row('− سلف وقروض الموظفين (${s.employeeMoves.count})', _money(-s.employeeMoves.sum))
+              : row('+ رجع من سلف الموظفين (${s.employeeMoves.count})', _money(s.employeeMoves.sum)),
         pw.Divider(thickness: 0.8),
         row('المتوقّع في الصندوق', _money(s.expected), strong: true),
         row('المستلَم فعلاً', _money(s.received), strong: true),

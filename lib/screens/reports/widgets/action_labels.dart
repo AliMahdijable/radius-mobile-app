@@ -49,6 +49,8 @@ String arabicActionLabel(String actionType, [String description = '']) {
       return 'إلغاء بيع';
     case 'GOODS_LOSS':
       return description.startsWith('إلغاء خسارة') ? 'إلغاء خسارة مواد' : 'خسارة مواد';
+    case 'EMPLOYEE_MOVE':
+      return employeeMoveLabel(description);
     case 'EXPENSE_EDIT':
       return 'تعديل صرفية';
     case 'EXPENSE_DELETE':
@@ -106,4 +108,12 @@ String arabicActionLabel(String actionType, [String description = '']) {
     default:
       return actionType;
   }
+}
+
+/// «حركة موظف» في التقرير الماليّ: نوعها من أوّل وصفها («سلفة: أحمد …») — «سلفة موظف».
+String employeeMoveLabel(String description) {
+  for (final k in const ['سلفة', 'قرض', 'سحب', 'مكافأة', 'خصم', 'تسديد']) {
+    if (description.startsWith(k)) return '$k موظف';
+  }
+  return 'حركة موظف';
 }

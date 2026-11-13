@@ -5,11 +5,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../widgets/reveal_password_sheet.dart';
 
+import '../../api/employee_ledger_api.dart';
 import '../../api/employee_limits_api.dart';
 import '../../api/employees_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/clipboard_helper.dart';
 import '../../core/widgets/explain_action.dart';
+import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/active_company.dart';
 import '../../services/ai_assistant_state.dart';
 import '../../services/permissions_service.dart';
@@ -18,6 +20,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'employee_account_screen.dart';
+import 'employee_ledger_widgets.dart';
 import 'sheets/employee_editor_sheet.dart';
 import 'sheets/link_employee_sheet.dart';
 import '../../services/auth_storage.dart';
@@ -56,11 +59,68 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     if (on != _limitsFeature) setState(() => _limitsFeature = on);
   }
 
-  void _openAccount(Employee e) {
+  /// «حركات الموظف» (١٣ نوفمبر): من أنا في الميزة (المدير، أو موظّفٌ بصلاحيّة الرواتب)، وملخّص حساب كلّ موظّف (له/عليه، راتبٌ
+  /// مستحقّ) برقمه. الميزة مطفأة لهذه الصفحة أو لا أدير بها ⇒ null وخريطةٌ فارغة، والشاشة كما كانت.
+  LedgerMe? _ledgerMe;
+  Map<int, LedgerSummary> _ledgerRows = const {};
+
+  bool get _ledgerOn => _ledgerMe?.manages ?? false;
+
+  /// رقم الموظّف المستعمل نفسه (صاحب الصلاحيّة لا يسجّل على نفسه).
+  int? get _selfEmployeeId => _ledgerMe?.account?.summary.employeeId;
+
+  Future<void> _loadLedger() async {
+    // شركةٌ غير المفتوحة هنا للعرض وحده: هذه المسارات للمفتوحة — لا تُسأل ولا تُعرض فوق موظّفي غيرها.
+    if (MergedSection.viewOnlyNow(context)) return;
+    final me = await EmployeeLedgerApi.me();
+    // تعذّر السؤال (شبكة) ⇒ يبقى ما نعرفه: لا تختفي الأزرار لانقطاعٍ عابر
+    if (!mounted || me == null) return;
+    EmployeeLedgerState.note(me);
+    if (!me.manages) {
+      if (_ledgerMe != null || _ledgerRows.isNotEmpty) {
+        setState(() {
+          _ledgerMe = null;
+          _ledgerRows = const {};
+        });
+      }
+      return;
+    }
+    final rows = await EmployeeLedgerApi.list();
+    if (!mounted) return;
+    setState(() {
+      _ledgerMe = me;
+      // تعذّرت القائمة ⇒ يبقى ما نعرفه (الأزرار تعمل، والشارات تنتظر)
+      if (rows != null) _ledgerRows = {for (final r in rows) r.employeeId: r};
+    });
+  }
+
+  Future<void> _openAccount(Employee e) async {
     final name = (e.fullName?.isNotEmpty == true) ? e.fullName! : e.username;
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => EmployeeAccountScreen(employeeId: e.id, title: name),
+    final me = _ledgerMe;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => EmployeeAccountScreen(
+        employeeId: e.id,
+        title: name,
+        limitsOn: _limitsFeature && !PermissionsService.isEmployee,
+        ledger: me != null && me.manages ? (canWrite: e.id != _selfEmployeeId, canVoid: me.isManager) : null,
+      ),
     ));
+    // عاد من حسابه: سلفةٌ أو كشفٌ غيّر شارته
+    if (mounted && _ledgerOn) unawaited(_loadLedger());
+  }
+
+  /// «حركة موظف» من رأس القسم: «على أيّ موظف؟» ثمّ ورقة الحركة.
+  Future<void> _quickMove() async {
+    final rows = [
+      for (final e in _rows)
+        if (e.id != _selfEmployeeId) _ledgerRows[e.id] ?? LedgerSummary(employeeId: e.id, username: e.username, name: e.fullName, active: e.isActive),
+    ];
+    final picked = await showEmployeePickSheet(context, employees: rows);
+    if (picked == null || !mounted) return;
+    final done = await showEmployeeMoveSheet(context, employeeId: picked.employeeId, name: picked.displayName, owes: _ledgerRows[picked.employeeId]?.owesTotal);
+    if (done == null || !mounted) return;
+    showSheetSnack(context, done, isError: false);
+    unawaited(_loadLedger());
   }
 
   /// المالك موزّع ايرث لنك؟ المصدر `ProviderService` (من `/api/auth/me`)،
@@ -82,6 +142,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     ActiveCompany.listenable.addListener(_onContextChanged);
     _load();
     _loadLimitsFeature();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadLedger();
+    });
   }
 
   @override
@@ -121,6 +184,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           (cat == null && !viewOnly ? 'تعذّر تحميل كتالوج الصلاحيات' : null);
       _loading = false;
     });
+    // السحب للتحديث يحدّث الشارات أيضاً (أوّل تحميل يسأل من initState)
+    if (_ledgerMe != null) unawaited(_loadLedger());
   }
 
   Future<void> _openEditor({Employee? employee}) async {
@@ -248,6 +313,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             focusedProvider == MergedProvider.kit)
         : _isEarthlink;
     final canManage = Perms.has('employees.manage') && !viewOnly;
+    // «حركات الموظف»: للشركة المفتوحة وحدها
+    final ledgerOn = _ledgerOn && !viewOnly;
+    final limitsOn = _limitsFeature && !viewOnly && !PermissionsService.isEmployee;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -261,6 +329,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
           iconTheme: IconThemeData(color: AppColors.textHi),
           actions: [
+            if (ledgerOn && _rows.isNotEmpty)
+              IconButton(
+                key: const ValueKey('employees-ledger-move'),
+                icon: Icon(LucideIcons.banknote, color: AppColors.textHi),
+                tooltip: 'حركة موظف',
+                onPressed: _quickMove,
+              ),
             if (_canLinkFromOtherPages && canManage)
               IconButton(
                 key: const ValueKey('employees-link-other-page'),
@@ -270,15 +345,20 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               ),
           ],
         ),
-        actions: _canLinkFromOtherPages && canManage
-            ? [
-                IconButton(
-                  icon: Icon(Icons.group_add_outlined, color: AppColors.textHi),
-                  tooltip: 'موظف من صفحة أخرى',
-                  onPressed: _linkFromOtherPage,
-                ),
-              ]
-            : null,
+        actions: [
+          if (ledgerOn && _rows.isNotEmpty)
+            IconButton(
+              icon: Icon(LucideIcons.banknote, color: AppColors.textHi),
+              tooltip: 'حركة موظف',
+              onPressed: _quickMove,
+            ),
+          if (_canLinkFromOtherPages && canManage)
+            IconButton(
+              icon: Icon(Icons.group_add_outlined, color: AppColors.textHi),
+              tooltip: 'موظف من صفحة أخرى',
+              onPressed: _linkFromOtherPage,
+            ),
+        ],
         primary: (_catalog == null || !canManage)
             ? null
             : DeskPrimaryButton(
@@ -337,10 +417,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   onShowPassword: canManage && !e.isLinkedCopy
                                       ? () => _showEmployeePassword(e)
                                       : null,
-                                  // حساب الموظف مع مديره (حدوده وتسويته) — المدير وحده، والميزة مفتوحة لصفحته
-                                  onAccount: _limitsFeature && !viewOnly && !PermissionsService.isEmployee
-                                      ? () => _openAccount(e)
-                                      : null,
+                                  // حساب الموظف: حدوده وتسويته (المدير وحده) و/أو «له / عليه» (المدير أو صاحب صلاحيّة الرواتب)
+                                  onAccount: limitsOn || ledgerOn ? () => _openAccount(e) : null,
+                                  ledger: ledgerOn ? _ledgerRows[e.id] : null,
                                 ),
                             ]),
                           ],
@@ -543,8 +622,13 @@ class _EmployeeTile extends StatelessWidget {
     this.onDelete,
     this.onShowPassword,
     this.onAccount,
+    this.ledger,
   });
   final Employee emp;
+
+  /// ملخّص «له / عليه» (حين الميزة مفتوحة): نقطةٌ على زرّ حسابه — كهرمانيّة لراتبٍ مستحقّ، حمراء لما عليه — بلا سطرٍ جديد
+  /// في البطاقة؛ والحاسبة (صفٌّ عريض) تكتبها بسطر الصلاحيّات.
+  final LedgerSummary? ledger;
 
   /// «حساب الموظف» (حدوده وتسويته) — null يُخفي الزرّ (ليس المدير أو الميزة مطفأة).
   final VoidCallback? onAccount;
@@ -573,6 +657,26 @@ class _EmployeeTile extends StatelessWidget {
         (emp.fullName?.isNotEmpty == true) ? emp.fullName! : emp.username;
     final accentColor = emp.isActive ? AppColors.success : AppColors.textLow;
     final desk = DesktopScope.of(context);
+    // هاتفٌ ضيّق (دون ٤٠٠): أزرار الصفّ بمقاسها المرسوم (٣٢) لا بحشوة اللمس (٤٨) — أربعة أزرار كانت تترك للاسم ٥٩ نقطة بعرض ٣٦٠
+    // فيفيض سطر الصلاحيّات. الأعرض كما كان.
+    final tightButtons = !desk && MediaQuery.sizeOf(context).width < 400
+        ? IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap)
+        : null;
+    // «له / عليه»: راتبٌ مستحقّ يحتاج فعلاً (كهرمانيّ) يسبق «عليه» (أحمر)
+    final lg = ledger;
+    final balance = ledgerBalanceText(lg);
+    final ledgerParts = [
+      if (lg != null && lg.salaryDue) lg.salary.dueCount == 1 ? 'راتبٌ مستحقّ' : '${lg.salary.dueCount} رواتب مستحقّة',
+      if (balance != null) balance.text,
+    ];
+    final ledgerTip = ledgerParts.isEmpty ? null : ledgerParts.join(' · ');
+    final Color? ledgerDot = lg == null
+        ? null
+        : lg.salaryDue
+            ? AppColors.warning
+            : lg.owesTotal > 0
+                ? AppColors.error
+                : null;
     final body = Padding(
       padding: const EdgeInsetsDirectional.only(
           start: 12, end: 4, top: 10, bottom: 10),
@@ -644,16 +748,19 @@ class _EmployeeTile extends StatelessWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Text(
-                          // نسخة صفحةٍ مضافة: اسم دخوله الأصليّ لا الداخليّ
-                          emp.linked?.loginUsername ?? emp.username,
-                          style: TextStyle(
-                            fontSize: 11, height: 1.25,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textMid,
+                        // مرنٌ: يُختصر «…» حين يضيق الصفّ (أربعة أزرار بعرض ٣٢٠) بدل أن يفيض
+                        Flexible(
+                          child: Text(
+                            // نسخة صفحةٍ مضافة: اسم دخوله الأصليّ لا الداخليّ
+                            emp.linked?.loginUsername ?? emp.username,
+                            style: TextStyle(
+                              fontSize: 11, height: 1.25,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMid,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         Text('  ·  ',
                             style: AppType.muted()),
@@ -664,6 +771,19 @@ class _EmployeeTile extends StatelessWidget {
                           '$permsCount صلاحية',
                           style: AppType.pillBold(color: AppColors.brand),
                         ),
+                        // الحاسبة: الصفّ عريض — تُكتب بجانب الصلاحيّات (الهاتف: نقطة زرّ الحساب)
+                        if (desk && ledgerTip != null) ...[
+                          Text('  ·  ', style: AppType.muted()),
+                          Flexible(
+                            child: Text(
+                              ledgerTip,
+                              key: ValueKey('employee-ledger-text-${emp.id}'),
+                              style: AppType.pillBold(color: ledgerDot ?? AppColors.success),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     // ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»
@@ -713,6 +833,7 @@ class _EmployeeTile extends StatelessWidget {
               // 2026-08-26: زر نسخ اليوزر — يتوفّر لأي حساب مصادَق (بلا
               // perm gating لأن الـusername ليس بيانات حسّاسة).
               IconButton(
+                  style: tightButtons,
                 icon:
                     Icon(LucideIcons.copy, color: AppColors.textMid, size: 15),
                 onPressed: () => copyToClipboard(context, emp.linked?.loginUsername ?? emp.username,
@@ -724,16 +845,38 @@ class _EmployeeTile extends StatelessWidget {
               ),
               if (onAccount != null)
                 IconButton(
+                  style: tightButtons,
                   key: ValueKey('employee-account-${emp.id}'),
-                  icon: Icon(LucideIcons.handCoins, color: AppColors.brand, size: 16),
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(LucideIcons.handCoins, color: AppColors.brand, size: 16),
+                      if (ledgerDot != null)
+                        PositionedDirectional(
+                          top: -3,
+                          end: -4,
+                          child: Container(
+                            key: ValueKey('employee-ledger-dot-${emp.id}'),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: ledgerDot,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.surface, width: 1.5),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   onPressed: onAccount,
-                  tooltip: 'حساب الموظف',
+                  tooltip: ledgerTip == null ? 'حساب الموظف' : 'حساب الموظف — $ledgerTip',
                   splashRadius: 18,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 ),
               if (onShowPassword != null)
                 IconButton(
+                  style: tightButtons,
                   icon: Icon(LucideIcons.keyRound,
                       color: AppColors.brandAccent, size: 16),
                   onPressed: onShowPassword,
@@ -745,6 +888,7 @@ class _EmployeeTile extends StatelessWidget {
                 ),
               if (onDelete != null)
                 IconButton(
+                  style: tightButtons,
                   icon: Icon(LucideIcons.trash2,
                       color: AppColors.error, size: 15),
                   onPressed: onDelete,

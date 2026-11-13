@@ -304,6 +304,12 @@ class _DetailSheetState extends State<_DetailSheet> {
                 value: goodsBoxLine(s.goodsPurchases).value,
                 valueColor: goodsBoxLine(s.goodsPurchases).out ? AppColors.error : AppColors.success,
               ),
+            if (s.employeeMoves.count > 0)
+              SheetRowData(
+                label: '${employeeBoxLine(s.employeeMoves).label} · ${s.employeeMoves.count}',
+                value: employeeBoxLine(s.employeeMoves).value,
+                valueColor: employeeBoxLine(s.employeeMoves).out ? AppColors.error : AppColors.success,
+              ),
             SheetRowData(
               label: 'settle.expected'.tr(),
               value: settleMoney(s.expected),

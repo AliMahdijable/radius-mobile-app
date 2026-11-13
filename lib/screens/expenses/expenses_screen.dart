@@ -140,6 +140,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       );
       return;
     }
+    // صرفيّة كشف راتب: مبلغها من الكشف — يُلغى الكشف من حساب الموظف فتُحذف معه
+    if (row.isPayslip) {
+      showSheetSnack(context, 'exp.payslip_locked'.tr(), isError: true);
+      return;
+    }
     final changed = await showEditExpenseSheet(context, row, companyKey: _companyKey, companyName: _companyName);
     if (changed == true && mounted) _load();
   }
@@ -471,6 +476,19 @@ class _ExpenseTile extends StatelessWidget {
                         ],
                       ],
                     ),
+                    if (row.isPayslip) ...[
+                      const SizedBox(height: 3),
+                      ToneChip(
+                        key: ValueKey('exp-payslip-${row.id}'),
+                        // «كشف راتب 3 · أحمد» — صرفيّةٌ كتبها صرف الراتب
+                        label: (row.payslipEmployee ?? '').isEmpty
+                            ? 'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'})
+                            : '${'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'})} · ${row.payslipEmployee}',
+                        icon: LucideIcons.users,
+                        tone: AppTone.brand,
+                        dense: true,
+                      ),
+                    ],
                     if (row.isRecurring) ...[
                       const SizedBox(height: 3),
                       ToneChip(
@@ -517,6 +535,12 @@ class _ExpenseTile extends StatelessWidget {
                     icon: LucideIcons.lock,
                     dense: true,
                   ),
+                )
+              else if (row.isPayslip)
+                // صرفيّة كشف راتب: لا حذف من هنا (قفلٌ بمكان الزرّ — البطاقة بحجمها)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(start: Sp.x6, end: Sp.md),
+                  child: Icon(LucideIcons.lock, size: 14, color: AppColors.textLow),
                 )
               else
                 IconButton(

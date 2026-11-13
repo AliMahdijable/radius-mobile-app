@@ -115,8 +115,11 @@ class PackageCostKpis {
     final perRow = period.knownRows == 0 ||
         allLogs.any((l) => l.packageCostSent || l.packageCost != null);
     if (!perRow) return (cost: null, unavailable: true);
-    final activityRows =
-        allLogs.where((l) => l.actionType.toUpperCase().trim() != 'ADMIN_EXPENSE').length;
+    // الصرفيات وحركات الموظفين سطورٌ يحقنها الخادم فوق سقف السجلّ — لا تُعدّ منه
+    final activityRows = allLogs.where((l) {
+      final at = l.actionType.toUpperCase().trim();
+      return at != 'ADMIN_EXPENSE' && at != 'EMPLOYEE_MOVE';
+    }).length;
     if (activityRows >= recentLogsServerCap) return (cost: null, unavailable: true);
     return (cost: fromLogs(filtered), unavailable: false);
   }
@@ -168,7 +171,31 @@ class FinanceKPIs {
     this.balanceAddSalesSum,
     this.goodsLossSum = 0,
     this.goodsLossCount = 0,
+    this.hasEmployeeMoves = false,
+    this.empSalariesSum = 0,
+    this.empGivenSum = 0,
+    this.empBackSum = 0,
+    this.empOutstanding = 0,
   });
+
+  /// «حركات الموظف» (١٣ نوفمبر): الخادم أرسل قسمها (لهذا النطاق حركات) — وإلّا الشاشة كما كانت حرفاً. كلّها **للعرض**:
+  /// السلف والقروض ليست مصروفاً ولا تدخل الصافي هنا؛ المصروف راتبهم، وهو داخلٌ أصلاً في [expensesSum].
+  final bool hasEmployeeMoves;
+
+  /// صرفيّات كشوف الرواتب ضمن الصرفيات («رواتب ومكافآت»).
+  final num empSalariesSum;
+
+  /// سلف وسحوبات وقروض خرجت بالفترة.
+  final num empGivenSum;
+
+  /// ما رجع منها بالفترة (استقطاع الكشوف + تسديدٌ نقديّ).
+  final num empBackSum;
+
+  /// «سلف وقروض قائمة» الآن (رصيدٌ لا حركة فترة).
+  final num empOutstanding;
+
+  /// يُعرض سطر «سلف وقروض الموظفين».
+  bool get showEmployeeReceivable => hasEmployeeMoves && (empOutstanding != 0 || empGivenSum != 0 || empBackSum != 0);
   final num paymentsSum;
   final num debtPaySum;
   final num balanceDeductSum;
@@ -291,6 +318,11 @@ class FinanceKPIs {
       balanceAddSalesSum: j.containsKey('balance_add_sales_sum') ? _n(j['balance_add_sales_sum']) : null,
       goodsLossSum: _n(j['sales_loss_sum']),
       goodsLossCount: _i(j['sales_loss_count']),
+      hasEmployeeMoves: j['emp_receivable_outstanding'] != null || j['emp_salaries_sum'] != null,
+      empSalariesSum: _n(j['emp_salaries_sum']),
+      empGivenSum: _n(j['emp_given_sum']),
+      empBackSum: _n(j['emp_recovered_sum']) + _n(j['emp_repaid_sum']),
+      empOutstanding: _n(j['emp_receivable_outstanding']),
     );
   }
 }
@@ -809,6 +841,8 @@ class ReportsApi {
         if (userManager != null && userManager.isNotEmpty)
           'user_manager': userManager,
         if (employeeId != null) 'employee_id': '$employeeId',
+        // «حركات الموظف»: سطورها (سلفة، قرض، سحب…) ضمن «آخر الحركات» — الخادم لا يرسلها لمن لم يطلبها
+        'emp_moves': '1',
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/reports/finance',

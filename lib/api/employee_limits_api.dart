@@ -84,9 +84,18 @@ class EmployeeLimitStatus {
     this.settlements = const [],
     this.statusUnavailable = false,
     this.note,
+    this.handTaken = 0,
+    this.toHandOver,
   });
 
   final int employeeId;
+
+  /// «حركات الموظف» (١٣ نوفمبر): ما أخذه من النقد الذي بيده في هذه الفترة (سحب، سلفة أو راتب من يده، ناقص ما سدّده) —
+  /// للعرض وحده، السقف لا يتغيّر به. صفر من خادمٍ قبله أو حين لا شيء.
+  final double handTaken;
+
+  /// ما يسلّمه فعلاً = النقد الذي استلمه − [handTaken]. null = الخادم لم يرسله.
+  final double? toHandOver;
 
   /// الخادم قرأ الحدود وتعذّرت أرقام الحال الآن (`status_unavailable`) ⇒ تُعرض [note] لا أصفار؛ الحدود تُعدَّل كالعادة.
   final bool statusUnavailable;
@@ -176,6 +185,8 @@ class EmployeeLimitStatus {
           : const [],
       statusUnavailable: raw['status_unavailable'] == true,
       note: raw['note']?.toString(),
+      handTaken: EmployeeLimits._n(raw['hand_taken']) ?? 0,
+      toHandOver: EmployeeLimits._n(raw['to_hand_over']),
     );
   }
 }
@@ -301,8 +312,17 @@ class SettlementPreview {
     this.openDebtUnavailable = false,
     this.periodStart,
     this.breakdown = const {},
+    this.handTaken,
+    this.toHandOver,
   });
   final Map<String, dynamic> cut;
+
+  /// «حركات الموظف»: ما أخذه من النقد الذي بيده — يُعاد للخادم مع التأكيد فيرفض التسوية إن تغيّر منذ المعاينة.
+  /// null = الخادم لم يرسله (ميزةٌ مطفأة أو خادمٌ قبلها) ⇒ لا يُرسل ولا يُعرض.
+  final double? handTaken;
+
+  /// ما يسلّمه فعلاً = [cashIn] − [handTaken]. null ⇒ [cashIn].
+  final double? toHandOver;
   final double cashIn;
   final double debtOut;
 
@@ -344,6 +364,8 @@ class SettlementPreview {
       openDebtUnavailable: raw['open_debt_unavailable'] == true,
       periodStart: period is Map ? EmployeeLimitStatus._d(period['start_at']) : null,
       breakdown: bd,
+      handTaken: EmployeeLimits._n(raw['hand_taken']),
+      toHandOver: EmployeeLimits._n(raw['to_hand_over']),
     );
   }
 }
@@ -454,7 +476,14 @@ class EmployeeLimitsApi {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/$id/settlement', data: {
         'cut': p.cut,
-        'expected': {'cash_in': p.cashIn, 'debt_out': p.debtOut, 'ops_count': p.opsCount, 'profit': p.profit},
+        'expected': {
+          'cash_in': p.cashIn,
+          'debt_out': p.debtOut,
+          'ops_count': p.opsCount,
+          'profit': p.profit,
+          // ما أخذه من النقد الذي بيده يُرسَل حين عرضه الخادم — فيرفض التسوية إن تغيّر منذ المعاينة
+          if (p.handTaken != null) 'hand_taken': p.handTaken,
+        },
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         'idempotency_key': idempotencyKey,
       });

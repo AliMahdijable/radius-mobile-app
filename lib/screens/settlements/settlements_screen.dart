@@ -733,6 +733,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
               label: goodsBoxLine(p.goodsPurchases).label,
               value: goodsBoxLine(p.goodsPurchases).value,
             ),
+          if (p.employeeMoves.count > 0)
+            _Line(
+              label: employeeBoxLine(p.employeeMoves).label,
+              value: employeeBoxLine(p.employeeMoves).value,
+            ),
           if (_opening != 0)
             _Line(
               label: 'settle.opening_label'.tr(),
@@ -925,6 +930,14 @@ class _BoxCard extends StatelessWidget {
                     value: goodsBoxLine(cur.goodsPurchases).value,
                     color: goodsBoxLine(cur.goodsPurchases).out ? AppColors.error : AppColors.success,
                   ),
+                // «حركات الموظف» (١٣ نوفمبر): سلف وقروض وسحوبات خرجت من الصندوق ناقص ما عاد (تسديد، استقطاع رواتب)
+                if (cur.employeeMoves.count > 0)
+                  _Line(
+                    key: const ValueKey('settle-emp-line'),
+                    label: '${employeeBoxLine(cur.employeeMoves).label} · ${cur.employeeMoves.count}',
+                    value: employeeBoxLine(cur.employeeMoves).value,
+                    color: employeeBoxLine(cur.employeeMoves).out ? AppColors.error : AppColors.success,
+                  ),
               ],
             ),
           ),
@@ -935,7 +948,7 @@ class _BoxCard extends StatelessWidget {
 }
 
 class _Line extends StatelessWidget {
-  const _Line({required this.label, required this.value, this.color});
+  const _Line({super.key, required this.label, required this.value, this.color});
   final String label;
   final String value;
   final Color? color;

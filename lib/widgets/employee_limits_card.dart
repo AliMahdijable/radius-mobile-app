@@ -275,6 +275,16 @@ class EmployeeLimitsPanel extends StatelessWidget {
               ),
             ],
           ),
+          // «حركات الموظف» (١٣ نوفمبر): ما أخذه من النقد الذي بيده (سحب، سلفة أو راتب من يده) ⇒ يسلّم أقلّ في التسوية.
+          if (s.handTaken != 0) ...[
+            const SizedBox(height: Sp.sm),
+            Text(
+              '${selfView ? 'أخذتَ من النقد الذي بيدك' : 'أخذ من النقد الذي بيده'}: ${formatIQD(s.handTaken)} د.ع'
+              '${s.toHandOver == null ? '' : ' · ${selfView ? 'تسلّم' : 'يسلّم'}: ${formatIQD(s.toHandOver!)} د.ع'}',
+              key: const ValueKey('emp-hand-taken'),
+              style: AppType.micro(color: AppColors.textMid),
+            ),
+          ],
           if (blocked) ...[
             const SizedBox(height: Sp.md),
             Container(

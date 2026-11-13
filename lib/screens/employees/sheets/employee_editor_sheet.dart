@@ -17,6 +17,7 @@ import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../employee_account_screen.dart' show EmployeeLimitsFields;
+import '../employee_ledger_widgets.dart' show EmployeeSalaryFields, EmployeeSalaryForm;
 
 /// Sheet إنشاء/تعديل موظف. tab1 = معلومات، tab2 = صلاحيات. الـpresets
 /// (3 افتراضية من backend: cashier/assistant_manager/viewer) تطبّق
@@ -149,6 +150,16 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     setState(() => _limitsShown = true);
   }
 
+  // ── «راتب الموظف» (١٣ نوفمبر — «حركات الموظف»): المدير وحده، وحين الميزة مفتوحة لصفحته. يُحفظ بعد حفظ الموظف والحدود
+  //    (PUT /api/v2/employee-ledger/:id/salary)؛ لم تُقرأ قيمه ⇒ لا حقول ولا حفظ. ──
+  final _salary = EmployeeSalaryForm();
+
+  Future<void> _loadSalary() async {
+    if (PermissionsService.isEmployee) return;
+    final shown = await _salary.load(widget.employee?.id);
+    if (mounted && shown) setState(() {});
+  }
+
   /// يحفظ الحدود إن تغيّرت — null نجاح/لا تغيير، وإلّا رسالة الخادم.
   Future<String?> _saveLimits(int? employeeId) async {
     if (!_limitsShown || employeeId == null) return null;
@@ -229,6 +240,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     listen(_fullNameCtrl);
     listen(_phoneCtrl);
     _loadLimits();
+    _loadSalary();
   }
 
   @override
@@ -240,6 +252,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     _passCtrl.dispose();
     _userFocus.dispose();
     _debtCapCtrl.dispose();
+    _salary.dispose();
     _cashCapCtrl.dispose();
     _profitCtrl.dispose();
     super.dispose();
@@ -381,15 +394,20 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       createdUsername = r.employee?.username;
       savedId = r.employee?.id;
     }
-    // الحدود بعد حفظ الموظف (المدير وحده) — فشلها لا يلغي حفظه: يُقال صراحةً.
-    final limitsError = ok ? await _saveLimits(savedId) : null;
+    // الحدود ثمّ الراتب بعد حفظ الموظف (المدير وحده) — فشلهما لا يلغي حفظه: يُقال صراحةً.
+    final limitsOnlyError = ok ? await _saveLimits(savedId) : null;
+    final salaryError = ok ? await _salary.save(savedId) : null;
+    final limitsError = [
+      if (limitsOnlyError != null) 'الحدود: $limitsOnlyError',
+      if (salaryError != null) 'الراتب: $salaryError',
+    ].join(' · ');
     if (!mounted) return;
     setState(() => _saving = false);
-    if (ok && limitsError != null && _isEdit) {
-      _showError('حُفظ الموظف، لكن لم تُحفظ الحدود: $limitsError');
+    if (ok && limitsError.isNotEmpty && _isEdit) {
+      _showError('حُفظ الموظف، لكن تعذّر حفظ $limitsError');
       return;
     }
-    if (ok && limitsError != null) _snack('حُفظ الموظف، لكن لم تُحفظ الحدود: $limitsError', warn: true);
+    if (ok && limitsError.isNotEmpty) _snack('حُفظ الموظف، لكن تعذّر حفظ $limitsError', warn: true);
     if (ok) {
       if (_el && !_isEdit) {
         // ايرث لنك: لوحة بيانات الدخول بدل الإغلاق، والقائمة تُحدَّث خلفها.
@@ -622,6 +640,16 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             onChanged: () {
               if (_error != null) setState(() => _error = null);
             },
+          ),
+        ],
+        if (_salary.shown) ...[
+          const SizedBox(height: Sp.lg),
+          Text('راتب الموظف', key: const ValueKey('emp-salary-section'),
+              style: AppType.bodyBold(color: AppColors.textHi)),
+          const SizedBox(height: Sp.sm),
+          EmployeeSalaryFields(
+            form: _salary,
+            onChanged: () => setState(() => _error = null),
           ),
         ],
       ],

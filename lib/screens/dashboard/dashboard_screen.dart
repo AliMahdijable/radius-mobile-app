@@ -57,6 +57,7 @@ import 'widgets/subscribers_card.dart';
 import '../reports/financial_report_screen.dart';
 import '../../services/merged_text.dart';
 import '../../widgets/employee_limits_card.dart';
+import '../employees/employee_my_ledger_screen.dart' show EmployeeLedgerCard;
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -1093,6 +1094,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // يجلب، فلو بُني الحيّ لبقي على هيكله دوّارةً أبداً.
                   // «حسابي مع المدير» (٩ نوفمبر — حدود الموظّف): للموظّف وحده، وحين يضبط مديره سقفاً أو ربحاً — وإلّا لا شيء.
                   if (Perms.isEmployee && !MergedMode.active.value) const EmployeeLimitsCard(),
+                  // «سلفي وراتبي» («حركات الموظف»): سطرٌ واحد حين للموظّف ما يُعرض — وإلّا لا شيء ولا مساحة
+                  if (Perms.isEmployee && !MergedMode.active.value) const EmployeeLedgerCard(),
                   if (wide) ...[
                     // الحاسبة: صفّ الأرقام الرئيسيّة + شريط الحالات، ثمّ الإيرادات بجانب آخر النشاطات.
                     if (_shown('subscribers') || _shown('wallet'))
