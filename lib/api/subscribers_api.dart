@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/subscriber.dart';
 import '../services/vitals_reporter.dart';
 import '../services/auth_storage.dart';
+import '../services/known_slow_list.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'agent_alerts_api.dart';
 import 'api_client.dart';
@@ -235,13 +236,30 @@ class _SubsListCache {
       // الحسابات الكبيرة (≥ ٥٠٠٠، BigSubscribersApi): لا قائمة كاملة أصلاً — ٨٩ ألفاً ≈ ٩٦ث تتجاوز المهلة، وكانت تُعاد مع
       // كلّ نبضة. شاشة المشتركين والرئيسية والبحث تجلب بالصفحة والملخّص؛ وما سواها يرى «تعذّر» بدل انتظارٍ بلا نهاية أو
       // نسخة قرصٍ قديمة. صفٌّ واحد يحسم (مخزَّنٌ ١٠ دقائق).
-      if (await BigSubscribersApi.probe() > 0) return null;
+      //
+      // الحساب المعروف ببطء قائمته (١٤ نوفمبر، KnownSlowList — صغيرٌ دون الكبير): لا تنتظر القائمة ذلك الفحص (ثانيةٌ أو أكثر
+      // على ساسٍ بطيء) — يجري معها ليبقى ما يُعرف عن الحساب حديثاً.
+      final knownSlow = await KnownSlowList.size();
+      if (knownSlow != null) {
+        unawaited(BigSubscribersApi.probe());
+      } else if (await BigSubscribersApi.probe() > 0) {
+        return null;
+      }
+      final sw = Stopwatch()..start();
       final result = await SubscribersApi._loadAllRaw();
+      sw.stop();
       if (result != null) {
         _list = result;
         _at = DateTime.now();
         _servedFromDiskAt = null; // طازجٌ من الشبكة
+        // زمنها يعلّم الحساب «معروفاً ببطئه» (≥ ٣ث) أو يمسحه (< ١٫٥ث) — عدد مشتركيه وحده
+        unawaited(KnownSlowList.note(sw.elapsed, result.length));
         return result;
+      }
+      // لم تصل بعد انتظارٍ طويل (مهلة الخادم ٢٨ث للساس البطيء) ⇒ بطءٌ يُتذكَّر بعدده المعروف؛ الفشل السريع (جلسة/صلاحيّة) لا يُعدّ.
+      if (sw.elapsed >= const Duration(seconds: 15)) {
+        final n = knownSlow ?? BigSubscribersApi.knownSize;
+        if (n > 0) unawaited(KnownSlowList.note(null, n));
       }
       // ── الشبكة سقطت ──────────────────────────────────────────
       // ⚠️ الرجوع إلى القرص **هنا** لا في الشاشات: لو تركناه لكلّ

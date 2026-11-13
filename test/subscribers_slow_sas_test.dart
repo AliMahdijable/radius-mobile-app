@@ -61,8 +61,9 @@ void main() {
     });
 
     test('القائمة الفارغة لسبب فشلٍ تعرض السبب وزرّ الإعادة (ليس للكبير ولا «كل الشركات»)', () {
-      expect(screen, contains('error: !_big && !_mergedOn && _all.isEmpty'));
-      expect(screen, contains('? SubscribersApi.lastListError'));
+      // الشرط في getter خارج شجرة البناء (١٤ نوفمبر — كان `!_mergedOn` فيها يُقرأ لفاحص «للشركة وحدها» حارساً لنداءٍ مجاور)
+      expect(screen, contains('error: _listNeverArrivedReason,'));
+      expect(screen, contains('!_big && !_mergedOn && _all.isEmpty ? SubscribersApi.lastListError : null'));
       expect(screen, contains("if (error != null && query.isEmpty) return _failed(error!);"));
       expect(screen, contains('تعذّر جلب المشتركين من سيرفر الشركة'));
     });

@@ -30,6 +30,7 @@ import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/connection_readings_uploader.dart';
+import '../../services/known_slow_list.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
@@ -920,6 +921,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// مهلة القائمة الكاملة للحساب الصغير قبل أن يصير التحميل تدريجيّاً — ساسٌ عاديّ يجيب في أقلّ من ثانية (٠٫٥–١٫٢ث).
   static const _slowFullListAfter = Duration(milliseconds: 1200);
 
+  /// سبب «لم تصل القائمة أصلاً» (١٣ نوفمبر — بلاغ فايبر لنك كربلاء) لحالة القائمة الفارغة، وإلّا null. ⚠️ خارج شجرة البناء عمداً
+  /// (١٤ نوفمبر): شرطه `!_mergedOn` داخل قوس قائمة المشتركين كان يُقرأ لفاحص «للشركة وحدها» (route_scan gatedRef) حارساً لنداء
+  /// «تذكير الدين» المجاور فيُخفي إزالة حارسه الحقيقيّ (merged_route_proof ٧ أحمر منذ 81997ea4).
+  String? get _listNeverArrivedReason =>
+      !_big && !_mergedOn && _all.isEmpty ? SubscribersApi.lastListError : null;
+
   /// التدريجيّ: صفحات الساس بطريقة الكبير بلا ملخّص (العدّادات «…») حتى تصل [fullF]، ثمّ يعود كلّ شيءٍ كما كان. القائمة الكاملة
   /// إن تعذّرت تبقى الصفحات كالحساب الكبير — مع عدّاداتها من الملخّص.
   Future<void> _loadProgressively(Future<List<Subscriber>?> fullF) async {
@@ -953,6 +960,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
     if (_mergedOn) {
       await _loadMerged();
+      return;
+    }
+
+    // ── الحساب المعروف ببطء قائمته (١٤ نوفمبر — المالك: «أوّل ٥٠ مشتركاً حيّين خلال ٣–٥ث والباقي وراهم»، ⛔ لا نسخة قديمة) ──
+    // لا انتظار «هل الحساب كبير؟» ولا [_slowFullListAfter]: الصفحة الأولى حيّةً من الساس والقائمة الكاملة (بلا فحصٍ قبلها —
+    // _SubsListCache) معاً من أوّل لحظة، والكاملة تحلّ محلّها حين تصل كالمتوسّط. KnownSlowList يحفظ عدد المشتركين وحده.
+    if (!SubscribersApi.hasFreshList && await KnownSlowList.size() != null) {
+      if (!mounted) return;
+      await _loadProgressively(SubscribersApi.loadAll());
       return;
     }
 
@@ -2411,9 +2427,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 query: _query,
                                 // لم تصل القائمة أصلاً (لا صفوف ولا نسخة محفوظة): السبب
                                 // لا «لا يوجد مشترك» — ١٣ نوفمبر، بلاغ فايبر لنك كربلاء.
-                                error: !_big && !_mergedOn && _all.isEmpty
-                                    ? SubscribersApi.lastListError
-                                    : null,
+                                error: _listNeverArrivedReason,
                                 onRetry: () => _refresh(pull: true),
                               ),
                             )
