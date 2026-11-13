@@ -79,12 +79,30 @@ class SubscriberTrafficChart extends StatelessWidget {
   final bool unavailable;
 
   /// عدّادات الجهاز نفسه لا ترى تحميل المشترك (ONU بتسريعٍ عتاديّ للواي فاي — HS8546V2) ⇒ لا رقم ولا «إعادة محاولة»:
-  /// السبب صريحاً بدل رقمٍ ناقص.
+  /// **سطرٌ واحد** بالسبب بدل المربّع كلّه — اختيار المالك ١٤ نوفمبر بعد أن رأى المربّع فارغاً بالكرت («سطر صغير بدل المربّع»).
   final bool uncounted;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
+    // لا إطار فارغ ولا شرطات ولا مفتاح رسمٍ لخطوطٍ لن تُرسم: الكرت يصغر ويبقى السبب.
+    if (uncounted) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+        decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(R.icon)),
+        child: Row(children: [
+          Icon(Icons.info_outline_rounded, size: 15, color: AppColors.textHint),
+          const SizedBox(width: Sp.x6),
+          Expanded(
+              child: Text('الترافيك: الجهاز ما يعدّ التحميل',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.microBold(color: AppColors.textMid))),
+        ]),
+      );
+    }
     final readings = samples.where((s) => s.valid).toList();
     final live = downBps != null && upBps != null;
     final peakDown =
@@ -100,9 +118,7 @@ class SubscriberTrafficChart extends StatelessWidget {
     final period = seconds >= 60 ? 'آخر ${seconds ~/ 60} د' : 'آخر $seconds ث';
     final status = live
         ? 'الترافيك الآن'
-        : uncounted
-            ? 'الجهاز ما يعدّ تحميل المشترك'
-            : unavailable
+        : unavailable
             ? 'تعذّرت قراءة الترافيك'
             : readings.isEmpty
                 ? 'بانتظار القراءة'
@@ -149,9 +165,7 @@ class SubscriberTrafficChart extends StatelessWidget {
                 child: readings.length < 2
                     ? Center(
                         child: Text(
-                            uncounted
-                                ? 'عدّادات الواي فاي بيه ناقصة — ما نعرض رقماً غلط'
-                                : unavailable
+                            unavailable
                                 ? 'بانتظار إعادة المحاولة'
                                 : readings.isEmpty
                                     ? 'يظهر الرسم عند وصول القراءات'

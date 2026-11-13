@@ -50,8 +50,9 @@ void main() {
     expect(subscriberTrafficRate(2500000000), '2.5 Gbps');
   });
 
-  // ١٤ نوفمبر (HS8546V2): عدّادات الـONU لا ترى تحميل المشترك ⇒ السبب صريحاً بلا أرقام ولا «إعادة محاولة»، وبلا رسمٍ قديم.
-  testWidgets('«الجهاز ما يعدّ تحميل المشترك»: السبب بدل الرقم، بعرض الهاتف وخطٍّ مكبَّر، فاتح وغامق', (t) async {
+  // ١٤ نوفمبر (HS8546V2): عدّادات الـONU لا ترى تحميل المشترك ⇒ سطرٌ واحد بالسبب بدل المربّع — المالك رأى المربّع فارغاً بالكرت
+  // واختار «سطر صغير بدل المربّع»: لا أرقام ولا شرطات ولا مفتاح رسم ولا «إعادة محاولة».
+  testWidgets('«الترافيك: الجهاز ما يعدّ التحميل»: سطرٌ صغير بدل المربّع، بعرض الهاتف وخطٍّ مكبَّر، فاتح وغامق', (t) async {
     t.view.physicalSize = const Size(1440, 900);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
@@ -79,11 +80,14 @@ void main() {
         ));
         await t.pump();
         expect(t.takeException(), isNull);
-        expect(find.text('الجهاز ما يعدّ تحميل المشترك'), findsOneWidget);
-        expect(find.text('عدّادات الواي فاي بيه ناقصة — ما نعرض رقماً غلط'), findsOneWidget);
-        expect(find.text('—'), findsNWidgets(2), reason: 'لا رقم للتحميل ولا للرفع');
+        expect(find.text('الترافيك: الجهاز ما يعدّ التحميل'), findsOneWidget);
+        expect(find.text('—'), findsNothing, reason: 'لا شرطات مكان أرقامٍ لن تأتي');
+        expect(find.text('تحميل'), findsNothing, reason: 'لا مفتاح رسمٍ بلا رسم');
+        expect(find.textContaining('ذروة التحميل'), findsNothing);
         expect(find.text('تعذّرت قراءة الترافيك'), findsNothing);
         expect(find.text('بانتظار إعادة المحاولة'), findsNothing, reason: 'لا محاولة تُنتظر — الجهاز لا يعطي الرقم');
+        final box = t.getSize(find.byType(SubscriberTrafficChart));
+        expect(box.height, lessThan(64), reason: 'سطرٌ لا مربّع (المربّع ~١٨٠) — الكرت يصغر');
       }
       final output = Platform.environment['TRAFFIC_SHOTS_DIR'];
       if (output != null) {
