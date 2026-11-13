@@ -8,6 +8,7 @@ import 'snmp_client.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/net/device_net.dart';
+import '../core/net/vpn_pipe.dart' show PipeDenied;
 import '../models/device_region.dart';
 import '../models/network_device.dart';
 import '../services/device_events.dart';
@@ -831,7 +832,9 @@ class NetworkDevicesApi {
         for (final port in ports) {
           try {
             final sw = Stopwatch()..start();
-            final socket = await Socket.connect(ip, port, timeout: timeout);
+            // ١٤ نوفمبر (المالك: «بحث النطاق… ماكو يشتغل عبر vpn من انقر درع»): كان Socket.connect خامّاً فيفحص شبكة الهاتف
+            // نفسها والوكيل بـ«وضع VPN» — الآن [DeviceNet]: بالوضع يمرّ من ممرّ نفقه، وخارجه كما كان حرفاً.
+            final socket = await DeviceNet.connect(ip, port, timeout: timeout);
             sw.stop();
             // على منفذَي الإدارة فقط: قراءةٌ قصيرة تُميّز الصانع، ولا
             // نُبطئ بقيّة المنافذ بانتظارٍ لا يفيد.
@@ -851,6 +854,9 @@ class NetworkDevicesApi {
             results.add(res);
             onFound?.call(res);
             break; // أوّل port فُتح → لا نكمل باقي الـports لهذا الـIP
+          } on PipeDenied {
+            // نفق شركةٍ مشترك والعنوان ليس من أجهزته ولا مشتركيه: كلّ منافذه مرفوضة — لا تُطلب واحداً واحداً
+            break;
           } catch (_) {
             // continue للـport التالي
           }

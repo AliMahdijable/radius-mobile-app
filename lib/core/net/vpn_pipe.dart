@@ -21,6 +21,18 @@ class PipeRetry implements Exception {
   const PipeRetry();
 }
 
+/// الخادم ردّ «مشغول» (PIPE_BUSY 429): بلغ الوكيل سقف ممرّاته المفتوحة (٢٤) — لحظيّ، يُعاد بعد قليل ([VpnPipe.connect]).
+class PipeBusy implements Exception {
+  const PipeBusy([this.message = '']);
+  final String message;
+}
+
+/// العنوان ليس من أجهزة الوكيل ولا مشتركيه (NOT_YOURS 403) على نفق شركةٍ مشترك — فشل اتّصالٍ كغيره، ويُعرف بنوعه فلا تُجرَّب
+/// بقيّة منافذ العنوان نفسه (فحص النطاق).
+class PipeDenied extends SocketException {
+  const PipeDenied(super.message, {super.port});
+}
+
 /// طريق الوكيل عبر الـVPN الآن: قائم ([ok] + [via]: company · own · template)، أو السبب بكلمة الخادم و[reason] (no_vpn، tunnel_failed…).
 class PipeRoute {
   const PipeRoute.ok(this.via)
@@ -93,19 +105,105 @@ class VpnPipe {
   static int? connectMsOf(Socket s) => _connectMs[s];
   static int? udpMsOf(String host) => _udpMs[host];
 
+  // ——— طابور الممرّات (١٤ نوفمبر — المالك: «فحص الأجهزة من ينقر ع الدرع يفحص يوصل للنصّ مرّات ويفصل») ———
+  //
+  // الخادم يسمح للوكيل بـ٢٤ ممرّاً مفتوحاً معاً (PIPE_BUSY فوقها). «الفحص الشامل» (٦ أجهزة معاً، ٢–٤ اتّصالات لكلٍّ) مع جولة القسم
+  // وبطاقاته كانت تتجاوزها بمنتصف الفحص، فيُرفض فتح الباقي ويظهر «ما قُرئ» — ٥٢ رفضاً بسجلّ الخادم يومها، كلّها على الفتح.
+  // الآن: ما زاد على [maxOpen] **ينتظر دوره** (والانتظار لا يُحسب من مهلة الجهاز)، و«مشغول» من الخادم (تطبيقٌ ثانٍ للوكيل نفسه،
+  // أو ممرّاتٌ لم يُغلقها الخادم بعد) يُعاد بعد لحظة بدل أن يُعدّ فشلاً.
+
+  /// أقصى ممرّاتٍ مفتوحة من هذا التطبيق معاً — دون سقف الخادم (٢٤) بهامشٍ لتطبيقٍ ثانٍ. يُضبط بالاختبار.
+  static int maxOpen = 20;
+
+  /// أقصى انتظارٍ للدور قبل أن يُعدّ الممرّ مشغولاً فعلاً.
+  static Duration queueWait = const Duration(seconds: 25);
+
+  /// مهلات إعادة «مشغول» من الخادم (ms) — ~٦ث مجموعاً.
+  static List<int> busyBackoffMs = const [300, 500, 800, 1200, 1500, 1800];
+
+  static int _open = 0;
+  static final _queue = <Completer<void>>[];
+
+  /// ممرّاتٌ مفتوحة (أو تُفتح) الآن من هذا التطبيق.
+  @visibleForTesting
+  static int get openNow => _open;
+
+  @visibleForTesting
+  static void debugResetGate() {
+    _open = 0;
+    for (final c in _queue) {
+      if (!c.isCompleted) c.completeError(const SocketException('reset'));
+    }
+    _queue.clear();
+  }
+
+  static Future<void> _acquire(int port) async {
+    if (_open < maxOpen) {
+      _open++;
+      return;
+    }
+    final c = Completer<void>();
+    _queue.add(c);
+    try {
+      // الدور يُسلَّم محجوزاً ([_release] لا يُنقص العدّاد حين يسلّمه)
+      await c.future.timeout(queueWait);
+    } on TimeoutException {
+      _queue.remove(c);
+      // سُلّم الدور لحظة انتهاء المهلة ⇒ يُعاد لغيره
+      if (c.isCompleted) _release();
+      throw SocketException('الممرّ مشغول — أعد المحاولة بعد لحظة', port: port);
+    }
+  }
+
+  static void _release() {
+    while (_queue.isNotEmpty) {
+      final c = _queue.removeAt(0);
+      if (!c.isCompleted) {
+        c.complete(); // الدور ينتقل لمن ينتظر (العدّاد كما هو)
+        return;
+      }
+    }
+    if (_open > 0) _open--;
+  }
+
   /// [Socket] متّصلٌ بالجهاز [host]:[port] عبر الممرّ — أو [SocketException] كالمباشر.
   static Future<Socket> connect(String host, int port, {Duration? timeout}) async {
     used = true;
-    final o = await transport.open(host, port, timeout ?? const Duration(seconds: 6));
-    final id = o.id;
+    await _acquire(port);
+    var held = true; // الدور بيدنا حتى يحمله الرابط (يُعاد عند إغلاقه)
+    void free() {
+      if (held) {
+        held = false;
+        _release();
+      }
+    }
+
     try {
-      final s = await _bridge(id);
-      if (o.ms != null) _connectMs[s] = o.ms!;
-      return s;
-    } catch (e) {
-      unawaited(transport.close(id).catchError((Object _) {}));
-      if (e is SocketException) rethrow;
-      throw SocketException('تعذّر فتح الممرّ: $e', port: port);
+      ({String id, int? ms}) o;
+      for (var i = 0;; i++) {
+        try {
+          o = await transport.open(host, port, timeout ?? const Duration(seconds: 6));
+          break;
+        } on PipeBusy catch (e) {
+          if (i >= busyBackoffMs.length) {
+            throw SocketException(e.message.isEmpty ? 'الممرّ مشغول — أعد المحاولة بعد لحظة' : e.message, port: port);
+          }
+          await Future<void>.delayed(Duration(milliseconds: busyBackoffMs[i]));
+        }
+      }
+      final id = o.id;
+      try {
+        final s = await _bridge(id, onClosed: free);
+        if (o.ms != null) _connectMs[s] = o.ms!;
+        return s;
+      } catch (e) {
+        unawaited(transport.close(id).catchError((Object _) {}));
+        if (e is SocketException) rethrow;
+        throw SocketException('تعذّر فتح الممرّ: $e', port: port);
+      }
+    } catch (_) {
+      free();
+      rethrow;
     }
   }
 
@@ -143,7 +241,7 @@ class VpnPipe {
   }
 
   /// زوجٌ محلّيّ: القارئ يأخذ طرفاً، والآخر يمرّ بالخادم. المقبول يُطابَق بمنفذ طرفنا (لا يُقبل غيره).
-  static Future<Socket> _bridge(String id) async {
+  static Future<Socket> _bridge(String id, {void Function()? onClosed}) async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final got = Completer<Socket>();
     int? want;
@@ -178,7 +276,7 @@ class VpnPipe {
         client.setOption(SocketOption.tcpNoDelay, true);
         inner.setOption(SocketOption.tcpNoDelay, true);
       } catch (_) {/* اختياريّ */}
-      _Link(id, inner, transport).start();
+      _Link(id, inner, transport, onClosed: onClosed).start();
       return client;
     } finally {
       await sub.cancel();
@@ -198,6 +296,7 @@ class VpnPipe {
       return SocketException(msg, osError: OSError(msg, _errnoOf(err)), port: port);
     }
     final msg = '${m['message'] ?? ''}'.trim();
+    if (code == 'NOT_YOURS') return PipeDenied(msg.isEmpty ? 'هذا العنوان ليس من أجهزتك ولا مشتركيك' : msg, port: port);
     return SocketException(msg.isEmpty ? 'الجهاز ما ردّ عبر الـVPN' : msg, port: port);
   }
 
@@ -226,10 +325,19 @@ class VpnPipe {
 
 /// طرفٌ محلّيّ ⇄ ممرّ الخادم: ما يكتبه القارئ يُرسل بالترتيب (طلبٌ بعد طلب)، وقراءةٌ معلّقة دائماً تأتي بما يرسله الجهاز.
 class _Link {
-  _Link(this.id, this.inner, this.t);
+  _Link(this.id, this.inner, this.t, {this.onClosed});
   final String id;
   final Socket inner;
   final VpnPipeTransport t;
+
+  /// يُنادى مرّةً حين ينتهي الرابط بأيّ طريق (القارئ أغلق، الجهاز أغلق، الخادم أسقطه) — يُعيد دوره في طابور الممرّات.
+  final void Function()? onClosed;
+  bool _freed = false;
+  void _free() {
+    if (_freed) return;
+    _freed = true;
+    onClosed?.call();
+  }
   final _out = BytesBuilder(copy: false);
   bool _writing = false;
   bool _closed = false;
@@ -309,6 +417,7 @@ class _Link {
       if (r.end) {
         // الجهاز أغلق ⇒ نهاية القراءة عند القارئ بعد آخر بايت
         _closed = true;
+        _free();
         try {
           await inner.flush();
           await inner.close();
@@ -322,6 +431,7 @@ class _Link {
   void _shutdown({bool notify = true}) {
     if (_closed) return;
     _closed = true;
+    _free();
     try {
       inner.destroy();
     } catch (_) {}
@@ -363,6 +473,9 @@ class _HttpPipeTransport implements VpnPipeTransport {
       final id = '${data['id'] ?? ''}';
       final ms = data['ms'];
       if (_id.hasMatch(id)) return (id: id, ms: ms is num && ms > 0 ? ms.round() : null);
+    }
+    if (r.statusCode == 429 || (body is Map && body['code'] == 'PIPE_BUSY')) {
+      throw PipeBusy(body is Map ? '${body['message'] ?? ''}'.trim() : '');
     }
     throw VpnPipe.failure(body, port: port);
   }
