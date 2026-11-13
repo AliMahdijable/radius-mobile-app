@@ -1,0 +1,32 @@
+identity=ALIMAHDI.MyServicesPro ready=1 version=3.0.181.0
+Resolving dependencies...
+Downloading packages...
++ archive 4.7.1
++ args 2.7.0
++ async 2.13.1
++ cli_util 0.6.0
++ collection 1.19.1
++ console 4.1.0
++ ffi 2.2.0
++ get_it 9.3.0
++ image 4.12.0
++ meta 1.19.0
++ msix 3.18.0
++ package_config 3.0.0
++ path 1.9.1
++ posix 6.5.4
++ pub_semver 2.2.1
++ source_span 1.10.2
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ vector_math 2.4.4
++ yaml 3.1.4
+Building package executables...
+Built msix:pack.
+Built msix:build.
+Built msix:create.
+Built msix:publish.
+Activated msix 3.18.0.
+building msix files...                  /-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-4.6s
+packing msix files...                   /-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\3.7s
+[32mmsix created: [0m[1m[34mdist\MyServicesPro_3.0.19_181_store.msix[0m[0m
