@@ -9,6 +9,7 @@ import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
+import '../../../core/net/zte_ont_service.dart';
 import '../../../core/net/router_ops.dart';
 import '../../../core/net/router_types.dart';
 import '../../../core/net/tenda_service.dart';
@@ -237,6 +238,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   final _trafficHistory = SubscriberTrafficHistory();
   bool _trafficPaused = false;
   bool _trafficFailed = false;
+
+  /// عدّادات الـONU لا ترى تحميل المشترك (حكم [OntTrafficSession] بالقياس — HS8546V2، ١٤ نوفمبر): لا رقم ناقص، والنبض يقف
+  /// (لا دخول كلّ بضع ثوانٍ على جهازٍ لا يعطي الرقم). يُمسح حين يتبدّل الجهاز أو يُعاد الفحص بـ«حفظ وفحص».
+  bool _trafficUncounted = false;
   int _trafficEpoch = 0;
 
   bool _trafficCurrent(int epoch) => mounted && !_trafficPaused && epoch == _trafficEpoch;
@@ -263,9 +268,25 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     });
   }
 
+  /// الـONU لا يعدّ تحميل المشترك: الجلسة تُغلق والنبض يقف، وما رُسم (إن رُسم شيء) يُمسح — كان ناقصاً.
+  void _ontTrafficUncounted() {
+    _closeOntTraffic();
+    _trafficTimer?.cancel();
+    _trafficTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _trafficUncounted = true;
+      _trafficFailed = false;
+      _rxBps = null;
+      _txBps = null;
+      _trafficHistory.clear();
+    });
+  }
+
   void _stopTraffic({bool clear = false}) {
     _trafficEpoch++;
     _trafficFailed = false;
+    if (clear) _trafficUncounted = false;
     _trafficTimer?.cancel();
     _trafficTimer = null;
     _session?.close();
@@ -289,6 +310,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   Widget _trafficChart() => SubscriberTrafficChart(
     samples: _trafficHistory.samples, downBps: _rxBps, upBps: _txBps, unavailable: _trafficFailed,
+    uncounted: _trafficUncounted,
   );
 
   @override
@@ -435,6 +457,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // بدل ١–٤ث كاملةً) كلّ [_ontPulse].
     if (snap == null) return;
     if (snap.kind == DeviceKind.ont) {
+      // حُكم على عدّاداته في هذا الكرت ⇒ لا نبض حتى يتبدّل الجهاز أو يُعاد فتح الكرت.
+      if (_trafficUncounted) return;
       // بعد لحظة لا فوراً: الفحص الذي جاء بنا ما زال يحمل `_probing` حتّى يعود — والنبضة الفوريّة كانت تُتخطّى فتنتظر
       // الدورة التالية (أوّل رقمٍ بعد ~٢٥ث من فتح الصفحة).
       Timer(const Duration(milliseconds: 300), _pulseOntTraffic);
@@ -748,8 +772,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   /// نبضة ترافيك الـONU: جلسةٌ تُفتح مرّةً (باعتمادات شركة المشترك وعنوانه المثبَّت — كالفحص حرفاً)، ثمّ قراءةٌ ومعدّل.
   Future<void> _pulseOntTraffic() async {
-    // فحصٌ جارٍ يدخل على الجهاز نفسه — دخولنا الآن يطرده (جلسةٌ واحدة) أو يطردنا؛ ننتظر النبضة التالية
-    if (_pulsing || _probing || !mounted || _trafficPaused) return;
+    // فحصٌ جارٍ يدخل على الجهاز نفسه — دخولنا الآن يطرده (جلسةٌ واحدة) أو يطردنا؛ ننتظر النبضة التالية. وأمر إعادة تشغيلٍ
+    // جارٍ مثله: دخولنا أو خروجنا وسطه يُنهي جلسته (ZTE: الجلسة بعنوان الطالب).
+    if (_pulsing || _probing || _rebooting || !mounted || _trafficPaused) return;
     final epoch = _trafficEpoch;
     final retryAt = _ontRetryAt;
     if (_ontSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
@@ -764,6 +789,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         );
         if (!_trafficCurrent(epoch)) return;
         if (creds == null) { _loseTraffic(); return; }
+        // جهازٌ حُكم عليه قبل قليل (كرتٌ سابق): لا دخول ولا نبض — السبب مباشرةً.
+        if ((_snap?.ont?.isZte ?? false) && OntTrafficSession.knownUncounted(creds.ip)) {
+          _ontTrafficUncounted();
+          return;
+        }
         final session = await OntTrafficSession.open(
           ip: creds.ip,
           user: creds.user,
@@ -792,7 +822,14 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         _loseTraffic();
         return;
       }
+      final judged = _ontSession?.download ?? OntDownload.counted;
+      if (judged == OntDownload.uncounted) {
+        _ontTrafficUncounted();
+        return;
+      }
       final r = _ontMeter.add(counters, DateTime.now());
+      // تحقّقٌ جارٍ من أنّ العدّادات ترى التحميل (~٨ث، مرّةً): المرجع يتقدّم والرقم يُحجب — لا رقمٌ ناقص يظهر ثمّ يُسحب.
+      if (judged == OntDownload.checking) return;
       // القراءة الأولى تزرع المرجع: الثانية بعد ٣ث لا عند النبضة التالية — أوّل رقمٍ أسرع، والمدّة كافية للدقّة
       if (r == null) Timer(const Duration(seconds: 3), _pulseOntTraffic);
       if (r != null && mounted) {
@@ -991,6 +1028,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     DeviceProbeBus.bump();
     // أُعيد البنگ بعد أن عُرف الإعداد (customIp) — فيُصحَّح عنوانه إن لزم.
     unawaited(_checkReach(force: force));
+    // «حفظ وفحص الجهاز» ينسى حكم «التحميل غير معدود» مع بقيّة ما نُسي — يُعاد القياس.
+    if (retryLogin) _trafficUncounted = false;
     _restartTrafficIfChanged(before, snap);
     _maybeStartTraffic();
     _maybeStartSignal();
@@ -1001,8 +1040,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   bool _canReboot() {
     if (!Perms.has('devices.manage')) return false;
     final k = _snap?.kind;
-    // ZTE (٢٥ أكتوبر): مسار إعادة تشغيله لم يُفحص على جهازٍ حقيقيّ — لا زرّ يَعِد بما لم يُجرَّب.
-    if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return false;
+    // ZTE (١٤ نوفمبر): الزرّ حين تكون صفحة إعادة التشغيل المجرَّبة حيّاً في قائمة حساب الوكيل على هذا الجهاز
+    // ([ZteOntService.reboot] — HS8546V2 بحساب user). غيرها بلا زرّ: لا زرّ يَعِد بما لم يُجرَّب.
+    if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return _snap!.ont!.canReboot;
     // الراوتر (١٢ نوفمبر — المالك: «وعمل ريبوت»): بأمر صفحته نفسها للعائلات المبنيّة ([RouterOps.canReboot])، وغيرها بلا زرّ
     // (كان سيُرسل إقلاع النانو بـSSH على منفذٍ مقفول).
     if (k == DeviceKind.ubiquiti && (_snap?.ubnt?.isRouter ?? false)) return RouterOps.canReboot(_snap!.ubnt!.vendor);
@@ -1067,6 +1107,18 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         backgroundColor: done.ok ? AppColors.success : AppColors.error,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
+      ));
+      return;
+    }
+    if (isOnt && (_snap?.ont?.isZte ?? false)) {
+      final done = await _rebootZte();
+      if (!mounted) return;
+      setState(() => _rebooting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(done.text),
+        backgroundColor: done.ok ? AppColors.success : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
       ));
       return;
     }
@@ -1139,6 +1191,44 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     return (ok: true, text: r.value!.confirmed
         ? 'أُرسل أمر إعادة التشغيل — الراوتر يقلع الآن ويرجع الإنترنت خلال دقيقتين تقريباً'
         : 'أُرسل أمر إعادة التشغيل وانقطع الاتّصال — الراوتر يقلع غالباً، ويرجع خلال دقيقتين');
+  }
+
+  /// إعادة تشغيل ONU من عائلة ZTE بزرّ «Reboot» في صفحته نفسها ([ZteOntService.reboot]) — مُجرَّب حيّاً على HS8546V2 (١٤ نوفمبر).
+  ///
+  /// جلسة هذا الجهاز بعنوان الطالب لا بكوكي: خروج جلسة الترافيك (أو فحصٍ جارٍ) وسط الأمر يُنهي جلسة الأمر نفسها — فننتظر
+  /// الجاري ونُغلق جلسة الترافيك ونتمّ خروجها أوّلاً، والنبض يقف ما دام `_rebooting`.
+  Future<({bool ok, String text})> _rebootZte() async {
+    final creds = await DeviceProbeApi.resolveOntCreds(
+      fallbackIp: widget.ip,
+      subscriberUsername: widget.username,
+      slot: widget.slot,
+      company: widget.company,
+    );
+    if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وباسورد للجهاز — اكتبهن من زرّ الإعدادات');
+    final until = DateTime.now().add(const Duration(seconds: 15));
+    while ((_pulsing || _probing) && DateTime.now().isBefore(until)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    final live = _ontSession;
+    _ontSession = null;
+    _ontMeter.reset();
+    if (live != null) await live.close().timeout(const Duration(seconds: 5), onTimeout: () {});
+    final r = await ZteOntService.reboot(creds.ip, creds.user, creds.pass);
+    if (r.sent) {
+      // الجهاز يقلع: لا نطرقه وهو يقلع، ولا رقم قديم. قِيس: صفحته رجعت تجاوب بعد ~٧٠ث، والضوء والـPPPoE بعدها بقليل.
+      _ontRetryAt = DateTime.now().add(const Duration(seconds: 120));
+      _loseTraffic();
+      return (ok: true, text: 'أُرسل أمر إعادة التشغيل — الجهاز يقلع الآن ويرجع خلال دقيقتين تقريباً');
+    }
+    final why = switch (r.issue) {
+      ZteLoginIssue.rejected => 'الجهاز رفض اليوزر أو الباسورد',
+      ZteLoginIssue.busy => 'صفحة الجهاز مفتوحة بمكانٍ ثاني',
+      ZteLoginIssue.locked => 'الجهاز قافل الدخول',
+      ZteLoginIssue.unknownForm => 'صفحة دخول الجهاز جديدة علينا',
+      ZteLoginIssue.unreachable || ZteLoginIssue.notZte => 'الجهاز ما يجاوب',
+      null => r.trace.startsWith('no-page') ? 'حساب الدخول هذا ما بصفحته إعادة تشغيل' : 'الجهاز ما قبل الأمر',
+    };
+    return (ok: false, text: 'تعذّرت إعادة التشغيل: $why');
   }
 
   /// إعادة تشغيل TP-Link بأمر صفحته نفسها (مُجرَّب حيّاً على CPE610، ١٠ نوفمبر).
@@ -1497,6 +1587,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       ProbeIssue.unknownFormat => (
           title: 'دخلنا للجهاز بس صفحة ضوئه جديدة علينا',
           hint: 'انبعث شكل صفحته (بلا أيّ قيم) حتى ينضاف هذا الطراز',
+        ),
+      ProbeIssue.unknownLogin => (
+          title: 'صفحة دخول الجهاز جديدة علينا',
+          hint: 'ما أرسلنا اليوزر والباسورد حتى لا تنحسب محاولة غلط — انبعث شكل الصفحة (بلا أيّ قيم) حتى ينضاف هذا الطراز',
         ),
       ProbeIssue.needsCredentials => (
           title: 'جهاز ZTE يحتاج يوزر وباسورده',

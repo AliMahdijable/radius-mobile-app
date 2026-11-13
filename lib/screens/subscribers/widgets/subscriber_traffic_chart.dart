@@ -71,11 +71,16 @@ class SubscriberTrafficChart extends StatelessWidget {
       required this.samples,
       required this.downBps,
       required this.upBps,
-      this.unavailable = false});
+      this.unavailable = false,
+      this.uncounted = false});
   final List<SubscriberTrafficSample> samples;
   final int? downBps;
   final int? upBps;
   final bool unavailable;
+
+  /// عدّادات الجهاز نفسه لا ترى تحميل المشترك (ONU بتسريعٍ عتاديّ للواي فاي — HS8546V2) ⇒ لا رقم ولا «إعادة محاولة»:
+  /// السبب صريحاً بدل رقمٍ ناقص.
+  final bool uncounted;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +100,9 @@ class SubscriberTrafficChart extends StatelessWidget {
     final period = seconds >= 60 ? 'آخر ${seconds ~/ 60} د' : 'آخر $seconds ث';
     final status = live
         ? 'الترافيك الآن'
-        : unavailable
+        : uncounted
+            ? 'الجهاز ما يعدّ تحميل المشترك'
+            : unavailable
             ? 'تعذّرت قراءة الترافيك'
             : readings.isEmpty
                 ? 'بانتظار القراءة'
@@ -142,7 +149,9 @@ class SubscriberTrafficChart extends StatelessWidget {
                 child: readings.length < 2
                     ? Center(
                         child: Text(
-                            unavailable
+                            uncounted
+                                ? 'عدّادات الواي فاي بيه ناقصة — ما نعرض رقماً غلط'
+                                : unavailable
                                 ? 'بانتظار إعادة المحاولة'
                                 : readings.isEmpty
                                     ? 'يظهر الرسم عند وصول القراءات'

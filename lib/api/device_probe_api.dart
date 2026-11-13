@@ -41,6 +41,10 @@ enum ProbeIssue {
   /// دخلنا والصفحات تُجاب، ولا ضوء فيها بصيغةٍ نعرفها — طرازٌ جديد (أثره يُبلَّغ بلا قيم).
   unknownFormat,
 
+  /// صفحة دخول الجهاز تطلب رمزاً لا نعرف من أين تأخذه (برنامج ZTE جديد) — لم نرسل اليوزر والباسورد (دخولٌ ناقص يُحسب
+  /// محاولةً غلط ويتّهم الباسورد زوراً)، وشكل الصفحة يُبلَّغ بلا قيم.
+  unknownLogin,
+
   /// جهاز ZTE أو TP-Link ولا يوزر له من الوكيل — لا نجرّب افتراضاً من عندنا.
   needsCredentials,
 
@@ -496,7 +500,10 @@ class DeviceProbeApi {
       if (userKey != null) _issueByUser.remove(userKey);
     }
     // جهازٌ دخلناه ولم نقرأ ضوءه = صيغةٌ لا نعرفها (D401، ٢٧ أكتوبر) ⇒ أثره يُبلَّغ مرّةً لكلّ عنوانٍ بالجلسة ولو بلا «حفظ وفحص».
-    final readMiss = fresh?.issue == ProbeIssue.readFailed || fresh?.issue == ProbeIssue.unknownFormat;
+    // وصفحة دخولٍ برمزٍ لا نعرفه (برنامج ZTE جديد) مثلها: طرازٌ يحتاج إضافة، فشكل صفحته يصل السجلّ بلا انتظار «حفظ وفحص».
+    final readMiss = fresh?.issue == ProbeIssue.readFailed ||
+        fresh?.issue == ProbeIssue.unknownFormat ||
+        fresh?.issue == ProbeIssue.unknownLogin;
     if (!reportNow && snap == null && readMiss && _readReported.add(ipKey)) reportNow = true;
     if (reportNow) {
       // مرحلة الفشل بلا اعتمادات ولا عنوان — تصل سجلّ الخادم فيُعرف السبب بالدليل.
@@ -1641,6 +1648,7 @@ class DeviceProbeApi {
           ZteLoginIssue.rejected => ProbeIssue.loginRejected,
           ZteLoginIssue.busy => ProbeIssue.busy,
           ZteLoginIssue.locked => ProbeIssue.locked,
+          ZteLoginIssue.unknownForm => ProbeIssue.unknownLogin,
           _ => ProbeIssue.unreachable,
         },
         lockLeft: z?.lockLeft,
@@ -1663,7 +1671,7 @@ class DeviceProbeApi {
         );
         return null;
       }
-      return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical);
+      return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical.withReboot(ZteOntService.canReboot(session)));
     } finally {
       await ZteOntService.logout(session);
     }

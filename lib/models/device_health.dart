@@ -37,6 +37,7 @@ class OntOpticalInfo {
     required this.sendStatus,
     this.vendor = 'huawei',
     this.model = '',
+    this.canReboot = false,
   });
   final String txPower;
   final String rxPower;
@@ -51,7 +52,25 @@ class OntOpticalInfo {
   /// الطراز كما يسمّيه الجهاز (ZTE: عنوان الصفحة «MH80») — فارغٌ حين لا يُعرف.
   final String model;
 
+  /// ZTE وحده (١٤ نوفمبر، HS8546V2): في قائمة الحساب الذي دخل به الفحص صفحة إدارة الجهاز التي فيها زرّ «Reboot» ⇒ الكرت
+  /// يُظهر زرّ إعادة التشغيل. هواوي لا يقرؤه (زرّه دائماً).
+  final bool canReboot;
+
   bool get isZte => vendor == 'zte';
+
+  OntOpticalInfo withReboot(bool can) => can == canReboot
+      ? this
+      : OntOpticalInfo(
+          txPower: txPower,
+          rxPower: rxPower,
+          voltage: voltage,
+          temperature: temperature,
+          bias: bias,
+          sendStatus: sendStatus,
+          vendor: vendor,
+          model: model,
+          canReboot: can,
+        );
 
   bool get txOk {
     final v = double.tryParse(txPower);
@@ -87,6 +106,7 @@ class OntOpticalInfo {
         's': sendStatus,
         if (vendor != 'huawei') 'vd': vendor,
         if (model.isNotEmpty) 'md': model,
+        if (canReboot) 'rb': true,
       };
 
   /// مخزَّنٌ قبل حقل المورّد ⇒ هواوي كما كان.
@@ -99,6 +119,7 @@ class OntOpticalInfo {
         sendStatus: (j['s'] ?? '').toString(),
         vendor: (j['vd'] ?? 'huawei').toString(),
         model: (j['md'] ?? '').toString(),
+        canReboot: j['rb'] == true,
       );
 }
 

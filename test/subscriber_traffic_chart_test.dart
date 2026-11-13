@@ -50,6 +50,56 @@ void main() {
     expect(subscriberTrafficRate(2500000000), '2.5 Gbps');
   });
 
+  // ١٤ نوفمبر (HS8546V2): عدّادات الـONU لا ترى تحميل المشترك ⇒ السبب صريحاً بلا أرقام ولا «إعادة محاولة»، وبلا رسمٍ قديم.
+  testWidgets('«الجهاز ما يعدّ تحميل المشترك»: السبب بدل الرقم، بعرض الهاتف وخطٍّ مكبَّر، فاتح وغامق', (t) async {
+    t.view.physicalSize = const Size(1440, 900);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.view.resetDevicePixelRatio);
+    final boundaryKey = GlobalKey();
+    for (final dark in [false, true]) {
+      AppColors.setDarkMode(dark);
+      for (final width in [248.0, 340.0]) {
+        await t.pumpWidget(MaterialApp(
+          theme: simTheme(dark ? Brightness.dark : Brightness.light),
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(1.2)),
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Scaffold(
+                  body: Center(
+                      child: RepaintBoundary(
+                key: boundaryKey,
+                child: SizedBox(
+                    width: width,
+                    child: const SubscriberTrafficChart(samples: [], downBps: null, upBps: null, uncounted: true)),
+              ))),
+            ),
+          ),
+        ));
+        await t.pump();
+        expect(t.takeException(), isNull);
+        expect(find.text('الجهاز ما يعدّ تحميل المشترك'), findsOneWidget);
+        expect(find.text('عدّادات الواي فاي بيه ناقصة — ما نعرض رقماً غلط'), findsOneWidget);
+        expect(find.text('—'), findsNWidgets(2), reason: 'لا رقم للتحميل ولا للرفع');
+        expect(find.text('تعذّرت قراءة الترافيك'), findsNothing);
+        expect(find.text('بانتظار إعادة المحاولة'), findsNothing, reason: 'لا محاولة تُنتظر — الجهاز لا يعطي الرقم');
+      }
+      final output = Platform.environment['TRAFFIC_SHOTS_DIR'];
+      if (output != null) {
+        final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey));
+        await t.runAsync(() async {
+          final image = await boundary.toImage(pixelRatio: 2);
+          final data = await image.toByteData(format: ui.ImageByteFormat.png);
+          image.dispose();
+          final file = File('$output/traffic-uncounted-${dark ? 'dark' : 'light'}.png');
+          file.parent.createSync(recursive: true);
+          file.writeAsBytesSync(data!.buffer.asUint8List());
+        });
+      }
+    }
+  });
+
   for (final platform in [
     TargetPlatform.android,
     TargetPlatform.iOS,

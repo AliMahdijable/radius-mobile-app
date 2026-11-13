@@ -111,6 +111,18 @@ class OntTrafficMeter {
   }
 }
 
+/// هل ترى عدّادات واجهات الجهاز تحميل المشترك؟ (ZTE وحده يُفحص — هواوي «معدود» دائماً.)
+enum OntDownload {
+  /// العدّادات ترى التحميل، أو لا دليل على غير ذلك — الرقم يُعرض.
+  counted,
+
+  /// أوّل تحقّقٍ جارٍ (~[OntTrafficSession.zteCheckWindow]): الرقم يُحجب حتى الحكم — لا رقمٌ ناقص يظهر ثمّ يُسحب.
+  checking,
+
+  /// حزمٌ تدخل للمشترك من الـPON ولا تظهر في عدّادات واجهاته ⇒ لا رقم.
+  uncounted,
+}
+
 /// جلسة ويب معمَّرة لقياس ترافيك الـONU: دخولٌ واحد لعمر الكارت، ثمّ في كلّ نبضة رأسا الصفحتين وحدهما (~٨ ك.ب و~٠٫٧ث
 /// لكلٍّ بدل ٢٠٠ ك.ب–٢ م.ب كاملة)، والخروج عند الإغلاق.
 ///
@@ -138,6 +150,47 @@ class OntTrafficSession {
   /// صفحةٌ أعطت عدّادات مرّةً ثمّ غابت ⇒ القراءة فاشلة (لا معدّل LAN وحده يُعرض كأنّه الكلّ).
   bool _hadWifi = false;
   bool _hadLan = false;
+
+  // ——— هل ترى العدّادات تحميل المشترك؟ (H.T.M HS8546V2، ١٤ نوفمبر) ———
+  //
+  // قِيس حيّاً (XPONV4.2.1M19، مشتركٌ على الواي فاي وحده): يدخل له من الـPON ‎~١٠٠٠–٢٠٠٠ حزمة/ث (`UniPacketRecv`) وعدّاد
+  // «Sent» لشبكتَي الواي فاي يتحرّك ٠–١٠ إطارات/ث فقط — ما يمرّ بالمسار السريع (التسريع العتاديّ) لا يُعدّ — فيخرج «تحميل
+  // ٠٫٠٢ ميغا» والحقيقة فوق العشرة. الرفع سليم (إطارات «Received» ≈ حزم الـPON المرسَلة، ٩٧٪ تراكميّاً منذ الإقلاع).
+  // رقمٌ ناقص أسوأ من لا رقم، فنقارن ما دخل من الـPON بما عدّته واجهات المشترك في النافذة نفسها:
+  //  ١) الشبهة من صفحة الواي فاي التي نقرؤها أصلاً: العملاء يرسلون إطاراتٍ كثيرة ولا يكاد يُرسَل إليهم شيء (TCP لا يكون هكذا).
+  //     جهازٌ سليم لا يُشتبه به ⇒ لا طلب زائد عليه أبداً.
+  //  ٢) عندها تُقرأ صفحة الرابط مرّتين بينهما [zteCheckWindow]: حزم الـPON الداخلة مقابل ما عدّته الواجهات (إطاراتٍ وحزماً).
+  //  ٣) دخل أربعة أضعاف ما عُدّ أو أكثر ⇒ «غير معدود»، ويُحفظ للجهاز ([ZteOntService.markDownloadUncounted]). نافذةٌ بلا
+  //     ترافيكٍ كافٍ لا تحكم (رفعٌ بـUDP وحده يشبه الشبهة وليس عطباً) ⇒ «معدود» كما كان، ولا يُعاد قبل [zteRecheck].
+  // التراكميّ منذ الإقلاع لا يصلح حكماً: إعادة تشغيل الراديو تصفّر عدّادات الواي فاي وحدها.
+
+  /// إطاراتٌ من العملاء في نبضةٍ واحدة تكفي للشبهة (‎~١٢/ث على نبضة ٥ث) — دونها لا ترافيك يُحكم عليه.
+  static const zteSuspectFrames = 60;
+
+  /// المرسَل إلى العملاء أقلّ من ثُمن ما أرسلوه ⇒ شبهة.
+  static const _zteSuspectRatio = 8;
+
+  /// طول نافذة التحقّق بين قراءتَي صفحة الرابط — يُضبط بالاختبارات.
+  static Duration zteCheckWindow = const Duration(seconds: 8);
+
+  /// حزمٌ داخلة من الـPON في النافذة تكفي للحكم (‎~٥٠/ث).
+  static const zteCheckMinPackets = 400;
+
+  /// لا تحقّق ثانٍ قبل هذه المدّة (كلّ تحقّقٍ قراءتان زائدتان لصفحةٍ ~١٠٠ ك.ب).
+  static Duration zteRecheck = const Duration(seconds: 60);
+
+  ({int sent, int received})? _zteFramesPrev;
+  int _zteLanSentPackets = 0;
+  ({int pon, int counted, DateTime at})? _zteCheck;
+  DateTime? _zteCheckedAt;
+  String? _zteLinkPage;
+  OntDownload _download = OntDownload.counted;
+
+  /// حكم التحميل الآن — الكرت يقرؤه بعد كلّ [sample].
+  OntDownload get download => _download;
+
+  /// جهاز ZTE حُكم على عدّاداته قبل قليل (كرتٌ سابق في الجلسة نفسها) ⇒ لا جلسة ترافيك جديدة عليه.
+  static bool knownUncounted(String ip) => ZteOntService.downloadUncounted(ip);
 
   /// [vendor] من الفحص (`OntOpticalInfo.vendor`): `zte` ⇒ دخول ZTE باعتمادات الوكيل نفسها؛ وإلّا هواوي كما كان.
   static Future<OntTrafficSession?> open({
@@ -191,16 +244,23 @@ class OntTrafficSession {
       } else {
         _zteWlanPage = _pickZtePage(menu, has: 'wlan');
         _zteLanPage = _pickZtePage(menu, has: 'lan', avoid: 'wlan');
+        // صفحة الرابط (فيها حزم الـPON) للتحقّق من التحميل: ما وجده الفحص، وإلّا المعروفة الموجودة في القائمة.
+        final found = ZteOntService.opticalPageOf(zte);
+        _zteLinkPage = found != null && menu.contains(found)
+            ? found
+            : _zteLinkPages.where(menu.contains).firstOrNull;
       }
       _ztePagesResolved = true;
     }
     var wifi = const <String, ({int sent, int received})>{};
+    ({int sent, int received})? frames;
     var wAt = DateTime.now();
     if (_zteWlanPage != null && _zteWlanPage!.isNotEmpty) {
       final w = await ZteOntService.page(zte, _zteWlanPage!);
       wAt = DateTime.now();
       if (w == null) return null;
       wifi = ZteOntParse.wifi(w);
+      frames = ZteOntParse.wifiFrames(w);
     }
     // بلا واي فاي (D401): المنافذ كلّ نبضة. مع واي فاي (MH80): في الأولى ثمّ كلّ سادسة ما لم يُوصل منفذ.
     final noWifi = _zteWlanPage == null || _zteWlanPage!.isEmpty;
@@ -215,13 +275,63 @@ class OntTrafficSession {
       lan = ZteOntParse.lan(l); // MH80 (Table_laninterface)
       if (lan.counters.isEmpty) lan = ZteOntParse.lanLabels(l); // D401 (جدول Bytes Received/Sent)
       _zteLanLinked = lan.linked;
+      _zteLanSentPackets = ZteOntParse.lanSentPackets(l) ?? _zteLanSentPackets;
     }
     if (wifi.isEmpty && (lan == null || lan.counters.isEmpty)) return null;
+    try {
+      await _judgeZteDownload(zte, frames);
+    } catch (_) {/* الحكم أفضل جهد — تعذّره لا يُسقط القراءة */}
     return OntByteCounters({
       for (final e in wifi.entries) e.key: (sent: e.value.sent, received: e.value.received, at: wAt),
       if (lan != null)
         for (final e in lan.counters.entries) e.key: (sent: e.value.sent, received: e.value.received, at: lAt),
     });
+  }
+
+  /// صفحات الرابط المعروفة (نفسها صفحات الضوء) — تُطلب فقط إن كانت في قائمة الجهاز.
+  static const _zteLinkPages = ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'];
+
+  /// يحدّث [download] من هذه القراءة — الشرح عند الثوابت أعلاه. [frames]: مجموع إطارات الواي فاي الآن (null: لا جدول).
+  Future<void> _judgeZteDownload(ZteOntSession zte, ({int sent, int received})? frames) async {
+    final prev = _zteFramesPrev;
+    _zteFramesPrev = frames;
+    final linkPage = _zteLinkPage;
+    if (frames == null || linkPage == null || _download == OntDownload.uncounted) return;
+    final counted = frames.sent + _zteLanSentPackets;
+    final now = DateTime.now();
+
+    final open = _zteCheck;
+    if (open != null) {
+      // نافذة التحقّق مفتوحة: تُغلق بقراءةٍ ثانية لصفحة الرابط بعد [zteCheckWindow].
+      if (now.difference(open.at) < zteCheckWindow) return;
+      _zteCheck = null;
+      _zteCheckedAt = now;
+      final link = await ZteOntService.page(zte, linkPage);
+      final pon = link == null ? null : ZteOntParse.ponReceivedPackets(link);
+      final entered = pon == null ? -1 : pon - open.pon;
+      final seen = counted - open.counted;
+      // تصفيرٌ أو إعادة إقلاع في النافذة (فرقٌ سالب) لا يحكم.
+      final blind = entered >= zteCheckMinPackets && seen >= 0 && seen * 4 < entered;
+      _download = blind ? OntDownload.uncounted : OntDownload.counted;
+      if (blind) ZteOntService.markDownloadUncounted(zte);
+      return;
+    }
+
+    if (prev == null) return;
+    final fromClients = frames.received - prev.received;
+    final toClients = frames.sent - prev.sent;
+    if (fromClients < zteSuspectFrames || toClients < 0 || toClients * _zteSuspectRatio >= fromClients) return;
+    final last = _zteCheckedAt;
+    if (last != null && now.difference(last) < zteRecheck) return;
+    final link = await ZteOntService.page(zte, linkPage);
+    final pon = link == null ? null : ZteOntParse.ponReceivedPackets(link);
+    if (pon == null) {
+      _zteCheckedAt = now; // صفحةٌ بلا عدّاد حزم (طرازٌ آخر) ⇒ لا حكم، ولا طرقٌ كلّ نبضة
+      return;
+    }
+    _zteCheck = (pon: pon, counted: counted, at: DateTime.now());
+    // أوّل تحقّقٍ يحجب الرقم حتى الحكم؛ ما بعده يجري بالخلفيّة والرقم المعروض (المحكوم له قبلاً) باقٍ.
+    if (last == null) _download = OntDownload.checking;
   }
 
   /// صفحةٌ في القائمة تحوي [has] وحالةً (status/info) وليست إعداداً، بلا [avoid]. `''` حين لا شيء.

@@ -14,6 +14,12 @@ import '../../models/device_health.dart';
 ///   وكوكي الجلسة. ثلاث محاولاتٍ خاطئة تقفل الواجهة دقيقة ⇒ الاعتمادات المرفوضة لا تُعاد ([loginConfigured]).
 /// - الصفحات `getpage.gch?pid=1002&nextpage=<x>.gch` (~١٣٠–١٤٥ ك.ب لكلٍّ: القالب كاملاً معها، ~١ث).
 /// - الخروج: POST `/` بـ`logout=1` — واجهةٌ قد ترفض دخولاً ثانياً وجلسةٌ مفتوحة، فالفحص يخرج بعد القراءة.
+///
+/// 🆕 ١٤ نوفمبر — H.T.M HS8546V2 (EPON، XPONV4.2.1M19؛ المالك: «راوتر ضوئي جديد»): الواجهة نفسها وصفحة الضوء والعدّادات
+/// بصيغة MH80 حرفاً، والفرق بالدخول وحده — **رمز جلسة** يضعه سكربت الصفحة في الحقل `_SESSION_TOKEN` وفي كوكي
+/// `session_cookie` معاً ([ZteOntParse.sessionToken]). بلا أحدهما يردّ الجهاز «User information is error» كأنّ الباسورد
+/// غلط (جُرِّب كلٌّ وحده حيّاً)، فكان الكرت يتّهم اعتماداتٍ صحيحة. والجلسة عنده بعنوان الطالب لا بكوكي، وصفحةٌ تُطلب بلا
+/// جلسة تعود «Session timeout» قصيرةً (~٠٫٦ ك.ب) لا صفحة دخول ([ZteOntParse.isSessionGone]).
 class ZteOntService {
   ZteOntService._();
 
@@ -90,12 +96,26 @@ class ZteOntService {
     final lock = ZteOntParse.lockLeft(page);
     if (lock != null) return (session: null, issue: ZteLoginIssue.locked, lockLeft: lock, trace: 'get:locked $lock');
     final token = ZteOntParse.loginToken(page);
+    // برنامجٌ برمز جلسة (HS8546V2): الحقل والكوكي كما يضعهما سكربت الصفحة نفسه — بلا الرمز يُردّ الدخول كأنّ الباسورد غلط.
+    final st = ZteOntParse.sessionToken(page);
+    if (st == null && ZteOntParse.wantsSessionToken(page)) {
+      // النموذج يطلب رمزاً لا نعرف من أين يأخذه ⇒ لا نرسل: دخولٌ بلا رمزه يُرفض ويُحسب محاولةً غلط، ويُتّهم الباسورد زوراً.
+      return (
+        session: null,
+        issue: ZteLoginIssue.unknownForm,
+        lockLeft: null,
+        trace: 'get:${first.statusCode} stok:? ${ZteOntParse.submitShape(page)}',
+      );
+    }
     final jar = <String, String>{}..addAll(_cookies(first));
+    final stCookie = st?.cookie;
+    if (st != null && stCookie != null) jar[stCookie] = st.value;
     final Response<String> res;
     try {
       res = await dio.post<String>(
         '/',
         data: 'frashnum=&action=login&Frm_Logintoken=${Uri.encodeQueryComponent(token)}'
+            '${st == null ? '' : '&_SESSION_TOKEN=${Uri.encodeQueryComponent(st.value)}'}'
             '&username=${Uri.encodeQueryComponent(user)}&Password=${Uri.encodeQueryComponent(pass)}',
         options: Options(headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -110,7 +130,7 @@ class ZteOntService {
     final code = res.statusCode ?? 0;
     final location = res.headers.value('location') ?? '';
     final body = res.data ?? '';
-    final trace = 'tok:${token.isEmpty ? '-' : 'ok'} post:$code'
+    final trace = 'tok:${token.isEmpty ? '-' : 'ok'}${st == null ? '' : ' stok:${stCookie == null ? 'f' : 'fc'}'} post:$code'
         ' loc:${location.isEmpty ? '-' : Uri.tryParse(location)?.path ?? '?'} ck:${jar.length} len:${body.length}';
     final redirect = code == 302 || code == 303;
     if (redirect && location.contains('start.ghtml')) {
@@ -132,6 +152,22 @@ class ZteOntService {
     _rejected.remove(host);
     _busyUntil.remove(host);
     _scanMissAt.remove('http://$host');
+    _downloadUncountedAt.remove('http://$host');
+  }
+
+  /// أجهزةٌ ثبت أنّ عدّادات واجهاتها لا ترى تحميل المشترك (حكم [OntTrafficSession] بالقياس) ⇒ لا جلسة ترافيك عليها قبل
+  /// [uncountedQuiet] — لا دخول كلّ بضع ثوانٍ على جهازٍ لا يعطي الرقم — إلّا بـ«حفظ وفحص» ([forget]).
+  static final _downloadUncountedAt = <String, DateTime>{};
+  static const uncountedQuiet = Duration(minutes: 30);
+
+  static void markDownloadUncounted(ZteOntSession s) => _downloadUncountedAt[s.baseUrl] = DateTime.now();
+
+  static bool downloadUncounted(String host) {
+    final at = _downloadUncountedAt['http://$host'];
+    if (at == null) return false;
+    if (DateTime.now().difference(at) < uncountedQuiet) return true;
+    _downloadUncountedAt.remove('http://$host');
+    return false;
   }
 
   /// آخر سبب فشلٍ على [host] (null: آخر دخولٍ نجح أو لا محاولة).
@@ -192,7 +228,7 @@ class ZteOntService {
         }),
       );
       final html = res.data ?? '';
-      final login = ZteOntParse.isLoginPage(html);
+      final login = ZteOntParse.sessionEnded(html);
       if (res.statusCode != 200 || login) {
         _pageTrace[s.baseUrl] = 'page:${res.statusCode} login:${login ? 1 : 0} len:${html.length}';
         return null;
@@ -285,6 +321,12 @@ class ZteOntService {
       if (r.html != null) menu.addAll(ZteOntParse.pageNames(r.html!));
     }
 
+    // زرّ «Reboot» لهذا الحساب: صفحة إدارة الجهاز في قائمته (تُعرف هنا، والكرت يُظهر زرّه بها — [canReboot]).
+    if (menu.isNotEmpty) {
+      final rb = ZteOntParse.rebootPage(menu);
+      rb == null ? _rebootPageOf.remove(s.baseUrl) : _rebootPageOf[s.baseUrl] = rb;
+    }
+
     // المرشّحات من القائمة فقط: المعروفة، ثمّ ما يسمّيه الجهاز حالةً فيها pon/opt/power، ثمّ باقي صفحات الحالة (بالفحص).
     // 🛡️ احتياطٌ لغير D401: جهازٌ تعذّرت قراءة قائمته (إطارٌ مختلف) ⇒ القائمة فارغة، فنجرّب الأسماء المعروفة مباشرةً كما
     //    كان (MH80 يشتغل بالحالتين). D401 قائمته تُقرأ دائماً فلا يصل هنا، فلا يُطلب epon الذي يفسد جلسته.
@@ -348,6 +390,9 @@ class ZteOntService {
 
   static String? lastPageInfo(ZteOntSession s) => _pageInfo[s.baseUrl];
 
+  /// صفحة الرابط/الضوء التي وُجدت لهذا الجهاز في آخر فحص (فيها أيضاً عدّادات حزم الـPON) — null: لم تُعرف بعد.
+  static String? opticalPageOf(ZteOntSession s) => _opticalPageOf[s.baseUrl];
+
   /// آخر قراءةٍ على [s] أجابت صفحاتها ولم يُعرف الضوء فيها — طرازٌ بصيغةٍ جديدة، لا صفحةٌ تأخّرت.
   static bool lastReadUnknown(ZteOntSession s) => _unknownFormat.contains(s.baseUrl);
 
@@ -363,7 +408,7 @@ class ZteOntService {
         }),
       );
       final body = res.data ?? '';
-      final login = ZteOntParse.isLoginPage(body);
+      final login = ZteOntParse.sessionEnded(body);
       final ok = res.statusCode == 200 && !login;
       return (html: ok ? body : null, code: '${res.statusCode}', login: login);
     } catch (e) {
@@ -386,6 +431,78 @@ class ZteOntService {
       if (r.html != null) menu.addAll(ZteOntParse.pageNames(r.html!));
     }
     return menu;
+  }
+
+  /// صفحة إدارة الجهاز (فيها زرّ «Reboot») في قائمة الحساب الذي دخلنا به — لكلّ جهازٍ في هذه الجلسة.
+  static final _rebootPageOf = <String, String>{};
+
+  /// كم ننتظر ردّ الجهاز على أمر إعادة التشغيل قبل أن نعدّ سكوته قبولاً: صفحاته تجيب بأقلّ من ثانيتين، والجهاز المجرَّب لا
+  /// يردّ على هذا الأمر أبداً — فلا يبقى الوكيل ينتظر مهلة القراءة الكاملة (١٥ث). يُضبط بالاختبارات.
+  static Duration rebootReplyWait = const Duration(seconds: 6);
+
+  /// في قائمة هذا الحساب صفحة إعادة التشغيل التي نعرفها — يُسأل بعد [fetchOptical] (القائمة تُقرأ فيها أوّل مرّة).
+  static bool canReboot(ZteOntSession s) => _rebootPageOf.containsKey(s.baseUrl);
+
+  /// إعادة تشغيل الجهاز بزرّ «Reboot» في صفحة «Device Management» نفسها — جُرِّب حيّاً على H.T.M HS8546V2 بإذن المالك
+  /// (١٤ نوفمبر): نموذج الصفحة `fSubmit` إلى الصفحة نفسها بـ`IF_ACTION=devrestart` و`flag=1`، وبقيّة حقوله كما ملأتها
+  /// الصفحة، ورمز جلستها ([ZteOntParse.rebootForm]) — لا نرسل إلّا ما يرسله سكربت الصفحة، وعلى صفحةٍ تعلن الأمر بنفسها.
+  ///
+  /// ⛔ جاره في السكربت نفسه `devrestore`/`devrestoreAll` = **ضبط المصنع** (يمسح إعدادات المشترك والـPPPoE) — لا يُرسَل
+  /// أبداً، واختبارٌ يثبّت أنّه لا يخرج منّا.
+  ///
+  /// [sent]: الجهاز قبل الأمر، أو سكت بعد أن وصله (بدأ يقلع). الجلسة تموت مع الإقلاع فلا خروج بعده.
+  ///
+  /// القياس الحيّ (HS8546V2): الجهاز **لا يردّ** على الأمر أصلاً — يسكت ويقلع (انقطع عن الشبكة خلال ~١٩ث، ورجعت صفحته تجاوب
+  /// عند +٧٢ث بمدّة تشغيلٍ ٥٦ث، ثمّ الدخول والضوء كما كانا). فسكوته بعد وصول الطلب هو القبول ([rebootReplyWait])، وصفحةٌ
+  /// تعود بـ`flag=1` (برنامجٌ يردّ) قبولٌ أيضاً ([ZteOntParse.rebootAccepted]).
+  static Future<ZteRebootOutcome> reboot(String host, String user, String pass) async {
+    final s = await loginConfigured(host, user, pass);
+    if (s == null) {
+      final i = lastIssue(host);
+      return (sent: false, issue: i?.issue ?? ZteLoginIssue.unreachable, trace: 'login ${i?.trace ?? ''}');
+    }
+    var leave = true;
+    try {
+      var name = _rebootPageOf[s.baseUrl];
+      if (name == null) {
+        name = ZteOntParse.rebootPage(await menuPages(s));
+        if (name != null) _rebootPageOf[s.baseUrl] = name;
+      }
+      if (name == null) return (sent: false, issue: null, trace: 'no-page');
+      final page = await _pageRaw(s, name);
+      final html = page.html;
+      if (html == null) return (sent: false, issue: null, trace: 'page:${page.code}${page.login ? 'L' : ''}');
+      final body = ZteOntParse.rebootForm(html);
+      if (body == null) return (sent: false, issue: null, trace: 'no-form ${ZteOntParse.kb(html)}');
+      final Response<String> res;
+      try {
+        res = await _dio(s.baseUrl).post<String>(
+          '/getpage.gch',
+          queryParameters: {'pid': '1002', 'nextpage': name},
+          data: body,
+          options: Options(receiveTimeout: rebootReplyWait, headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            if (s.cookie.isNotEmpty) 'Cookie': s.cookie,
+            'Referer': '${s.baseUrl}/getpage.gch?pid=1002&nextpage=$name',
+          }),
+        );
+      } on DioException catch (e) {
+        // لم يتّصل أصلاً ⇒ لم يُرسَل. أُرسل وانقطع الجواب ⇒ الجهاز بدأ يقلع غالباً — لا يُعاد الأمر.
+        final never = e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.connectionError;
+        leave = never;
+        return (sent: !never, issue: null, trace: 'post:${e.type.name}');
+      }
+      final out = res.data ?? '';
+      final ok = res.statusCode == 200 && ZteOntParse.rebootAccepted(out);
+      leave = !ok;
+      return (
+        sent: ok,
+        issue: null,
+        trace: 'post:${res.statusCode} ${ZteOntParse.kb(out)}${ZteOntParse.sessionEnded(out) ? ' ended' : ''}',
+      );
+    } finally {
+      if (leave) await logout(s);
+    }
   }
 
   static Future<void> logout(ZteOntSession s) async {
@@ -439,9 +556,16 @@ enum ZteLoginIssue {
 
   /// قافلٌ بعد ثلاث محاولاتٍ خاطئة — لا نرسل عليه.
   locked,
+
+  /// نموذج الدخول يطلب رمز جلسةٍ لا نعرف من أين يأخذه (برنامجٌ جديد) — لا نرسل: الدخول بلا رمزه يُرفض ويُحسب محاولةً
+  /// غلط. لا يُحفظ رفضاً، وشكل سكربت الصفحة يُبلَّغ بلا قيم.
+  unknownForm,
 }
 
 typedef ZteLoginOutcome = ({ZteOntSession? session, ZteLoginIssue? issue, int? lockLeft, String trace});
+
+/// نتيجة أمر إعادة التشغيل: [sent] أُرسل وقُبل (أو انقطع الجواب بعد الإرسال)؛ [issue] سبب فشل الدخول إن لم ندخل.
+typedef ZteRebootOutcome = ({bool sent, ZteLoginIssue? issue, String trace});
 
 /// تحليل صفحات ZTE — نصٌّ ⇒ قيم (نقيّ، يُختبر بلا جهاز).
 class ZteOntParse {
@@ -455,6 +579,87 @@ class ZteOntParse {
   /// رمز النموذج كما يضعه سكربت الصفحة (`getObj("Frm_Logintoken").value = "3";`) — «3» في الطراز المفحوص.
   static String loginToken(String html) =>
       RegExp(r'getObj\("Frm_Logintoken"\)\.value\s*=\s*"([^"]*)"').firstMatch(html)?.group(1) ?? '';
+
+  /// صفحة إدارة الجهاز التي فيها زرّ «Reboot» من أسماء قائمة الحساب — الاسم المجرَّب حيّاً وحده (حساب user على HS8546V2).
+  /// null: ليست في قائمته ⇒ لا زرّ في الكرت (لا زرّ يَعِد بما لم يُجرَّب).
+  static String? rebootPage(Iterable<String> menu) =>
+      menu.contains('manager_dev_conf_t_user.gch') ? 'manager_dev_conf_t_user.gch' : null;
+
+  /// آخر قيمةٍ تضعها الصفحة لحقل [name] (`Transfer_meaning('name','value')` — الأخيرة تغلب كما في المتصفّح)، بفكّ `\xHH`.
+  static String? _lastMeaning(String html, String name) {
+    final all = RegExp('Transfer_meaning\\(\\s*[\'"]$name[\'"]\\s*,\\s*[\'"]([^\'"]*)[\'"]').allMatches(html);
+    if (all.isEmpty) return null;
+    return all.last.group(1)!.replaceAllMapped(
+        RegExp(r'\\x([0-9a-fA-F]{2})'), (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 16)));
+  }
+
+  /// جسم طلب «Reboot» كما يرسله نموذج الصفحة `fSubmit` حرفاً: حقوله المخفيّة بترتيبها وقيمها التي ملأتها الصفحة، مع
+  /// `IF_ACTION=devrestart` و`flag=1` (ما يضعه `msgCallback()` قبل الإرسال)، ثمّ رمز جلسة الصفحة (`session_token` الذي
+  /// يضيفه سكربتها لكلّ نموذج). null — فلا نرسل شيئاً — حين لا تعلن الصفحة أمر `devrestart` بنفسها، أو لا نموذج، أو تطلب
+  /// رمزاً لم نجده. ⛔ لا يكتب إلّا `devrestart`: جاره `devrestore` ضبطُ مصنع.
+  static String? rebootForm(String html) {
+    if (!RegExp('[\'"]devrestart[\'"]').hasMatch(html)) return null;
+    final form = RegExp('<form[^>]*\\bname\\s*=\\s*[\'"]?fSubmit\\b.*?</form>', caseSensitive: false, dotAll: true)
+        .firstMatch(html)
+        ?.group(0);
+    if (form == null) return null;
+    final names = [
+      for (final m in RegExp('<input[^>]*\\bname\\s*=\\s*[\'"]?([\\w.]+)', caseSensitive: false).allMatches(form)) m.group(1)!,
+    ];
+    if (!names.contains('IF_ACTION') || !names.contains('flag')) return null;
+    final token = RegExp('var\\s+session_token\\s*=\\s*[\'"]([^\'"]+)[\'"]').firstMatch(html)?.group(1);
+    if (token == null && html.contains('_SESSION_TOKEN')) return null;
+    String pair(String n, String v) => '${Uri.encodeQueryComponent(n)}=${Uri.encodeQueryComponent(v)}';
+    return [
+      for (final n in names)
+        pair(n, switch (n) { 'IF_ACTION' => 'devrestart', 'flag' => '1', _ => _lastMeaning(html, n) ?? '' }),
+      if (token != null) pair('_SESSION_TOKEN', token),
+    ].join('&');
+  }
+
+  /// ردّ الجهاز على أمر «Reboot»: الصفحة نفسها تعود و`flag` فيها «1» والخطأ `SUCC` — عندها تعرض «Device restarting will
+  /// take about 2~3 minutes» (سكربتها `pageLoad`).
+  static bool rebootAccepted(String html) =>
+      !sessionEnded(html) && _lastMeaning(html, 'flag') == '1' && _lastMeaning(html, 'IF_ERRORSTR') == 'SUCC';
+
+  /// النموذج فيه حقل رمز الجلسة — برامج ZXIC الأحدث (HS8546V2). MH80 وD401 بلا هذا الحقل.
+  static bool wantsSessionToken(String html) => html.contains('_SESSION_TOKEN');
+
+  /// رمز الجلسة الذي يرسله سكربت الدخول مع النموذج (HS8546V2، XPONV4.2.1M19 — من صفحته الحيّة):
+  /// `var token = "A36…"; getObj("_SESSION_TOKEN").value = token; … setCookie("session_cookie",token);` — الحقل والكوكي
+  /// معاً شرط (جُرِّب كلٌّ وحده حيّاً فرُدّ الدخول). نفعل ما يفعله سكربت الصفحة: القيمة من `var token`، والكوكي بالاسم الذي
+  /// يضعه `setCookie` (null حين لا يضع كوكي)؛ أو قيمة الحقل نفسها إن ملأها الخادم (يرسلها المتصفّح كما هي، بلا كوكي).
+  /// null: برنامجٌ بلا رمز، أو صيغةٌ لا نعرفها ([wantsSessionToken] يفرّق بينهما).
+  static ({String value, String? cookie})? sessionToken(String html) {
+    if (!wantsSessionToken(html)) return null;
+    final v = RegExp('var\\s+token\\s*=\\s*["\']([^"\']+)["\']').firstMatch(html)?.group(1);
+    if (v != null) {
+      final cookie = RegExp('setCookie\\(\\s*["\']([\\w.-]+)["\']\\s*,\\s*token\\s*\\)').firstMatch(html)?.group(1);
+      return (value: v, cookie: cookie);
+    }
+    final input = RegExp('<input[^>]*_SESSION_TOKEN[^>]*>', caseSensitive: false).firstMatch(html)?.group(0) ?? '';
+    final filled = RegExp('\\svalue\\s*=\\s*["\']([^"\']+)["\']', caseSensitive: false).firstMatch(input)?.group(1);
+    return filled == null ? null : (value: filled, cookie: null);
+  }
+
+  /// شكل سكربت الإرسال في صفحة دخولٍ لا نعرف من أين تأخذ رمزها — للتشخيص بلا قيم: الأرقام مقنّعة، ١٤٠ حرفاً على الأكثر.
+  static String submitShape(String html) {
+    final i = html.indexOf('function dosubmit');
+    final from = i >= 0 ? i : html.indexOf('_SESSION_TOKEN');
+    if (from < 0) return '-';
+    final s = html
+        .substring(from, (from + 400).clamp(0, html.length))
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'\d'), '9');
+    return s.length > 140 ? s.substring(0, 140) : s;
+  }
+
+  /// صفحة «انتهت الجلسة» القصيرة التي تردّ بها بعض البرامج بدل صفحة الدخول لأيّ صفحةٍ تُطلب بلا جلسة (HS8546V2: ٦٢٧ بايتاً
+  /// — `logout_redirect()` و«Session timeout, please login again.»). بالطول أيضاً: صفحة محتوى لا تقلّ عن عشرات الكيلوبايتات.
+  static bool isSessionGone(String html) => html.length < 4096 && html.contains('logout_redirect');
+
+  /// الجلسة ليست قائمة: صفحة الدخول عادت، أو صفحة «انتهت الجلسة».
+  static bool sessionEnded(String html) => isLoginPage(html) || isSessionGone(html);
 
   /// ثوانٍ باقية على قفل الدخول، أو null حين لا قفل. الصفحة تحسب العدّاد بنفسها: `maxtime = Math.min(60, <وقت القفل> + 60 -
   /// <الآن>)` — وقت القفل صفرٌ ما لم يُقفل (MH80 ٢٧ أكتوبر: `0 + 60 - 402930`).
@@ -710,6 +915,40 @@ class ZteOntParse {
           if (int.tryParse(r[3] ?? '') != null && int.tryParse(r[5] ?? '') != null)
             'wlan${r[1]}': (sent: int.parse(r[5]!), received: int.parse(r[3]!)),
       };
+
+  /// مجموع **إطارات** الواي فاي على كلّ الشبكات (`Table_wlanstat`: الخليّة 4 إطاراتٌ مستلَمة من العملاء · 6 مرسَلة إليهم).
+  /// null: لا جدول. تُقارَن بحزم الـPON لمعرفة هل ترى عدّادات الواي فاي تحميل المشترك فعلاً ([OntTrafficSession]).
+  static ({int sent, int received})? wifiFrames(String html) {
+    var sent = 0;
+    var received = 0;
+    var rows = 0;
+    for (final r in _rows(html, 'Table_wlanstat')) {
+      final rx = int.tryParse(r[4] ?? '');
+      final tx = int.tryParse(r[6] ?? '');
+      if (rx == null || tx == null) continue;
+      received += rx;
+      sent += tx;
+      rows++;
+    }
+    return rows == 0 ? null : (sent: sent, received: received);
+  }
+
+  /// مجموع **الحزم** المرسَلة إلى أجهزة المشترك على المنافذ (`Table_laninterface`: الخليّة 8). null: لا جدول بهذه الصيغة.
+  static int? lanSentPackets(String html) {
+    int? sum;
+    for (final r in _rows(html, 'Table_laninterface')) {
+      final tx = int.tryParse(r[8] ?? '');
+      if (tx != null) sum = (sum ?? 0) + tx;
+    }
+    return sum;
+  }
+
+  /// حزم الـPON المستقبَلة من البرج للمشترك (صفحة الرابط: `Transfer_meaning('UniPacketRecv','…')`، وإلّا `PacketRecv`) — ما
+  /// دخل للجهاز فعلاً، حزماً لا بايتات. null: الصفحة لا تذكرها.
+  static int? ponReceivedPackets(String html) => _tmInt(html, 'UniPacketRecv') ?? _tmInt(html, 'PacketRecv');
+
+  static int? _tmInt(String html, String name) => int.tryParse(
+      RegExp('Transfer_meaning\\(\\s*[\'"]$name[\'"]\\s*,\\s*[\'"](\\d{1,19})[\'"]').firstMatch(html)?.group(1) ?? '');
 
   /// المنافذ (`Table_laninterface`): 1 الاسم · 4 الحالة · 5 بايتات مستلَمة · 7 مرسَلة. [linked]: منفذٌ موصول.
   static ({Map<String, ({int sent, int received})> counters, bool linked}) lan(String html) {
