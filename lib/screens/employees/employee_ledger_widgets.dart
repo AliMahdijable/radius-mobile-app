@@ -738,7 +738,15 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: Text(label, style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.body(color: AppColors.textMid))),
+            // سطران على الأكثر: تسميةٌ طويلة («عمولة العمليّات (تعذّر حسابها…)») تلتفّ ولا تزاحم المبلغ
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.body(color: AppColors.textMid),
+              ),
+            ),
             const SizedBox(width: Sp.sm),
             Text(value, key: valueKey, style: strong ? AppType.bodyBold(color: color ?? AppColors.textHi) : AppType.body(color: color ?? AppColors.textHi)),
           ],
