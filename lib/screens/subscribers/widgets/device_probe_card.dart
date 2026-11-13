@@ -34,6 +34,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
+import 'foldable_section.dart';
 
 /// كارت «معلومات الجهاز» — يفحص IP المشترك عند أوّل بناء ويعرض قياسات
 /// الجهاز. الشريحة 4 من إعادة التصميم (2026-08-29).
@@ -59,10 +60,14 @@ class DeviceProbeCard extends StatefulWidget {
     required this.username,
     this.company,
     this.slot = 1,
+      this.onFold,
   });
 
   /// 1 = جهاز المشترك (آيبي الجلسة أو المخصّص)، 2 = «الجهاز الثاني» (نانو + راوتر — عنوانه واعتماده من إعداد المشترك).
   final int slot;
+
+  /// يطوي القسم (صفحة المشترك تعطيه — [FoldableSection])؛ null = كرتٌ لا ينطوي.
+  final VoidCallback? onFold;
 
   /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
   /// يجرّب customIp من DeviceConfig أوّلاً، فحتى المشتركون بلا session
@@ -1351,13 +1356,13 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         Expanded(
           child: Row(
             children: [
-              Icon(LucideIcons.router, size: 18, color: AppColors.brandAccent),
-              const SizedBox(width: Sp.sm),
+              // النقر على العنوان يطوي القسم حين يُعطى [onFold] (١٤ نوفمبر — «الاقسام خليهن توكل»)
               Flexible(
-                child: Text(widget.slot == 2 ? 'الجهاز الثاني' : 'معلومات الجهاز',
-                    style: AppType.cardTitle(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                child: FoldTitle(
+                  icon: LucideIcons.router,
+                  title: widget.slot == 2 ? 'الجهاز الثاني' : 'معلومات الجهاز',
+                  onFold: widget.onFold,
+                ),
               ),
               const SizedBox(width: Sp.sm),
               chip,

@@ -62,6 +62,7 @@ import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../network_devices/fiber/fiber_subscriber_card.dart';
 import '../national/national_subscriber_extras.dart';
+import 'widgets/foldable_section.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -558,11 +559,18 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                         // «تعبئة محفظته» بدين ⇒ دينه تغيّر: قراءةٌ طازجة كالسحب للتحديث
                         onChanged: () => unawaited(_onDataChanged(force: true)),
                       ),
-                    DeviceProbeCard(
-                      key: _deviceCardKey,
-                      ip: sub.ipAddress ?? '',
-                      username: sub.username,
-                      company: sub.companyKey,
+                    // الأقسام تنطوي وتُحفظ حالها (١٤ نوفمبر — المالك: «الاقسام خليهن توكل كلوز واحد منهن ع الاقل بشكل دائمي»)
+                    FoldableSection(
+                      id: 'dev1',
+                      title: 'معلومات الجهاز',
+                      icon: LucideIcons.router,
+                      builder: (fold) => DeviceProbeCard(
+                        key: _deviceCardKey,
+                        ip: sub.ipAddress ?? '',
+                        username: sub.username,
+                        company: sub.companyKey,
+                        onFold: fold,
+                      ),
                     ),
                     // «الجهاز الثاني» (نانو + راوتر) — يظهر حين يُحفظ له عنوانٌ في إعداد الجهاز.
                     SecondDeviceSlot(ip: sub.ipAddress ?? '', username: sub.username, company: sub.companyKey),
@@ -1851,9 +1859,15 @@ class _LiveSessionCard extends StatelessWidget {
           // لا جلسةَ ولا عنوانَ مثبَّت ⇒ لا كرت. (كارتٌ فارغ يوحي
           // بقيمةٍ تعذّر جلبها، وهو أسوأ من غيابه.)
           if (!hasSession && pinned.isEmpty) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(bottom: Sp.sm),
-            child: _body(context, hasSession: hasSession, pinned: pinned),
+          final title = hasSession ? 'subscribers.section_connection'.tr() : 'عنوان الجهاز';
+          return FoldableSection(
+            id: 'addr',
+            title: title,
+            icon: Icons.wifi_rounded,
+            builder: (fold) => Padding(
+              padding: const EdgeInsets.only(bottom: Sp.sm),
+              child: _body(context, hasSession: hasSession, pinned: pinned, onFold: fold),
+            ),
           );
         },
       ),
@@ -1861,7 +1875,7 @@ class _LiveSessionCard extends StatelessWidget {
   }
 
   Widget _body(BuildContext context,
-      {required bool hasSession, required String pinned}) {
+      {required bool hasSession, required String pinned, VoidCallback? onFold}) {
     Theme.of(context); // theme-dep (dark-mode)
     final ip = sub.ipAddress ?? '';
     final secs = hasSession ? (sub.sessionTime ?? 0) : 0;
@@ -1889,13 +1903,11 @@ class _LiveSessionCard extends StatelessWidget {
           // بدل أن تفيض. راجع `test/text_truncation_test.dart`.
           Row(
             children: [
-              Icon(Icons.wifi_rounded, size: 18, color: AppColors.brandAccent),
-              const SizedBox(width: Sp.sm),
-              Text(
-                  hasSession
-                      ? 'subscribers.section_connection'.tr()
-                      : 'عنوان الجهاز',
-                  style: AppType.cardTitle()),
+              FoldTitle(
+                icon: Icons.wifi_rounded,
+                title: hasSession ? 'subscribers.section_connection'.tr() : 'عنوان الجهاز',
+                onFold: onFold,
+              ),
               const SizedBox(width: Sp.sm),
               if (secs > 0)
                 Expanded(
