@@ -870,7 +870,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         if (!_trafficCurrent(epoch)) return;
         if (creds == null) { _loseTraffic(); return; }
         final session = await UbntTrafficSession.open(
-          ip: creds.ip,
+          // العنوان قد يحمل منفذ الويب («IP:443» خلف بورت فورورد) — SSH على الآيبي نفسه بمنفذه 22
+          ip: DeviceProbeApi.sshHost(creds.ip),
           user: creds.user,
           pass: creds.pass,
         );
@@ -1153,7 +1154,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         if (!ok) throw Exception('رفض الـONU أمر إعادة التشغيل');
       } else {
         await UbntApi.rebootDevice(
-          ip: creds.ip,
+          ip: DeviceProbeApi.sshHost(creds.ip),
           user: creds.user,
           pass: creds.pass,
         );

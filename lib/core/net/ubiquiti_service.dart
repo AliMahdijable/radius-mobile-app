@@ -340,6 +340,30 @@ class UbiquitiService {
     return parts.isEmpty ? null : parts.join('; ');
   }
 
+  /// هل على `https://`[host] واجهة airOS؟ طلبٌ واحد بلا دخول ولا تتبّع تحويل — لمشتركٍ خلف بورت فورورد نانوه على 443
+  /// وراوتره على 80 (١٤ نوفمبر). المقيس على airOS 6.2.0: `/` ⇒ 302 إلى `/cookiechecker?uri=/` (lighttpd)؛ والأحدث يحوّل
+  /// إلى `login.cgi` أو يضع كوكي `AIROS_…` أو يذكر airOS في صفحته.
+  static Future<bool> looksAirOsHttps(String host) async {
+    try {
+      final res = await _buildDio('https://$host').get<dynamic>(
+        '/',
+        options: Options(
+          followRedirects: false,
+          validateStatus: (_) => true,
+          responseType: ResponseType.plain,
+          sendTimeout: const Duration(seconds: 4),
+          receiveTimeout: const Duration(seconds: 4),
+        ),
+      );
+      final loc = (res.headers.value('location') ?? '').toLowerCase();
+      final cookies = (res.headers.map['set-cookie'] ?? const <String>[]).join(';').toUpperCase();
+      final body = '${res.data ?? ''}'.toLowerCase();
+      return loc.contains('cookiechecker') || loc.contains('login.cgi') || cookies.contains('AIROS_') || body.contains('airos');
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<UbiquitiStatus?> fetchStatus(
       UbiquitiLoginResult session) async {
     final dio = _buildDio(session.baseUrl);

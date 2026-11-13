@@ -571,6 +571,8 @@ class DeviceProbeApi {
     _ubntWinner.remove(k);
     _tplinkWinner.remove(k);
     _radioVendorByKey.remove(k);
+    _ubntHttpsOnly.remove(k);
+    _airOsSeen.remove(ip.trim());
     _tplinkSeen.remove(ip.trim());
     _tpClassicSeen.remove(ip.trim());
     _tpAgileSeen.remove(ip.trim());
@@ -940,6 +942,16 @@ class DeviceProbeApi {
     final tenda = _helloTenda(ip);
     final cgi = _helloTpCgi(ip);
     final mer = _helloTpMer(ip);
+    // ١٤ نوفمبر (المالك: «النانوات تفحص https لان بورت فورود اغلبه يستخدمون المشتركين ٨٠»): مشتركٌ خلف بورت فورورد — النانو
+    // على 443 وراوتره على 80 بالعنوان نفسه. ردّ الراوتر على 80 كان يحسم وحده فلا يُجرَّب النانو أبداً. الآن: airOS يردّ على
+    // https العنوان ⇒ النانو هو الجهاز الأوّل (دخوله على https وحده — لا دخول airOS على راوتر الـ80)، وما لم يُقرأ ⇒ الراوتر كما كان.
+    final airos = _airOsHttps(ip);
+    Future<DeviceHealthSnapshot?> viaRouter(Future<DeviceHealthSnapshot?> Function() router) async {
+      if (!await airos) return router();
+      final nano = await _probeUbntHttps(ip, c.ubnt, kindKey);
+      return nano ?? await router();
+    }
+
     final done = Completer<DeviceHealthSnapshot?>();
     var othersDone = false;
     var helloDone = false;
@@ -964,7 +976,7 @@ class DeviceProbeApi {
       helloDone = true;
       if (done.isCompleted) return;
       if (h != null) {
-        done.complete(_probeTplinkAny(ip, c.tplink, kindKey, hello: h));
+        done.complete(viaRouter(() => _probeTplinkAny(ip, c.tplink, kindKey, hello: h)));
       } else {
         noneYet();
       }
@@ -973,7 +985,7 @@ class DeviceProbeApi {
       classicDone = true;
       if (done.isCompleted) return;
       if (h != null) {
-        done.complete(_probeTpClassicAny(ip, c.tplink, kindKey, hello: h));
+        done.complete(viaRouter(() => _probeTpClassicAny(ip, c.tplink, kindKey, hello: h)));
       } else {
         noneYet();
       }
@@ -982,7 +994,7 @@ class DeviceProbeApi {
       agileDone = true;
       if (done.isCompleted) return;
       if (yes) {
-        done.complete(_probeTpAgileAny(ip, c.tprouter, kindKey));
+        done.complete(viaRouter(() => _probeTpAgileAny(ip, c.tprouter, kindKey)));
       } else {
         noneYet();
       }
@@ -991,7 +1003,7 @@ class DeviceProbeApi {
       tendaDone = true;
       if (done.isCompleted) return;
       if (yes) {
-        done.complete(_probeTendaAny(ip, c.tprouter, kindKey));
+        done.complete(viaRouter(() => _probeTendaAny(ip, c.tprouter, kindKey)));
       } else {
         noneYet();
       }
@@ -1000,7 +1012,7 @@ class DeviceProbeApi {
       cgiDone = true;
       if (done.isCompleted) return;
       if (yes) {
-        done.complete(_probeTpCgiAny(ip, c.tplink, kindKey));
+        done.complete(viaRouter(() => _probeTpCgiAny(ip, c.tplink, kindKey)));
       } else {
         noneYet();
       }
@@ -1009,7 +1021,7 @@ class DeviceProbeApi {
       merDone = true;
       if (done.isCompleted) return;
       if (yes) {
-        done.complete(_probeTpMerAny(ip, c.tprouter, kindKey));
+        done.complete(viaRouter(() => _probeTpMerAny(ip, c.tprouter, kindKey)));
       } else {
         noneYet();
       }
@@ -1360,7 +1372,8 @@ class DeviceProbeApi {
   static Future<DeviceHealthSnapshot?> _probeRadio(
       String ip, List<DeviceCred> ubnt, List<DeviceCred> tplink, List<DeviceCred> tprouter, String kindKey) async {
     final known = _radioVendorByKey[kindKey];
-    if (known == 'ubnt') return _probeUbntAny(ip, ubnt, kindKey);
+    // نانو على https وعلى الـ80 جهازٌ آخر ⇒ https وحده (لا دخول airOS على راوتر الـ80 حين يسقط النانو)
+    if (known == 'ubnt') return _ubntHttpsOnly.contains(kindKey) ? _probeUbntHttps(ip, ubnt, kindKey) : _probeUbntAny(ip, ubnt, kindKey);
     if (known == 'tplink') return _probeTplinkAny(ip, tplink, kindKey);
     if (known == 'tpclassic') return _probeTpClassicAny(ip, tplink, kindKey);
     // راوترات «كلمة السرّ وحدها» بقائمتها (كانت Agile هنا تأخذ قائمة اليوزر+الباسورد).
@@ -1574,6 +1587,53 @@ class DeviceProbeApi {
     return null;
   }
 
+  /// عناوين (بمفتاح كاش النوع) نانوها على https وعلى الـ80 جهازٌ آخر ⇒ دخول airOS عليها بـhttps وحده دائماً.
+  static final _ubntHttpsOnly = <String>{};
+
+  /// تعرّف airOS على https الجاري/الحديث لكلّ عنوان (طلبٌ واحد بلا دخول).
+  static final _airOsSeen = <String, ({bool yes, DateTime at})>{};
+  static final _airOsRunning = <String, Future<bool>>{};
+
+  /// يُحقن في الاختبار (عنوان الاختبار المحلّيّ يحمل منفذاً دائماً).
+  @visibleForTesting
+  static Future<bool> Function(String ip)? debugAirOsHttps;
+
+  /// قراءة النانو على https — تُحقن في الاختبار (لا خادم airOS وهميّ بـTLS).
+  @visibleForTesting
+  static Future<DeviceHealthSnapshot?> Function(String ip)? debugProbeUbntHttps;
+
+  /// عنوان https للنانو — يُحقن في الاختبار.
+  @visibleForTesting
+  static String Function(String ip) ubntHttpsHost = (ip) => '$ip:443';
+
+  static bool _hasPort(String address) => RegExp(r':\d{1,5}$').hasMatch(address.trim());
+
+  /// هل على https العنوان واجهة airOS؟ لعنوانٍ بلا منفذٍ صريح وحده (المنفذ الصريح يحدّد جهازه). نصف دقيقة ذاكرة.
+  static Future<bool> _airOsHttps(String ip) {
+    final dbg = debugAirOsHttps;
+    if (dbg != null) return dbg(ip);
+    if (_hasPort(ip)) return Future.value(false);
+    final seen = _airOsSeen[ip];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
+    final running = _airOsRunning[ip];
+    if (running != null) return running;
+    final f = UbiquitiService.looksAirOsHttps(ip).then((yes) {
+      _airOsSeen[ip] = (yes: yes, at: DateTime.now());
+      return yes;
+    }).whenComplete(() => _airOsRunning.remove(ip));
+    _airOsRunning[ip] = f;
+    return f;
+  }
+
+  /// النانو على https العنوان وحده (على الـ80 جهازٌ آخر) — اللقطة بعنوان المشترك نفسه، والعنوان يُحفظ «https وحده».
+  static Future<DeviceHealthSnapshot?> _probeUbntHttps(String ip, List<DeviceCred> cands, String kindKey) async {
+    final dbg = debugProbeUbntHttps;
+    final snap = dbg != null ? await dbg(ip) : await _probeUbntAny(ubntHttpsHost(ip), cands, kindKey);
+    if (snap == null) return null;
+    _ubntHttpsOnly.add(kindKey);
+    return DeviceHealthSnapshot(kind: snap.kind, ip: ip, ubnt: snap.ubnt);
+  }
+
   /// ⑦: مثل [_probeOntAny] لـUbiquiti.
   static Future<DeviceHealthSnapshot?> _probeUbntAny(
       String ip, List<DeviceCred> cands, String kindKey, {bool unlessOther = false}) async {
@@ -1697,6 +1757,15 @@ class DeviceProbeApi {
   /// حلّ الاعتمادات يعيش هنا لا في الواجهة: نفس ترتيب أفضليّة الفحص
   /// (تجاوز المشترك ← افتراضات المدير ← ubnt/ubnt)، فلا يتفرّع منطقان
   /// يختلفان بصمت فيعمل الفحص ويفشل القياس على الجهاز نفسه.
+  /// عنوان SSH لجهازٍ عنوانه قد يحمل منفذ الويب («IP:443» خلف بورت فورورد): الآيبي وحده — SSH على 22 لا على منفذ الويب.
+  /// 🐛 ١٤ نوفمبر (صورة المالك: عنوانٌ مثبّت `…:443`، الإشارة تُقرأ والترافيك «تعذّرت قراءة الترافيك»): كان العنوان بمنفذه يُعطى
+  /// لـSSH كما هو فلا يتّصل أبداً — والمنفذ 22 مفتوحٌ للنانو نفسه (dropbear).
+  static String sshHost(String address) {
+    final a = address.trim();
+    final m = RegExp(r'^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$').firstMatch(a);
+    return m == null ? a : m.group(1)!;
+  }
+
   static Future<({String ip, String user, String pass})?> resolveUbntCreds({
     int slot = 1,
     required String fallbackIp,
