@@ -239,9 +239,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// نبضةٌ صامتة جارية — التالية تتخطّى حتى تنتهي (لا تراكم على ساسٍ بطيء).
   bool _silentBusy = false;
 
-  /// عمر «النسخة المحفوظة» المعروضة الآن ريثما تصل القائمة من الخادم (١٣ نوفمبر) — null حين تكون المعروضة طازجة.
-  DateTime? _savedAt;
-
   /// تحميلٌ أحدث يغلب ردّ تحميلٍ أقدم (القائمة ثمّ جلساتها ردّان منفصلان).
   int _mergedGen = 0;
 
@@ -959,27 +956,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       return;
     }
 
-    // ── آخر نسخةٍ محفوظة فوراً (١٣ نوفمبر — المالك: «اهم شي يكون سريع الاستجابه») ──
-    // ساسٌ بطيء (فايبر لنك كربلاء ~٢٢ث للقائمة كاملة) كان يترك الوكيل أمام دوّارة. آخر نسخةٍ ناجحة على هذا الجهاز لهذا
-    // المدير (≤ ١٢ ساعة، SubscribersApi.peekSaved) تُعرض لحظة تصل بعلامة «نسخة محفوظة · نجلب الأحدث…»، والطازجة تحلّ محلّها.
-    // ⚠️ لا تُنتظَر: قراءة القرص تجري مع طلبات الشبكة لا قبلها — فإن سبقتها القائمة الطازجة لا تُعرض أبداً. ولأوّل فتحٍ للشاشة
-    // وحده: بعد أيّ عمليّة (تفعيل، تسديد…) يمرّ التحديث بالشبكة كما كان، فلا تعود نسخةٌ قديمة بعد عمليّة.
-    if (!SubscribersApi.hasFreshList) {
-      unawaited(SubscribersApi.peekSaved().then((saved) {
-        if (saved == null || !mounted || !_loading || _big || _progressive || _all.isNotEmpty) return;
-        setState(() {
-          _all = saved.rows;
-          _savedAt = saved.at;
-          _loading = false;
-        });
-      }));
-    }
-
     // الحسابات الكبيرة: صفٌّ واحد يحسم قبل القائمة الكاملة — التي لا تُطلب للكبير أصلاً.
     final bigTotal = await BigSubscribersApi.probe();
     if (!mounted) return;
     if (bigTotal > 0) {
-      _savedAt = null;
       _big = true;
       await _bigReload();
       if (!mounted) return;
@@ -992,8 +972,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
     // ── المتوسّط (١٬٠٠٠–٥٬٠٠٠): الصفحة الأولى فوراً، والقائمة الكاملة تكمل في الخلفيّة ثمّ يعود كلّ شيءٍ كما كان ──
     // قائمةٌ طازجة في الذاكرة (الرئيسيّة جلبتها للتوّ) تُعرض فوراً بلا مرحلةٍ وسطى.
-    // نسخةٌ محفوظة معروضة (١٣ نوفمبر) ⇒ لا مرحلة صفحاتٍ فوقها: تبقى حتى تحلّ محلّها القائمة الكاملة.
-    if (_savedAt == null && BigSubscribersApi.knownProgressive && !SubscribersApi.hasFreshList) {
+    if (BigSubscribersApi.knownProgressive && !SubscribersApi.hasFreshList) {
       // تبدأ الآن — مخزَّنة ومشتركة مع الرئيسيّة
       await _loadProgressively(SubscribersApi.loadAll());
       return;
@@ -1009,7 +988,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         Future<bool>.delayed(_slowFullListAfter, () => false),
       ]);
       if (!mounted) return;
-      if (!arrived && _savedAt == null) {
+      if (!arrived) {
         await _loadProgressively(fullF);
         return;
       }
@@ -1039,8 +1018,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       setState(() {
         _all = quick;
         _loading = false;
-        // الطازجة وصلت ⇒ تختفي علامة «النسخة المحفوظة» (فشلٌ يعود بنسخة القرص يبقى بعلامة الانقطاع)
-        if (SubscribersApi.offlineSnapshotAt == null) _savedAt = null;
       });
     }
 
@@ -1298,8 +1275,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       return enriched;
     }).toList();
     _all = merged;
-    // قائمةٌ طازجة من الخادم ⇒ لا «نسخة محفوظة» بعدها (١٣ نوفمبر)
-    if (SubscribersApi.offlineSnapshotAt == null) _savedAt = null;
     if (extras) _lastPayments = payments ?? {};
   }
 
@@ -2212,10 +2187,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             // قبل أن يقول لزبونه «عليك ٢٥ ألفاً». رقمٌ قديمٌ بلا علامة
             // يُتّخذ عليه قرار — وهو أسوأ من لا رقم.
             if (SubscribersApi.offlineSnapshotAt != null)
-              _OfflineBanner(at: SubscribersApi.offlineSnapshotAt!)
-            // نسخةٌ محفوظة معروضة ريثما تصل الطازجة (١٣ نوفمبر) — بعمرها وبأنّنا نجلب الأحدث
-            else if (_savedAt != null && !_big)
-              _OfflineBanner(at: _savedAt!, refreshing: true),
+              _OfflineBanner(at: SubscribersApi.offlineSnapshotAt!),
             // ⚠️ البنية هنا ليست تجميلاً: كانت أربعة صفوف ثابتة فوق
             // القائمة (بحث · شرائح · فرز · ترقيم) تحجز نحو ثلث الشاشة
             // قبل أن يُرى مشترك واحد. الآن الشرائح وحدها تثبت — وهي
@@ -4269,11 +4241,8 @@ class _CompactSearchBar extends StatelessWidget {
 /// خمس دقائق ونسخةٍ عمرها يومان هو الفرق بين رقمٍ يُعتمد عليه ورقمٍ
 /// يُضلّل. و«بلا اتصال» وحدها لا تقول أيّهما.
 class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner({required this.at, this.refreshing = false});
+  const _OfflineBanner({required this.at});
   final DateTime at;
-
-  /// نسخةٌ محفوظة تُعرض والطازجة في الطريق (لا انقطاع) — «نجلب الأحدث…» ودوّارةٌ صغيرة.
-  final bool refreshing;
 
   String get _age {
     final d = DateTime.now().difference(at);
@@ -4291,20 +4260,11 @@ class _OfflineBanner extends StatelessWidget {
       color: AppTone.warning.softBg,
       child: Row(
         children: [
-          if (refreshing)
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppTone.warning.fill),
-            )
-          else
-            Icon(LucideIcons.history, size: 14, color: AppTone.warning.fill),
+          Icon(LucideIcons.history, size: 14, color: AppTone.warning.fill),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              refreshing
-                  ? 'نسخة محفوظة · آخر تحديث $_age — نجلب الأحدث…'
-                  : 'نسخة محفوظة · آخر تحديث $_age — الأرقام قد تكون تغيّرت',
+              'نسخة محفوظة · آخر تحديث $_age — الأرقام قد تكون تغيّرت',
               style: AppType.muted(color: AppTone.warning.onSoft),
             ),
           ),

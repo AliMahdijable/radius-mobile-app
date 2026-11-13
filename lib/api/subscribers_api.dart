@@ -665,23 +665,6 @@ class SubscribersApi {
     }
   }
 
-  // ── آخر نسخةٍ محفوظة للعرض الفوريّ (١٣ نوفمبر — المالك: «اهم شي يكون سريع الاستجابه») ──
-  //
-  // شاشة المشتركين تعرضها لحظة الفتح بعلامة «نسخة محفوظة · نجلب الأحدث…»
-  // ريثما تصل القائمة من الخادم (ساسٌ بطيء: ~٢٢ثانية لفايبر لنك كربلاء).
-  // نسخة هذا المدير وحده (SubscribersOfflineCache يفحص adminId) وعمرها
-  // ≤ [savedMaxAge] — أقصر من مهلة النسخة عند الانقطاع (٣ أيّام): هنا
-  // تُعرض والشبكة تعمل، فقديمٌ جدّاً لا يُعرض أصلاً.
-  static const savedMaxAge = Duration(hours: 12);
-
-  /// آخر نسخةٍ ناجحة على الجهاز (بلا شبكة)، أو null.
-  static Future<({List<Subscriber> rows, DateTime at})?> peekSaved() async {
-    final disk = await SubscribersOfflineCache.read();
-    if (disk == null || disk.rows.isEmpty) return null;
-    if (DateTime.now().difference(disk.at) > savedMaxAge) return null;
-    return (rows: disk.rows.map(Subscriber.fromJson).toList(), at: disk.at);
-  }
-
   // ── لماذا لم تصل القائمة (١٣ نوفمبر — بلاغ «فايبر لنك كربلاء») ──
   //
   // كانت الشاشة تقول «0 مشترك · لا يوجد مشترك في هذا الفلتر» حين يفشل
