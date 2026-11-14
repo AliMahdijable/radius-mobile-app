@@ -83,6 +83,8 @@ void main() {
           'بطاقة QR — الأبيض والحبر شرط قراءة الرمز بالكاميرا',
       'lib/screens/telegram/sheets/telegram_link_generator_sheet.dart':
           'بطاقة QR — نفس السبب',
+      'lib/screens/telegram/widgets/tg_account_card.dart':
+          'رمز QR لربط حساب تلغرام — نفس السبب (يُمسح بكاميرا تلغرام في الوضعين)',
       'lib/screens/network_devices/widgets/brand_badge.dart':
           'شعارات المصنّعين — الأبيض جزء من هويّة الشعار',
       'lib/screens/account/apple_sign_in_button.dart':
