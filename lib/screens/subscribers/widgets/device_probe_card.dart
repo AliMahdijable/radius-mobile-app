@@ -201,6 +201,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// جديدة فوراً.
   bool _routerOp = false;
 
+  /// عمليّة واي فاي جارية على الراوتر الضوئيّ ([_ontOpBusy]) — نبضة الترافيك لا تدخل عليه.
+  bool _ontOp = false;
+
   /// قبل العمليّة (true): لا نبضة جديدة، والجارية تكمل أوّلاً (خروجها وسط العمليّة يُسقطها — حيّاً ١٢ نوفمبر على WR940N: الواي فاي
   /// «ما قبل الأمر»)، والجلسة الحيّة (MER) تُغلق قبل دخول العمليّة. بعدها (false): النبضة التالية بلا مهلة.
   Future<void> _routerOpBusy(bool busy) async {
@@ -779,7 +782,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   Future<void> _pulseOntTraffic() async {
     // فحصٌ جارٍ يدخل على الجهاز نفسه — دخولنا الآن يطرده (جلسةٌ واحدة) أو يطردنا؛ ننتظر النبضة التالية. وأمر إعادة تشغيلٍ
     // جارٍ مثله: دخولنا أو خروجنا وسطه يُنهي جلسته (ZTE: الجلسة بعنوان الطالب).
-    if (_pulsing || _probing || _rebooting || !mounted || _trafficPaused) return;
+    if (_pulsing || _probing || _rebooting || _ontOp || !mounted || _trafficPaused) return;
     final epoch = _trafficEpoch;
     final retryAt = _ontRetryAt;
     if (_ontSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
@@ -1792,8 +1795,41 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         const SizedBox(height: 14),
         _DetailRow(field: _ontKind(o), strong: true),
         if (_ontHasFiber(o)) _DetailRow(field: _ontFiber(o)),
+        // «كلمة سرّ الواي فاي» للراوتر الضوئيّ (١٤ نوفمبر — المالك: «نكدر نظهر الرمز مال وايرلس مالتهم وهم نغيره؟»): عائلة ZTE حين
+        // تكون صفحة الأمان في قائمة حساب الوكيل — الصندوق نفسه الذي في الراوترات.
+        if (o.isZte && o.canWifi) ...[
+          const SizedBox(height: Sp.sm),
+          Divider(height: 1, color: AppColors.divider),
+          RouterWifiPanel(vendor: RouterOps.zteOnt, creds: _ontCreds, onBusy: _ontOpBusy),
+        ],
       ],
     );
+  }
+
+  /// الاعتماد الذي دخل به الفحص على الراوتر الضوئيّ (أو مرشّح الوكيل) — لصندوق الواي فاي.
+  Future<RouterCreds?> _ontCreds() => DeviceProbeApi.resolveOntCreds(
+        fallbackIp: widget.ip,
+        subscriberUsername: widget.username,
+        slot: widget.slot,
+        company: widget.company,
+      );
+
+  /// عمليّة واي فاي على الراوتر الضوئيّ: جلسته بعنوان الطالب (ZTE) — خروجنا بعد العمليّة يُنهي جلسة الترافيك، ودخول الترافيك
+  /// وسطها يُنهي جلستها. فننتظر النبضة/الفحص الجاريين ونُغلق جلسة الترافيك ونتمّ خروجها، والنبض يقف حتى تنتهي (كإعادة التشغيل).
+  Future<void> _ontOpBusy(bool busy) async {
+    _ontOp = busy;
+    if (busy) {
+      final until = DateTime.now().add(const Duration(seconds: 15));
+      while ((_pulsing || _probing) && DateTime.now().isBefore(until)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      final live = _ontSession;
+      _ontSession = null;
+      _ontMeter.reset();
+      if (live != null) await live.close().timeout(const Duration(seconds: 5), onTimeout: () {});
+      return;
+    }
+    _ontRetryAt = null;
   }
 
   // ═══════════════ Ubiquiti ═══════════════

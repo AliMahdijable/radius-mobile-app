@@ -38,6 +38,7 @@ class OntOpticalInfo {
     this.vendor = 'huawei',
     this.model = '',
     this.canReboot = false,
+    this.canWifi = false,
   });
   final String txPower;
   final String rxPower;
@@ -56,6 +57,10 @@ class OntOpticalInfo {
   /// يُظهر زرّ إعادة التشغيل. هواوي لا يقرؤه (زرّه دائماً).
   final bool canReboot;
 
+  /// ZTE وحده (١٤ نوفمبر، HS8546V2): في قائمة الحساب الذي دخل به الفحص صفحة أمان الواي فاي ⇒ الكرت يُظهر «كلمة سرّ الواي فاي»
+  /// (عرضٌ ونسخٌ وتغيير — [ZteOntService.readWifi]). هواوي لم يُقَس بعد ⇒ بلا صندوق.
+  final bool canWifi;
+
   bool get isZte => vendor == 'zte';
 
   OntOpticalInfo withReboot(bool can) => can == canReboot
@@ -70,6 +75,22 @@ class OntOpticalInfo {
           vendor: vendor,
           model: model,
           canReboot: can,
+          canWifi: canWifi,
+        );
+
+  OntOpticalInfo withWifi(bool can) => can == canWifi
+      ? this
+      : OntOpticalInfo(
+          txPower: txPower,
+          rxPower: rxPower,
+          voltage: voltage,
+          temperature: temperature,
+          bias: bias,
+          sendStatus: sendStatus,
+          vendor: vendor,
+          model: model,
+          canReboot: canReboot,
+          canWifi: can,
         );
 
   bool get txOk {
@@ -107,6 +128,7 @@ class OntOpticalInfo {
         if (vendor != 'huawei') 'vd': vendor,
         if (model.isNotEmpty) 'md': model,
         if (canReboot) 'rb': true,
+        if (canWifi) 'wf': true,
       };
 
   /// مخزَّنٌ قبل حقل المورّد ⇒ هواوي كما كان.
@@ -120,6 +142,7 @@ class OntOpticalInfo {
         vendor: (j['vd'] ?? 'huawei').toString(),
         model: (j['md'] ?? '').toString(),
         canReboot: j['rb'] == true,
+        canWifi: j['wf'] == true,
       );
 }
 

@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/device_probe_api.dart';
 import 'package:rad_mysvcs/core/net/ont_traffic.dart';
+import 'package:rad_mysvcs/core/net/router_ops.dart';
+import 'package:rad_mysvcs/core/net/router_types.dart';
 import 'package:rad_mysvcs/core/net/zte_ont_service.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -408,10 +410,123 @@ void main() {
       expect(ZteOntParse.rebootPage(['manager_dev_conf_t_user.gch']), 'manager_dev_conf_t_user.gch');
     });
   });
+
+  _wifiGroup(() => d);
 }
 
 /// HS8546V2 وهميّ بشكل الجهاز الحيّ (١٤ نوفمبر): دخولٌ برمز جلسة (الحقل + الكوكي معاً)، جلسةٌ بعنوان الطالب، صفحة «Session
 /// timeout» لما يُطلب بلا جلسة، وقائمةٌ بصفحات الحالة والإعداد، وعدّادات واي فاي/منافذ/PON يحرّكها الاختبار.
+void _wifiGroup(_FakeHtm Function() dev) {
+  group('كلمة سرّ الواي فاي (١٤ نوفمبر)', () {
+    test('الفحص يعرف صفحة الأمان من قائمة الحساب ⇒ الكرت يُظهر الصندوق ويُحفظ مع اللقطة؛ والفحص لا يفتحها', () async {
+      final d = dev();
+      final s = (await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1'))!;
+      final o = (await ZteOntService.fetchOptical(s))!;
+      expect(ZteOntService.canWifi(s), isTrue);
+      final w = o.withWifi(true);
+      expect(w.canWifi, isTrue);
+      expect(OntOpticalInfo.fromJson(w.toJson()).canWifi, isTrue);
+      expect(OntOpticalInfo.fromJson(o.toJson()).canWifi, isFalse, reason: 'المخزَّن القديم بلا الحقل ⇒ بلا صندوق');
+      expect(d.nextpages, isNot(contains('net_wlan_secrity_t.gch')), reason: 'اسمها من القائمة — الفحص لا يفتحها');
+      await ZteOntService.logout(s);
+    });
+
+    test('القراءة: الشبكتان بكلمتيهما، والخامسة بمنتقي الشبكة بلا أمر، ثمّ خروج', () async {
+      final d = dev();
+      final r = await ZteOntService.readWifi(d.host, 'agent', 'secret-1');
+      expect(r.ok, isTrue, reason: '${r.fail} ${r.detail}');
+      expect([for (final n in r.value!) (n.ref, n.band, n.password, n.security, n.enabled)], [
+        ('IGD.LD1.WLAN1', '2.4G', 'OldPass123', 'WPA2', true),
+        ('IGD.LD1.WLAN5', '5G', 'Old5Gpass9', 'WPA2', true),
+      ]);
+      expect(d.wifiPosts, hasLength(1));
+      expect(d.wifiPosts.single['IF_ACTION'], '', reason: 'تبديل الشبكة وحده — لا apply');
+      expect(d.wifiPosts.single['IF_VIEWID'], 'IGD.LD1.WLAN5');
+      expect(d.wifiKeys, {'IGD.LD1.WLAN1': 'OldPass123', 'IGD.LD1.WLAN5': 'Old5Gpass9'});
+      expect(d.logouts, 1);
+    });
+
+    test('التغيير: كلّ شبكةٍ بنموذج صفحتها وأمر apply ⇒ الكلمة الجديدة على الشبكتين، والإعدادات الأخرى NULL، ثمّ خروج', () async {
+      final d = dev();
+      final r = await ZteOntService.setWifiPassword(d.host, 'agent', 'secret-1', 'New Pass#456');
+      expect(r.ok, isTrue, reason: '${r.fail} ${r.detail}');
+      expect(d.wifiKeys.values.toSet(), {'New Pass#456'});
+      final applies = d.wifiPosts.where((f) => f['IF_ACTION'] == 'apply').toList();
+      expect(applies.map((f) => f['IF_VIEWID']), ['IGD.LD1.WLAN1', 'IGD.LD1.WLAN5']);
+      for (final f in applies) {
+        expect(f['ESSID'], 'NULL');
+        expect(f['Enable'], 'NULL');
+        expect(f['Channel'], 'NULL');
+        expect(f['BeaconType'], '11i');
+        expect(f['11iAuthMode'], 'PSKAuthentication');
+        expect(f['_SESSION_TOKEN'], d.pageToken);
+      }
+      expect([for (final n in r.value!) n.password], ['New Pass#456', 'New Pass#456']);
+      expect(d.logouts, 1);
+      expect(d.actions, isEmpty, reason: 'لا أمر على صفحة الإدارة');
+      expect(d.rebooted, isFalse);
+      expect(d.factoryReset, isFalse);
+    });
+
+    test('شبكةٌ بعينها ⇒ هي وحدها تتغيّر', () async {
+      final d = dev();
+      final r = await ZteOntService.setWifiPassword(d.host, 'agent', 'secret-1', 'OnlyFive99', only: {'IGD.LD1.WLAN5'});
+      expect(r.ok, isTrue, reason: '${r.fail} ${r.detail}');
+      expect(d.wifiKeys, {'IGD.LD1.WLAN1': 'OldPass123', 'IGD.LD1.WLAN5': 'OnlyFive99'});
+    });
+
+    test('جهازٌ يقبل الطلب ولا يحفظ ⇒ «ما قبل الأمر» لا نجاحٌ كاذب، ويقف عند الأولى', () async {
+      final d = dev()..wifiSaves = false;
+      final r = await ZteOntService.setWifiPassword(d.host, 'agent', 'secret-1', 'NewPass456');
+      expect(r.ok, isFalse);
+      expect(r.fail, RouterFail.failed);
+      expect(r.detail, startsWith('not-saved IGD.LD1.WLAN1'));
+      expect(d.wifiPosts.where((f) => f['IF_ACTION'] == 'apply'), hasLength(1));
+      expect(d.logouts, 1);
+    });
+
+    test('شبكةٌ مفتوحة ⇒ لا كلمة تُعرض ولا شيء يُحفظ (بلا كلمة شخصيّة)', () async {
+      final d = dev()..beacon = 'None';
+      final read = await ZteOntService.readWifi(d.host, 'agent', 'secret-1');
+      expect(read.value!.every((n) => n.password == null && n.security == 'مفتوحة'), isTrue);
+      final r = await ZteOntService.setWifiPassword(d.host, 'agent', 'secret-1', 'NewPass456');
+      expect(r.fail, RouterFail.noPsk);
+      expect(d.wifiPosts.where((f) => f['IF_ACTION'] == 'apply'), isEmpty);
+    });
+
+    test('حسابٌ قائمته بلا صفحة الأمان ⇒ لا صندوق، والقراءة «غير مدعومة» بلا طلب الصفحة', () async {
+      final d = dev()..wifiPage = false;
+      final s = (await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1'))!;
+      await ZteOntService.fetchOptical(s);
+      expect(ZteOntService.canWifi(s), isFalse);
+      await ZteOntService.logout(s);
+      final r = await ZteOntService.readWifi(d.host, 'agent', 'secret-1');
+      expect(r.fail, RouterFail.unsupported);
+      expect(d.nextpages, isNot(contains('net_wlan_secrity_t.gch')));
+    });
+
+    test('اعتمادٌ مرفوض ⇒ «الراوتر رفض كلمة السرّ» ولا يُعاد على الجهاز', () async {
+      final d = dev();
+      final r = await ZteOntService.readWifi(d.host, 'agent', 'wrong-pass');
+      expect(r.fail, RouterFail.rejected);
+      final again = await ZteOntService.readWifi(d.host, 'agent', 'wrong-pass');
+      expect(again.fail, RouterFail.rejected);
+      expect(d.posts.where((p) => p.body.contains('wrong-pass')), hasLength(1), reason: 'المرفوض لا يُعاد');
+    });
+
+    test('RouterOps يوجّه الراوتر الضوئيّ إلى ZTE (والإقلاع له زرّه الخاصّ لا من هنا)', () async {
+      final d = dev();
+      expect(RouterOps.canWifi(RouterOps.zteOnt), isTrue);
+      expect(RouterOps.canReboot(RouterOps.zteOnt), isFalse);
+      final r = await RouterOps.readWifi(RouterOps.zteOnt, d.host, 'agent', 'secret-1');
+      expect(r.ok, isTrue);
+      final bad = await RouterOps.setWifiPassword(RouterOps.zteOnt, d.host, 'agent', 'secret-1', 'short');
+      expect(bad.ok, isFalse, reason: 'كلمةٌ أقصر من ٨ لا تُرسل');
+      expect(d.wifiPosts.where((f) => f['IF_ACTION'] == 'apply'), isEmpty);
+    });
+  });
+}
+
 class _FakeHtm {
   late HttpServer server;
   bool inSession = false;
@@ -459,7 +574,31 @@ class _FakeHtm {
     wlan5RxBytes = wlan5RxFrames = wlan5TxBytes = wlan5TxFrames = 0;
   }
 
-  List<String> get _menu => [..._statusMenu, userAccount ? 'manager_dev_conf_t_user.gch' : 'manager_dev_conf_t.gch'];
+  List<String> get _menu => [
+        ..._statusMenu,
+        userAccount ? 'manager_dev_conf_t_user.gch' : 'manager_dev_conf_t.gch',
+        if (wifiPage) 'net_wlan_secrity_t.gch',
+      ];
+
+  // كلمة سرّ الواي فاي (١٤ نوفمبر): صفحة «Security» كما على الحيّ (الصفحة المنقّحة نفسها — test/fixtures/zte_wifi)، بشبكتين:
+  // WLAN1 (2.4G) وWLAN5 (5G). الجهاز يحفظ الكلمة بأمر apply ويعيد الصفحة على الشبكة نفسها، ويبدّل الشبكة بالنموذج بلا أمر.
+  bool wifiPage = true;
+  bool wifiSaves = true;
+  String beacon = '11i';
+  final wifiKeys = <String, String>{'IGD.LD1.WLAN1': 'OldPass123', 'IGD.LD1.WLAN5': 'Old5Gpass9'};
+  final wifiPosts = <Map<String, String>>[];
+  static final _securityFixture = File('test/fixtures/zte_wifi/hs8546v2_security_wlan1.html').readAsStringSync();
+
+  String securityPage(String view) {
+    String hex(String v) => v.replaceAll('.', r'\x2e');
+    final five = view.endsWith('WLAN5');
+    return _securityFixture
+        .replaceAll(r"Transfer_meaning('IF_VIEWID','IGD\x2eLD1\x2eWLAN1')", "Transfer_meaning('IF_VIEWID','${hex(view)}')")
+        .replaceAll("Transfer_meaning('KeyPassphrase','OldPass123')", "Transfer_meaning('KeyPassphrase','${wifiKeys[view] ?? ''}')")
+        .replaceAll(r"Transfer_meaning('Band','2\x2e4G')", five ? "Transfer_meaning('Band','5G')" : r"Transfer_meaning('Band','2\x2e4G')")
+        .replaceAll("Transfer_meaning('BeaconType','11i')", "Transfer_meaning('BeaconType','$beacon')")
+        .replaceAll('FAKETOKEN0123456', pageToken);
+  }
 
   /// صفحة «Device Management» لحساب user كما على الحيّ: نموذج `fSubmit` وسكربتا «Reboot» و«Restore» (الثاني ضبط مصنع).
   String mgmtPage({String flag = 'NULL'}) => _content(
@@ -628,6 +767,18 @@ class _FakeHtm {
         await res.close();
         return;
       }
+      if (req.method == 'POST' && path == '/getpage.gch' && inSession && req.uri.queryParameters['nextpage'] == 'net_wlan_secrity_t.gch') {
+        final f = Uri.splitQueryString(await utf8.decoder.bind(req).join());
+        wifiPosts.add(f);
+        final view = f['IF_VIEWID'] ?? 'IGD.LD1.WLAN1';
+        final key = f['KeyPassphrase'];
+        if (f['_SESSION_TOKEN'] == pageToken && f['IF_ACTION'] == 'apply' && wifiSaves && key != null && key != 'NULL') {
+          wifiKeys[view] = key;
+        }
+        html(securityPage(view));
+        await res.close();
+        return;
+      }
       if (req.method == 'POST' && path == '/getpage.gch' && inSession) {
         // أمرٌ على صفحة الإدارة: يُقبل برمز الصفحة فقط، كنموذجها.
         final body = await utf8.decoder.bind(req).join();
@@ -668,6 +819,7 @@ class _FakeHtm {
           'status_wlaninfo_t.gch' => wlanPage(),
           'status_ponlan_info_t.gch' => lanPage(),
           'manager_dev_conf_t_user.gch' when userAccount => mgmtPage(),
+          'net_wlan_secrity_t.gch' when wifiPage => securityPage('IGD.LD1.WLAN1'),
           _ => _template(),
         });
       } else {
