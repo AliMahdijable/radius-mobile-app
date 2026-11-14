@@ -1,10 +1,10 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/util/server_time.dart';
 import '../../api/company_route.dart';
-import '../../api/archive_info.dart';
 import '../../api/expenses_api.dart';
 import '../../api/reports_api.dart';
 import '../../core/util/format.dart';
@@ -172,52 +172,60 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     // نجلب activities + expenses بالتوازي.
     // الصرفيات في جدول منفصل ولا تظهر في /api/activities — نجلبها من
     // /api/admin/expenses ونحوّلها إلى ActivityRow صناعية.
-    final results = await Future.wait([
-      ReportsApi.activities(
-        from: _range.from,
-        to: _range.to,
-        search: _search.isEmpty ? null : _search,
-        userIds: _filters.actionManagerId == null ? _scopeIds : null,
-        actionManagerId: _filters.actionManagerId,
-        userManager: _filters.userManager,
-        employeeId: _filters.employeeId,
-        limit: 5000,
-      ),
-      // ⚠️ **السجلّ يعرض كلّ شيء — ومعه المسوّى.**
-      //
-      // الخادم يُخفي ما غطّته تسويةٌ فعّالة افتراضيّاً، وهو الصواب في
-      // شاشات «الآن». أمّا هنا فسجلّ تدقيق: بدون هذه الراية تختفي
-      // الصرفيات المسوّاة بينما تبقى التفعيلات، فيبدو السجلّ ناقصاً
-      // بلا سبب. (`docs/settlements-prompt.md` §٦-٦)
-      // صرفيات الشركة المفتوحة صراحةً (لا لقسم «الصرفيات» ظاهرٍ لشركةٍ أخرى ببادئته)
-      CompanyRoute.runOpen(() => ExpensesApi.list(
-            from: _fmt(_range.from),
-            to: _fmt(_range.to),
-            limit: 2000,
-            includeArchived: true,
-          )),
-    ]);
-    final r = results[0] as ({bool ok, List<ActivityRow> rows, String? error});
-    // ⚠️ **لا تُحوِّل السجلّ بشكله.**
     //
-    // 🐛 سجلّات Dart تُطابَق **بنيويّاً**: كان هنا
-    // `as ({List<ExpenseRow> rows, num total})`، فأيّ حقلٍ يُضاف إلى
-    // `ExpensesApi.list` يُسقط التحويل **وقت التشغيل لا وقت التحليل**
-    // — فتعلق الشاشة على التحميل أبداً و`flutter analyze` نظيف.
-    // أضاف القسم ٦-٣ حقل `archive` فعلاً، فكُسر الشكل.
-    //
-    // وحقلُ `rows` وحده هو المستعمل، فنقرؤه بلا ادّعاء شكلٍ كامل.
-    final expList = results[1] as ({
-      List<ExpenseRow> rows,
-      num total,
-      ArchiveInfo? archive
-    });
+    // ⚠️ **لا Future.wait ولا تحويل سجلٍّ بشكله.** سجلّات Dart تُطابَق **بنيويّاً**، و`Future.wait` يُسقط النوعين إلى Object فلا
+    // يرى `flutter analyze` شيئاً: كان هنا `results[1] as ({rows, total, archive})` — فلمّا أضاف ٨ نوفمبر (abd6a2a2) حقل
+    // `routedWrites` إلى `ExpensesApi.list` رمى التحويل **وقت التشغيل** وعلقت الشاشة على التحميل أبداً في 179–182 (المالك ١٥ نوفمبر:
+    // «سجل النشاط لحد هسه ع حاله» — والخادم يردّ خلال ربع ثانية). وقبله كُسر بالطريقة نفسها حين أُضيف `archive`. الآن `(a, b).wait`:
+    // الطلبان معاً كما كانا، وكلٌّ بنوعه من دالّته — حقلٌ جديد لا يكسر شيئاً. test/activity_log_loads_test.dart يحرسه.
+    final ({bool ok, List<ActivityRow> rows, String? error}) r;
+    final List<ExpenseRow> expenses;
+    try {
+      final (acts, exps) = await (
+        ReportsApi.activities(
+          from: _range.from,
+          to: _range.to,
+          search: _search.isEmpty ? null : _search,
+          userIds: _filters.actionManagerId == null ? _scopeIds : null,
+          actionManagerId: _filters.actionManagerId,
+          userManager: _filters.userManager,
+          employeeId: _filters.employeeId,
+          limit: 5000,
+        ),
+        // ⚠️ **السجلّ يعرض كلّ شيء — ومعه المسوّى.**
+        //
+        // الخادم يُخفي ما غطّته تسويةٌ فعّالة افتراضيّاً، وهو الصواب في
+        // شاشات «الآن». أمّا هنا فسجلّ تدقيق: بدون هذه الراية تختفي
+        // الصرفيات المسوّاة بينما تبقى التفعيلات، فيبدو السجلّ ناقصاً
+        // بلا سبب. (`docs/settlements-prompt.md` §٦-٦)
+        // صرفيات الشركة المفتوحة صراحةً (لا لقسم «الصرفيات» ظاهرٍ لشركةٍ أخرى ببادئته)
+        CompanyRoute.runOpen(() => ExpensesApi.list(
+              from: _fmt(_range.from),
+              to: _fmt(_range.to),
+              limit: 2000,
+              includeArchived: true,
+            )),
+      ).wait;
+      r = acts;
+      expenses = exps.rows;
+    } catch (e) {
+      // شبكة أمان: أيّ رميةٍ هنا تُنهي التحميل برسالة «تعذّر» لا بمؤشّرٍ لا ينتهي (الدالّتان تلتقطان أخطاءهما أصلاً).
+      if (kDebugMode) debugPrint('🔴 activity-log load: $e');
+      if (!mounted || gen != _gen || _mergedOn) return;
+      setState(() {
+        _merged = null;
+        _loading = false;
+        _rows = const [];
+        _error = 'common.load_failed'.tr();
+      });
+      return;
+    }
 
     if (!mounted || gen != _gen || _mergedOn) return;
 
     // نحوّل الصرفيات لـActivityRow-shaped rows. نصنع id مركّب مع فارق
     // كبير حتى لا يتصادم مع IDs الحقيقية.
-    final expenseRows = expList.rows
+    final expenseRows = expenses
         .where((e) {
           if (_search.isNotEmpty) {
             return (e.note ?? '').contains(_search);
