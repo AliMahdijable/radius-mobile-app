@@ -149,6 +149,19 @@ void main() {
       expect(r.error, isNull);
     });
 
+    test('١٤ نوفمبر (الخيار «٣»): countsOnly ⇒ counts_only=1 والردّ يُقرأ countsOnly؛ بدونه لا علم ولا counts_only (كما كان)', () async {
+      final body = ownerBody();
+      body['data'] = {...(body['data'] as Map<String, dynamic>), 'counts_only': true};
+      adapter.reply = (200, body);
+      final c = await PackageReportApi.fetch(from: DateTime(2026, 11, 14), to: DateTime(2026, 11, 14), countsOnly: true);
+      expect(adapter.lastQuery['counts_only'], '1');
+      expect(c.data?.countsOnly, isTrue);
+      adapter.reply = (200, ownerBody());
+      final f = await PackageReportApi.fetch(from: DateTime(2026, 11, 14), to: DateTime(2026, 11, 14));
+      expect(adapter.lastQuery.containsKey('counts_only'), isFalse);
+      expect(f.data?.countsOnly, isFalse);
+    });
+
     test('🚨 ٤٠٣ (صلاحيّةٌ سُحبت) ⇒ status 403 بلا بيانات — الواجهة تُقفل لا «تعذّر»', () async {
       adapter.reply = (403, {'success': false, 'message': 'لا تملك صلاحيّة التقرير الماليّ'});
       final r = await PackageReportApi.fetch(from: DateTime(2026, 10, 1), to: DateTime(2026, 10, 25));

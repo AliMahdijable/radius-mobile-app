@@ -69,6 +69,9 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
   /// «الربح المقدَّر» مخفيٌّ حتى يُظهره صاحب الحساب (المالك ٢٥ أكتوبر: «خلي مخفي الا يظهر الشخص… حتى لاتصير خربطه
   /// بينه وبين الايرادات اعلاه») — واختياره يُحفظ على الجهاز كالفترة.
   bool _showProfit = false;
+
+  /// تحميل التقرير الكامل جارٍ (إظهار الأرباح فوق ردّ «الأعداد وحدها») — المقدَّر مؤشّر تحميل لا «—» حتى يصل.
+  bool _loadingFull = false;
   static const _profitKey = 'pkgcard.show_profit';
 
   @override
@@ -115,6 +118,11 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
   void _setShowProfit(bool v) {
     setState(() => _showProfit = v);
     SharedPreferences.getInstance().then((p) => p.setBool(_profitKey, v)).catchError((_) => false);
+    // ١٤ نوفمبر (الخيار «٣»): المعروض «أعدادٌ وحدها» بلا أسعار ⇒ الإظهار يجلب الكامل حيّاً الآن
+    if (v && (_data?.countsOnly ?? false)) {
+      setState(() => _loadingFull = true); // المؤشّر من لحظة الضغط، لا «—» ثمّ مؤشّر
+      _load(user: true);
+    }
   }
 
   void _pick(String period) {
@@ -143,6 +151,7 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
       setState(() {
         _needsFocus = true;
         _loading = false;
+        _loadingFull = false;
         _data = null;
         _error = null;
       });
@@ -154,6 +163,7 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
         _needsFocus = false;
         _loading = false;
         _denied = true;
+        _loadingFull = false;
         _data = null;
         _error = null;
       });
@@ -165,15 +175,20 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
     });
     final range = PackagesSummaryCard.rangeOf(_period);
     final ids = focused == null ? await loadScopeUserIds() : null;
+    // ١٤ نوفمبر (المالك: الخيار «٣»): الأرباح مخفيّة ⇒ الأعداد وحدها (لا انتظار أسعار الساس ٢٫٥ث)؛ ظاهرةٌ ⇒ الكامل حيّاً
+    final wantFull = _showProfit;
+    if (wantFull) setState(() => _loadingFull = true);
     final r = await PackageReportApi.fetch(
       from: range.from,
       to: range.to,
       userIds: ids,
       companyKey: focused?.key,
+      countsOnly: !wantFull,
     );
     if (!mounted || gen != _gen) return;
     setState(() {
       _loading = false;
+      _loadingFull = false;
       _denied = r.status == 403;
       if (r.data != null) {
         _data = r.data;
@@ -403,7 +418,8 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
         _showProfit
             ? _ProfitsBlock(
                 total: t.profitTotal,
-                estimated: t.profitEstimated,
+                estimated: d.countsOnly ? null : t.profitEstimated,
+                estimating: d.countsOnly && _loadingFull,
                 period: PackagesSummaryCard.rangeOf(_period).label,
                 onHide: () => _setShowProfit(false),
               )
@@ -574,10 +590,14 @@ class _ProfitsBlock extends StatelessWidget {
     required this.estimated,
     required this.period,
     required this.onHide,
+    this.estimating = false,
   });
 
   final num? total;
   final num? estimated;
+
+  /// المقدَّر يُحسب الآن (التقرير الكامل في الطريق) — مؤشّرٌ صغير مكان «—».
+  final bool estimating;
   final String period;
   final VoidCallback onHide;
 
@@ -605,6 +625,7 @@ class _ProfitsBlock extends StatelessWidget {
             label: 'pkgdist.profit_est'.tr(),
             hint: 'pkgdist.profit_est_hint'.tr(),
             value: estimated,
+            loading: estimating,
           ),
           Align(
             alignment: AlignmentDirectional.centerEnd,
@@ -640,12 +661,14 @@ class _ProfitLine extends StatelessWidget {
     required this.label,
     required this.hint,
     required this.value,
+    this.loading = false,
   });
 
   final IconData icon;
   final String label;
   final String hint;
   final num? value;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -672,6 +695,17 @@ class _ProfitLine extends StatelessWidget {
               ],
             ),
           ),
+          if (loading && v == null)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: Sp.sm),
+              child: SizedBox(
+                key: const ValueKey('pkgdist-est-loading'),
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.warning),
+              ),
+            )
+          else
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(

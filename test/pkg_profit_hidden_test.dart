@@ -46,6 +46,13 @@ void main() {
       await t.pump();
       expect(inCard(find.text('الربح المتحقّق')), findsOneWidget);
       expect(inCard(find.text('الربح المقدَّر')), findsOneWidget);
+      // ١٤ نوفمبر (المالك: الخيار «٣»): البطاقة طلبت الأعداد وحدها (counts_only — بلا أسعار) ⇒ المتحقّق (من SQL) حاضرٌ فوراً،
+      // والمقدَّر مؤشّرُ تحميلٍ لا رقمٌ ولا «—» حتى يصل التقرير الكامل حيّاً بأسعاره.
+      expect(inCard(find.textContaining('1,592,000')), findsOneWidget);
+      expect(inCard(find.byKey(const ValueKey('pkgdist-est-loading'))), findsOneWidget);
+      expect(inCard(find.textContaining('11,647,000')), findsNothing);
+      await settle(t);
+      expect(inCard(find.byKey(const ValueKey('pkgdist-est-loading'))), findsNothing);
       final realized = t.getTopLeft(inCard(find.textContaining('1,592,000')));
       final estimated = t.getTopLeft(inCard(find.textContaining('11,647,000')));
       expect(realized.dy, lessThan(estimated.dy), reason: 'المتحقّق فوق المقدَّر');

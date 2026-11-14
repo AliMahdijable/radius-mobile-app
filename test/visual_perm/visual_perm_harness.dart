@@ -463,18 +463,20 @@ class VisualServer implements HttpClientAdapter {
     if (get && p == '/api/reports/finance/packages') {
       if (!s.allows('reports.financial')) return _denied();
       final owner = s.actor == Actor.owner;
+      // ١٤ نوفمبر (الخيار «٣»): counts_only=1 ⇒ كالخادم (e00a23d) — بلا أسعار: السعر والكلفة الوحديّة والمقدَّر null، وcounts_only في data
+      final countsOnly = o.queryParameters['counts_only'] == '1';
       Map<String, Object?> row(String key, String name, int total, int active, int acts, int ext, int revenue, int est) => {
             'key': key,
             'name': name,
             'profile_id': int.tryParse(key.substring(2)),
-            'price': 35000,
+            'price': countsOnly ? null : 35000,
             'subscribers_total': total,
             'subscribers_active': active,
             'activations': acts,
             'sync_activations': 0,
             'extensions': ext,
             'revenue': revenue,
-            if (owner) ...{'unit_cost': 21000, 'cost': revenue * 6 ~/ 10, 'profit_total': revenue * 4 ~/ 10, 'profit_estimated': est},
+            if (owner) ...{'unit_cost': countsOnly ? null : 21000, 'cost': revenue * 6 ~/ 10, 'profit_total': revenue * 4 ~/ 10, 'profit_estimated': countsOnly ? null : est},
           };
       return _json(200, {
         'success': true,
@@ -482,6 +484,7 @@ class VisualServer implements HttpClientAdapter {
           'owner': owner,
           'cost_exempt': false,
           'provider': s.isEl ? 'earthlink' : 'sas4',
+          if (countsOnly) 'counts_only': true,
           'rows': [
             row('p:5', 'FTTH 50 ميغا', 412, 365, 38, 12, 1330000, 5110000),
             row('p:7', 'D-Active 75 ميغا العائليّة', 260, 231, 25, 9, 1375000, 4389000),
@@ -497,7 +500,7 @@ class VisualServer implements HttpClientAdapter {
             'sync_activations': 0,
             'extensions': 25,
             'revenue': 3980000,
-            if (owner) ...{'cost': 2388000, 'profit_total': 1592000, 'cost_rows': 107, 'cost_known_rows': 107, 'cost_complete': true, 'profit_estimated': 11647000},
+            if (owner) ...{'cost': 2388000, 'profit_total': 1592000, 'cost_rows': 107, 'cost_known_rows': 107, 'cost_complete': true, 'profit_estimated': countsOnly ? null : 11647000},
           },
         },
         'unavailable_parts': const [],

@@ -140,6 +140,7 @@ class PackageReport {
     this.provider,
     this.subscribersPartial = false,
     this.unavailableParts = const [],
+    this.countsOnly = false,
   });
 
   /// صاحب الحساب (الكلفة والربح في الردّ) — قرار الخادم لا التطبيق.
@@ -149,6 +150,10 @@ class PackageReport {
   final List<PackageReportRow> rows;
   final PackageReportTotals totals;
   final bool subscribersPartial;
+
+  /// ١٤ نوفمبر (المالك: الخيار «٣»): ردّ «الأعداد وحدها» (`counts_only=1`) — لا أسعار قُرئت، فالسعر والكلفة و«المقدَّر» null.
+  /// إظهار الأرباح يطلب التقرير الكامل (الأسعار حيّة).
+  final bool countsOnly;
 
   /// activity · package_cost · packages · subscribers — ما تعذّر جزءاً جزءاً (نصّه `pkgdist.part_<الجزء>`).
   final List<String> unavailableParts;
@@ -206,6 +211,7 @@ class PackageReport {
           : const PackageReportTotals(),
       subscribersPartial: d['subscribers_partial'] == true,
       unavailableParts: parts.toList(),
+      countsOnly: d['counts_only'] == true,
     );
   }
 }
@@ -225,6 +231,7 @@ class PackageReportApi {
     List<String>? userIds,
     int? employeeId,
     String? companyKey,
+    bool countsOnly = false,
   }) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -235,6 +242,8 @@ class PackageReportApi {
           if (companyKey == null && userIds != null && userIds.isNotEmpty)
             'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
           if (employeeId != null) 'employee_id': '$employeeId',
+          // بطاقة الرئيسيّة والأرباح مخفيّة: الأعداد وحدها (بلا أسعار — أسرع ولا مبلغ قديم)؛ الخادم القديم يتجاهله فيردّ الكامل.
+          if (countsOnly) 'counts_only': '1',
         },
         options: Options(
           // عدّ مشتركي كلّ باقة قد يأخذ ثوانيَ للحسابات الكبيرة أوّل مرّة (الخادم يتذكّره ٣ دقائق).
