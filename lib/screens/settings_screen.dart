@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/auth_api.dart';
 import '../api/el_deposit_password.dart';
@@ -31,6 +32,8 @@ import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
 import 'whatsapp/connection_alerts_screen.dart';
 import 'whatsapp/whatsapp_schedules_screen.dart';
+import 'whatsapp/message_exclusions_screen.dart';
+import '../api/message_exclusions_api.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
 import 'view_scope_screen.dart';
@@ -64,6 +67,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     PermissionsService.changes.addListener(_onPermsChanged);
     // حالة باسورد إيداع ايرث لنك المحفوظ (صفّ صاحب الحساب أدناه).
     if (_elOwner) ElDepositPassword.load();
+    // «المستثنون من الرسائل»: هل الميزة مفتوحةٌ للحساب وكم مستثنى (صفّها في قسم الواتساب)
+    unawaited(MessageExclusionsState.ensureFresh());
   }
 
   /// صاحب حساب ايرث لنك (لا موظّف) — يحفظ باسورد الإيداع ويغيّره ويمسحه.
@@ -271,6 +276,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     builder: (_) => const ConnectionAlertsScreen(),
                   ),
                 ),
+              ),
+              // «المستثنون من الرسائل» (المالك ١٤ نوفمبر): قائمة من أُوقفت رسائل النظام عنهم — تظهر حين تُفتح الميزة للحساب؛ من لا
+              // يُدير (موظّفٌ بلا صلاحيّتها — يقوله الخادم) يراها بمكانها مقفلة.
+              ValueListenableBuilder<MxSnapshot?>(
+                valueListenable: MessageExclusionsState.snapshot,
+                builder: (context, snap, _) {
+                  if (snap == null || !snap.enabled) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: Sp.xs),
+                    child: _Row(
+                      icon: LucideIcons.bellOff,
+                      label: 'المستثنون من الرسائل',
+                      trailing: snap.count > 0 ? '${snap.count}' : null,
+                      locked: !snap.canManage,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MessageExclusionsScreen(),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: Sp.md),
             ],

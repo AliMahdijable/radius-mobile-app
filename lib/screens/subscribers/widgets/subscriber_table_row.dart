@@ -314,6 +314,7 @@ class SubscriberTableRow extends StatefulWidget {
     required this.onTap,
     required this.onToggleSelect,
     this.hasTelegram = false,
+    this.messagesMuted = false,
     this.last = false,
   });
 
@@ -322,6 +323,9 @@ class SubscriberTableRow extends StatefulWidget {
 
   /// مربوطٌ ببوت تلغرام — شارةٌ صغيرة بجنب الاسم كبطاقة الهاتف.
   final bool hasTelegram;
+
+  /// «المستثنون من الرسائل»: أوقف الوكيل رسائل النظام عنه — جرسٌ مشطوب بجنب الاسم كبطاقة الهاتف.
+  final bool messagesMuted;
 
   final Subscriber sub;
   final SubscriberTableColumns columns;
@@ -453,7 +457,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
   /// شارات بجنب الاسم: مربوط بتلغرام + «متّصل بلا باقة» — كبطاقة الهاتف.
   Widget? _nameTrailing(Subscriber s) {
     final onlineExpired = s.isOnline && s.isExpired;
-    if (!widget.hasTelegram && !onlineExpired) return null;
+    if (!widget.hasTelegram && !onlineExpired && !widget.messagesMuted) return null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -462,7 +466,14 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
             message: 'subscribers.telegram_linked'.tr(),
             child: Icon(Icons.send_rounded, size: 13, color: AppColors.brandAccent),
           ),
-        if (widget.hasTelegram && onlineExpired) const SizedBox(width: 5),
+        if (widget.messagesMuted) ...[
+          if (widget.hasTelegram) const SizedBox(width: 5),
+          Tooltip(
+            message: 'مستثنى من الرسائل',
+            child: Icon(LucideIcons.bellOff, key: const ValueKey('mx-muted'), size: 13, color: AppColors.textLabel),
+          ),
+        ],
+        if ((widget.hasTelegram || widget.messagesMuted) && onlineExpired) const SizedBox(width: 5),
         if (onlineExpired)
           Tooltip(
             message: 'subscribers.filter_online_no_plan'.tr(),

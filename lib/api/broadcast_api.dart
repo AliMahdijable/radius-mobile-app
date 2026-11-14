@@ -234,12 +234,14 @@ class BroadcastApi {
       // «تحديد المدينين»: من لم يُعرف عمر دينه لم يُشمل — الخادم يقوله في نصّه، فيُعرض كما هو بدل الصمت
       final df = sum['debtFilter'] is Map ? (sum['debtFilter'] as Map) : null;
       final unknownAge = df == null ? 0 : _toInt(df['unknownAge']);
+      // «المستثنون من الرسائل» (١٤ نوفمبر): من استثناهم الوكيل لم يُدرَج لهم شيء — الخادم يقوله في نصّه («استُثني N»)، فيُعرض كما هو
+      final byList = _toInt(sum['excludedByList']);
       return (
         ok: true,
         queued: queued == null ? null : _toInt(queued),
         excludedHighRisk: excluded == null ? null : _toInt(excluded),
         // الحساب الكبير «عام»: الخادم بدأ التجهيز في الخلفيّة (pending) — رسالته تُعرض كما هي، والنتيجة بإشعار
-        message: data['pending'] == true || unknownAge > 0 ? data['message']?.toString() : null,
+        message: data['pending'] == true || unknownAge > 0 || byList > 0 ? data['message']?.toString() : null,
         code: null,
       );
     } on DioException catch (e) {
@@ -766,6 +768,7 @@ class BroadcastPreview {
     this.notDebtor = 0,
     this.blocked = 0,
     this.totalBound = 0,
+    this.excludedByList = 0,
   });
 
   /// الحساب الكبير: الخادم ما زال يحسب (202) — تُعاد المعاينة بعد ثوانٍ.
@@ -786,7 +789,8 @@ class BroadcastPreview {
         notFound = 0,
         notDebtor = 0,
         blocked = 0,
-        totalBound = 0;
+        totalBound = 0,
+        excludedByList = 0;
 
   final bool pending;
   final String? pendingMessage;
@@ -796,6 +800,9 @@ class BroadcastPreview {
   final int notDebtor;
   final int blocked;
   final int totalBound;
+
+  /// «المستثنون من الرسائل»: من استثناهم الوكيل من هذا التبليغ — خارج [count] أصلاً (يغيب عن الردّ = صفر).
+  final int excludedByList;
   final int count;
   final int audience;
   final int excludedHighRisk;
@@ -829,6 +836,7 @@ class BroadcastPreview {
       count: _toInt(j['count']),
       audience: _toInt(j['audience']),
       excludedHighRisk: _toInt(j['excludedHighRisk']),
+      excludedByList: _toInt(j['excludedByList']),
       deduped: _toInt(j['deduped']),
       rows: rows,
       truncated: j['truncated'] == true,

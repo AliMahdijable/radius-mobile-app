@@ -567,9 +567,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       // تذكيرٍ بالديون تُكتشَف بعد أسبوع «ليش ما وصلته رسالة؟».
       final ex = r.excludedHighRisk ?? 0;
       _snack(
-        ex > 0
-            ? 'أُدرجت ${r.queued ?? 0} رسالة — واستُبعد $ex لخطر الحظر'
-            : 'تم إرسال ${r.queued ?? targets.length} رسالة إلى الطابور',
+        // نصّ الخادم حين يحمل ما يجب أن يُقال (مستثنون من الرسائل، عمرٌ مجهول، تجهيزٌ في الخلفيّة) — وإلّا جملتنا
+        r.message ??
+            (ex > 0
+                ? 'أُدرجت ${r.queued ?? 0} رسالة — واستُبعد $ex لخطر الحظر'
+                : 'تم إرسال ${r.queued ?? targets.length} رسالة إلى الطابور'),
         isError: false,
       );
       setState(() {
@@ -2123,6 +2125,7 @@ class _FilteredConfirmSheetState extends State<_FilteredConfirmSheet> {
       if (pv.legacy > 0) '${pv.legacy} عليهم «دين قديم» (أقدم من سجلّاتنا) — مشمولون بأيّ عمر',
       if (pv.unknownAge > 0)
         pv.ageUnsupported ? 'عمر الدين غير معروف لهذه الشركة — ${pv.unknownAge} لم يُشملوا' : '${pv.unknownAge} بلا عمر دينٍ معروف — لم يُشملوا',
+      if (pv.excludedByList > 0) '${pv.excludedByList} ضمن «المستثنون من الرسائل» — لا يصلهم',
       if (pv.deduped > 0) '${pv.deduped} يتشاركون رقماً — رسالةٌ واحدة لكلّ رقم',
       if (pv.missing > 0) '${pv.missing} من المختارين لم يعودوا في القائمة',
       if (pv.partial) 'تعذّر جلب كلّ المشتركين — من لم يُجلب لا يصله',

@@ -10,6 +10,7 @@ import '../../api/device_probe_api.dart';
 import '../../api/big_subscribers_api.dart';
 import '../../api/sales_api.dart';
 import '../../api/subscriber_contacts_api.dart';
+import '../../api/message_exclusions_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/platform/app_platform.dart';
@@ -57,6 +58,7 @@ import 'widgets/subscriber_actions.dart';
 import 'widgets/kit_fiber_card.dart';
 import 'widgets/private_note_card.dart';
 import 'widgets/subscriber_contacts_card.dart';
+import 'widgets/message_exclusion_card.dart';
 import 'connection_alert_flow.dart';
 import '../../widgets/company_tag.dart';
 import '../../widgets/merged_section.dart';
@@ -268,6 +270,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     ConnectionAlertSettings.ensureLoaded();
     // «بيع مادّة» يظهر حين تكون «المبيعات» مفعّلةً للحساب (مفتاحٌ بالخادم) — حالتها قد لم تُسأل بعد إن فُتح المشترك أوّلاً.
     unawaited(SalesState.ensureFresh());
+    // «المستثنون من الرسائل»: قائمة الصفحة المفتوحة (لكرت «لا تصله» وزرّ «إيقاف الرسائل») — قد يُفتح المشترك من البحث لا القائمة.
+    if (sub.companyKey == null) unawaited(MessageExclusionsState.ensureFresh());
     // Keep the open detail screen in sync with backend state. Any
     // mutation done from the operations grid (activate / extend /
     // pay-debt / add-debt / discount / disconnect / toggle / …)
@@ -553,6 +557,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       controller: _privateNote,
                     ),
                     // «أرقام تواصل إضافيّة» صارت داخل بطاقة الهويّة تحت الهاتف (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت») — لا كرت منفصل.
+                    // «المستثنون من الرسائل» (المالك ١٤ نوفمبر): من أُوقفت رسائله وحده يُعرض له كرت «لا تصله: …»؛ الإيقاف من «المزيد».
+                    if (sub.companyKey == null)
+                      MessageExclusionCard(
+                        key: ValueKey('mx-${sub.username}'),
+                        sub: sub,
+                        pageLocked: _pageLock != null,
+                        onEdit: _editMessageExclusion,
+                      ),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود
@@ -1263,6 +1275,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// والقراءات (الحركات، الجلسات، الاستهلاك، النسخ، الطباعة) كما هي.
   String? get _pageLock => MergedOps.writeLock(sub);
 
+  /// ورقة «إيقاف الرسائل» لهذا المشترك — ما يُحفظ يرسم الكرت والقائمة فوراً ([MessageExclusionsState]).
+  void _editMessageExclusion() {
+    if (sub.companyKey != null || !MessageExclusionsState.canManage) return;
+    unawaited(showMessageExclusionSheet(context, subject: mxSubjectOf(sub)).then((changed) {
+      if (changed == true && mounted) setState(() {});
+    }));
+  }
+
   /// سبب قفل زرّ مالٍ يُبنى على الدين المعروض ([key]: «تسديد»، «إضافة دين»): قفل الصفحة أوّلاً، ثمّ أرقامٌ لم تتحدّث ([_staleLock])
   /// لمن يملك المفتاح — ومن لا يملكه يبقى قفله قفل الصلاحيّة. null ⇒ لا قفل غير الصلاحيّة.
   String? _debtLock(String key) => _pageLock ?? (_has(key) ? _staleLock : null);
@@ -1536,6 +1556,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             locked: !_has('subscribers.edit'),
             unavailable: _pageLock,
             onTap: !_has('subscribers.edit') || !_subContacts.ready ? null : () => _subContacts.edit(context),
+          ),
+        // «المستثنون من الرسائل» (المالك ١٤ نوفمبر: «ذولا ما تروح لهم رسائل… التفعيل، التنبيهات، التذكير، التبليغات»): إيقاف رسائل
+        // النظام عن هذا المشترك — كلّها أو أنواعٌ منها — على خادمنا. الميزة مطفأةٌ للحساب ⇒ لا زرّ؛ من لا يُدير (موظّفٌ بلا
+        // صلاحيّتها) يراه بمكانه مقفلاً.
+        if (sub.companyKey == null && MessageExclusionsState.enabled)
+          SubAction(
+            icon: LucideIcons.bellOff,
+            label: MessageExclusionsState.of(sub.username) == null ? 'إيقاف الرسائل' : 'تعديل الرسائل الموقوفة',
+            locked: !MessageExclusionsState.canManage,
+            unavailable: _pageLock,
+            onTap: !MessageExclusionsState.canManage ? null : _editMessageExclusion,
           ),
         if (sub.hasDebt && _shows('subscribers.send_whatsapp'))
           SubAction(

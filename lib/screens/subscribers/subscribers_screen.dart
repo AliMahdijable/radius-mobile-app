@@ -17,6 +17,7 @@ import '../../api/big_subscribers_api.dart';
 import '../../api/managers_api.dart';
 import '../../api/company_route.dart';
 import '../../api/telegram_api.dart';
+import '../../api/message_exclusions_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/fit_hint.dart';
 import '../../core/util/format.dart';
@@ -57,6 +58,7 @@ import 'widgets/sort_sheet.dart';
 import 'widgets/debt_age.dart';
 import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
+import 'widgets/message_exclusion_card.dart';
 import 'widgets/subscriber_table_row.dart';
 import 'widgets/detail_pane_observer.dart';
 import 'widgets/subscriber_columns.dart';
@@ -416,6 +418,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.focus.addListener(_onMergedFocus);
     VpnNow.mergedScope = _vpnMergedScope;
     PermissionsService.changes.addListener(_onPermsChanged);
+    // «المستثنون من الرسائل» (١٤ نوفمبر): قائمة الصفحة المفتوحة — للجرس المشطوب بجنب الاسم وزرّ الجماعيّ؛ تُرسم حين تصل وحين تتغيّر
+    // (تُقرأ مع القائمة في [_load]).
+    MessageExclusionsState.snapshot.addListener(_onMessagesMutedChanged);
     SubscriberColumnPrefs.layout.addListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.addListener(_onColumnsChanged);
     // قراءةٌ وصلت بعد سقف فحصها تُحفظ ⇒ توقظ البطاقات والجدول كقراءة الموجة.
@@ -445,6 +450,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   bool _wasLocked = false;
 
   /// مفتاحٌ مُنح أثناء الجلسة (تحديث `/me`): يبدأ التحميل والاستطلاع الآن.
+  void _onMessagesMutedChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// «المستثنون من الرسائل»: صفٌّ من الصفحة المفتوحة أوقف الوكيل رسائله (صفوف «كل الشركات» بلا علامة — تُدار من صفحة شركتها).
+  bool _messagesMuted(Subscriber s) => s.companyKey == null && MessageExclusionsState.of(s.username) != null;
+
   void _onPermsChanged() {
     if (!mounted) return;
     final locked = _locked;
@@ -782,6 +794,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.focus.removeListener(_onMergedFocus);
     if (VpnNow.mergedScope == _vpnMergedScope) VpnNow.mergedScope = null;
     PermissionsService.changes.removeListener(_onPermsChanged);
+    MessageExclusionsState.snapshot.removeListener(_onMessagesMutedChanged);
     SubscriberColumnPrefs.layout.removeListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.removeListener(_onColumnsChanged);
     _hscroll.dispose();
@@ -959,6 +972,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    // قائمة المستثنين من الرسائل مع كلّ تحميل: تبديل الشركة يمسحها ([SessionManager]) فتُقرأ هنا لصفحتها الجديدة (وإلّا بمدّتها).
+    unawaited(MessageExclusionsState.ensureFresh());
 
     if (_mergedOn) {
       await _loadMerged();
@@ -1204,6 +1219,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   /// [pull]: سحبٌ يدويّ — «كل الشركات» يتخطّى مخبأ كلّ الشركات؛ وبعد عمليّةٍ تُجلب شركتها وحدها (أُسقطت قائمتها بعد الكتابة).
   Future<void> _refresh({bool pull = false}) async {
+    // قائمة المستثنين مع القائمة (السحب للتحديث يقرؤها الآن؛ وإلّا بمدّتها)
+    unawaited(MessageExclusionsState.ensureFresh(force: pull));
     if (_mergedOn) {
       setState(() => _refreshing = true);
       await _loadMerged(fresh: pull);
@@ -1979,6 +1996,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     return null;
   }
 
+  /// «المستثنون من الرسائل»: إيقاف رسائل النظام عن المحدَّدين دفعةً (أو السماح بها لمن أُوقفت عنه منهم) — للصفحة المفتوحة وحدها.
+  Future<void> _openBulkMessages() async {
+    final rows = _bulkRowsOrRefuse(_filteredSubscribersForBulk());
+    if (rows == null || rows.isEmpty) return;
+    final done = await showBulkMessageExclusionSheet(context, subjects: [for (final s in rows) mxSubjectOf(s)]);
+    if (!mounted || done != true) return;
+    _exitSelection();
+  }
+
   Future<void> _openBulkPayDebt() async {
     final debtors =
         _filteredSubscribersForBulk().where((s) => s.hasDebt).toList();
@@ -2508,6 +2534,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                                   ? _telegramBoundIdx
                                                   : (_mergedTelegram[s.companyKey] ?? const <String>{}))
                                               .contains(s.idx.toString()),
+                                      messagesMuted: _messagesMuted(s),
                                       onTap: () => _openDetail(s),
                                       onToggleSelect: _mergedOn ? null : () => _toggleSelect(s),
                                       last: i == page.length - 1 && remaining <= 0,
@@ -2529,6 +2556,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                                 ? _telegramBoundIdx
                                                 : (_mergedTelegram[s.companyKey] ?? const <String>{}))
                                             .contains(s.idx.toString()),
+                                    messagesMuted: _messagesMuted(s),
                                     showUsage: UsagePrefs.enabled.value,
                                     onTap: () {
                                       if (_selectionMode) {
@@ -2634,6 +2662,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 onDisable: () => _bulk(_BulkAction.disable),
                 onEnable: () => _bulk(_BulkAction.enable),
                 onDelete: () => _bulk(_BulkAction.delete),
+                onMessages: _mergedOn ? null : _openBulkMessages,
               ),
             )
           : null,
@@ -3453,6 +3482,7 @@ class _BulkActionBar extends StatelessWidget {
     required this.onDisable,
     required this.onEnable,
     required this.onDelete,
+    this.onMessages,
   });
   final int selectedCount;
   final int debtorCount;
@@ -3480,6 +3510,10 @@ class _BulkActionBar extends StatelessWidget {
   final VoidCallback onDisable;
   final VoidCallback onEnable;
   final VoidCallback onDelete;
+
+  /// «المستثنون من الرسائل» (١٤ نوفمبر): إيقاف رسائل النظام عن المحدَّدين. null («كل الشركات») أو الميزة مطفأةٌ للحساب ⇒ لا زرّ.
+  /// زرٌّ بأيقونته وحدها في آخر الصفّ الثاني (لا يضيق به الشريط على ٣٢٠)؛ من لا يُدير (موظّفٌ بلا صلاحيّتها) يراه مقفلاً.
+  final VoidCallback? onMessages;
 
   @override
   Widget build(BuildContext context) {
@@ -3522,9 +3556,11 @@ class _BulkActionBar extends StatelessWidget {
     final showPay =
         debtorCount > 0 && permShown(const ['subscribers.pay_debt']);
     final showDisconnect = onlineCount > 0 && showToggle && !(sessionOnly && subscriberDisconnectHidden());
+    final showMessages = onMessages != null && sessionOnly && MessageExclusionsState.enabled;
+    final canMessages = MessageExclusionsState.canManage;
     // لا زرّ يُعرض أصلاً (لا مفتاح يُمنح لهذا الدور) — عمليّاً لا يقع.
     if (!showRenew && !showPay && !showDisconnect && !showToggle &&
-        !showDelete) {
+        !showDelete && !showMessages) {
       return const SizedBox.shrink();
     }
     final primaryChildren = <Widget>[];
@@ -3587,10 +3623,10 @@ class _BulkActionBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (primaryChildren.isNotEmpty) Row(children: primaryChildren),
-            if (primaryChildren.isNotEmpty && (showToggle || showDelete))
+            if (primaryChildren.isNotEmpty && (showToggle || showDelete || showMessages))
               const SizedBox(height: 6),
-            // Secondary row: Disable / Enable / Delete
-            if (showToggle || showDelete)
+            // Secondary row: Disable / Enable / Delete (+ «إيقاف الرسائل» بأيقونته)
+            if (showToggle || showDelete || showMessages)
               Row(
                 children: [
                   if (showToggle) ...[
@@ -3631,6 +3667,17 @@ class _BulkActionBar extends StatelessWidget {
                         onTap: onDelete,
                       ),
                     ),
+                  if (showMessages) ...[
+                    if (showToggle || showDelete) const SizedBox(width: 6) else const Spacer(),
+                    _SecondaryIconBtn(
+                      key: const ValueKey('subs-bulk-messages'),
+                      icon: LucideIcons.bellOff,
+                      label: 'إيقاف الرسائل',
+                      color: AppColors.textLabel,
+                      locked: !canMessages,
+                      onTap: onMessages!,
+                    ),
+                  ],
                 ],
               ),
           ],
@@ -3781,6 +3828,53 @@ class _SecondaryBtn extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
               fontWeight: FontWeight.w700, fontSize: 11.5, height: 1.35)),
+    );
+  }
+}
+
+/// زرٌّ ثانويّ بأيقونته وحدها (اسمه للقارئ الآليّ والتلميح) — لإجراءٍ جماعيّ خامس لا يتّسع له نصٌّ على هاتفٍ ضيّق.
+class _SecondaryIconBtn extends StatelessWidget {
+  const _SecondaryIconBtn({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.locked = false,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  /// لا صلاحيّة — يبقى بمكانه بقفل، ونقرته رسالة القفل لا العمليّة.
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Semantics(
+      button: true,
+      label: locked ? 'locked.a11y'.tr(args: [label]) : label,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: locked ? LockedStyle.glyph : color,
+            backgroundColor: locked ? AppColors.surfaceSunken : null,
+            side: BorderSide(color: locked ? AppColors.border : color.withValues(alpha: 0.4)),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(44, 34),
+            maximumSize: const Size(44, 34),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+          ),
+          onPressed: locked ? () => showNoPermission(context, action: true) : onTap,
+          child: Icon(locked ? LucideIcons.lock : icon, size: 15),
+        ),
+      ),
     );
   }
 }

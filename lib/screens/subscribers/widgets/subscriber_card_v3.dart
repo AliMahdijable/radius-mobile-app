@@ -89,6 +89,7 @@ class SubscriberCardV3 extends StatelessWidget {
     this.onOpenLocation,
     this.onAlertConnection,
     this.hasTelegram = false,
+    this.messagesMuted = false,
     this.showUsage = false,
   });
 
@@ -102,6 +103,10 @@ class SubscriberCardV3 extends StatelessWidget {
   /// (توجيه تلقائي في الـbackend). المخطّط لا يعرّف الشارة، لكنّها
   /// موجودة منذ 2026-08-26 ولا يصحّ إسقاطها بإعادة التصميم.
   final bool hasTelegram;
+
+  /// «المستثنون من الرسائل» (١٤ نوفمبر): أوقف الوكيل رسائل النظام عنه (كلّها أو أنواعاً) ⇒ جرسٌ مشطوب صغير بجنب الاسم —
+  /// بمقاس شارة تلغرام فلا يكبر الكرت.
+  final bool messagesMuted;
 
   /// زرّ «تذكير دين» في شريط الدين. null = الزرّ يختفي (صلاحيّات).
   final VoidCallback? onSendDebtReminder;
@@ -217,6 +222,14 @@ class SubscriberCardV3 extends StatelessWidget {
                     const SizedBox(width: 6),
                     Icon(Icons.send_rounded,
                         size: 13, color: AppColors.brandAccent),
+                  ],
+                  if (messagesMuted) ...[
+                    const SizedBox(width: 6),
+                    Icon(LucideIcons.bellOff,
+                        key: const ValueKey('mx-muted'),
+                        size: 13,
+                        color: AppColors.textLabel,
+                        semanticLabel: 'مستثنى من الرسائل'),
                   ],
                 ],
               ),

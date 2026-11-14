@@ -407,14 +407,19 @@ class ElEmployeePerms {
   /// (بوّابتاهما تمرّران `connection-alerts` و`agent-alerts` منذ ٦ نوفمبر؛ فايبر اكس لا).
   static const alertKeys = <String>{'conn_alerts.use', 'conn_alerts.notify', 'agent_alerts.use', 'agent_alerts.notify'};
 
+  /// «المستثنون من الرسائل» (١٤ نوفمبر — الخادم `server/messageExclusions.js`): إضافة مشتركٍ لقائمة من لا تصلهم رسائل النظام وإزالته —
+  /// جدولنا وحده ومساره ممرَّرٌ لكلّ مزوّد. مطفأٌ افتراضاً ويُمنح فرادى؛ خارج الكتالوج ما دامت الميزة مطفأةً للحساب.
+  static const messageExclusionKeys = <String>{'whatsapp.exclusions'};
+
   /// خارج الأدوار الجاهزة: الدور لا يلمسها ([presets] · `_applyElPreset`) ولا تُحسب في مطابقته ([matching]) — تُمنح فرادى.
-  static const roleFreeKeys = <String>{...checkKeys, ...vpnKeys, ...alertKeys};
+  static const roleFreeKeys = <String>{...checkKeys, ...vpnKeys, ...alertKeys, ...messageExclusionKeys};
 
   /// ما يُجري عمليّةً من [roleFreeKeys] (لا فحصاً ولا عرضاً ولا إشعاراً) بالاسم الذي يُقال للمالك: «ربط VPN»، وقسم «تنبيهات المشتركين»
   /// بموافقته وإرساله. الدور لا يلمسها، فإن بقيت ممنوحةً سمّاها سطر الدور ([captionFor]).
   static const roleFreeOperations = <String, String>{
     'conn_vpn.link': 'ربط VPN',
     'conn_alerts.use': 'تنبيهات المشتركين (الموافقة والإرسال)',
+    'whatsapp.exclusions': 'المستثنون من الرسائل (إضافة وإزالة)',
   };
 
   /// سطر الوصف تحت الأدوار للدور المطابق [p] (مراجعة 3.0.18): «عرض فقط» بلا أيّ عمليّة — إلّا ما منحه المالك فرادى من
@@ -498,6 +503,8 @@ class ElEmployeePerms {
     ...checkKeys,
     ...vpnKeys,
     ...alertKeys,
+    // «المستثنون من الرسائل» (١٤ نوفمبر) — مساره ممرَّرٌ للشركات المُضافة كذلك
+    ...messageExclusionKeys,
   };
 
   /// موظّفونا لحساب فايبر اكس (٣١ أكتوبر — المالك: «فايبر اكس خلي موظفينا فقط… احنه اصلا موفرين هلمزية»): ما يفرضه
@@ -544,6 +551,8 @@ class ElEmployeePerms {
     ...ticketKeys,
     // الفحصان على الشبكة وحدهما — بوّابة فايبر اكس لا تمرّر ما عبر VPN ولا التنبيهات
     ...checkKeys,
+    // «المستثنون من الرسائل» (١٤ نوفمبر) — مساره ممرَّرٌ لفايبر اكس كذلك
+    ...messageExclusionKeys,
   };
 
   /// ما يختلف معناه لموظّف فايبر اكس عن ايرث لنك.
@@ -600,6 +609,8 @@ class ElEmployeePerms {
     ...checkKeys,
     ...vpnKeys,
     ...alertKeys,
+    // «المستثنون من الرسائل» (١٤ نوفمبر) — تُمنح وحدها (خارج الأدوار الجاهزة).
+    ...messageExclusionKeys,
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في

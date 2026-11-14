@@ -15,6 +15,7 @@ import '../api/national_more_api.dart';
 import '../api/national_sheet_api.dart';
 import '../api/renew_requests_api.dart';
 import '../api/tickets_api.dart';
+import '../api/message_exclusions_api.dart';
 import '../api/receipts_archive_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
@@ -117,6 +118,8 @@ class SessionManager {
     _guardSync('RenewRequestsState.reset', () => RenewRequestsState.reset());
     // «التذاكر» — ملخّص حساب المدير السابق وعدد غير المقروءة.
     _guardSync('TicketsState.reset', () => TicketsState.reset());
+    // «المستثنون من الرسائل» — قائمة حساب المدير السابق (من أُوقفت رسائلهم).
+    _guardSync('MessageExclusionsState.reset', () => MessageExclusionsState.reset());
     // المشروع الوطنيّ: المفتاح التجريبيّ وقدرات مستخدم البوّابة لحساب المدير السابق.
     _guardSync('NationalMoreState.reset', () => NationalMoreState.reset());
     _guardSync('NationalSheetApi.reset', () => NationalSheetApi.reset());
