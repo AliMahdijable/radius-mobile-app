@@ -125,6 +125,9 @@ const expectedSubscriberWriters = {
   'SubscribersApi.delete', 'SubscribersApi.disconnect', 'SubscribersApi.extend', 'SubscribersApi.generatePortalQrToken',
   'SubscribersApi.payDebt', 'SubscribersApi.receiptLink', 'SubscribersApi.setDiscount', 'SubscribersApi.setLocation',
   'SubscribersApi.toggle', 'SubscribersApi.toggleResult', 'SubscribersApi.transferSubscriber', 'SubscribersApi.updateSubscriber',
+  // «تأكيد رقم المشترك بالواتساب» (فايبر الجزيرة، ١٤ نوفمبر): POST /api/v2/subscribers/:idx/pay-otp/{send,confirm} — لا مال، لكنّه
+  // يرسل رسالةً لرقم مشتركٍ بعينه ⇒ بغلاف شركة الصفّ كالتفعيل
+  'SubscribersApi.payOtp',
 };
 
 /// الجماعيّة: صفوف «كل الشركات» تُرفض قبلها في دالّتها نفسها (أو في دالّة العرض التي وحدها تبني الشيت).
@@ -142,6 +145,8 @@ const reviewedWriterPrefixes = <String, List<String>>{
   'lib/screens/subscribers/sheets/activate_sheet.dart KitCardApi.start': ['MergedOps.run(widget.sub,'],
   'lib/screens/subscribers/sheets/activate_sheet.dart SubscribersApi.activate':
       ['MergedOps.run(widget.sub,', 'MergedOps.run(widget.sub,', 'MergedOps.run(widget.sub,'],
+  // «أرسل الرمز» و«تأكيد» لمشترك الصفّ نفسه (غلاف التفعيل في الشيت نفسه)
+  'lib/screens/subscribers/sheets/activate_sheet.dart SubscribersApi.payOtp': ['MergedOps.run(widget.sub,', 'MergedOps.run(widget.sub,'],
   'lib/screens/subscribers/sheets/add_credit_sheet.dart SubscribersApi.addCredit': ['MergedOps.write(widget.sub,'],
   'lib/screens/subscribers/sheets/add_debt_sheet.dart SubscribersApi.addDebt': ['MergedOps.write(widget.sub,'],
   'lib/screens/subscribers/sheets/add_subscriber_sheet.dart SubscribersApi.createSubscriber': ['_co('],
