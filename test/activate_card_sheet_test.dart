@@ -187,6 +187,115 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
+  /* ── «طريق موقع الشحن» (فايبر الجزيرة): الخادم يقول pay_rail — الكارت بطاقات الوكيل في الموقع أو بطاقةٌ خارجيّة برقمها ── */
+
+  Map<String, dynamic> railData({Object? ownCards = 0, bool otp = false, bool option = true}) => {
+        ...cardsData(available: ownCards),
+        'manager_balance': 7200,
+        'pay_rail': {
+          'on': true,
+          'ok': true,
+          'balance': 7200,
+          'amount': 35000,
+          'own_cards': ownCards,
+          'requires_otp': otp,
+          'loan_available': false,
+          'external_card': true,
+          'option': option ? {'id': '11', 'name': 'Family'} : null,
+        },
+      };
+  const pinKey = ValueKey('rail-card-pin');
+
+  testWidgets('طريق موقع الشحن: بلا بطاقاتٍ بالموقع ⇒ حقل البطاقة الخارجيّة؛ ٨ خانات تفتح الزرّ وتُرسل cardPin مع method=card',
+      (t) async {
+    server.activationExtra = railData();
+    await open(t);
+    expect(find.byKey(pinKey), findsNothing, reason: 'الحقل للكارت وحده');
+    await t.tap(find.text('كارت (0)'));
+    await t.pumpAndSettle();
+    expect(find.byKey(pinKey), findsOneWidget);
+    expect(footer('ما عندك كارت لهالباقة'), findsOneWidget);
+    expect(find.textContaining('اكتب رقم بطاقة خارجيّة'), findsOneWidget, reason: 'السطر يدلّ على البديل');
+
+    // رموزٌ غير الأرقام والحروف الإنكليزيّة لا تُكتب، وما دون ٨ خانات يقفل الزرّ بسببه
+    await t.enterText(find.byKey(pinKey), 'AB-12 c');
+    await t.pumpAndSettle();
+    expect(t.widget<TextField>(find.byKey(pinKey)).controller!.text, 'AB12c');
+    expect(footer('رقم البطاقة ٨ خانات'), findsOneWidget);
+    await t.tap(footer('رقم البطاقة ٨ خانات'));
+    await t.pumpAndSettle();
+    expect(server.activateBodies, isEmpty, reason: 'الزرّ معطّل');
+
+    await t.enterText(find.byKey(pinKey), 'AB12cd34');
+    await t.pumpAndSettle();
+    expect(find.textContaining('يُفعَّل بالبطاقة الخارجيّة'), findsOneWidget);
+    await submit(t, 'تجديد بكارت');
+    final body = server.activateBodies.single;
+    expect(body['method'], 'card');
+    expect(body['cardPin'], 'AB12cd34');
+    expect(body.containsKey('pin'), isFalse, reason: 'pin حقل ايرث لنك لا هذا');
+    expect(t.takeException(), isNull);
+    await drainSnack(t);
+  });
+
+  testWidgets('طريق موقع الشحن: ببطاقاتٍ بالموقع وبلا رقم ⇒ method=card بلا cardPin؛ والرصيد لا يحمل الرقم ولو كُتب قبله',
+      (t) async {
+    server.activationExtra = railData(ownCards: 2);
+    await open(t);
+    await t.tap(find.text('كارت (2)'));
+    await t.pumpAndSettle();
+    expect(find.byKey(pinKey), findsOneWidget);
+    await submit(t, 'تجديد بكارت');
+    expect(server.activateBodies.single['method'], 'card');
+    expect(server.activateBodies.single.containsKey('cardPin'), isFalse);
+    await drainSnack(t);
+
+    server = _Server()..activationExtra = railData(ownCards: 2);
+    ApiClient.dio.httpClientAdapter = server;
+    await open(t);
+    await t.tap(find.text('كارت (2)'));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(pinKey), 'AB12cd34');
+    await t.pumpAndSettle();
+    await t.tap(find.text('رصيد'));
+    await t.pumpAndSettle();
+    expect(find.byKey(pinKey), findsNothing);
+    await submit(t, 'تجديد الآن');
+    final body = server.activateBodies.single;
+    expect(body.containsKey('method'), isFalse);
+    expect(body.containsKey('cardPin'), isFalse);
+    await drainSnack(t);
+  });
+
+  testWidgets('طريق موقع الشحن: رقمٌ غير مؤكَّد ⇒ السبب ظاهر والزرّ مقفل بأيّ طريقة',
+      (t) async {
+    server.activationExtra = railData(ownCards: 2, otp: true);
+    await open(t);
+    expect(find.textContaining('تأكيد رقم هاتف هذا المشترك بالواتساب'), findsOneWidget);
+    expect(footer('غير متاح عبر موقع الشحن'), findsOneWidget);
+    await t.tap(footer('غير متاح عبر موقع الشحن'));
+    await t.pumpAndSettle();
+    expect(server.activateBodies, isEmpty);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('طريق موقع الشحن: باقة المشترك ليست بين باقات الموقع ⇒ السبب ظاهر والزرّ مقفل', (t) async {
+    server.activationExtra = railData(ownCards: 2, option: false);
+    await open(t);
+    expect(find.textContaining('ليست بين باقات موقع الشحن'), findsOneWidget);
+    expect(footer('غير متاح عبر موقع الشحن'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('خارج الطريق (لا pay_rail): لا حقل لرقم بطاقةٍ خارجيّة أبداً', (t) async {
+    server.activationExtra = cardsData(available: 3);
+    await open(t);
+    await t.tap(find.text('كارت (3)'));
+    await t.pumpAndSettle();
+    expect(find.byKey(pinKey), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('الكارت وحده: مختارٌ بلا بلاطات', (t) async {
     server.activationExtra = cardsData(credit: false, available: 2);
     await open(t);

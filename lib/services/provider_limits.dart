@@ -83,8 +83,19 @@ bool providerHidesAction(String key) {
     if (Perms.isEmployee) return ProviderService.parentIsZone && _nationalPortalOnlyKeys.contains(key);
     return _kitCapabilityKeys.contains(key) && !Perms.has(key);
   }
+  if (sessionIsJazeeraFiber && _addSubscriberKeys.contains(key)) return !Perms.isEmployee && !Perms.has('subscribers.add');
   return false;
 }
+
+/// جلسة فايبر الجزيرة: ساس SAS4 حقيقيّ برمز `ftth` في دليل الشركات (ftth.jt.iq) — لا المشروع الوطنيّ (`provider:'ftth'`، رمزه
+/// `ftth-iq` — [ProviderService.isFtth]). مالها عند موقع الشحن (pay.jt.iq)، والساس للآيبي والاتصال والاستهلاك والاسم والرمز.
+bool get sessionIsJazeeraFiber => !ProviderService.isFtth && ActiveCompany.current?.sasCode == 'ftth';
+
+/// «إضافة مشترك» لفايبر الجزيرة (المالك ١٤ نوفمبر: «اضافة مشترك لازم نخفي الزر الهم لان هم ماعدهم اضافة»): الوكيل لا ينشئ مشتركاً
+/// بأيٍّ من صفحتيه (الساس بلا صلاحيّة إنشاء، وموقع الشحن بلا صفحة إضافة — الشركة تنشئه) ⇒ لا يظهر لصاحب الصفحة أصلاً متى قالت قدراتها
+/// لا (الخادم f6ac57d: `subscribers.add` = إنشاء الساس لصفحات ftth) — لا مقفلاً بـ«اطلبها من مديرك» ولا مفتوحاً يرفضه الساس. صفحةٌ
+/// يمنحها ساسها الإنشاء تبقى كما كانت، والموظّف بما مُنح.
+const Set<String> _addSubscriberKeys = {'subscribers.add', 'subscribers.create'};
 
 /// مفتاحان يُمنحان لموظّف المشروع الوطنيّ لأقسام بوّابته وحدها (١ نوفمبر — `ElEmployeePerms.nationalExtraKeys`): «الجلسات» و«تقرير
 /// الجلسات» فيها، والتعليق على المهامّ والطلبات. ما يفتحه المفتاح نفسه خارجها — تقرير جلسات الساس العامّ، «سجلّ الجلسات» و«تعديل»

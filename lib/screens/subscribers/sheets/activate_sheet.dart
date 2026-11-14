@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:easy_localization/easy_localization.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -171,6 +172,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   late final _deposit = ElDepositPasswordController(companyKey: widget.sub.companyKey);
   final _identifierCtrl = TextEditingController();  // رقم الكارت (card)
   final _pinCtrl = TextEditingController();         // Pin الكارت (card)
+  // «طريق موقع الشحن» (فايبر الجزيرة): رقم بطاقةٍ خارجيّة (٨ خانات) — يُرسل مع الطلب وحده
+  final _railPinCtrl = TextEditingController();
   // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
   bool _confirmRepeat = false;
   // فايبر اكس: «تفعيلٌ مكرّر» عندهم (FIBERX_COOLOFF) يُعاد بتأكيدٍ صريح وحده؛ وتوقيت باقةٍ غير الحاليّة.
@@ -352,6 +355,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     _deposit.dispose();
     _identifierCtrl.dispose();
     _pinCtrl.dispose();
+    _railPinCtrl.dispose();
     super.dispose();
   }
 
@@ -634,7 +638,30 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// الكارت مختارٌ ولا يصلح الآن: لا كارت لهذه الباقة، أو رُفضت الصلاحيّة.
   /// «تعذّرت القراءة» ليست منعاً — الخادم يعيد القراءة عند التفعيل نفسه.
   bool get _cardBlocked =>
-      _cardMode && (_cardDenied || _cards.level == CardStockLevel.empty);
+      _cardMode && (_cardDenied || (_cards.level == CardStockLevel.empty && !_railExternal) || _railPinBad);
+
+  /// «طريق موقع الشحن» (فايبر الجزيرة): الخادم ينفّذ التفعيل عبر pay.jt.iq ويقول ذلك بـ`pay_rail` في بيانات التفعيل —
+  /// الرصيد رصيد الموقع، والكارت بطاقات الوكيل فيه أو بطاقةٌ خارجيّة يكتب رقمها (٨ خانات). غيابه = كما كان.
+  Map<String, dynamic>? get _rail {
+    final r = _data?['pay_rail'];
+    return r is Map && r['on'] == true ? Map<String, dynamic>.from(r) : null;
+  }
+
+  bool get _railCardField => _cardMode && _rail?['external_card'] == true;
+  String get _railPin => _railPinCtrl.text.trim();
+  bool get _railExternal => _rail != null && _cardMode && _railPin.isNotEmpty;
+  bool get _railPinBad => _railExternal && !RegExp(r'^[A-Za-z0-9]{8}$').hasMatch(_railPin);
+
+  /// سبب منع التفعيل عبر موقع الشحن (يقوله الموقع نفسه) — null بلا منع.
+  String? get _railStop {
+    final r = _rail;
+    if (r == null) return null;
+    if (r['requires_otp'] == true) {
+      return 'موقع الشحن يطلب تأكيد رقم هاتف هذا المشترك بالواتساب قبل تفعيله — أكّده من موقع الشحن أوّلاً.';
+    }
+    if (r['option'] == null) return 'باقة المشترك ليست بين باقات موقع الشحن — غيّر باقته ثمّ فعّل.';
+    return null;
+  }
 
   /// تسمية الزرّ — وسبب المنع عليه حين يُمنع الكارت (كشيت التمديد).
   String get _footerLabel {
@@ -646,9 +673,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (_kitCust) return 'تفعيل من محفظة المشترك';
     if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
     if (_pkgSwitcher) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون، وفايبر اكس من المحفظة)
+    if (_railStop != null) return 'غير متاح عبر موقع الشحن';
     if (!_cardMode) return 'sheets.renew_now'.tr();
     if (_cardDenied) return 'cards.not_allowed_short'.tr();
-    if (_cards.level == CardStockLevel.empty) {
+    if (_railPinBad) return 'رقم البطاقة ٨ خانات';
+    if (_cards.level == CardStockLevel.empty && !_railExternal) {
       return 'cards.no_card_short'.tr();
     }
     return 'cards.renew_with_card'.tr();
@@ -676,7 +705,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       if (_pay == _PayType.partial && _partialAmount <= 0) return false;
       return true;
     }
-    if (_cardBlocked) return false; // SAS4 فقط
+    if (_cardBlocked || _railStop != null) return false; // SAS4 فقط
     if (_pay == _PayType.partial) {
       // Partial only requires a positive amount. v1 lets the admin
       // pay MORE than the package price and the excess lands as a
@@ -695,7 +724,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
     // تفعّل للتوّ ⇒ لا تفعيل ثانٍ (الزرّ «تمّ» معطّل؛ وهذا لما يصل غيره — Enter على الحاسبة).
     if (_done) return;
-    if (idx == null || _data == null || _cardBlocked || _outcomeUnclear) return;
+    if (idx == null || _data == null || _cardBlocked || _railStop != null || _outcomeUnclear) return;
     final paymentType = switch (_pay) {
       _PayType.cash => 'cash',
       _PayType.partial => 'partial-cash',
@@ -809,6 +838,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
     // لقطةٌ قبل الانتظار: الردّ يُقرأ بما أُرسل لا بما صار مختاراً بعده.
     final useCard = _cardMode;
+    final railPin = useCard && _railExternal && !_railPinBad ? _railPin : null;
     setState(() => _submitting = true);
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يبني الرسالة
     // ويعيدها في wa_preview بلا إرسال، ونفتح modal بعد النجاح.
@@ -820,6 +850,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       partialAmount: _pay == _PayType.partial ? _partialAmount : null,
       skipAutoWa: manualMode,
       method: useCard ? 'card' : 'credit',
+      cardPin: railPin,
     ));
     if (!mounted) return;
     setState(() {
@@ -1304,6 +1335,37 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           if (_cardMode) ...[
             if (_methods.canChoose) const SizedBox(height: Sp.sm),
             _cardNote(),
+          ],
+          if (_railCardField) ...[
+            const SizedBox(height: Sp.sm),
+            SheetBox(
+              focused: _railPinCtrl.text.isNotEmpty,
+              child: TextField(
+                key: const ValueKey('rail-card-pin'),
+                controller: _railPinCtrl,
+                enabled: !_submitting,
+                keyboardType: TextInputType.visiblePassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                maxLength: 8,
+                textDirection: ui.TextDirection.ltr,
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]'))],
+                onChanged: (_) => setState(() {}),
+                style: AppType.input(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  counterText: '',
+                  contentPadding: EdgeInsets.zero,
+                  hintText: 'رقم بطاقة خارجيّة (٨ خانات)',
+                  hintStyle: AppType.input(color: AppColors.textPlaceholder),
+                ),
+              ),
+            ),
+          ],
+          if (_railStop != null) ...[
+            const SizedBox(height: Sp.sm),
+            _CardNote(tone: AppTone.danger, icon: LucideIcons.triangleAlert, text: _railStop!, maxLines: 4),
           ],
         ],
       ),
@@ -2044,6 +2106,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   }
 
   Widget _cardNote() {
+    if (_railExternal) {
+      return _CardNote(
+        tone: _railPinBad ? AppTone.danger : AppTone.brand,
+        icon: LucideIcons.ticket,
+        text: _railPinBad ? 'رقم البطاقة الخارجيّة ٨ خانات (أرقام أو حروف إنكليزيّة)' : 'يُفعَّل بالبطاقة الخارجيّة التي كتبتها',
+      );
+    }
     if (_cardDenied) {
       return _CardNote(
         tone: AppTone.danger,
@@ -2064,7 +2133,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       CardStockLevel.empty => _CardNote(
           tone: AppTone.warning,
           icon: LucideIcons.triangleAlert,
-          text: 'cards.none_for'.tr(namedArgs: {'profile': profile}),
+          // على طريق موقع الشحن: البديل بطاقةٌ خارجيّة يكتب رقمها في الحقل تحته
+          text: _rail != null
+              ? 'ما عندك بطاقة بموقع الشحن لهذه الباقة — اكتب رقم بطاقة خارجيّة بالحقل تحته'
+              : 'cards.none_for'.tr(namedArgs: {'profile': profile}),
+          maxLines: _rail != null ? 3 : 2,
         ),
       // ليس صفراً: التفعيل مسموح، والخادم يعيد القراءة داخل التفعيل نفسه.
       CardStockLevel.unknown => _CardNote(
