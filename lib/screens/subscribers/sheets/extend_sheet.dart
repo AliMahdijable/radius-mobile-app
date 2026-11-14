@@ -154,6 +154,24 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   /// (AccessGate) بشكل SAS4 تماماً فيسلك المسار المعتاد.
   bool get _daysMode => _data?['mode']?.toString() == 'days';
 
+  /// «خدمة دايني» — فايبر الجزيرة على طريق موقع الشحن (الخادم: `pay_rail.on` في extension-options): يومٌ أو يومان يمنحهما الموقع
+  /// للمشترك المنتهي بلا مبلغ — فلا رصيد ولا نقاط ولا طريقة دفع ولا سعر (المالك ١٤ نوفمبر: «التمديد نفس الويب يظهر ويختار اليوم
+  /// وماعتقد يحتاج عرض طريقة الدفع لان ماكو طرق دفع»). كانت «باقتاه» بسعر صفر فيبقى الزرّ «السعر غير متوفر» معطّلاً. وحين لا يعرضها
+  /// الموقع (مشتركٌ فعّال، رقمٌ غير مؤكَّد، الموقع لا يُقرأ) يقول الخادم السبب في `note`.
+  bool get _loanMode {
+    final r = _data?['pay_rail'];
+    return r is Map && r['on'] == true;
+  }
+
+  /// سبب خلوّ القائمة كما قاله الخادم (`note`) — «دايني» للمنتهي وحده، أو تعذّر موقع الشحن…
+  String? get _serverNote {
+    final n = _data?['note']?.toString().trim() ?? '';
+    return n.isEmpty ? null : n;
+  }
+
+  /// تمديدٌ بلا كلفة ولا طريقة دفع: المدّة عند الشركة المُضافة، أو «دايني» من موقع الشحن.
+  bool get _freeMode => _daysMode || _loanMode;
+
   /// اسم الشركة كما يقوله الخادم (`provider_label`).
   String get _providerName {
     final l = _data?['provider_label']?.toString().trim() ?? '';
@@ -169,7 +187,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (_loading || _submitting || _data == null || _selectedPkg == null) {
       return false;
     }
-    if (_daysMode) return true; // بلا كلفة: لا رصيد يُفحص
+    if (_freeMode) return true; // بلا كلفة: لا رصيد يُفحص
     if (_method == _Method.points) {
       return _pointsBalance >= _selectedPoints && _selectedPoints > 0;
     }
@@ -177,7 +195,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   }
 
   String? get _disabledReason {
-    if (_selectedPkg == null || _daysMode) return null;
+    if (_selectedPkg == null || _freeMode) return null;
     if (_method == _Method.points) {
       if (_selectedPoints <= 0) return 'sheets.no_points_support'.tr();
       if (_pointsBalance < _selectedPoints) {
@@ -334,7 +352,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     final pkgs = (_data?['packages'] as List?) ?? const [];
     if (pkgs.isEmpty) {
       return [
-        _stateBlock(LucideIcons.inbox, 'لا توجد باقات متاحة للتمديد'),
+        // «دايني»: السبب من الخادم (للمنتهي وحده، رقمٌ غير مؤكَّد، الموقع لا يُقرأ) — لا «لا باقات» يوحي بخللٍ في الساس
+        _stateBlock(LucideIcons.inbox, (_loanMode ? _serverNote : null) ?? 'لا توجد باقات متاحة للتمديد'),
       ];
     }
     final cur = 'common.currency'.tr();
@@ -347,12 +366,12 @@ class _ExtendSheetState extends State<_ExtendSheet> {
             label: 'الباقة الحالية',
             value: _currentProfileName.isEmpty ? '—' : _currentProfileName,
           ),
-          if (!_isEarthlink && !_daysMode)
+          if (!_isEarthlink && !_freeMode)
             SheetRowData(
               label: 'dashboard.manager_balance'.tr(),
               value: '${formatIQD(_managerBalance.round())} $cur',
             ),
-          if (_pointsBalance > 0 && !_daysMode)
+          if (_pointsBalance > 0 && !_freeMode)
             SheetRowData(
               label: 'sheets.points'.tr(),
               value: formatIQD(_pointsBalance.round()),
@@ -370,7 +389,11 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         )
       else
         SheetSection(
-          label: _daysMode ? 'sheets.extend_days_label'.tr() : 'اختر باقة التمديد',
+          label: _loanMode
+              ? 'خدمة دايني (موقع الشحن)'
+              : _daysMode
+                  ? 'sheets.extend_days_label'.tr()
+                  : 'اختر باقة التمديد',
           child: Container(
             decoration: BoxDecoration(
               color: AppColors.surface,
@@ -385,8 +408,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
                   _PackageRow(
                     pkg: list[i],
                     selected: _selectedPkg == list[i],
-                    // المدّة بلا كلفة: «0 د.ع» بجانبها تضلّل — الاسم يقول «بلا كلفة».
-                    showPrice: !_daysMode,
+                    // المدّة بلا كلفة و«دايني»: «0 د.ع» بجانبها تضلّل — الاسم يقول ما هي.
+                    showPrice: !_freeMode,
                     onTap: () => setState(() => _selectedPkg = list[i]),
                   ),
                 ],
@@ -402,21 +425,23 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           durationLabel:
               (_selectedDuration ?? '').isEmpty ? null : _selectedDuration,
           amountLabel: 'sheets.amount_due'.tr(),
-          amount: _daysMode
+          amount: _freeMode
               ? 'sheets.extend_free'.tr()
               : _method == _Method.points
                   ? '${formatIQD(_selectedPoints.round())} نقطة'
                   : '${formatIQD(_selectedPrice.round())} $cur',
         ),
-        if (_daysMode) ...[
+        if (_daysMode || _loanMode) ...[
           const SizedBox(height: Sp.sm),
           Text(
-            'sheets.extend_days_note'.tr(namedArgs: {'name': _providerName}),
+            _loanMode
+                ? 'من موقع الشحن للمشترك المنتهي: كلّ مرّةٍ يومٌ يبدأ من الآن — بلا مبلغ'
+                : 'sheets.extend_days_note'.tr(namedArgs: {'name': _providerName}),
             style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
           ),
         ],
-        // ايرث لنك: لا اختيار طريقة — التمديد بالنقاط حصراً (user/extend ٢٤ ساعة). والمدّة بلا كلفة: لا طريقة.
-        if (!_isEarthlink && !_daysMode) ...[
+        // ايرث لنك: لا اختيار طريقة — التمديد بالنقاط حصراً (user/extend ٢٤ ساعة). والمدّة بلا كلفة و«دايني»: لا طريقة.
+        if (!_isEarthlink && !_freeMode) ...[
           const SizedBox(height: 14),
           SheetSection(
             label: 'sheets.payment_method'.tr(),
