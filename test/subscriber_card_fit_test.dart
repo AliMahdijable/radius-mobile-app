@@ -277,6 +277,25 @@ void main() {
       expect(_planRow(t).debugSplit, isFalse, reason: 'ما دام يبقى من الاسم ما يُقرأ فلا يكبر الكرت');
     });
 
+    testWidgets('زرّ الموقع يُنقر في الحالتين — على سطر الباقة وحين ينزل مع القياسات', (t) async {
+      var taps = 0;
+      Widget card(_C c) => SubscriberCardV3(
+            sub: c.sub,
+            selected: false,
+            onTap: () => fail('النقر على الموقع فتح الكرت'),
+            onLongPress: () {},
+            onOpenLocation: () => taps++,
+          );
+      await _pump(t, card(_case('02')), width: 480);
+      expect(_planRow(t).debugSplit, isFalse);
+      await t.tap(find.byIcon(Icons.location_on_rounded));
+      expect(taps, 1);
+      await _pump(t, card(_case('07')), width: 390);
+      expect(_planRow(t).debugSplit, isTrue);
+      await t.tap(find.byIcon(Icons.location_on_rounded));
+      expect(taps, 2);
+    });
+
     testWidgets('أضيق هاتفٍ بأكبر خطّ: القياسات تلتفّ داخل سطرها ولا تخرج', (t) async {
       await _pump(t, _card(_case('07')), width: 320, scale: 1.2);
       expect(t.takeException(), isNull);
