@@ -18,8 +18,8 @@ import 'sim_el/sim_harness.dart';
 /// «المستثنون من الرسائل» (المالك ١٤ نوفمبر: «نسوي مثل القسم الريجكتد مسج، يعني ذولا ما تروح لهم رسائل… التفعيل، التنبيهات،
 /// التذكير، التبليغات» ثمّ «تقسيم… نعم مستثنى»): الخادم يحجب عند كلّ باب إرسال (server/messageExclusions.js)؛ التطبيق يقرأ
 /// قائمة الصفحة مرّةً ([MessageExclusionsState])، يعرض «لا تصله: …» بصفحة المشترك وجرساً مشطوباً بجنب اسمه في القائمة، ويحفظ
-/// من ورقة «إيقاف الرسائل» (واحداً أو المحدَّدين) ومن صفحة «المستثنون من الرسائل». الميزة مطفأةٌ للحساب ⇒ لا شيء؛ «كل الشركات»
-/// (صفٌّ من شركةٍ أخرى) ⇒ لا شيء؛ من لا يُدير يرى «تعديل» بمكانه مقفلاً.
+/// من ورقة «إيقاف الرسائل» (واحداً أو المحدَّدين) ومن صفحة «المستثنون من الرسائل». الميزة مطفأةٌ للحساب ⇒ لا شيء؛ من لا يُدير
+/// يرى «تعديل» بمكانه مقفلاً. «كل الشركات» (صفٌّ بمفتاح شركته) بقائمة شركته هي — test/message_exclusions_merged_test.dart.
 const _v = SimVariant(390, dark: false);
 const _all = MessageExclusionsApi.allPath;
 const _path = MessageExclusionsApi.path;
@@ -254,7 +254,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('كرت صفحة المشترك: «لا تصله: …» بملاحظته ومن أوقفها؛ غير المستثنى و«كل الشركات» والميزة المطفأة ⇒ لا كرت', (t) async {
+  testWidgets('كرت صفحة المشترك: «لا تصله: …» بملاحظته ومن أوقفها؛ غير المستثنى وصفّ شركةٍ لم تُقرأ قائمتها والميزة المطفأة ⇒ لا كرت', (t) async {
     server.reply('GET', _all, 200, _reply(exclusions: {'ali.hasan': _entry(['reminders', 'broadcast'], 'التذكيرات، التبليغات', note: 'طلب عدم الإزعاج')}));
     await load(t);
     var edits = 0;
@@ -276,7 +276,8 @@ void main() {
     await pumpSim(t, _v, home: (_) => page(_sub(username: 'someone.else')));
     expect(find.byKey(const ValueKey('mx-card')), findsNothing);
     await pumpSim(t, _v, home: (_) => page(_sub(companyKey: 'c0123456789ab')));
-    expect(find.byKey(const ValueKey('mx-card')), findsNothing, reason: '«كل الشركات»: صفٌّ من شركةٍ أخرى');
+    expect(find.byKey(const ValueKey('mx-card')), findsNothing,
+        reason: '«كل الشركات»: صفٌّ بمفتاح شركته يأخذ قائمة شركته هي — لا قائمة الصفحة المفتوحة (ولم تُقرأ قائمتها هنا)');
     MessageExclusionsState.reset();
     await pumpSim(t, _v, home: (_) => page(_sub()));
     expect(find.byKey(const ValueKey('mx-card')), findsNothing, reason: 'لم تُقرأ القائمة');
@@ -362,6 +363,19 @@ void main() {
     await pumpSim(t, _v, home: (_) => const MessageExclusionsScreen());
     expect(find.byKey(const ValueKey('mx-row-ali.hasan')), findsOneWidget);
     expect(find.byKey(const ValueKey('mx-allow-ali.hasan')), findsNothing);
+    await simDrain(t);
+  });
+
+  testWidgets('صفحة القائمة وتعذّر الجلب: «تعذّر… اسحب للتحديث» لا دائرة تحميلٍ أبديّة — والسحب يقرؤها', (t) async {
+    server.reply('GET', _all, 409, {'success': false, 'message': 'تعذّر الآن — حاول بعد قليل'});
+    await pumpSim(t, _v, home: (_) => const MessageExclusionsScreen());
+    expect(find.text('تعذّر جلب القائمة الآن — اسحب للتحديث.'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    server.reply('GET', _all, 200, _reply(exclusions: {'ali.hasan': _entry(['all'], 'كلّ الرسائل')}));
+    await t.fling(find.byType(ListView), const Offset(0, 320), 1200);
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mx-row-ali.hasan')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mx-merged-note')), findsNothing, reason: 'الوضع العاديّ: لا سطر «كل الشركات»');
     await simDrain(t);
   });
 

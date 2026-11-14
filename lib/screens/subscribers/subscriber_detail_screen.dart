@@ -270,8 +270,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     ConnectionAlertSettings.ensureLoaded();
     // «بيع مادّة» يظهر حين تكون «المبيعات» مفعّلةً للحساب (مفتاحٌ بالخادم) — حالتها قد لم تُسأل بعد إن فُتح المشترك أوّلاً.
     unawaited(SalesState.ensureFresh());
-    // «المستثنون من الرسائل»: قائمة الصفحة المفتوحة (لكرت «لا تصله» وزرّ «إيقاف الرسائل») — قد يُفتح المشترك من البحث لا القائمة.
-    if (sub.companyKey == null) unawaited(MessageExclusionsState.ensureFresh());
+    // «المستثنون من الرسائل»: قائمة شركة الصفّ (لكرت «لا تصله» وزرّ «إيقاف الرسائل») — بمفتاحه في «كل الشركات»، وبلا مفتاح الصفحة
+    // المفتوحة. قد يُفتح المشترك من البحث لا القائمة فلا نفترض أنّ أحداً قرأها — وحين تصل يُعاد رسم الزرّ في «المزيد».
+    MessageExclusionsState.changes.addListener(_onMessageExclusions);
+    unawaited(MessageExclusionsState.ensureFreshFor(sub.companyKey));
     // Keep the open detail screen in sync with backend state. Any
     // mutation done from the operations grid (activate / extend /
     // pay-debt / add-debt / discount / disconnect / toggle / …)
@@ -328,6 +330,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   @override
   void dispose() {
+    MessageExclusionsState.changes.removeListener(_onMessageExclusions);
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onDataChanged);
     _note?.dispose();
@@ -558,13 +561,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     ),
                     // «أرقام تواصل إضافيّة» صارت داخل بطاقة الهويّة تحت الهاتف (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت») — لا كرت منفصل.
                     // «المستثنون من الرسائل» (المالك ١٤ نوفمبر): من أُوقفت رسائله وحده يُعرض له كرت «لا تصله: …»؛ الإيقاف من «المزيد».
-                    if (sub.companyKey == null)
-                      MessageExclusionCard(
-                        key: ValueKey('mx-${sub.username}'),
-                        sub: sub,
-                        pageLocked: _pageLock != null,
-                        onEdit: _editMessageExclusion,
-                      ),
+                    // «كل الشركات» (١٥ نوفمبر): الكرت بقائمة شركة الصفّ نفسها.
+                    MessageExclusionCard(
+                      key: ValueKey('mx-${sub.companyKey ?? ''}-${sub.username}'),
+                      sub: sub,
+                      pageLocked: _pageLock != null,
+                      onEdit: _editMessageExclusion,
+                    ),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود
@@ -1275,10 +1278,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// والقراءات (الحركات، الجلسات، الاستهلاك، النسخ، الطباعة) كما هي.
   String? get _pageLock => MergedOps.writeLock(sub);
 
-  /// ورقة «إيقاف الرسائل» لهذا المشترك — ما يُحفظ يرسم الكرت والقائمة فوراً ([MessageExclusionsState]).
+  /// قائمة مستثني شركة الصفّ وصلت أو تغيّرت ⇒ زرّ «إيقاف الرسائل» في «المزيد» يُرسم بحاله (الكرت يسمع وحده).
+  void _onMessageExclusions() {
+    if (mounted) setState(() {});
+  }
+
+  /// ورقة «إيقاف الرسائل» لهذا المشترك في شركته (مفتاح صفّه في «كل الشركات»، وبلا مفتاح الصفحة المفتوحة) — ما يُحفظ يرسم الكرت
+  /// والقائمة فوراً ([MessageExclusionsState]).
   void _editMessageExclusion() {
-    if (sub.companyKey != null || !MessageExclusionsState.canManage) return;
-    unawaited(showMessageExclusionSheet(context, subject: mxSubjectOf(sub)).then((changed) {
+    if (!MessageExclusionsState.canManageFor(sub.companyKey) || _pageLock != null) return;
+    unawaited(showMessageExclusionSheet(context, subject: mxSubjectOf(sub), companyKey: sub.companyKey).then((changed) {
       if (changed == true && mounted) setState(() {});
     }));
   }
@@ -1559,14 +1568,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ),
         // «المستثنون من الرسائل» (المالك ١٤ نوفمبر: «ذولا ما تروح لهم رسائل… التفعيل، التنبيهات، التذكير، التبليغات»): إيقاف رسائل
         // النظام عن هذا المشترك — كلّها أو أنواعٌ منها — على خادمنا. الميزة مطفأةٌ للحساب ⇒ لا زرّ؛ من لا يُدير (موظّفٌ بلا
-        // صلاحيّتها) يراه بمكانه مقفلاً.
-        if (sub.companyKey == null && MessageExclusionsState.enabled)
+        // صلاحيّتها) يراه بمكانه مقفلاً. «كل الشركات» (١٥ نوفمبر): بقائمة شركة الصفّ وصلاحيّته فيها.
+        if (MessageExclusionsState.enabledFor(sub.companyKey))
           SubAction(
             icon: LucideIcons.bellOff,
-            label: MessageExclusionsState.of(sub.username) == null ? 'إيقاف الرسائل' : 'تعديل الرسائل الموقوفة',
-            locked: !MessageExclusionsState.canManage,
+            label: MessageExclusionsState.ofRow(sub.companyKey, sub.username) == null ? 'إيقاف الرسائل' : 'تعديل الرسائل الموقوفة',
+            locked: !MessageExclusionsState.canManageFor(sub.companyKey),
             unavailable: _pageLock,
-            onTap: !MessageExclusionsState.canManage ? null : _editMessageExclusion,
+            onTap: !MessageExclusionsState.canManageFor(sub.companyKey) ? null : _editMessageExclusion,
           ),
         if (sub.hasDebt && _shows('subscribers.send_whatsapp'))
           SubAction(

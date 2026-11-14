@@ -128,6 +128,9 @@ const expectedSubscriberWriters = {
   // «تأكيد رقم المشترك بالواتساب» (فايبر الجزيرة، ١٤ نوفمبر): POST /api/v2/subscribers/:idx/pay-otp/{send,confirm} — لا مال، لكنّه
   // يرسل رسالةً لرقم مشتركٍ بعينه ⇒ بغلاف شركة الصفّ كالتفعيل
   'SubscribersApi.payOtp',
+  // «المستثنون من الرسائل» في «كل الشركات» (١٥ نوفمبر): PUT/DELETE /api/v2/subscribers/:idx/message-exclusion — جدولنا وحده (لا مال)،
+  // لكنّه يوقف رسائل مشتركٍ بعينه في شركته ⇒ بغلاف شركة الصفّ ومرجع نافذته كالملاحظة الخاصّة
+  'MessageExclusionsApi.saveAt', 'MessageExclusionsApi.removeAt',
 };
 
 /// الجماعيّة: صفوف «كل الشركات» تُرفض قبلها في دالّتها نفسها (أو في دالّة العرض التي وحدها تبني الشيت).
@@ -166,6 +169,11 @@ const reviewedWriterPrefixes = <String, List<String>>{
   'lib/screens/subscribers/subscriber_detail_screen.dart SubscribersApi.disconnect': ['MergedOps.write(sub,'],
   'lib/screens/subscribers/subscriber_detail_screen.dart SubscribersApi.toggleResult': ['MergedOps.write(sub,'],
   'lib/screens/subscribers/widgets/private_note_card.dart PrivateNotesApi.save': ['MergedOps.write(widget.sub,'],
+  // ورقة «إيقاف الرسائل»: شركة الصفّ التي التقطتها الورقة لحظة فتحها (صفحة المشترك: sub.companyKey؛ صفحة القائمة: شركة الصفّ)
+  'lib/screens/subscribers/widgets/message_exclusion_card.dart MessageExclusionsApi.saveAt': ['MergedOps.writeAt(widget.companyKey,'],
+  'lib/screens/subscribers/widgets/message_exclusion_card.dart MessageExclusionsApi.removeAt': ['MergedOps.writeAt(widget.companyKey,'],
+  // «السماح بالرسائل» من صفحة «المستثنون»: شركة صفّ القائمة نفسه (مفتاح قائمته التي قُرئ منها)
+  'lib/screens/whatsapp/message_exclusions_screen.dart MessageExclusionsApi.removeAt': ['MergedOps.writeAt(row.companyKey,'],
   // printArchived («أرشيف الوصولات» ١١ نوفمبر): شركة الوصل نفسه (ArchivedReceipt.companyKey = مفتاح الطلب الذي أعاده) — ثمّ _emit: شركة الصفّ
   'lib/services/receipt_service.dart SubscribersApi.receiptLink': ['CompanyRoute.pin(r.companyKey,', 'CompanyRoute.pin(key=sub.companyKey,'],
 };

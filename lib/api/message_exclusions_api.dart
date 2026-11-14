@@ -7,7 +7,11 @@ import 'company_route.dart';
 /// «المستثنون من الرسائل» (المالك ١٤ نوفمبر: «نسوي مثل القسم الريجكتد مسج، يعني ذولا ما تروح لهم رسائل… التفعيل، التنبيهات،
 /// التذكير، التبليغات» ثمّ «تقسيم… نعم مستثنى»): على خادمنا وحده (`server/messageExclusions.js` — المسارات
 /// `/api/v2/message-exclusions`). لكلّ مشترك «كلّ الرسائل» أو أنواعٌ منها، والخادم يحجبها عند كلّ باب إرسال — فالتطبيق يعرض ويحفظ
-/// فقط. صفحة الحساب المفتوحة وحدها («كل الشركات» تُدار من صفحة الشركة). المفتاح مطفأ للحساب ⇒ enabled:false ⇒ لا شيء يُعرض.
+/// فقط. المفتاح مطفأ للحساب ⇒ enabled:false ⇒ لا شيء يُعرض.
+///
+/// «كل الشركات» (١٥ نوفمبر — المالك: «نعم هم سويها»): قائمة كلّ شركةٍ تُقرأ بطلبها الموجَّه ([MessageExclusionsState.ensureFreshFor])،
+/// وإيقاف رسائل مشترك صفٍّ والسماح بها بالمسار ذي الرقم ([MessageExclusionsApi.saveAt]/[MessageExclusionsApi.removeAt]) بغلاف شركة
+/// الصفّ (MergedOps.writeAt — مرجع نافذته، كبقيّة كتابات المشترك). الجماعيّ والمساران بلا رقم للصفحة المفتوحة وحدها.
 
 /// نوعٌ من الرسائل يُوقف عن المشترك — `all` «كلّ الرسائل» أو مجموعة (ops · reminders · broadcast · conn). الاسم والشرح من الخادم.
 class MxGroup {
@@ -235,6 +239,56 @@ class MessageExclusionsApi {
     }
   }
 
+  // ── المسار ذو الرقم («كل الشركات»، ١٥ نوفمبر) ──────────────────────────────────────────────────────────────
+  // الخادم: PUT/DELETE /api/v2/subscribers/:idx/message-exclusion — المعالج نفسه، والرقم من المسار. في «كل الشركات» يوجّهه جدول
+  // التوجيه لشركة الصفّ بمرجع نافذة المشترك ([CompanyRefs] — 'message-exclusion')؛ فمن يناديه يغلّفه بشركة الصفّ (MergedOps.writeAt).
+
+  /// رقم المشترك الصالح للمسار الموجَّه (أرقامٌ ١–١٢ كجدول الخادم) — وإلّا null (لا يُوجَّه: يُدار من صفحة الشركة).
+  static String? routedIdx(String? idx) {
+    final s = idx?.trim() ?? '';
+    return RegExp(r'^\d{1,12}$').hasMatch(s) ? s : null;
+  }
+
+  /// حين لا رقم صالحاً لمشترك صفٍّ في «كل الشركات».
+  static const String noRoutedIdx = 'تعذّر تحديد المشترك في شركته — افتح الشركة وحدها';
+
+  static String _subPath(String idx) => '/api/v2/subscribers/${Uri.encodeComponent(idx)}/message-exclusion';
+
+  /// [save] لمشتركٍ برقمه [idx] في شركة الصفّ — [groups] فارغة = إزالة الاستثناء.
+  static Future<({bool ok, MxEntry? entry, String? message})> saveAt(
+    String idx,
+    MxSubject subject, {
+    required List<String> groups,
+    String note = '',
+  }) async {
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>(_subPath(idx), data: {
+        ...subject.toJson(),
+        'groups': groups,
+        'note': note.trim(),
+      });
+      final b = r.data ?? const {};
+      if (b['success'] != true) return (ok: false, entry: null, message: b['message']?.toString() ?? 'تعذّر الحفظ');
+      return (ok: true, entry: MxEntry.fromJson(subject.username, b['exclusion']), message: null);
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 message-exclusion PUT: $e');
+      return (ok: false, entry: null, message: _msg(e, 'تعذّر الحفظ'));
+    }
+  }
+
+  /// [remove] لمشتركٍ برقمه [idx] في شركة الصفّ — تعود الرسائل تصله.
+  static Future<({bool ok, String? message})> removeAt(String idx, String username) async {
+    try {
+      final r = await ApiClient.dio.delete<Map<String, dynamic>>(_subPath(idx), queryParameters: {'username': username});
+      final b = r.data ?? const {};
+      if (b['success'] != true) return (ok: false, message: b['message']?.toString() ?? 'تعذّر الحفظ');
+      return (ok: true, message: null);
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 message-exclusion DELETE: $e');
+      return (ok: false, message: _msg(e, 'تعذّر الحفظ'));
+    }
+  }
+
   /// الجماعيّ: إيقافٌ ([add] true، بـ[groups]) أو سماحٌ ([add] false) لعدّة مشتركين — [bulkMax] في الطلب. ⇒ done: كم نُفّذ.
   static Future<({bool ok, int done, String? message})> bulk({
     required bool add,
@@ -265,12 +319,23 @@ class MessageExclusionsApi {
   }
 }
 
-/// حال قائمة المستثنين للجلسة المفتوحة: تُقرأ مرّةً وتتشاركها القائمة (الشارة) ولوحة المشترك وصفحة «المستثنون من الرسائل».
-/// null = لم تُقرأ بعد. كلّ قراءةٍ وكتابة للشركة المفتوحة صراحةً ([CompanyRoute.runOpen]) — لا تأخذ وجهة قسمٍ في «كل الشركات».
+/// حال قائمة المستثنين: تُقرأ مرّةً وتتشاركها القائمة (الشارة) ولوحة المشترك وصفحة «المستثنون من الرسائل».
+///
+/// * الصفحة المفتوحة: [snapshot] (null = لم تُقرأ بعد) — كلّ قراءةٍ وكتابة لها صراحةً ([CompanyRoute.runOpen]) فلا تأخذ وجهة قسمٍ
+///   في «كل الشركات».
+/// * «كل الشركات» (١٥ نوفمبر): [companies] — قائمة كلّ شركةٍ بمفتاحها، تُقرأ بطلبها الموجَّه ([CompanyRoute.run])؛ صفوف الوضع كلّها
+///   تحمل مفتاح شركتها (والمفتوحة منها). الكتابة لمشترك صفٍّ ليست هنا: شاشته تنادي [MessageExclusionsApi.saveAt]/[removeAt] بغلاف
+///   شركة الصفّ ثمّ [applySavedFor] — كبقيّة كتابات المشترك (والحارس الثابت يفحص غلافها عند الموضع نفسه).
 class MessageExclusionsState {
   MessageExclusionsState._();
 
   static final ValueNotifier<MxSnapshot?> snapshot = ValueNotifier<MxSnapshot?>(null);
+
+  /// «كل الشركات»: ما قُرئ من قوائم الشركات — مفتاح الشركة ⇒ قائمتها. شركةٌ غائبة = لم تُقرأ بعد (أو تعذّرت): لا علامة ولا زرّ.
+  static final ValueNotifier<Map<String, MxSnapshot>> companies = ValueNotifier<Map<String, MxSnapshot>>(const {});
+
+  /// يتغيّر مع أيٍّ منهما — لما يرسم من الاثنين (القائمة المدموجة، صفحة المشترك، صفحة «المستثنون»).
+  static final Listenable changes = Listenable.merge([snapshot, companies]);
 
   static const Duration ttl = Duration(seconds: 60);
   static const Duration _cooldown = Duration(seconds: 20);
@@ -280,9 +345,33 @@ class MessageExclusionsState {
   static DateTime? _failedAt;
   static Future<void>? _inflight;
 
+  static final Map<String, DateTime> _coFetchedAt = {};
+  static final Map<String, DateTime> _coFailedAt = {};
+  static final Map<String, Future<void>> _coInflight = {};
+
   static bool get enabled => snapshot.value?.enabled ?? false;
   static bool get canManage => enabled && (snapshot.value?.canManage ?? false);
   static MxEntry? of(String? username) => snapshot.value?.of(username);
+
+  /// قائمة شركة الصفّ: [key] مفتاح شركته في «كل الشركات»، وnull ⇒ الصفحة المفتوحة.
+  static MxSnapshot? snapshotFor(String? key) => key == null ? snapshot.value : companies.value[key];
+  static bool enabledFor(String? key) => snapshotFor(key)?.enabled ?? false;
+  static bool canManageFor(String? key) {
+    final s = snapshotFor(key);
+    return s != null && s.enabled && s.canManage;
+  }
+
+  /// مستثنى الصفّ في شركته ([key] null ⇒ المفتوحة) — null: ليس مستثنى، أو قائمة شركته لم تُقرأ.
+  static MxEntry? ofRow(String? key, String? username) => snapshotFor(key)?.of(username);
+
+  /// ما يُعرض في «الإعدادات» وصفحة «المستثنون»: [keys] null (الوضع العاديّ) ⇒ الصفحة المفتوحة وحدها (مفتاحها null)؛ وإلّا
+  /// («كل الشركات») ما قُرئ من قوائم تلك الشركات بترتيبها — كلٌّ بمفتاحه. الشاشة تمرّر شركاتها (الطبقة هنا لا تقرأ الوضع).
+  static List<({String? key, MxSnapshot snap})> viewFor(Iterable<String>? keys) => keys == null
+      ? [if (snapshot.value case final MxSnapshot s) (key: null, snap: s)]
+      : [
+          for (final k in keys)
+            if (companies.value[k] case final MxSnapshot s) (key: k, snap: s),
+        ];
 
   /// يقرأ القائمة إن قدُمت (أو [force]). تعذّرٌ لا يمحو آخر قراءة، ويُعاد بعد مهلةٍ قصيرة.
   static Future<void> ensureFresh({bool force = false}) {
@@ -316,11 +405,64 @@ class MessageExclusionsState {
     snapshot.value = r.snapshot;
   }
 
+  /// [ensureFresh] لشركة صفّ: [key] null ⇒ الصفحة المفتوحة؛ وإلّا قائمة تلك الشركة بطلبها الموجَّه (مفتاحٌ غير صالح ⇒ لا طلب).
+  static Future<void> ensureFreshFor(String? key, {bool force = false}) {
+    if (key == null) return ensureFresh(force: force);
+    if (!CompanyRoute.keyRe.hasMatch(key)) return Future<void>.value();
+    final running = _coInflight[key];
+    if (running != null) return running;
+    final now = DateTime.now();
+    if (!force) {
+      final at = _coFetchedAt[key];
+      if (at != null && now.difference(at) < ttl) return Future<void>.value();
+      final failed = _coFailedAt[key];
+      if (failed != null && now.difference(failed) < _cooldown) return Future<void>.value();
+    }
+    final epoch = _epoch;
+    late final Future<void> run;
+    run = CompanyRoute.run(key, () => _fetchFor(key, epoch)).whenComplete(() {
+      if (identical(_coInflight[key], run)) {
+        // إزالةٌ بجسمٍ لا بسهم: remove تُرجع المستقبل نفسه، وإرجاعه من whenComplete يجعله ينتظر نفسه
+        _coInflight.remove(key);
+      }
+    });
+    _coInflight[key] = run;
+    return run;
+  }
+
+  static Future<void> _fetchFor(String key, int epoch) async {
+    final r = await MessageExclusionsApi.all();
+    if (epoch != _epoch) return;
+    if (!r.ok || r.snapshot == null) {
+      _coFailedAt[key] = DateTime.now();
+      return;
+    }
+    _coFailedAt.remove(key);
+    _coFetchedAt[key] = DateTime.now();
+    companies.value = {...companies.value, key: r.snapshot!};
+  }
+
+  /// «كل الشركات»: قوائم عدّة شركاتٍ معاً (كلٌّ بمدّته) — للقائمة المدموجة وصفحة «المستثنون».
+  static Future<void> ensureCompanies(Iterable<String> keys, {bool force = false}) =>
+      Future.wait([for (final k in keys.toSet()) ensureFreshFor(k, force: force)]);
+
   /// بعد حفظٍ أو إزالةٍ ناجحة لمشتركٍ واحد — الشاشات المستمعة ترسم فوراً.
   static void applySaved(String username, MxEntry? entry) {
     final cur = snapshot.value;
     if (cur == null || !cur.enabled) return;
     snapshot.value = cur.withEntry(username, entry);
+  }
+
+  /// [applySaved] لشركة الصفّ ([key] null ⇒ المفتوحة). الشركة المفتوحة قد تُعرض بمفتاحها أيضاً («كل الشركات»): قائمتها بلا مفتاح
+  /// تُقرأ من جديد عند أوّل طلب، فلا تبقى بما قبل الحفظ.
+  static void applySavedFor(String? key, String username, MxEntry? entry) {
+    if (key == null) {
+      applySaved(username, entry);
+      return;
+    }
+    final cur = companies.value[key];
+    if (cur != null && cur.enabled) companies.value = {...companies.value, key: cur.withEntry(username, entry)};
+    _fetchedAt = null;
   }
 
   /// حفظٌ للشركة المفتوحة ثمّ تحديث الحال. ⇒ نتيجة [MessageExclusionsApi.save].
@@ -358,6 +500,10 @@ class MessageExclusionsState {
     _fetchedAt = null;
     _failedAt = null;
     _inflight = null;
+    _coFetchedAt.clear();
+    _coFailedAt.clear();
+    _coInflight.clear();
     snapshot.value = null;
+    companies.value = const {};
   }
 }

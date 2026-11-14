@@ -6,13 +6,15 @@ import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
 /// «المستثنون من الرسائل» في صفحة المشترك (المالك ١٤ نوفمبر: «ذولا ما تروح لهم رسائل… التفعيل، التنبيهات، التذكير، التبليغات»).
 /// الكرت للمشترك الموقوفة رسائله وحده («لا تصله: …» بمن أوقفها ومتى، و«تعديل»)؛ «إيقاف الرسائل» في «المزيد» — كالملاحظة
-/// وأرقام التواصل. الحال في [MessageExclusionsState] (تتشاركه القائمة). «كل الشركات» (صفٌّ من شركةٍ أخرى) لا يُعرض له شيء.
+/// وأرقام التواصل. الحال في [MessageExclusionsState] (تتشاركه القائمة). «كل الشركات» (١٥ نوفمبر — المالك: «نعم هم سويها»): صفّ
+/// كلّ شركةٍ بقائمتها هي ([MessageExclusionsState.snapshotFor] بمفتاح شركته)، والحفظ بالمسار ذي الرقم بغلاف شركة الصفّ.
 
 /// المشترك كما يُحفظ معه الاستثناء.
 MxSubject mxSubjectOf(Subscriber sub) => MxSubject(
@@ -39,10 +41,12 @@ class MessageExclusionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    return ValueListenableBuilder<MxSnapshot?>(
-      valueListenable: MessageExclusionsState.snapshot,
-      builder: (context, snap, _) {
-        final e = sub.companyKey == null ? snap?.of(sub.username) : null;
+    return ListenableBuilder(
+      listenable: MessageExclusionsState.changes,
+      builder: (context, _) {
+        // قائمة شركة الصفّ: بمفتاحه في «كل الشركات»، وبلا مفتاح ⇒ الصفحة المفتوحة
+        final snap = MessageExclusionsState.snapshotFor(sub.companyKey);
+        final e = snap?.of(sub.username);
         if (snap == null || !snap.enabled || e == null) return const SizedBox.shrink();
         final canEdit = snap.canManage && !pageLocked;
         final meta = [
@@ -121,10 +125,12 @@ class MessageExclusionCard extends StatelessWidget {
   }
 }
 
-/// ورقة «إيقاف الرسائل» لمشتركٍ واحد — تحفظ عبر [MessageExclusionsState] (فترسم القائمة والكرت فوراً). ⇒ true إن تغيّر شيء.
-Future<bool?> showMessageExclusionSheet(BuildContext context, {required MxSubject subject, String? title}) {
-  final snap = MessageExclusionsState.snapshot.value;
+/// ورقة «إيقاف الرسائل» لمشتركٍ واحد — ما يُحفظ يرسم القائمة والكرت فوراً ([MessageExclusionsState]). ⇒ true إن تغيّر شيء.
+/// [companyKey]: شركة الصفّ في «كل الشركات» (تُلتقط لحظة الفتح — لا يغيّرها شريطٌ يتبدّل تحت الورقة)؛ null ⇒ الصفحة المفتوحة.
+Future<bool?> showMessageExclusionSheet(BuildContext context, {required MxSubject subject, String? title, String? companyKey}) {
+  final snap = MessageExclusionsState.snapshotFor(companyKey);
   if (snap == null || !snap.enabled) return Future<bool?>.value(null);
+  final name = title ?? ((subject.name ?? '').trim().isNotEmpty ? subject.name!.trim() : subject.username);
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -135,7 +141,9 @@ Future<bool?> showMessageExclusionSheet(BuildContext context, {required MxSubjec
       subjects: [subject],
       current: snap.of(subject.username),
       groups: snap.groups,
-      subtitle: title ?? ((subject.name ?? '').trim().isNotEmpty ? subject.name!.trim() : subject.username),
+      companyKey: companyKey,
+      // «كل الشركات»: اسم الشركة مع المشترك — ما يُوقف يُوقف في شركةٍ يراها الوكيل قبل الحفظ (خارج الوضع: الاسم وحده)
+      subtitle: MergedOps.withCompany(name, companyKey),
     ),
   );
 }
@@ -168,7 +176,11 @@ class _ExclusionSheet extends StatefulWidget {
     required this.groups,
     required this.subtitle,
     this.alreadyExcluded = 0,
+    this.companyKey,
   });
+
+  /// شركة الصفّ في «كل الشركات» (المشترك الواحد وحده — الجماعيّ للصفحة المفتوحة)؛ null ⇒ الصفحة المفتوحة.
+  final String? companyKey;
 
   /// واحدٌ (صفحة المشترك أو القائمة) أو عدّة (الجماعيّ).
   final List<MxSubject> subjects;
@@ -229,7 +241,7 @@ class _ExclusionSheetState extends State<_ExclusionSheet> {
       Navigator.of(context).pop(true);
       return;
     }
-    final r = await MessageExclusionsState.save(widget.subjects.single, groups: _chosen, note: _note.text);
+    final r = await _saveOne(widget.subjects.single);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {
@@ -238,6 +250,29 @@ class _ExclusionSheetState extends State<_ExclusionSheet> {
     }
     showSheetSnack(context, r.entry == null ? 'عادت تصله الرسائل' : 'أُوقفت عنه: ${r.entry!.label}');
     Navigator.of(context).pop(true);
+  }
+
+  /// حفظ المشترك الواحد: الصفحة المفتوحة كما كانت (المسار بلا رقم)؛ وصفّ شركةٍ في «كل الشركات» بالمسار ذي الرقم بغلاف شركته
+  /// (مرجع نافذته أوّلاً — الخادم يرفض قبل معالجه إن لم يكن الرقم ما فُتح في تلك الشركة).
+  Future<({bool ok, MxEntry? entry, String? message})> _saveOne(MxSubject s) async {
+    final key = widget.companyKey;
+    if (key == null) return MessageExclusionsState.save(s, groups: _chosen, note: _note.text);
+    final idx = MessageExclusionsApi.routedIdx(s.idx);
+    if (idx == null) return (ok: false, entry: null, message: MessageExclusionsApi.noRoutedIdx);
+    final r = await MergedOps.writeAt(widget.companyKey, idx, () => MessageExclusionsApi.saveAt(idx, s, groups: _chosen, note: _note.text));
+    if (r.ok) MessageExclusionsState.applySavedFor(key, s.username, r.entry);
+    return r;
+  }
+
+  /// السماح للمشترك الواحد — كـ[_saveOne]: المفتوحة بلا رقم، وصفّ الشركة بالمسار ذي الرقم بغلاف شركته.
+  Future<({bool ok, String? message})> _allowOne(MxSubject s) async {
+    final key = widget.companyKey;
+    if (key == null) return MessageExclusionsState.remove(s.username);
+    final idx = MessageExclusionsApi.routedIdx(s.idx);
+    if (idx == null) return (ok: false, message: MessageExclusionsApi.noRoutedIdx);
+    final r = await MergedOps.writeAt(widget.companyKey, idx, () => MessageExclusionsApi.removeAt(idx, s.username));
+    if (r.ok) MessageExclusionsState.applySavedFor(key, s.username, null);
+    return r;
   }
 
   /// «السماح بالرسائل»: إزالة الاستثناء (واحدٌ أو المحدَّدون).
@@ -256,7 +291,7 @@ class _ExclusionSheetState extends State<_ExclusionSheet> {
       Navigator.of(context).pop(true);
       return;
     }
-    final r = await MessageExclusionsState.remove(widget.subjects.single.username);
+    final r = await _allowOne(widget.subjects.single);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {

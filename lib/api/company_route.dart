@@ -434,6 +434,8 @@ class CompanyRefs {
     'account-password', 'send-info', 'send-link', 'send-debt-reminder', 'generate-link', 'portal-qr-token',
     // «ملاحظة خاصّة» (٣١ أكتوبر): الحفظ والحذف بمرجع النافذة (companyRoutingAllow private-note-set/remove).
     'private-note',
+    // «المستثنون من الرسائل» (١٥ نوفمبر): إيقاف رسائل مشترك الصفّ في شركته والسماح بها (message-exclusion-set/remove).
+    'message-exclusion',
   };
 
   static String _k(String key, String idx, CompanyRefKind kind) => '$key|$idx|${kind.name}';

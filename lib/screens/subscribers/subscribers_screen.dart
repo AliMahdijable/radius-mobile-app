@@ -419,8 +419,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     VpnNow.mergedScope = _vpnMergedScope;
     PermissionsService.changes.addListener(_onPermsChanged);
     // «المستثنون من الرسائل» (١٤ نوفمبر): قائمة الصفحة المفتوحة — للجرس المشطوب بجنب الاسم وزرّ الجماعيّ؛ تُرسم حين تصل وحين تتغيّر
-    // (تُقرأ مع القائمة في [_load]).
-    MessageExclusionsState.snapshot.addListener(_onMessagesMutedChanged);
+    // (تُقرأ مع القائمة في [_load]). «كل الشركات» (١٥ نوفمبر): قائمة كلّ شركةٍ بمفتاحها (تُقرأ مع القائمة المدموجة في [_loadMerged]).
+    MessageExclusionsState.changes.addListener(_onMessagesMutedChanged);
     SubscriberColumnPrefs.layout.addListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.addListener(_onColumnsChanged);
     // قراءةٌ وصلت بعد سقف فحصها تُحفظ ⇒ توقظ البطاقات والجدول كقراءة الموجة.
@@ -454,8 +454,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (mounted) setState(() {});
   }
 
-  /// «المستثنون من الرسائل»: صفٌّ من الصفحة المفتوحة أوقف الوكيل رسائله (صفوف «كل الشركات» بلا علامة — تُدار من صفحة شركتها).
-  bool _messagesMuted(Subscriber s) => s.companyKey == null && MessageExclusionsState.of(s.username) != null;
+  /// «المستثنون من الرسائل»: صفٌّ أوقف الوكيل رسائله في شركته — صفّ «كل الشركات» بقائمة شركته (مفتاحه)، وغيره بالصفحة المفتوحة.
+  bool _messagesMuted(Subscriber s) => MessageExclusionsState.ofRow(s.companyKey, s.username) != null;
 
   void _onPermsChanged() {
     if (!mounted) return;
@@ -794,7 +794,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.focus.removeListener(_onMergedFocus);
     if (VpnNow.mergedScope == _vpnMergedScope) VpnNow.mergedScope = null;
     PermissionsService.changes.removeListener(_onPermsChanged);
-    MessageExclusionsState.snapshot.removeListener(_onMessagesMutedChanged);
+    MessageExclusionsState.changes.removeListener(_onMessagesMutedChanged);
     SubscriberColumnPrefs.layout.removeListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.removeListener(_onColumnsChanged);
     _hscroll.dispose();
@@ -857,6 +857,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _mergedSideAt = DateTime.now();
       unawaited(_loadMergedSide(r));
     }
+    // «المستثنون من الرسائل»: قائمة كلّ شركةٍ ظهرت صفوفها — للجرس المشطوب على صفّها (كلٌّ بمدّته؛ السحب للتحديث يقرؤها الآن)
+    unawaited(MessageExclusionsState.ensureCompanies([
+      for (final p in r.parts)
+        if (p.rows != null) p.company.key,
+    ], force: fresh));
     // جلسات كلّ شركة بعد القائمة — كـ_fetchAndMerge في الوضع العاديّ: عنوان الجلسة ومدّتها والتحميل. عليها تقوم حالة
     // الاتصال بالكارت (الإشارة، الـONU، النانو): صفٌّ بلا عنوانٍ ولا عنوانٍ مثبَّت لا يُفحص.
     final withSessions = await MergedSubscribers.withSessions(r, fresh: fresh);

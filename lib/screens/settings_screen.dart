@@ -34,6 +34,7 @@ import 'whatsapp/connection_alerts_screen.dart';
 import 'whatsapp/whatsapp_schedules_screen.dart';
 import 'whatsapp/message_exclusions_screen.dart';
 import '../api/message_exclusions_api.dart';
+import '../services/merged_mode.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
 import 'view_scope_screen.dart';
@@ -67,8 +68,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     PermissionsService.changes.addListener(_onPermsChanged);
     // حالة باسورد إيداع ايرث لنك المحفوظ (صفّ صاحب الحساب أدناه).
     if (_elOwner) ElDepositPassword.load();
-    // «المستثنون من الرسائل»: هل الميزة مفتوحةٌ للحساب وكم مستثنى (صفّها في قسم الواتساب)
+    // «المستثنون من الرسائل»: هل الميزة مفتوحةٌ للحساب وكم مستثنى (صفّها في قسم الواتساب) — و«كل الشركات»: قوائم شركاته كلّها
     unawaited(MessageExclusionsState.ensureFresh());
+    if (MergedMode.active.value) {
+      unawaited(MessageExclusionsState.ensureCompanies([for (final c in MergedMode.usable) c.key]));
+    }
   }
 
   /// صاحب حساب ايرث لنك (لا موظّف) — يحفظ باسورد الإيداع ويغيّره ويمسحه.
@@ -278,18 +282,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               // «المستثنون من الرسائل» (المالك ١٤ نوفمبر): قائمة من أُوقفت رسائل النظام عنهم — تظهر حين تُفتح الميزة للحساب؛ من لا
-              // يُدير (موظّفٌ بلا صلاحيّتها — يقوله الخادم) يراها بمكانها مقفلة.
-              ValueListenableBuilder<MxSnapshot?>(
-                valueListenable: MessageExclusionsState.snapshot,
-                builder: (context, snap, _) {
-                  if (snap == null || !snap.enabled) return const SizedBox.shrink();
+              // يُدير (موظّفٌ بلا صلاحيّتها — يقوله الخادم) يراها بمكانها مقفلة. «كل الشركات» (١٥ نوفمبر): مجموع شركاته — تظهر إن
+              // فُتحت الميزة لأيٍّ منها، وتُدار إن كان يُدير في أيٍّ منها (والصفحة تقفل صفوف ما لا يُدير).
+              ListenableBuilder(
+                listenable: Listenable.merge([MessageExclusionsState.changes, MergedMode.active, MergedMode.data]),
+                builder: (context, _) {
+                  final view = MessageExclusionsState.viewFor(
+                      MergedMode.active.value ? [for (final c in MergedMode.usable) c.key] : null);
+                  if (!view.any((v) => v.snap.enabled)) return const SizedBox.shrink();
+                  final count = view.fold<int>(0, (n, v) => n + (v.snap.enabled ? v.snap.count : 0));
+                  final canManage = view.any((v) => v.snap.enabled && v.snap.canManage);
                   return Padding(
+                    key: const ValueKey('settings-mx'),
                     padding: const EdgeInsets.only(top: Sp.xs),
                     child: _Row(
                       icon: LucideIcons.bellOff,
                       label: 'المستثنون من الرسائل',
-                      trailing: snap.count > 0 ? '${snap.count}' : null,
-                      locked: !snap.canManage,
+                      trailing: count > 0 ? '$count' : null,
+                      locked: !canManage,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const MessageExclusionsScreen(),
