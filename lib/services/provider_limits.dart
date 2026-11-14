@@ -1,4 +1,7 @@
+import '../models/merged_company.dart';
+import '../models/subscriber.dart';
 import 'active_company.dart';
+import 'merged_mode.dart';
 import 'permissions_service.dart';
 import 'provider_service.dart';
 
@@ -110,3 +113,22 @@ bool subscriberDisconnectHidden() =>
 
 /// التعليق/التشغيل الجماعيّ — لا للوطنيّ (كلّ تعليقٍ ~٣ نداءات للبوّابة، والخادم يحدّه ٤/د و٢٠/١٠د لكلّ شريك).
 bool bulkToggleHidden() => ProviderService.togglesAsSuspend;
+
+/// «معلومات الجهاز» وفحص أجهزة المشتركين من الهاتف لا يخدمها **المشروع الوطنيّ** (المالك ١٤ نوفمبر: «المشروع الوطني نلغي منه معلومات
+/// الجهاز… لان هم بالاصل ماعدهم منجمنت حتى لايصير ضغط بالصفحه»): جهاز المشترك تديره الشركة ولا عنوان إدارةٍ له عند الوكيل، فالكرت
+/// كان يدور على جهازٍ لا يصله ويثقّل الصفحة. فلا كرت «معلومات الجهاز» ولا «الجهاز الثاني» بصفحة مشتركه، ولا موجة فحصٍ على قائمته،
+/// ولا «فحص الأجهزة» (الرادار) لجلسته. «الليف والموقع» (الضوء من بوّابته) و«تعديل معلومات الجهاز» (بوّابته) يبقيان — ليسا فحصاً
+/// من الهاتف. الجلسة: قديمه (`ftth`) وجديده (`watani`) — [ProviderService.parentIsZone] نفسه.
+bool get sessionHasNoSubscriberDevices => ProviderService.parentIsZone;
+
+/// شركةٌ في «كل الشركات» لا أجهزة مشتركين لها (المشروع الوطنيّ — كحكم التذاكر: مزوّده `ftth` أو رمزه يبدأ بـ`watani`).
+bool companyHasNoSubscriberDevices(MergedCompany c) =>
+    c.provider == MergedProvider.ftth || c.code.toLowerCase().startsWith('watani');
+
+/// [sub] من شركةٍ لا أجهزة مشتركين لها: صفٌّ مربوطٌ بشركته في «كل الشركات» ⇒ شركته (المجهولة ⇒ كما كان)، وإلّا الجلسة.
+bool subscriberDevicesHidden(Subscriber sub) {
+  final key = sub.companyKey;
+  if (key == null) return sessionHasNoSubscriberDevices;
+  final c = MergedMode.companyOf(key);
+  return c != null && companyHasNoSubscriberDevices(c);
+}

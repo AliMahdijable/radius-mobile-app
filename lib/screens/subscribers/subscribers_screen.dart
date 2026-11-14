@@ -575,7 +575,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   /// زرّ الفحص العامّ للموظّف: على الشبكة أو عبر VPN (الاثنان مطفآن ⇒ يختفي — المالك ٨ نوفمبر).
-  bool get _scanAllowed => PermissionsService.subsCheckNet || PermissionsService.subsCheckVpn;
+  /// «فحص الأجهزة» (الرادار): بمفتاحَي الفحص — ولا يظهر لجلسة المشروع الوطنيّ (لا أجهزة مشتركين تُفحص؛ «كل الشركات» ببقيّة شركاتها كما كان).
+  bool get _scanAllowed =>
+      (PermissionsService.subsCheckNet || PermissionsService.subsCheckVpn) && !(sessionHasNoSubscriberDevices && !_mergedOn);
 
   Future<void> _openVpnPage() async {
     if (!PermissionsService.canLinkVpn) return showNoPermission(context, action: true);
@@ -1074,8 +1076,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // له IP، يُنفَّذ merci وiplevel cache 5د بعد أول wave.
     // الكبير: الصفوف المحمَّلة وحدها (لا ٨٩ ألف فحص).
     // «كل الشركات»: كلّ صفٍّ بشركته — إعداد جهازه وافتراضاتها من شركته (٢٢ أكتوبر).
+    // المشروع الوطنيّ بلا أجهزة مشتركين تُفحص ([subscriberDevicesHidden] — ١٤ نوفمبر): صفوفه لا تدخل الموجة (جلسته ⇒ لا موجة
+    // ولا طلب إعداد جهازٍ لكلّ مشترك؛ «كل الشركات» ⇒ بقيّة الشركات كما كانت).
     var targets = (_big ? _bigRows : _all)
-        .where((s) => s.username.isNotEmpty)
+        .where((s) => s.username.isNotEmpty && !subscriberDevicesHidden(s))
         .map<ProbeTarget>((s) => (
               username: s.username,
               ip: (s.ipAddress ?? '').trim(),
