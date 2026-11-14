@@ -1917,7 +1917,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           _DetailRow(field: _routerWan(u), small: true),
         // سرعة منفذ الإنترنت (المالك ١١ نوفمبر: «سرعه المنفذ wan») — حين يصدّرها الراوتر (Tenda).
         if (u.isRouter && u.wanLinkMbps != null)
-          _DetailRow(field: _routerWanLink(u), small: true),
+          // «مشترك بجهازين» (١٤ نوفمبر): منفذ الراوتر = الطرف الثاني لكيبل النانو نفسه — باسمه في كرت «الجهاز الثاني»
+          _DetailRow(field: widget.slot == 2 ? _routerWanLink(u, label: 'منفذ الراوتر') : _routerWanLink(u), small: true),
         if (u.firmware.isNotEmpty)
           _DetailRow(field: _ubntFirmware(u), small: true),
         if (u.ssid.isNotEmpty)
@@ -2106,7 +2107,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// صفّ المنافذ — تسمية يمين وحبّات المنافذ يسار، كما في المخطّط
   /// («ETH0 · 100M» بلون البراند و«ETH1 · مفصول» رماديّة).
   Widget _lanPortsRow(List<LanPort> ports) {
-    final field = _lanPortsField(ports);
+    // «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك: «الاثنين يقروه ايثر ١٠٠… لازم نميز»): للمشترك جهازٌ ثانٍ ⇒ منافذ النانو
+    // «كيبل النانو» (الحكم عليه منه وحده) — ومنفذ الراوتر باسمه في كرت «الجهاز الثاني».
+    final second = widget.slot == 1 &&
+        (DeviceConfigApi.peekConfig(widget.username, company: widget.company)?.hasSecond ?? false);
+    final base = _lanPortsField(ports);
+    final field = second ? CopyField('كيبل النانو', base.value, noun: 'حالة كيبل النانو') : base;
     return Copyable.field(
       field,
       child: Padding(
@@ -2637,7 +2643,7 @@ CopyField _routerOnline(UbiquitiStatus u) => CopyField(
 
 CopyField _routerWan(UbiquitiStatus u) => CopyField('الإنترنت', u.wanType);
 
-CopyField _routerWanLink(UbiquitiStatus u) => CopyField('منفذ الإنترنت', '${u.wanLinkMbps}Mbps');
+CopyField _routerWanLink(UbiquitiStatus u, {String label = 'منفذ الإنترنت'}) => CopyField(label, '${u.wanLinkMbps}Mbps');
 
 /// إيجارات DHCP (سلكيّ + لاسلكيّ) — تبقى بعد خروج الجهاز، فاسمها «أجهزة DHCP» لا «متّصلون».
 CopyField _routerDhcp(UbiquitiStatus u) => CopyField('أجهزة DHCP', '${u.dhcpCount}');

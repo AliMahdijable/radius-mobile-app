@@ -1,7 +1,9 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/util/server_time.dart';
 
+import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/device_health.dart';
@@ -408,6 +410,34 @@ class SubscriberCardV3 extends StatelessWidget {
   /// يُقصّ. المعلومتان زمنيّتان ومستقلّتان — لا داعي لحشرهما معاً.
   Widget _expiryRow() {
     final session = _sessionVisual();
+    // «مشترك بجهازين» (١٤ نوفمبر): شريحة الراوتر تقرأ ذاكرة الفحص ⇒ السطر يستمع للموجة كبقيّة قراءات الأجهزة بالكرت.
+    return ListenableBuilder(
+      listenable: DeviceProbeBus.tick,
+      builder: (context, _) => _expiryRowFor(session),
+    );
+  }
+
+  /// «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك: «الاولية تكون للنانو وبالنسبة لوضع الراوتر فيكفي اظهار عدد المتصلين
+  /// والايثر شكد يقره»): للمشترك جهازٌ ثانٍ (راوتر خلف النانو) ⇒ شريحةٌ صغيرة بنهاية سطر «متصل منذ»: المتّصلون بالراوتر · سرعة
+  /// منفذه (إن قرأها)، أو «مطفي» حين لا يردّ والنانو يردّ (عند المشترك). لا جهاز ثانٍ، أو النانو لا يردّ، أو لم يُفحص بعد ⇒ لا شريحة.
+  ({int? clients, String? port, bool off})? _routerChip() {
+    final cfg = DeviceConfigApi.peekConfig(sub.username, company: sub.companyKey);
+    if (cfg == null || !cfg.hasSecond) return null;
+    final ip = sub.ipAddress?.trim();
+    final r = DeviceProbeApi.peek(username: sub.username, ip: ip, company: sub.companyKey, slot: 2)?.snap?.ubnt;
+    if (r != null) {
+      if (!r.isRouter) return null;
+      final port = (r.wanLinkMbps ?? 0) > 0 ? '${r.wanLinkMbps}M' : null;
+      if (r.peerCount == null && port == null) return null;
+      return (clients: r.peerCount, port: port, off: false);
+    }
+    if (DeviceProbeApi.peek(username: sub.username, ip: ip, company: sub.companyKey)?.snap == null) return null;
+    final why = DeviceProbeApi.issueFor(username: sub.username, ip: ip ?? '', company: sub.companyKey, slot: 2);
+    return why?.issue == ProbeIssue.unreachable ? (clients: null, port: null, off: true) : null;
+  }
+
+  Widget _expiryRowFor(SubscriberSessionVisual? session) {
+    final router = session == null ? null : _routerChip();
     return LayoutBuilder(
       builder: (context, c) {
         final labelStyle = AppType.body(color: AppColors.textLabel).copyWith(fontSize: 12.5);
@@ -422,7 +452,9 @@ class SubscriberCardV3 extends StatelessWidget {
           // يُقصّان بـ«…». الآن بالقياس: كلٌّ في حصّته ⇒ كما كان؛ يتّسعان معاً ⇒ سطرٌ واحد ومنطقة الجلسة بقدر حاجتها؛
           // وإلّا ينزل نصّ الجلسة لسطره (كما الهواتف الضيّقة).
           final wE = 15 + 6 + _textWidth(context, 'ينتهي', labelStyle) + 6 + _textWidth(context, dateText, dateStyle);
-          final wS = 14 + 5 + _textWidth(context, session.text, AppType.muted(color: session.color).copyWith(fontSize: 11.5));
+          // شريحة الراوتر جزءٌ من «مجموعة الجلسة» في القياس نفسه (لا يُقصّ لها نصّ، ولا يكبر بها الكرت — ارتفاعها سطر الجلسة)
+          final wChip = router == null ? 0.0 : 6 + routerChipWidth(context, router);
+          final wS = 14 + 5 + _textWidth(context, session.text, AppType.muted(color: session.color).copyWith(fontSize: 11.5)) + wChip;
           if (wE + 8 + wS + 1 > c.maxWidth) {
             stacked = true;
           } else if (wS + 1 > sessionRegion) {
@@ -450,7 +482,7 @@ class SubscriberCardV3 extends StatelessWidget {
           ],
         );
         if (session == null) return expiry;
-        final sessionRow = Row(
+        final sessionText = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(session.icon, size: 14, color: session.color),
@@ -466,6 +498,15 @@ class SubscriberCardV3 extends StatelessWidget {
             ),
           ],
         );
+        final sessionRow = router == null
+            ? sessionText
+            : Row(
+                children: [
+                  Expanded(child: Align(alignment: AlignmentDirectional.centerStart, child: sessionText)),
+                  const SizedBox(width: 6),
+                  RouterChip(router),
+                ],
+              );
         if (stacked) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1356,6 +1397,61 @@ class _UsageRowState extends State<_UsageRow> {
           ],
         );
       },
+    );
+  }
+}
+
+
+// «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك، الشكل الذي رآه بالصور): شريحة راوتر المشترك بنهاية سطر «متصل منذ» — أيقونة
+// الراوتر ثمّ «المتّصلون · سرعة منفذه»، أو «مطفي» رماديّاً. ارتفاعٌ ثابت = سطر الجلسة ⇒ الكرت بطوله نفسه معها وبلاها (مقيس 480 و390).
+TextStyle _routerChipStyle(Color c) => AppType.muted(color: c).copyWith(fontSize: 11, fontWeight: FontWeight.w600, height: 1.0);
+
+List<String> _routerChipParts(({int? clients, String? port, bool off}) r) =>
+    r.off ? const ['مطفي'] : [if (r.clients != null) '${r.clients}', if (r.port != null) r.port!];
+
+/// عرض الشريحة كما تُرسم (بنمط السياق) — لقرار «سطرٌ واحد أم سطران» في صفّ الانتهاء.
+double routerChipWidth(BuildContext context, ({int? clients, String? port, bool off}) r) {
+  final parts = _routerChipParts(r);
+  var w = 6.0 * 2 + 2 + 12.5 + 4;
+  for (var i = 0; i < parts.length; i++) {
+    if (i > 0) w += 4 + 3 + 4;
+    w += _textWidth(context, parts[i], _routerChipStyle(AppColors.textMid));
+  }
+  return w;
+}
+
+class RouterChip extends StatelessWidget {
+  const RouterChip(this.r, {super.key});
+  final ({int? clients, String? port, bool off}) r;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = r.off ? AppColors.textHint : AppColors.textMid;
+    final parts = _routerChipParts(r);
+    return Semantics(
+      label: r.off ? 'راوتر المشترك مطفي' : 'راوتر المشترك: ${parts.join(' · ')}',
+      child: Container(
+        key: const ValueKey('router-chip'),
+        height: 16,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(color: AppColors.borderSoft),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(LucideIcons.router, size: 12.5, color: c),
+          const SizedBox(width: 4),
+          for (var i = 0; i < parts.length; i++) ...[
+            if (i > 0) ...[
+              const SizedBox(width: 4),
+              Container(width: 3, height: 3, decoration: BoxDecoration(color: AppColors.grabber, shape: BoxShape.circle)),
+              const SizedBox(width: 4),
+            ],
+            Text(parts[i], textDirection: r.off ? TextDirection.rtl : TextDirection.ltr, style: _routerChipStyle(c)),
+          ],
+        ]),
+      ),
     );
   }
 }

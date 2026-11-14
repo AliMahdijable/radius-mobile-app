@@ -389,6 +389,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   (IconData, String)? _captionOf(SubsCheckCat c) => switch (c) {
         SubsCheckCat.problems => null,
         SubsCheckCat.healthy => (LucideIcons.arrowDownWideNarrow, 'الأقرب إلى حدّ المشكلة أوّلاً'),
+        // «مشترك بجهازين» (١٤ نوفمبر): النانو يحكم، والراوتر معلومة
+        SubsCheckCat.atSubscriber => (LucideIcons.router, 'نانوهم سليم وراوترهم لا يردّ — عند المشترك، ليس عطل شبكة'),
         SubsCheckCat.noReply => (LucideIcons.info, 'متّصلون وأجهزتهم ما ردّت — السبب بجانب كلّ مشترك'),
         SubsCheckCat.offline => (LucideIcons.info, 'غير متّصلين الآن — ليس عطلاً بأجهزتهم'),
         SubsCheckCat.noMetrics => (LucideIcons.info, 'أجهزتهم تردّ بلا مقاييس — ليست نانو ولا وحدةً ضوئيّة'),
@@ -419,6 +421,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         return out;
       case SubsCheckCat.healthy:
         return r.healthy;
+      case SubsCheckCat.atSubscriber:
+        return r.atSub;
       default:
         return r.missingIn(_seg);
     }
@@ -434,6 +438,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
 
   /// الأقسام الثانويّة — رماديّة: من لا يُقرأ جهازه أصلاً، وليس عطلاً يُتابَع.
   List<(SubsCheckCat, AppTone, IconData)> get _minor => [
+        // «عند المشترك» (١٤ نوفمبر): راوتر المشترك مطفي ونانوه سليم — ليس عطل شبكة
+        (SubsCheckCat.atSubscriber, AppTone.neutral, LucideIcons.router),
         (SubsCheckCat.offline, AppTone.neutral, LucideIcons.wifiOff),
         (SubsCheckCat.noMetrics, AppTone.neutral, LucideIcons.gauge),
         (
@@ -1001,6 +1007,20 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5)),
+                  // «عند المشترك» (١٤ نوفمبر): «راوتر المشترك مطفي» — سطرٌ يقول ما عنده، لا مشكلة شبكة
+                  if (row.note != null) ...[
+                    const SizedBox(height: Sp.xs),
+                    Row(children: [
+                      Icon(LucideIcons.router, size: 14, color: AppColors.textMid),
+                      const SizedBox(width: Sp.x6),
+                      Flexible(
+                        child: Text(row.note!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.body(color: AppColors.textHi).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                      ),
+                    ]),
+                  ],
                   if (x != null) ...[
                     const SizedBox(height: Sp.sm),
                     Padding(
@@ -1014,7 +1034,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
                 start: 0,
                 top: 0,
                 bottom: 0,
-                child: Container(width: 3, color: problem ? AppTone.danger.fill : AppColors.success),
+                child: Container(width: 3, color: problem ? AppTone.danger.fill : row.note != null ? AppColors.textHint : AppColors.success),
               ),
             ]),
           ),
@@ -1122,6 +1142,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       SubsCheckCat.problems =>
         _notice(LucideIcons.circleCheck, 'لا مشاكل ✓ — كلّ المقروئين ضمن حدود «تنبيه المشترك»', good: true),
       SubsCheckCat.healthy => _notice(LucideIcons.triangleAlert, 'لا أحد سليم — كلّ المقروئين بمشكلة'),
+      SubsCheckCat.atSubscriber => _notice(LucideIcons.circleCheck, 'لا راوتر مطفي ✓', good: true),
       SubsCheckCat.noReply =>
         _busy ? _notice(LucideIcons.radar, 'لا أحد حتى الآن — الفحص يكمل') : _noReplyEmpty(r),
       SubsCheckCat.offline => _offlineEmpty(r),

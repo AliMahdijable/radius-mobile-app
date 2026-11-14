@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
 import 'package:flutter/foundation.dart' show immutable, visibleForTesting;
 
+import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../core/util/bidi.dart';
 import '../core/util/format.dart';
@@ -124,10 +125,13 @@ class SubsReading {
 
 /// مشتركٌ مقروء في التقرير — بمشاكله (فارغة = سليم) وقراءته.
 class SubsCheckRow {
-  const SubsCheckRow(this.sub, this.problems, {this.reading});
+  const SubsCheckRow(this.sub, this.problems, {this.reading, this.note});
   final Subscriber sub;
   final List<SubsCheckProblem> problems;
   final SubsReading? reading;
+
+  /// سطرٌ بلا مشكلة شبكة يُقال للمشترك (١٤ نوفمبر): «راوتر المشترك مطفي» في «عند المشترك».
+  final String? note;
 
   /// أسوأ مشاكله (الكيبل ثمّ الإشارة…) — null إن كان سليماً.
   ConnectionProblemKind? get worst {
@@ -175,6 +179,10 @@ typedef SubsMissing = ({Subscriber sub, SubsMissWhy why, String? note});
 enum SubsCheckCat {
   problems('بمشكلة'),
   healthy('سليم'),
+
+  /// «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك): النانو سليم وراوتر المشترك لا يردّ ⇒ «راوتر المشترك مطفي» — عند المشترك،
+  /// لا يُحسب عطل شبكة.
+  atSubscriber('عند المشترك'),
   noReply('جهازه ما ردّ'),
   offline('غير متّصل الآن'),
   noMetrics('بلا مقاييس'),
@@ -273,6 +281,7 @@ class SubsCheckReport {
     required this.read,
     required this.rows,
     this.healthy = const [],
+    this.atSub = const [],
     this.missing = const [],
     this.oldest,
     this.newest,
@@ -288,6 +297,9 @@ class SubsCheckReport {
 
   /// المقروء بلا مشكلة — الأقرب للحدّ أوّلاً.
   final List<SubsCheckRow> healthy;
+
+  /// «عند المشترك» (١٤ نوفمبر): نانوه سليم وراوتره (الجهاز الثاني) لا يردّ — [SubsCheckRow.note].
+  final List<SubsCheckRow> atSub;
 
   /// من لم يُقرأ — الميّت عبر الـVPN أوّلاً ([SubsMissWhy] بترتيبه).
   final List<SubsMissing> missing;
@@ -314,6 +326,7 @@ class SubsCheckReport {
   int count(SubsCheckCat c) => switch (c) {
         SubsCheckCat.problems => rows.length,
         SubsCheckCat.healthy => healthy.length,
+        SubsCheckCat.atSubscriber => atSub.length,
         _ => missing.where((m) => SubscribersCheck.catOf(m.why) == c).length,
       };
 }
@@ -516,6 +529,14 @@ class SubscribersCheck {
         out.add('• ${who(row.sub)} — ${row.problems.map((p) => p.label).join(' · ')}');
       }
     }
+    if (r.atSub.isNotEmpty) {
+      out
+        ..add('')
+        ..add('${SubsCheckCat.atSubscriber.label} (${formatIQD(r.atSub.length)}):');
+      for (final row in r.atSub) {
+        out.add('• ${who(row.sub)} — ${row.note ?? routerOffNote}');
+      }
+    }
     for (final c in const [SubsCheckCat.noReply, SubsCheckCat.noMetrics, SubsCheckCat.unchecked]) {
       final ms = r.missingIn(c);
       if (ms.isEmpty) continue;
@@ -538,6 +559,7 @@ class SubscribersCheck {
     ConnectionAlertThresholds Function(String? company) limits, {
     DateTime? oldest,
     DateTime? newest,
+    List<SubsCheckRow> atSub = const [],
   }) {
     rows.sort(_byWorst);
     final margins = <SubsCheckRow, double>{
@@ -553,9 +575,10 @@ class SubscribersCheck {
     final sortedMissing = [for (final i in order) missing[i]];
     return SubsCheckReport(
       total: total,
-      read: rows.length + healthy.length,
+      read: rows.length + healthy.length + atSub.length,
       rows: rows,
       healthy: healthy,
+      atSub: atSub,
       missing: sortedMissing,
       oldest: oldest,
       newest: newest,
@@ -612,6 +635,45 @@ class SubscribersCheck {
     return raw.isEmpty || raw.startsWith('0000') ? null : parseSasLocal(raw);
   }
 
+  /// «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك: «النانو هو جهاز المشترك والحكم منه؛ الراوتر معلومة»): سطر «عند المشترك».
+  static const routerOffNote = 'راوتر المشترك مطفي';
+
+  /// اسم كيبل النانو حين للمشترك جهازٌ ثانٍ — رقم الإيثر باسم جهازه («كيبل النانو» لا «منفذ الراوتر»).
+  static const nanoCableWord = 'كيبل النانو';
+
+  /// للاختبار: { له جهازٌ ثانٍ؟ وراوتره لا يردّ؟ } بدل الإعداد وذاكرة الفحص.
+  @visibleForTesting
+  static ({bool second, bool routerOff}) Function(Subscriber s)? debugTwo;
+
+  static ({bool second, bool routerOff}) _two(Subscriber s) {
+    final d = debugTwo;
+    if (d != null) return d(s);
+    final cfg = DeviceConfigApi.peekConfig(s.username, company: s.companyKey);
+    if (cfg == null || !cfg.hasSecond) return (second: false, routerOff: false);
+    final ip = s.ipAddress?.trim();
+    if (DeviceProbeApi.peek(username: s.username, ip: ip, company: s.companyKey, slot: 2)?.snap != null) {
+      return (second: true, routerOff: false);
+    }
+    final why = DeviceProbeApi.issueFor(username: s.username, ip: ip ?? '', company: s.companyKey, slot: 2);
+    return (second: true, routerOff: why?.issue == ProbeIssue.unreachable);
+  }
+
+  /// قراءة هاتفٍ لنانو المشترك ⇒ قسمها: الحكم من النانو وحده؛ له جهازٌ ثانٍ ⇒ مشكلة الكيبل «كيبل النانو: …» (لا عطلان)، والنانو
+  /// سليمٌ وراوتره لا يردّ ⇒ «عند المشترك» بسطر «راوتر المشترك مطفي» (لا عطل شبكة). النانو لا يردّ ⇒ لا يصل هنا (لا حكم على الراوتر).
+  static void _placePhone(Subscriber s, List<ConnectionProblem> probs, SubsReading x, List<SubsCheckRow> rows,
+      List<SubsCheckRow> healthy, List<SubsCheckRow> atSub) {
+    final two = _two(s);
+    if (probs.isEmpty && two.second && two.routerOff) {
+      atSub.add(SubsCheckRow(s, const [], reading: x, note: routerOffNote));
+      return;
+    }
+    final named = [
+      for (final q in probs)
+        (kind: q.kind, label: two.second && q.kind == ConnectionProblemKind.cable ? '$nanoCableWord: ${q.label}' : q.label)
+    ];
+    (probs.isEmpty ? healthy : rows).add(SubsCheckRow(s, named, reading: x));
+  }
+
   /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار، و[wave] الموجة الجارية (من لم تبلغه «لم يُفحص بعد»)؛ وغير
   /// المتّصل الآن بقراءةٍ من قبل هذا الفحص «غير متّصل الآن» ([currentFor]).
   static SubsCheckReport local(
@@ -627,6 +689,7 @@ class SubscribersCheck {
     final rows = <SubsCheckRow>[];
     final healthy = <SubsCheckRow>[];
     final missing = <SubsMissing>[];
+    final atSub = <SubsCheckRow>[];
     for (final s in subs) {
       final p = look(s);
       final snap = p?.snap;
@@ -643,11 +706,9 @@ class SubscribersCheck {
       }
       if (oldest == null || p.at.isBefore(oldest)) oldest = p.at;
       if (newest == null || p.at.isAfter(newest)) newest = p.at;
-      final probs = ConnectionAlerts.detect(snap!, limits(s.companyKey));
-      final row = SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: x);
-      (probs.isEmpty ? healthy : rows).add(row);
+      _placePhone(s, ConnectionAlerts.detect(snap!, limits(s.companyKey)), x, rows, healthy, atSub);
     }
-    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest);
+    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest, atSub: atSub);
   }
 
   /// من قراءات فحص الخادم عبر الـVPN: [reading] يُستبدل في الاختبار، و[readAt] وقت فحص شركة المشترك (null: لم تُفحص)،
@@ -725,6 +786,7 @@ class SubscribersCheck {
     final rows = <SubsCheckRow>[];
     final healthy = <SubsCheckRow>[];
     final missing = <SubsMissing>[];
+    final atSub = <SubsCheckRow>[];
     for (final s in subs) {
       final p = look(s);
       // غير المتّصل الآن بقراءة هاتفٍ من قبل هذا الفحص ⇒ لا تُعدّ ([currentFor])
@@ -748,9 +810,7 @@ class SubscribersCheck {
       if (local != null && !vpnWins) {
         if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
         if (newest == null || p.at.isAfter(newest)) newest = p.at;
-        final probs = ConnectionAlerts.detect(p.snap!, t);
-        (probs.isEmpty ? healthy : rows)
-            .add(SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: local));
+        _placePhone(s, ConnectionAlerts.detect(p.snap!, t), local, rows, healthy, atSub);
         continue;
       }
       if (!s.isOnline) {
@@ -785,7 +845,7 @@ class SubscribersCheck {
                               ? (sub: s, why: SubsMissWhy.unchecked, note: vpnNotYetNote)
                               : (sub: s, why: SubsMissWhy.unchecked, note: _noAddress(s)));
     }
-    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest);
+    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest, atSub: atSub);
   }
 
   /// قراءة VPN بلا مقاييس ⇒ سطر من لم يُقرأ: البنك وحده ⇒ «يردّ» بسببه إن أعطاه الخادم («جهازه ما ردّ»)؛ وجهازٌ قُرئ بلا أرقام ⇒

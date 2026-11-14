@@ -845,6 +845,22 @@ class DeviceProbeApi {
               force: force,
               company: t.company);
         } catch (_) {}
+        // «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك: «الاولية تكون للنانو وبالنسبة لوضع الراوتر فيكفي اظهار عدد المتصلين»):
+        // له جهازٌ ثانٍ (راوتر خلف النانو) ⇒ يُفحص بعد النانو بالعامل نفسه (لا عاملٌ زائد)، فتظهر شريحة الراوتر بالقائمة ويحكم
+        // «الفحص العامّ» بالنانو أوّلاً. النانو لم يردّ ⇒ لا يُسأل الراوتر (لا حكم عليه بلا النانو). لا جهاز ثانٍ ⇒ كما كان تماماً.
+        if (!canceled &&
+            !(isCanceled?.call() ?? false) &&
+            (DeviceConfigApi.peekConfig(t.username, company: t.company)?.hasSecond ?? false) &&
+            peek(username: t.username, ip: t.ip, company: t.company)?.snap != null) {
+          try {
+            await probe(
+                slot: 2,
+                fallbackIp: t.ip,
+                subscriberUsername: t.username,
+                force: force,
+                company: t.company);
+          } catch (_) {}
+        }
         done++;
         // ⚠️ يُنادى الآن **لكلّ هدف** لا لكلّ دفعة. وهذا آمنٌ لأنّ
         //    المستدعي لم يعد يستدعي `setState` فيه — يوقظ بطاقات
