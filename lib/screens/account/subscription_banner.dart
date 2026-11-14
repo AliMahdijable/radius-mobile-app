@@ -9,6 +9,7 @@ import '../../services/support_contact.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'account_dates.dart';
 import 'subscription_screen.dart';
 import '../../core/widgets/app_sheet.dart';
 
@@ -23,9 +24,15 @@ class AccountStatusCache {
 
   static bool get _sameUser => _uid != null && _uid == AccountService.currentUser?.uid;
 
-  static AccountMe? get cached => _sameUser ? _me : null;
+  /// للاختبارات واللقطات وحدها: حالة حسابٍ ثابتة بلا Firebase ولا شبكة (كرت «الحساب والاشتراك» والحبّة).
+  @visibleForTesting
+  static AccountMe? debugOverride;
+
+  static AccountMe? get cached => debugOverride ?? (_sameUser ? _me : null);
 
   static Future<AccountMe?> get({bool force = false}) async {
+    final o = debugOverride;
+    if (o != null) return o;
     if (!AccountService.isReady) return null;
     final fresh = _at != null && DateTime.now().difference(_at!) < const Duration(minutes: 10);
     if (!force && _me != null && fresh && _sameUser) return _me;
@@ -98,7 +105,7 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
     final body = neutral
         ? (ends == null
             ? ''
-            : 'account.banner_ends_on_neutral'.tr(args: [DateFormat('d MMMM y', context.locale.languageCode).format(ends)]))
+            : 'account.banner_ends_on_neutral'.tr(args: [accountDate(ends)]))
         : (me.subscription.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
     showAppSheet<void>(
       context: context,
@@ -174,21 +181,25 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
     final s = me.subscription;
     final neutral = StorePolicy.hidePurchaseFlows;
     if (!s.active) return const SizedBox.shrink();
+    // الأيّام بالتقويم إلى تاريخ الانتهاء — نفس رقم كرت «الحساب والاشتراك» وشاشته (المالك ١٤ نوفمبر). كان رقم
+    // الخادم (يقرّب الساعات للأعلى ⇒ «اليوم» عند ≤1) فيختلف عنهما بيوم.
+    final days = s.shownDaysLeft;
+    final today = s.endsAt != null ? days == 0 : s.daysLeft <= 1;
     // آيفون: لا حبّة طوال «التجربة» — قرب الانتهاء وحده، وبصيغة «تفعيل الحساب»
     // لا «اشتراك/تجربة» (3.1.1).
-    if (neutral ? s.daysLeft > kSubscriptionWarnDays : (!s.isTrial && s.daysLeft > kSubscriptionWarnDays)) {
+    if (neutral ? days > kSubscriptionWarnDays : (!s.isTrial && days > kSubscriptionWarnDays)) {
       return const SizedBox.shrink();
     }
 
-    final urgent = s.daysLeft <= 2;
+    final urgent = days <= 2;
     final title = neutral
-        ? (s.daysLeft <= 1
+        ? (today
             ? 'account.banner_today_neutral'.tr()
-            : 'account.banner_neutral_title'.tr(args: ['${s.daysLeft}']))
-        : s.daysLeft <= 1
+            : 'account.banner_neutral_title'.tr(args: ['$days']))
+        : today
             ? 'account.banner_today'.tr()
-            : (s.isTrial ? 'account.banner_trial' : 'account.banner_ending').tr(args: ['${s.daysLeft}']);
-    final short = s.daysLeft <= 1 ? 'account.chip_today'.tr() : 'account.chip_days_left'.tr(args: ['${s.daysLeft}']);
+            : (s.isTrial ? 'account.banner_trial' : 'account.banner_ending').tr(args: ['$days']);
+    final short = today ? 'account.chip_today'.tr() : 'account.chip_days_left'.tr(args: ['$days']);
     final tone = urgent ? AppTone.danger : AppTone.warning;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
