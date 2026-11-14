@@ -591,21 +591,25 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                         // «تعبئة محفظته» بدين ⇒ دينه تغيّر: قراءةٌ طازجة كالسحب للتحديث
                         onChanged: () => unawaited(_onDataChanged(force: true)),
                       ),
-                    // الأقسام تنطوي وتُحفظ حالها (١٤ نوفمبر — المالك: «الاقسام خليهن توكل كلوز واحد منهن ع الاقل بشكل دائمي»)
-                    FoldableSection(
-                      id: 'dev1',
-                      title: 'معلومات الجهاز',
-                      icon: LucideIcons.router,
-                      builder: (fold) => DeviceProbeCard(
-                        key: _deviceCardKey,
-                        ip: sub.ipAddress ?? '',
-                        username: sub.username,
-                        company: sub.companyKey,
-                        onFold: fold,
+                    // المشروع الوطنيّ: لا «معلومات الجهاز» ولا «الجهاز الثاني» (المالك ١٤ نوفمبر: «نلغي منه معلومات الجهاز… ماعدهم
+                    // منجمنت حتى لايصير ضغط بالصفحه» — [subscriberDevicesHidden]): لا كرت يدور على جهازٍ لا يصله الوكيل.
+                    if (!subscriberDevicesHidden(sub)) ...[
+                      // الأقسام تنطوي وتُحفظ حالها (١٤ نوفمبر — المالك: «الاقسام خليهن توكل كلوز واحد منهن ع الاقل بشكل دائمي»)
+                      FoldableSection(
+                        id: 'dev1',
+                        title: 'معلومات الجهاز',
+                        icon: LucideIcons.router,
+                        builder: (fold) => DeviceProbeCard(
+                          key: _deviceCardKey,
+                          ip: sub.ipAddress ?? '',
+                          username: sub.username,
+                          company: sub.companyKey,
+                          onFold: fold,
+                        ),
                       ),
-                    ),
-                    // «الجهاز الثاني» (نانو + راوتر) — يظهر حين يُحفظ له عنوانٌ في إعداد الجهاز.
-                    SecondDeviceSlot(ip: sub.ipAddress ?? '', username: sub.username, company: sub.companyKey),
+                      // «الجهاز الثاني» (نانو + راوتر) — يظهر حين يُحفظ له عنوانٌ في إعداد الجهاز.
+                      SecondDeviceSlot(ip: sub.ipAddress ?? '', username: sub.username, company: sub.companyKey),
+                    ],
                     const SizedBox(height: Sp.sm),
                     // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                     // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
