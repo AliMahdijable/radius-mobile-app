@@ -1100,6 +1100,38 @@ class SubscribersApi {
     }
   }
 
+  /// «تأكيد رقم المشترك بالواتساب» — فايبر الجزيرة على طريق موقع الشحن (١٤ نوفمبر): الموقع لا يفعّل مشتركاً رقمه غير مؤكَّد
+  /// (`pay_rail.requires_otp`) حتى يُرسل رمزاً بالواتساب لرقمه ويُدخل الوكيل الرمز. بلا [code] ⇒ «أرسل الرمز» لـ[phone]
+  /// (`POST …/pay-otp/send`)، وبه ⇒ التأكيد (`…/pay-otp/confirm`). الخادم يردّ رفض الموقع بنصّه (4xx) فيُقرأ ولا يُرمى.
+  static Future<({bool ok, String? message, String? code})> payOtp(String idx, {String? phone, String? code}) async {
+    final send = code == null;
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/pay-otp/${send ? 'send' : 'confirm'}',
+        data: send ? {'phone': phone ?? ''} : {'code': code},
+        options: Options(validateStatus: (s) => s != null && s < 500),
+      );
+      final b = r.data ?? const <String, dynamic>{};
+      final ok = b['success'] == true;
+      return (
+        ok: ok,
+        message: b['message']?.toString() ?? (ok ? null : (send ? 'تعذّر إرسال الرمز' : 'تعذّر تأكيد الرمز')),
+        code: ok ? null : b['code']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('pay-otp/$idx', e);
+      final b = e.response?.data;
+      return (
+        ok: false,
+        message: (b is Map ? b['message']?.toString() : null) ?? 'تعذّر الوصول لموقع الشحن الآن — أعد المحاولة',
+        code: b is Map ? b['code']?.toString() : null,
+      );
+    } catch (e) {
+      _log('pay-otp/$idx', e);
+      return (ok: false, message: 'تعذّر الوصول لموقع الشحن الآن — أعد المحاولة', code: null);
+    }
+  }
+
   /// POST /api/v2/subscribers/:idx/disconnect — يفصل جلسة المشترك الحيّة.
   /// الـbackend يلتقط acctsessionid عبر /index/online ثم يستدعي
   /// /user/disconnect/acctid/{acctid} لأن SAS4 يحتاج acctid لا الـidx.

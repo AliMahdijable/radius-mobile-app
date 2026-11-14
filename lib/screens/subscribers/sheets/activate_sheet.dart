@@ -174,6 +174,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   final _pinCtrl = TextEditingController();         // Pin الكارت (card)
   // «طريق موقع الشحن» (فايبر الجزيرة): رقم بطاقةٍ خارجيّة (٨ خانات) — يُرسل مع الطلب وحده
   final _railPinCtrl = TextEditingController();
+  // «تأكيد رقم المشترك بالواتساب» (موقع الشحن، ١٤ نوفمبر): الرقم ⇒ «أرسل الرمز» ⇒ الرمز ⇒ «تأكيد» ⇒ تُعاد قراءة النافذة
+  late final _otpPhoneCtrl = TextEditingController(text: _otpPhoneOf(widget.sub.phone));
+  final _otpCodeCtrl = TextEditingController();
+  bool _otpSent = false;
+  bool _otpBusy = false;
+  String? _otpMsg;
+  bool _otpMsgError = false;
   // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
   bool _confirmRepeat = false;
   // فايبر اكس: «تفعيلٌ مكرّر» عندهم (FIBERX_COOLOFF) يُعاد بتأكيدٍ صريح وحده؛ وتوقيت باقةٍ غير الحاليّة.
@@ -356,7 +363,54 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     _identifierCtrl.dispose();
     _pinCtrl.dispose();
     _railPinCtrl.dispose();
+    _otpPhoneCtrl.dispose();
+    _otpCodeCtrl.dispose();
     super.dispose();
+  }
+
+  /// رقم المشترك من الساس كما يُكتب في موقع الشحن (أرقامٌ وحدها) — فارغٌ إن لم يكن.
+  static String _otpPhoneOf(String? raw) => (raw ?? '').replaceAll(RegExp(r'[^0-9+]'), '');
+
+  /// ١) «أرسل الرمز» — الموقع يرسل رمزاً بالواتساب لرقم المشترك.
+  Future<void> _otpSend() async {
+    final idx = widget.sub.idx;
+    if (idx == null || _otpBusy) return;
+    setState(() {
+      _otpBusy = true;
+      _otpMsg = null;
+    });
+    final r = await MergedOps.run(widget.sub, () => SubscribersApi.payOtp(idx, phone: _otpPhoneCtrl.text.trim()));
+    if (!mounted) return;
+    setState(() {
+      _otpBusy = false;
+      _otpSent = r.ok;
+      _otpMsgError = !r.ok;
+      _otpMsg = r.message ?? (r.ok ? 'أُرسل الرمز لرقم المشترك' : 'تعذّر إرسال الرمز');
+    });
+  }
+
+  /// ٢) «تأكيد» بالرمز — نجح ⇒ تُعاد قراءة نافذة التفعيل (يسقط طلب التأكيد) فيُفعَّل كالعادة.
+  Future<void> _otpConfirm() async {
+    final idx = widget.sub.idx;
+    final code = _otpCodeCtrl.text.trim();
+    if (idx == null || _otpBusy || code.isEmpty) return;
+    setState(() {
+      _otpBusy = true;
+      _otpMsg = null;
+    });
+    final r = await MergedOps.run(widget.sub, () => SubscribersApi.payOtp(idx, code: code));
+    if (!mounted) return;
+    setState(() {
+      _otpBusy = false;
+      _otpMsgError = !r.ok;
+      _otpMsg = r.message ?? (r.ok ? 'تمّ تأكيد رقم المشترك' : 'تعذّر تأكيد الرمز');
+      if (!r.ok && r.code == 'PAY_OTP_EXPIRED') _otpSent = false; // انتهت المهلة ⇒ يُرسل من جديد
+    });
+    if (r.ok) {
+      _otpSent = false;
+      _otpCodeCtrl.clear();
+      await _load();
+    }
   }
 
   Future<void> _load() async {
@@ -652,12 +706,15 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool get _railExternal => _rail != null && _cardMode && _railPin.isNotEmpty;
   bool get _railPinBad => _railExternal && !RegExp(r'^[A-Za-z0-9]{8}$').hasMatch(_railPin);
 
+  /// موقع الشحن يطلب تأكيد رقم المشترك بالواتساب قبل تفعيله — يُؤكَّد من هنا ([_otpBlock]).
+  bool get _railOtp => _rail?['requires_otp'] == true;
+
   /// سبب منع التفعيل عبر موقع الشحن (يقوله الموقع نفسه) — null بلا منع.
   String? get _railStop {
     final r = _rail;
     if (r == null) return null;
     if (r['requires_otp'] == true) {
-      return 'موقع الشحن يطلب تأكيد رقم هاتف هذا المشترك بالواتساب قبل تفعيله — أكّده من موقع الشحن أوّلاً.';
+      return 'موقع الشحن يطلب تأكيد رقم هاتف هذا المشترك بالواتساب قبل تفعيله.';
     }
     if (r['option'] == null) return 'باقة المشترك ليست بين باقات موقع الشحن — غيّر باقته ثمّ فعّل.';
     return null;
@@ -673,6 +730,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (_kitCust) return 'تفعيل من محفظة المشترك';
     if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
     if (_pkgSwitcher) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون، وفايبر اكس من المحفظة)
+    if (_railOtp) return 'أكّد رقم المشترك أوّلاً';
     if (_railStop != null) return 'غير متاح عبر موقع الشحن';
     if (!_cardMode) return 'sheets.renew_now'.tr();
     if (_cardDenied) return 'cards.not_allowed_short'.tr();
@@ -1363,12 +1421,111 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               ),
             ),
           ],
-          if (_railStop != null) ...[
+          if (_railOtp) ...[
+            const SizedBox(height: Sp.sm),
+            _otpBlock(),
+          ] else if (_railStop != null) ...[
             const SizedBox(height: Sp.sm),
             _CardNote(tone: AppTone.danger, icon: LucideIcons.triangleAlert, text: _railStop!, maxLines: 4),
           ],
         ],
       ),
+    );
+  }
+
+  /// «تأكيد رقم المشترك بالواتساب» (المالك ١٤ نوفمبر: «تمام سويها»): رقم المشترك (من الساس، يُعدَّل) ⇒ «أرسل الرمز» ⇒ الرمز الذي
+  /// وصله ⇒ «تأكيد» ⇒ تُعاد قراءة النافذة فيُفعَّل كالعادة. ما يرفضه الموقع يظهر بنصّه تحت الخانة.
+  Widget _otpBlock() {
+    final cs = Theme.of(context).colorScheme;
+    Widget field({required Key key, required TextEditingController c, required String hint, required bool enabled, required int max}) =>
+        SheetBox(
+          focused: c.text.isNotEmpty,
+          child: TextField(
+            key: key,
+            controller: c,
+            enabled: enabled,
+            keyboardType: TextInputType.number,
+            textDirection: ui.TextDirection.ltr,
+            maxLength: max,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+٠-٩]'))],
+            onChanged: (_) => setState(() {}),
+            style: AppType.input(),
+            decoration: InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              counterText: '',
+              contentPadding: EdgeInsets.zero,
+              hintText: hint,
+              hintStyle: AppType.input(color: AppColors.textPlaceholder),
+            ),
+          ),
+        );
+    final busy = _otpBusy || _submitting;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _CardNote(
+          tone: AppTone.warning,
+          icon: LucideIcons.messageCircle,
+          text: 'موقع الشحن يطلب تأكيد رقم هاتف المشترك بالواتساب قبل تفعيله: يُرسل رمزٌ لرقمه، والمشترك يخبرك به.',
+          maxLines: 4,
+        ),
+        const SizedBox(height: Sp.sm),
+        field(key: const ValueKey('rail-otp-phone'), c: _otpPhoneCtrl, hint: 'رقم هاتف المشترك 07…', enabled: !busy && !_otpSent, max: 14),
+        const SizedBox(height: Sp.sm),
+        if (!_otpSent)
+          FilledButton.icon(
+            key: const ValueKey('rail-otp-send'),
+            onPressed: busy || _otpPhoneCtrl.text.trim().isEmpty ? null : _otpSend,
+            icon: _otpBusy
+                ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: cs.onPrimary))
+                : const Icon(LucideIcons.send, size: 18),
+            label: const Text('أرسل الرمز'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.brandAccent,
+              foregroundColor: AppColors.onBrand,
+              minimumSize: const Size.fromHeight(44),
+            ),
+          )
+        else ...[
+          field(key: const ValueKey('rail-otp-code'), c: _otpCodeCtrl, hint: 'الرمز الذي وصل المشترك', enabled: !busy, max: 8),
+          const SizedBox(height: Sp.sm),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  key: const ValueKey('rail-otp-confirm'),
+                  onPressed: busy || _otpCodeCtrl.text.trim().isEmpty ? null : _otpConfirm,
+                  icon: _otpBusy
+                      ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: cs.onPrimary))
+                      : const Icon(LucideIcons.check, size: 18),
+                  label: const Text('تأكيد'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandAccent,
+                    foregroundColor: AppColors.onBrand,
+                    minimumSize: const Size.fromHeight(44),
+                  ),
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              TextButton(
+                key: const ValueKey('rail-otp-again'),
+                onPressed: busy ? null : () => setState(() { _otpSent = false; _otpMsg = null; }),
+                child: const Text('رقمٌ آخر'),
+              ),
+            ],
+          ),
+        ],
+        if (_otpMsg != null) ...[
+          const SizedBox(height: Sp.sm),
+          _CardNote(
+            tone: _otpMsgError ? AppTone.danger : AppTone.success,
+            icon: _otpMsgError ? LucideIcons.triangleAlert : LucideIcons.circleCheck,
+            text: _otpMsg!,
+            maxLines: 4,
+          ),
+        ],
+      ],
     );
   }
 

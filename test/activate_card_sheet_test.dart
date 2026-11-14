@@ -67,6 +67,7 @@ void main() {
       'lastname': 'حسن',
       'profile_id': 4,
       'profile_name': 'Family',
+      'phone': '0770 123 4567',
     });
     await t.pumpWidget(EasyLocalization(
       supportedLocales: const [Locale('ar'), Locale('en')],
@@ -267,15 +268,105 @@ void main() {
     await drainSnack(t);
   });
 
-  testWidgets('طريق موقع الشحن: رقمٌ غير مؤكَّد ⇒ السبب ظاهر والزرّ مقفل بأيّ طريقة',
+  testWidgets('طريق موقع الشحن: رقمٌ غير مؤكَّد ⇒ صندوق «تأكيد رقم المشترك» برقمه من الساس، والتفعيل مقفلٌ حتى يتأكّد',
       (t) async {
     server.activationExtra = railData(ownCards: 2, otp: true);
     await open(t);
-    expect(find.textContaining('تأكيد رقم هاتف هذا المشترك بالواتساب'), findsOneWidget);
-    expect(footer('غير متاح عبر موقع الشحن'), findsOneWidget);
-    await t.tap(footer('غير متاح عبر موقع الشحن'));
+    expect(find.textContaining('يطلب تأكيد رقم هاتف المشترك بالواتساب'), findsOneWidget);
+    expect(t.widget<TextField>(find.byKey(const ValueKey('rail-otp-phone'))).controller!.text, '07701234567', reason: 'رقمه من الساس');
+    expect(find.byKey(const ValueKey('rail-otp-send')), findsOneWidget);
+    expect(find.byKey(const ValueKey('rail-otp-code')), findsNothing, reason: 'الرمز بعد الإرسال');
+    expect(footer('أكّد رقم المشترك أوّلاً'), findsOneWidget);
+    await t.tap(footer('أكّد رقم المشترك أوّلاً'));
     await t.pumpAndSettle();
     expect(server.activateBodies, isEmpty);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('تأكيد رقم المشترك: «أرسل الرمز» ⇒ خانة الرمز؛ رمزٌ خطأ ⇒ نصّ الموقع؛ الصحيح ⇒ تُعاد قراءة النافذة ويُفعَّل كالعادة',
+      (t) async {
+    server.activationExtra = railData(ownCards: 2, otp: true);
+    server.onOtpConfirmed = () => server.activationExtra = railData(ownCards: 2);
+    await open(t);
+    final reads = server.activationDataCalls;
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-phone')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('rail-otp-phone')), '0780 111 2233');
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-send')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('rail-otp-send')));
+    await t.pumpAndSettle();
+    expect(server.otpBodies('send').single, {'phone': '07801112233'}, reason: 'الرقم كما عُدِّل (أرقامٌ وحدها)');
+    expect(find.text('أُرسل رمز التحقّق بالواتساب إلى رقم المشترك'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rail-otp-code')), findsOneWidget);
+    expect(find.byKey(const ValueKey('rail-otp-send')), findsNothing);
+
+    server.otpConfirmReply = (422, {'success': false, 'code': 'PAY_OTP_WRONG', 'message': 'موقع الشحن: رمز التحقق غير صحيح'});
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-code')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('rail-otp-code')), '1111');
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-confirm')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('rail-otp-confirm')));
+    await t.pumpAndSettle();
+    expect(find.text('موقع الشحن: رمز التحقق غير صحيح'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rail-otp-code')), findsOneWidget, reason: 'يُعاد بالرمز الصحيح');
+    expect(server.activationDataCalls, reads, reason: 'لا إعادة قراءةٍ بعد رفض');
+
+    server.otpConfirmReply = (200, {'success': true, 'verified': true, 'message': 'تم تأكيد رقم الهاتف بنجاح'});
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-code')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('rail-otp-code')), '4321');
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-confirm')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('rail-otp-confirm')));
+    await t.pumpAndSettle();
+    expect(server.otpBodies('confirm').last, {'code': '4321'});
+    expect(server.activationDataCalls, reads + 1, reason: 'تُعاد قراءة النافذة');
+    expect(find.byKey(const ValueKey('rail-otp-phone')), findsNothing, reason: 'لا طلب تأكيدٍ بعد الآن');
+    expect(footer('أكّد رقم المشترك أوّلاً'), findsNothing);
+    await submit(t, 'تجديد الآن');
+    expect(server.activateBodies, hasLength(1), reason: 'يُفعَّل كالعادة');
+    expect(t.takeException(), isNull);
+    await drainSnack(t);
+  });
+
+  testWidgets('تأكيد رقم المشترك: رفض الموقع للرقم يظهر بنصّه والخانة تبقى للتصحيح؛ وانتهاء المهلة يعيد زرّ الإرسال',
+      (t) async {
+    server.activationExtra = railData(ownCards: 2, otp: true);
+    server.otpSendReply = (422, {
+      'success': false,
+      'code': 'PAY_OTP_REFUSED',
+      'message': 'موقع الشحن: لا يمكن ارسال الرمز لكون رقم الهاتف المدخل غير صحيح الرجاء التأكد من الرمز',
+    });
+    await open(t);
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-send')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('rail-otp-send')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('لا يمكن ارسال الرمز لكون رقم الهاتف المدخل غير صحيح'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rail-otp-code')), findsNothing);
+    expect(t.widget<TextField>(find.byKey(const ValueKey('rail-otp-phone'))).enabled, isTrue);
+
+    server.otpSendReply = (200, {'success': true, 'sent': true, 'message': 'أُرسل رمز التحقّق بالواتساب إلى رقم المشترك'});
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-send')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('rail-otp-send')));
+    await t.pumpAndSettle();
+    server.otpConfirmReply = (409, {'success': false, 'code': 'PAY_OTP_EXPIRED', 'message': 'لا رمز مرسَل لهذا المشترك أو انتهت مهلته — أرسل الرمز من جديد'});
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-code')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('rail-otp-code')), '4321');
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const ValueKey('rail-otp-confirm')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('rail-otp-confirm')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('انتهت مهلته'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rail-otp-send')), findsOneWidget, reason: 'يُرسل من جديد');
     expect(t.takeException(), isNull);
   });
 
@@ -403,7 +494,16 @@ class _DiskLoader extends AssetLoader {
 class _Server implements HttpClientAdapter {
   Map<String, dynamic> activationExtra = const {};
   (int, Map<String, dynamic>) activateReply = (200, {'success': true});
+  // «تأكيد رقم المشترك بالواتساب» (pay-otp)
+  (int, Map<String, dynamic>) otpSendReply = (200, {'success': true, 'sent': true, 'message': 'أُرسل رمز التحقّق بالواتساب إلى رقم المشترك'});
+  (int, Map<String, dynamic>) otpConfirmReply = (200, {'success': true, 'verified': true, 'message': 'تم تأكيد رقم الهاتف بنجاح'});
+  void Function()? onOtpConfirmed;
   final _requests = <RequestOptions>[];
+
+  List<Map<String, dynamic>> otpBodies(String kind) => _requests
+      .where((r) => r.path.endsWith('/pay-otp/$kind'))
+      .map((r) => Map<String, dynamic>.from(r.data as Map))
+      .toList();
 
   int get activationDataCalls =>
       _requests.where((r) => r.path.endsWith('/activation-data')).length;
@@ -439,6 +539,11 @@ class _Server implements HttpClientAdapter {
       );
     } else if (options.path == '/api/v2/subscribers/55/activate') {
       reply = activateReply;
+    } else if (options.path == '/api/v2/subscribers/55/pay-otp/send') {
+      reply = otpSendReply;
+    } else if (options.path == '/api/v2/subscribers/55/pay-otp/confirm') {
+      reply = otpConfirmReply;
+      if (reply.$1 == 200) onOtpConfirmed?.call();
     } else {
       reply = (404, {'success': false});
     }

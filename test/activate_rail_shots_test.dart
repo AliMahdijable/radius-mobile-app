@@ -77,11 +77,70 @@ void main() {
       await visualTearDown();
     });
   }
+  otpShots();
+}
+
+/// «تأكيد رقم المشترك بالواتساب» (١٤ نوفمبر): الصندوق قبل الإرسال وبعده — بعرض ٣٢٠ بخطٍّ ١٫٢ و٣٩٠ داكناً (لا نصّ يُقصّ).
+void otpShots() {
+  for (final d in const [VisualDevice('320_x1.2', Size(320, 760), 3), VisualDevice('390_dark', Size(390, 844), 3, dark: true)]) {
+    testWidgets('صندوق تأكيد رقم المشترك ${d.tag}', (t) async {
+      if (d.tag.contains('x1.2')) {
+        t.platformDispatcher.textScaleFactorTestValue = 1.2;
+        addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+      await visualSetUp(s1bSasOwner);
+      ApiClient.dio.httpClientAdapter = _RailServer(otp: true);
+      final sub = Subscriber.fromJson({
+        'idx': '55',
+        'username': 'sub_17_5_8_10',
+        'firstname': 'احمد',
+        'lastname': 'علي',
+        'phone': '07701234567',
+        'profile_id': 197,
+        'profile_name': 'Speed Plus',
+      });
+      await pumpVisual(
+        t,
+        d,
+        home: (_) => Scaffold(
+          body: Builder(
+            builder: (c) => Center(
+              child: TextButton(onPressed: () => showActivateSheet(c, sub), child: const Text('open')),
+            ),
+          ),
+        ),
+      );
+      await settle(t, seconds: 1);
+      await t.tap(find.text('open'));
+      await settle(t, seconds: 2);
+      await t.ensureVisible(find.byKey(const ValueKey('rail-otp-send')));
+      await settle(t, seconds: 1);
+      await _shot(t, '04_otp_ask', d);
+      await t.tap(find.byKey(const ValueKey('rail-otp-send')));
+      await settle(t, seconds: 1);
+      await t.ensureVisible(find.byKey(const ValueKey('rail-otp-confirm')));
+      await t.enterText(find.byKey(const ValueKey('rail-otp-code')), '4321');
+      await settle(t, seconds: 1);
+      await t.ensureVisible(find.byKey(const ValueKey('rail-otp-confirm')));
+      await settle(t, seconds: 1);
+      await _shot(t, '05_otp_code', d);
+      await t.pumpWidget(const SizedBox.shrink());
+      await t.pump(const Duration(seconds: 4));
+      await visualTearDown();
+    });
+  }
 }
 
 class _RailServer implements HttpClientAdapter {
+  _RailServer({this.otp = false});
+  final bool otp;
+
   @override
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    if (options.path.endsWith('/pay-otp/send')) {
+      return ResponseBody.fromString(jsonEncode({'success': true, 'sent': true, 'message': 'أُرسل رمز التحقّق بالواتساب إلى رقم المشترك'}), 200,
+          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    }
     final Map<String, dynamic> body = options.path.endsWith('/activation-data')
         ? {
             'success': true,
@@ -98,7 +157,7 @@ class _RailServer implements HttpClientAdapter {
               'activation_methods': {'credit': true, 'card': true},
               'cards': {'enabled': true, 'profile_id': 197, 'profile_name': 'Speed Plus', 'available': 0},
               'pay_rail': {
-                'on': true, 'ok': true, 'balance': 7200, 'amount': 35000, 'own_cards': 0, 'requires_otp': false,
+                'on': true, 'ok': true, 'balance': 7200, 'amount': 35000, 'own_cards': 0, 'requires_otp': otp,
                 'loan_available': false, 'external_card': true, 'option': {'id': '11', 'name': 'Speed Plus'},
               },
             },
