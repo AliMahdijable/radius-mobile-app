@@ -1747,11 +1747,7 @@ class DeviceProbeApi {
         );
         return null;
       }
-      return DeviceHealthSnapshot(
-        kind: DeviceKind.ont,
-        ip: ip,
-        ont: optical.withReboot(ZteOntService.canReboot(session)).withWifi(ZteOntService.canWifi(session)),
-      );
+      return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical.withReboot(ZteOntService.canReboot(session)));
     } finally {
       await ZteOntService.logout(session);
     }
