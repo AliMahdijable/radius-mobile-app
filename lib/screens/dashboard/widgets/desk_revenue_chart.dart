@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
+import '../../../services/dashboard_load_order.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -55,6 +56,9 @@ class _DeskRevenueChartState extends State<DeskRevenueChart> {
 
   Future<void> _load() async {
     _lastLoad = DateTime.now();
+    // المشتركون أوّلاً ([DashboardLoadOrder] — المالك ١٤ نوفمبر).
+    await DashboardLoadOrder.afterSubscribers();
+    if (!mounted) return;
     final r = await DashboardApi.fetchRevenue(RevenuePeriod.month);
     if (!mounted) return;
     if (r == null) {

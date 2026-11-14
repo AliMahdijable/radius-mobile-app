@@ -11,7 +11,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
 /// حال «أرقام تواصل إضافيّة» لمشتركٍ واحد (المالك ١٤ نوفمبر): تُجلب مرّة، وتُضاف/تُعدَّل بورقتها. تملكه شاشة المشترك (كالملاحظة)
-/// فيبقى حيّاً حين تطوي القائمة الكرت، ويقرؤه «المزيد». «كل الشركات» (مشتركٌ من شركةٍ أخرى) لا يُجلب — يُعدَّل من صفحة الشركة.
+/// وتعرضها بطاقة الهويّة تحت الهاتف (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت»)، ويقرؤه «المزيد» للإضافة والتعديل. «كل الشركات» (مشتركٌ من شركةٍ أخرى) لا يُجلب — يُعدَّل من صفحة الشركة.
 class SubscriberContactsController extends ChangeNotifier {
   SubscriberContactsController(this.sub);
   final Subscriber sub;
@@ -61,133 +61,6 @@ class SubscriberContactsController extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
-}
-
-/// كرت «أرقام تواصل إضافيّة» — للأرقام القائمة وحدها (بـ«تعديل»)؛ الإضافة من «المزيد» كالملاحظة (المالك ١ نوفمبر). لا يكبر به
-/// كرت المشترك ولا يظهر فارغاً.
-class SubscriberContactsCard extends StatefulWidget {
-  const SubscriberContactsCard({super.key, required this.controller, required this.canEdit});
-  final SubscriberContactsController controller;
-
-  /// يملك الحفظ (subscribers.edit) — وإلّا «تعديل» مقفل بمكانه.
-  final bool canEdit;
-
-  @override
-  State<SubscriberContactsCard> createState() => _SubscriberContactsCardState();
-}
-
-class _SubscriberContactsCardState extends State<SubscriberContactsCard> {
-  SubscriberContactsController get _c => widget.controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _c.addListener(_changed);
-    if (!_c.loaded) _c.load();
-  }
-
-  @override
-  void didUpdateWidget(SubscriberContactsCard old) {
-    super.didUpdateWidget(old);
-    if (old.controller != widget.controller) {
-      old.controller.removeListener(_changed);
-      _c.addListener(_changed);
-      if (!_c.loaded) _c.load();
-    }
-  }
-
-  void _changed() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    _c.removeListener(_changed);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep
-    final c = _c.contact;
-    if (!_c.ready || !_c.enabled || c == null || c.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: Sp.sm),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(R.lg),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.userPlus, size: 16, color: AppColors.textMid),
-                  const SizedBox(width: Sp.sm),
-                  Flexible(child: Text('أرقام تواصل إضافيّة', style: AppType.label(color: AppColors.textHi))),
-                  const SizedBox(width: Sp.sm),
-                  const Spacer(),
-                  Flexible(
-                    child: Text('خارج الساس', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
-                  ),
-                ],
-              ),
-            ),
-            if (c.waPhone2 != null) _line(LucideIcons.phone, 'واتساب ثانٍ', c.waPhone2!),
-            if (c.tgContact != null) _line(LucideIcons.send, 'تلغرام', c.tgContact!),
-            Divider(height: 1, color: AppColors.border),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 2, 6, 2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'حين لا يصل رقمه: الثاني ثمّ تلغرامه',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.micro(color: AppColors.textMid),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: widget.canEdit ? () => _c.edit(context) : null,
-                    icon: Icon(widget.canEdit ? LucideIcons.pencil : LucideIcons.lock, size: 15),
-                    label: const Text('تعديل'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _line(IconData icon, String label, String value) => Padding(
-        padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-        child: Row(
-          children: [
-            Icon(icon, size: 15, color: AppColors.textMid),
-            const SizedBox(width: Sp.sm),
-            Text(label, style: AppType.muted()),
-            const SizedBox(width: Sp.md),
-            Expanded(
-              child: Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: SelectableText(
-                  value,
-                  textDirection: TextDirection.ltr,
-                  maxLines: 1,
-                  style: AppType.bodyStrong(color: AppColors.textHi),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
 }
 
 class _ContactsSheet extends StatefulWidget {

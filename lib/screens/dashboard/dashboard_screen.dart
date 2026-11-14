@@ -26,6 +26,7 @@ import '../../services/ai_assistant_state.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/dashboard_refresh_signal.dart';
+import '../../services/dashboard_load_order.dart';
 import '../../services/auth_storage.dart';
 import '../../services/dashboard_cache.dart';
 import '../../services/linked_companies.dart';
@@ -267,6 +268,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // المخفيّ، وجلبٌ يسبق معرفة التفضيلات يُطلق النداءات كلّها ثمّ
     // يُخفي نتائجها — وهو نقيض الميزة. والكاش يرسم الأرقام القديمة
     // فوراً فلا يرى المستخدم انتظاراً.
+    // «المشتركون أوّلاً» (المالك ١٤ نوفمبر): الجولة تُفتح قبل أوّل رسم — كروت الإيرادات والباقات تجلب من initState
+    // (قبل أن تصل تفضيلات الأقسام)، فتنتظر المشتركين بدل أن تسبقهم. انظر [DashboardLoadOrder].
+    DashboardLoadOrder.begin();
     _loadSections().then((_) {
       if (mounted) _refreshLive(silent: false);
     });
@@ -309,6 +313,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _scheduleSilentRefresh() {
+    // الكروت التي تجلب بنفسها تسمع الحدث نفسه بعدنا مباشرةً — الجولة تُفتح هنا (لا بعد التأخير) فتنتظر المشتركين.
+    DashboardLoadOrder.begin();
     // Debounce — اجمع موجة الأحداث في refresh واحد. يعالج أيضاً حالة
     // resume + dataChanged بتوقيت متقارب (مثلاً مدير رجع للتطبيق بعد
     // بضع ثواني من تفعيل).
@@ -409,17 +415,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     }
     final jobs = <Future<void>>[];
-    // واتساب كلّ صفحة (المالك ٨ نوفمبر: «واتساب يضل جاري التحقق ميعرف يحفص كل الصفحات بيها واتساب او لا») — كان لا يُطلب
-    // في الوضع فتبقى الحبّة «جارٍ التحقق» أبداً.
-    if (wa) {
-      jobs.add(MergedDashboardApi.whatsApp().then((w) {
-        if (!mounted || !MergedMode.active.value) return;
-        setState(() {
-          _mergedWa = w;
-          _waLoaded = true;
-        });
-      }));
+    // «المشتركون أوّلاً» (المالك ١٤ نوفمبر) — كالوضع العاديّ: قوائم الشركات تنطلق وحدها، والبقيّة خلفها أو ٦ ثوانٍ.
+    DashboardLoadOrder.begin();
+    Future<void> afterSubs(Future<void> Function() job) async {
+      await DashboardLoadOrder.afterSubscribers();
+      if (!mounted || !MergedMode.active.value) return;
+      await job();
     }
+
     if (_canSubs) {
       jobs.add(MergedSubscribers.load(fresh: fresh).then((r) {
         if (!mounted || !MergedMode.active.value) return;
@@ -428,25 +431,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _applyMerged();
           _freshAt = DateTime.now();
         });
-      }));
+      }).whenComplete(DashboardLoadOrder.subscribersDone));
+    } else {
+      DashboardLoadOrder.subscribersDone();
+    }
+    // واتساب كلّ صفحة (المالك ٨ نوفمبر: «واتساب يضل جاري التحقق ميعرف يحفص كل الصفحات بيها واتساب او لا») — كان لا يُطلب
+    // في الوضع فتبقى الحبّة «جارٍ التحقق» أبداً.
+    if (wa) {
+      jobs.add(afterSubs(() => MergedDashboardApi.whatsApp().then((w) {
+        if (!mounted || !MergedMode.active.value) return;
+        setState(() {
+          _mergedWa = w;
+          _waLoaded = true;
+        });
+      })));
     }
     if (_shown('activities') && _canActivity) {
-      jobs.add(MergedDashboardApi.daily().then((m) {
+      jobs.add(afterSubs(() => MergedDashboardApi.daily().then((m) {
         if (!mounted || !MergedMode.active.value) return;
         setState(() {
           _mergedDaily = m;
           _applyMerged();
         });
-      }));
+      })));
     }
     if (_shown('wallet') && _canMoney) {
-      jobs.add(MergedDashboardApi.wallet().then((m) {
+      jobs.add(afterSubs(() => MergedDashboardApi.wallet().then((m) {
         if (!mounted || !MergedMode.active.value) return;
         setState(() {
           _mergedWallet = m;
           _applyMerged();
         });
-      }));
+      })));
     }
     await Future.wait(jobs.map((j) => j.catchError((_) {})));
   }
@@ -607,6 +623,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
     //
     // ⚠️ و`_can…` بجانب `_shown` على كلّ نداء: موظّف ايرث لنك لا يُطلب له
     // ما سيردّه الخادم 403 (انظر `_elEmployee`).
+    // ⚠️ نداء SAS4 المباشر حُذف (2026-08-31).
+    //
+    // كان يطلق **خمسة** طلبات هاتف→reseller-supernet.net في كلّ تحديث،
+    // ولا يُقرأ منها إلّا `total`. والأربعة الباقية — active · expired
+    // · online · balance — تُجلب وتُحلَّل وتُخزَّن ثمّ **تُهمَل**:
+    // الثلاثة الأولى تُحسب محلّيّاً من القائمة (التعليق تحت يشرح لماذا:
+    // widget الـactive في SAS4 يُرجع offline=0 على بعض الحسابات)،
+    // والرصيد يأتي من /api/v2/admin-widgets.
+    //
+    // ثمّ صار `total` نفسه ضارّاً: يتجاوز خادمنا فلا يعرف «نطاق العرض»،
+    // فيعرض إجمالي المستأجر كلّه فوق قائمة مرشَّحة.
+    //
+    // ومعه سقط مبرّر تأخير الـ800ms أدناه — كان موضوعاً ليترك النطاق
+    // الترددّي لهذه النداءات الميتة.
+    // (كان هنا «أخّر المدينين ليسبقهم الخفيف» — انقلب بطلب المالك: المشتركون أوّلاً وحدهم، والبقيّة خلفهم.)
+    // ── «المشتركون أوّلاً» (المالك ١٤ نوفمبر ٢٠٢٦: «الاولية تكون لتحميل المشتركين للداش بورد ثم بقيه الامور») ──
+    // قائمة المشتركين تنطلق وحدها أوّلاً (كانت بعد الواتساب وآخر النشاطات وبجانبها)، والبقيّة — الواتساب، آخر النشاطات، الرصيد،
+    // الكارتات، وكروت الإيرادات والباقات — تنتظر نهايتها أو ٦ ثوانٍ ([DashboardLoadOrder]).
+    DashboardLoadOrder.begin();
+    if (!_canSubs) {
+      DashboardLoadOrder.subscribersDone();
+    } else {
+      DashboardApi.fetchDebtors()
+          .timeout(kMaxLoad, onTimeout: () => null)
+          .catchError((_) => null)
+          .then((r) {
+        // الجولة تمضي أيّاً كانت النتيجة (نجاح، فشل، مهلة) — البقيّة لا تنتظر أكثر من هذا.
+        DashboardLoadOrder.subscribersDone();
+        if (!mounted || MergedMode.active.value) return;
+        if (silent && r == null && _debtorsLive != null) return;
+        setState(() {
+          _debtorsLive = r;
+          _debtorsLoaded = true;
+          if (r != null) _freshAt = DateTime.now();
+        });
+        // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
+        // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
+        AlertsService.refresh();
+        // الحساب الكبير: عدّ المدينين أوّل مرّة يأخذ دقيقةً أو اثنتين في الخادم — نسأل مرّةً بعد ٢٠ثانية لا عند التحديث التالي.
+        if (r != null && r.debtsPending && !_debtsRetry) {
+          _debtsRetry = true;
+          Future.delayed(const Duration(seconds: 20), () {
+            _debtsRetry = false;
+            if (mounted) _refreshLive(silent: true);
+          });
+        }
+      });
+    }
+    unawaited(DashboardLoadOrder.afterSubscribers().then((_) {
+      if (!mounted || MergedMode.active.value) return;
+      _refreshRest(silent: silent);
+    }));
+  }
+
+  /// بقيّة الرئيسيّة بعد المشتركين ([DashboardLoadOrder]) — كلٌّ مستقلّ يُضيء بطاقته حين يصل.
+  void _refreshRest({required bool silent}) {
+    const kMaxLoad = Duration(seconds: 20);
     if (_shown('wa_banner') && _canWa) {
       DashboardApi.fetchWhatsAppStatus()
           .timeout(kMaxLoad, onTimeout: () => null)
@@ -634,51 +707,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       });
     }
-    // ⚠️ نداء SAS4 المباشر حُذف (2026-08-31).
-    //
-    // كان يطلق **خمسة** طلبات هاتف→reseller-supernet.net في كلّ تحديث،
-    // ولا يُقرأ منها إلّا `total`. والأربعة الباقية — active · expired
-    // · online · balance — تُجلب وتُحلَّل وتُخزَّن ثمّ **تُهمَل**:
-    // الثلاثة الأولى تُحسب محلّيّاً من القائمة (التعليق تحت يشرح لماذا:
-    // widget الـactive في SAS4 يُرجع offline=0 على بعض الحسابات)،
-    // والرصيد يأتي من /api/v2/admin-widgets.
-    //
-    // ثمّ صار `total` نفسه ضارّاً: يتجاوز خادمنا فلا يعرف «نطاق العرض»،
-    // فيعرض إجمالي المستأجر كلّه فوق قائمة مرشَّحة.
-    //
-    // ومعه سقط مبرّر تأخير الـ800ms أدناه — كان موضوعاً ليترك النطاق
-    // الترددّي لهذه النداءات الميتة.
-    // Defer debtors 800ms so the faster widgets (SAS4/wallet/finance)
-    // grab bandwidth first. `subscribers/with-phones` is the heaviest
-    // fetch (loads every subscriber's row + notes + package) — running
-    // it in parallel with the light widgets was starving them.
-    // On silent refresh we still fire immediately (no cold start).
-    Future.delayed(Duration.zero, () {
-      if (!mounted || !_canSubs) return;
-      DashboardApi.fetchDebtors()
-          .timeout(kMaxLoad, onTimeout: () => null)
-          .catchError((_) => null)
-          .then((r) {
-        if (!mounted || MergedMode.active.value) return;
-        if (silent && r == null && _debtorsLive != null) return;
-        setState(() {
-          _debtorsLive = r;
-          _debtorsLoaded = true;
-          if (r != null) _freshAt = DateTime.now();
-        });
-        // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
-        // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
-        AlertsService.refresh();
-        // الحساب الكبير: عدّ المدينين أوّل مرّة يأخذ دقيقةً أو اثنتين في الخادم — نسأل مرّةً بعد ٢٠ثانية لا عند التحديث التالي.
-        if (r != null && r.debtsPending && !_debtsRetry) {
-          _debtsRetry = true;
-          Future.delayed(const Duration(seconds: 20), () {
-            _debtsRetry = false;
-            if (mounted) _refreshLive(silent: true);
-          });
-        }
-      });
-    });
     // ⚠️ التبويب على النداء لا على العرض: الغاية إسقاط الطلب لا
     // إخفاء نتيجته. القسم المخفيّ يجب ألّا يكلّف شبكةً أصلاً.
     if (_shown('wallet') && _canMoney) {

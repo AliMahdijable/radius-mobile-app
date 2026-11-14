@@ -203,6 +203,11 @@ class DashboardApi {
   /// GET /api/activities/daily-activations?admin_id=X
   /// Backend aggregates today's activation + extension counts and the
   /// last N recent activity rows. Same endpoint v1 uses.
+  /// «آخر النشاطات» بالرئيسيّة: أحدث خمسة وحدها (المالك ١٤ نوفمبر ٢٠٢٦: «يجلب بس ٥ قراءات احدث شي حتى لايشغل الداش بورد»).
+  /// الخادم (95aab05) يعيد أحدث [recentLimit] سطراً ويجلب أسماءها وحدها؛ والعدّادات (تفعيل/تمديد) من سطور اليوم كلّها كما كانت.
+  /// والقصّ هنا أيضاً: خادمٌ أقدم يعيد اليوم كلّه — يُعرض منه أحدث خمسة.
+  static const int recentLimit = 5;
+
   static Future<DailyActivationsResult?> fetchDailyActivations({String? adminIdOverride}) async {
     _logStart('daily-activations');
     final token = await AuthStorage.readToken();
@@ -229,6 +234,7 @@ class DashboardApi {
           // «إلغاء تسديد» (١١ نوفمبر): سطره في السجلّ تسديدٌ بمبلغٍ سالب — الخادم لا يعيده إلّا لمن يطلبه (تطبيقٌ أقدم كان
           // سيعرضه «تسديد دين» بمبلغه)، ومعه pay_void ومبلغه ومن ألغاه ([RecentActivities]).
           'include_voids': '1',
+          'limit': '$recentLimit',
         },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
@@ -246,6 +252,7 @@ class DashboardApi {
             _toInt(counts['extensions']) ?? _toInt(counts['extend']) ?? 0,
         recent: list
             .whereType<Map>()
+            .take(recentLimit)
             .map((e) => Map<String, dynamic>.from(e))
             .toList(),
       );

@@ -14,8 +14,10 @@ import '../../theme/typography.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/copyable.dart';
+import '../dashboard/widgets/pill_tabs.dart';
+import 'scan_range.dart';
 
-/// Bulk scanner — يفحص /24 subnet بالتوازي على 6 ports شائعة،
+/// Bulk scanner — يفحص شبكةً (‎/24‎ أو أيّ ‎/N‎) أو مدى «من – إلى» ([ScanRange]) بالتوازي على 6 ports شائعة،
 /// يعرض النتائج live، ويسمح للمستخدم يختار أجهزة يضيفها دفعة واحدة.
 ///
 /// الاستعمال:
@@ -37,6 +39,11 @@ class BulkScanScreen extends StatefulWidget {
 class _BulkScanScreenState extends State<BulkScanScreen> {
   final _baseCtrl = TextEditingController(text: '192.168.1');
   final _prefixCtrl = TextEditingController(text: 'جهاز');
+
+  /// «من – إلى» (المالك ١٤ نوفمبر: «نخلي اختياري يختار رينج من الى مثلا 10.10.10.2-10.10.10.20») بدل خانة الشبكة.
+  bool _fromTo = false;
+  final _fromCtrl = TextEditingController();
+  final _toCtrl = TextEditingController();
 
   bool _scanning = false;
   int _done = 0;
@@ -75,7 +82,27 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   void dispose() {
     _baseCtrl.dispose();
     _prefixCtrl.dispose();
+    _fromCtrl.dispose();
+    _toCtrl.dispose();
     super.dispose();
+  }
+
+  /// تبديل الطريقة: ما كُتب في الأولى يملأ الثانية (الشبكة ⇒ أوّل عنوانٍ وآخره، والمدى ⇒ ‎أ-ب‎) — لا يُعاد من الصفر.
+  void _setFromTo(bool v) {
+    if (v == _fromTo) return;
+    setState(() {
+      if (v) {
+        final r = parseScanNetwork(_baseCtrl.text).range;
+        if (r != null && _fromCtrl.text.trim().isEmpty && _toCtrl.text.trim().isEmpty) {
+          _fromCtrl.text = r.firstIp;
+          _toCtrl.text = r.lastIp;
+        }
+      } else {
+        final r = parseScanFromTo(_fromCtrl.text, _toCtrl.text).range;
+        if (r != null) _baseCtrl.text = '${r.firstIp}-${r.lastIp}';
+      }
+      _fromTo = v;
+    });
   }
 
   /// يجرّب استخراج WiFi IP من NetworkInterface — يقترحه في الحقل.
@@ -105,67 +132,19 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     } catch (_) {}
   }
 
-  /// نتيجة parseRange — base + start/end octets.
-  ({String base, int start, int end})? _parseRange(String raw) {
-    var s = raw.trim().replaceAll(RegExp(r'\s+'), '');
-    if (s.isEmpty) return null;
-    // شيل /24 لو موجود
-    s = s.replaceAll(RegExp(r'/\d+$'), '');
-    // شيل نقطة تعليقة في النهاية (10.70.241.)
-    s = s.replaceAll(RegExp(r'\.$'), '');
-
-    // صيغة range: a.b.c.d-e (مثال 10.70.241.5-100)
-    final rangeMatch =
-        RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})-(\d{1,3})$')
-            .firstMatch(s);
-    if (rangeMatch != null) {
-      final o1 = int.parse(rangeMatch.group(1)!);
-      final o2 = int.parse(rangeMatch.group(2)!);
-      final o3 = int.parse(rangeMatch.group(3)!);
-      final start = int.parse(rangeMatch.group(4)!);
-      final end = int.parse(rangeMatch.group(5)!);
-      if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
-      if (start < 1 || start > 254 || end < 1 || end > 254 || start > end) {
-        return null;
-      }
-      return (base: '$o1.$o2.$o3', start: start, end: end);
-    }
-    // صيغة 4 octets: a.b.c.d → نتجاهل الرابع، scan كامل
-    final fourMatch =
-        RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$').firstMatch(s);
-    if (fourMatch != null) {
-      final o1 = int.parse(fourMatch.group(1)!);
-      final o2 = int.parse(fourMatch.group(2)!);
-      final o3 = int.parse(fourMatch.group(3)!);
-      if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
-      return (base: '$o1.$o2.$o3', start: 1, end: 254);
-    }
-    // صيغة 3 octets: a.b.c → scan كامل .1-.254
-    final threeMatch =
-        RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(s);
-    if (threeMatch != null) {
-      final o1 = int.parse(threeMatch.group(1)!);
-      final o2 = int.parse(threeMatch.group(2)!);
-      final o3 = int.parse(threeMatch.group(3)!);
-      if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
-      return (base: '$o1.$o2.$o3', start: 1, end: 254);
-    }
-    return null;
-  }
-
   Future<void> _startScan() async {
-    final parsed = _parseRange(_baseCtrl.text);
-    if (parsed == null) {
+    final parsed = _fromTo ? parseScanFromTo(_fromCtrl.text, _toCtrl.text) : parseScanNetwork(_baseCtrl.text);
+    final range = parsed.range;
+    if (range == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(
-            'صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
+        content: Text(parsed.error ?? 'صيغة غير صحيحة'),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ));
       return;
     }
-    final total = parsed.end - parsed.start + 1;
+    final total = range.count;
     setState(() {
       _scanning = true;
       _done = 0;
@@ -175,10 +154,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     });
     HapticFeedback.mediumImpact();
     try {
-      final results = await NetworkDevicesApi.bulkScanSubnet(
-        base: parsed.base,
-        startOctet: parsed.start,
-        endOctet: parsed.end,
+      final results = await NetworkDevicesApi.bulkScanIps(
+        ips: range.ips,
         onProgress: (done, total) {
           if (mounted) {
             setState(() {
@@ -406,62 +383,101 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   }
 
   Widget _scannerBar() {
+    final fieldStyle = AppType.body(color: AppColors.textHi).copyWith(fontSize: 14);
+    InputDecoration deco(String label, String hint, {IconData? icon}) => InputDecoration(
+          labelText: label,
+          hintText: hint,
+          prefixIcon: icon == null ? null : Icon(icon, size: 18, color: AppColors.textMid),
+          filled: true,
+          fillColor: AppColors.surfaceInput,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(R.sm),
+            borderSide: BorderSide.none,
+          ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        );
     return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.md, 12, Sp.md, 8),
+      padding: const EdgeInsets.fromLTRB(Sp.md, 10, Sp.md, 8),
       color: AppColors.surface,
       child: Column(children: [
+        // الطريقة («شبكة» أو «من – إلى») وزرّ البدء في صفٍّ واحد — فتأخذ الخانتان عرض الشاشة كلّه (عنوانٌ كامل بلا قصّ على ٣٢٠).
         Row(children: [
-          Expanded(
-            flex: 3,
-            child: TextField(
-              controller: _baseCtrl,
-              enabled: !_scanning,
-              textDirection: TextDirection.ltr,
-              decoration: InputDecoration(
-                labelText: 'الشبكة أو النطاق',
-                hintText: '10.70.241.0/24',
-                prefixIcon: Icon(LucideIcons.network,
-                    size: 18, color: AppColors.textMid),
-                filled: true,
-                fillColor: AppColors.surfaceInput,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(R.sm),
-                  borderSide: BorderSide.none,
-                ),
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-            ),
+          PillTabs<bool>(
+            options: const [(false, 'شبكة'), (true, 'من – إلى')],
+            current: _fromTo,
+            onSelect: _scanning ? (_) {} : _setFromTo,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 2,
-            child: FilledButton.icon(
-              onPressed: _scanning ? null : _startScan,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.brand,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              icon: _scanning
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.onBrand))
-                  : const Icon(LucideIcons.radar, size: 16),
-              label: Text(_scanning ? 'يمسح…' : 'ابدأ'),
+          const Spacer(),
+          FilledButton.icon(
+            key: const ValueKey('bulk-scan-start'),
+            onPressed: _scanning ? null : _startScan,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.brand,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              visualDensity: VisualDensity.compact,
             ),
+            icon: _scanning
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrand))
+                : const Icon(LucideIcons.radar, size: 16),
+            label: Text(_scanning ? 'يمسح…' : 'ابدأ'),
           ),
         ]),
-        // Helper text — أمثلة الصيغ المقبولة
+        const SizedBox(height: 8),
+        if (!_fromTo)
+          TextField(
+            key: const ValueKey('bulk-scan-network'),
+            controller: _baseCtrl,
+            enabled: !_scanning,
+            textDirection: TextDirection.ltr,
+            keyboardType: TextInputType.text,
+            style: fieldStyle,
+            decoration: deco('الشبكة أو النطاق', '10.70.241.0/24', icon: LucideIcons.network),
+            onSubmitted: (_) => _scanning ? null : _startScan(),
+          )
+        else
+          Row(children: [
+            Expanded(
+              child: TextField(
+                key: const ValueKey('bulk-scan-from'),
+                controller: _fromCtrl,
+                enabled: !_scanning,
+                textDirection: TextDirection.ltr,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: fieldStyle,
+                textInputAction: TextInputAction.next,
+                decoration: deco('من', '10.10.10.2'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                key: const ValueKey('bulk-scan-to'),
+                controller: _toCtrl,
+                enabled: !_scanning,
+                textDirection: TextDirection.ltr,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: fieldStyle,
+                decoration: deco('إلى', '10.10.10.20 أو 20'),
+                onSubmitted: (_) => _scanning ? null : _startScan(),
+              ),
+            ),
+          ]),
+        // Helper text — أمثلة الصيغ المقبولة للطريقة المختارة
         Padding(
           padding: const EdgeInsets.only(top: 4, right: 4, left: 4),
-          child: Text(
-            'الصيغ المدعومة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100',
-            style: TextStyle(
-                color: AppColors.textLow, fontSize: 10.5, height: 1.4),
-            textDirection: TextDirection.rtl,
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              _fromTo
+                  ? 'أوّل عنوان كاملاً، والأخير كاملاً أو رقمه الأخير وحده — حتى ${ScanRange.maxCount} عنواناً بالمرّة'
+                  : 'الصيغ المدعومة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100  •  10.10.10.2-10.10.10.20',
+              style: TextStyle(color: AppColors.textLow, fontSize: 10.5, height: 1.4),
+              textDirection: TextDirection.rtl,
+            ),
           ),
         ),
         const SizedBox(height: 8),

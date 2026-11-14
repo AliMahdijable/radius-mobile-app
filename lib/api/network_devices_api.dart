@@ -815,12 +815,44 @@ class NetworkDevicesApi {
     Duration timeout = const Duration(milliseconds: 800),
     void Function(int done, int total)? onProgress,
     void Function(ScanResult result)? onFound,
-  }) async {
+  }) {
     final base3 =
         base.endsWith('.') ? base.substring(0, base.length - 1) : base;
-    final ips = <String>[
-      for (var i = startOctet; i <= endOctet; i++) '$base3.$i',
-    ];
+    return bulkScanIps(
+      ips: [for (var i = startOctet; i <= endOctet; i++) '$base3.$i'],
+      ports: ports,
+      concurrency: concurrency,
+      timeout: timeout,
+      onProgress: onProgress,
+      onFound: onFound,
+    );
+  }
+
+  /// ماسح قائمة عناوين بأيّ مدى — «من – إلى» عبر أكثر من ‎/24‎ أو ‎/N‎ بحدّه (المالك ١٤ نوفمبر: «نخلي اختياري يختار رينج من
+  /// الى… ما نقيده فقط بسبنت»). العامل نفسه حرفاً؛ والنتائج مرتّبة بالعنوان كاملاً لا بجزئه الأخير.
+  ///
+  /// [debugScan] للاختبار وحده: يستقبل القائمة بدل الشبكة.
+  @visibleForTesting
+  static Future<List<ScanResult>> Function(List<String> ips)? debugScan;
+
+  static Future<List<ScanResult>> bulkScanIps({
+    required List<String> ips,
+    List<int> ports = scanPorts,
+    int concurrency = 30,
+    Duration timeout = const Duration(milliseconds: 800),
+    void Function(int done, int total)? onProgress,
+    void Function(ScanResult result)? onFound,
+  }) async {
+    final hook = debugScan;
+    if (hook != null) {
+      final r = await hook(ips);
+      for (final x in r) {
+        onFound?.call(x);
+      }
+      onProgress?.call(ips.length, ips.length);
+      return r;
+    }
+    if (ips.isEmpty) return const [];
     final total = ips.length;
     var done = 0;
     final results = <ScanResult>[];
@@ -872,12 +904,16 @@ class NetworkDevicesApi {
       (_) => worker(),
     );
     await Future.wait(workers);
-    // sort by last octet ascending
-    results.sort((a, b) {
-      final ai = int.tryParse(a.ip.split('.').last) ?? 0;
-      final bi = int.tryParse(b.ip.split('.').last) ?? 0;
-      return ai.compareTo(bi);
-    });
+    // بالعنوان كاملاً (مدى عبر أكثر من ‎/24‎: ‎10.0.1.200‎ قبل ‎10.0.2.3‎).
+    int key(String ip) {
+      var v = 0;
+      for (final p in ip.split('.')) {
+        v = v * 256 + (int.tryParse(p) ?? 0);
+      }
+      return v;
+    }
+
+    results.sort((a, b) => key(a.ip).compareTo(key(b.ip)));
     return results;
   }
 

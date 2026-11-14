@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/device_probe_api.dart';
 import '../../api/big_subscribers_api.dart';
 import '../../api/sales_api.dart';
+import '../../api/subscriber_contacts_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/platform/app_platform.dart';
@@ -187,6 +188,15 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     }
     return _contacts!;
   }
+  /// ما تعرضه بطاقة الهويّة: الأرقام القائمة بعد جلبٍ ناجح والمفتاح مفتوح — وإلّا لا شيء (لا صفّ «تعذّر»).
+  SubscriberContacts? get _heroContacts {
+    if (sub.companyKey != null) return null;
+    final c = _subContacts;
+    if (!c.ready || !c.enabled) return null;
+    final v = c.contact;
+    return v == null || v.isEmpty ? null : v;
+  }
+
   bool _disconnecting = false;
   bool _alerting = false;
   bool _toggling = false;
@@ -447,12 +457,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   ),
                   children: [
                     // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
-                    _SubscriberHero(
-                      sub: sub,
-                      password: _subscriberPassword,
-                      passwordVisible: _passwordVisible,
-                      onTogglePassword: () =>
-                          setState(() => _passwordVisible = !_passwordVisible),
+                    // «أرقام تواصل إضافيّة» داخل البطاقة (المالك ١٤ نوفمبر) — تُرسم حين تصل وحين تُعدَّل من «المزيد».
+                    ListenableBuilder(
+                      listenable: sub.companyKey == null ? _subContacts : const AlwaysStoppedAnimation<double>(0),
+                      builder: (context, _) => _SubscriberHero(
+                        sub: sub,
+                        password: _subscriberPassword,
+                        passwordVisible: _passwordVisible,
+                        onTogglePassword: () =>
+                            setState(() => _passwordVisible = !_passwordVisible),
+                        contacts: _heroContacts,
+                      ),
                     ),
                     // بلوك الدين مباشرةً تحت بطاقة الهويّة كما في المخطّط
                     // (كان أسفل الصفحة بعد كارت الجهاز).
@@ -537,13 +552,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       sub: sub,
                       controller: _privateNote,
                     ),
-                    // «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر) — القائمة منها وحدها هنا؛ الإضافة من «المزيد» كالملاحظة.
-                    if (sub.companyKey == null)
-                      SubscriberContactsCard(
-                        key: ValueKey('sub-contacts-${sub.username}'),
-                        controller: _subContacts,
-                        canEdit: _has('subscribers.edit') && _pageLock == null,
-                      ),
+                    // «أرقام تواصل إضافيّة» صارت داخل بطاقة الهويّة تحت الهاتف (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت») — لا كرت منفصل.
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود
@@ -673,6 +682,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       sub,
       password: _subscriberPassword,
       passwordVisible: _passwordVisible,
+      contacts: _heroContacts,
       deviceConfig: config,
       device: device,
     );
@@ -1775,6 +1785,7 @@ List<CopyField> subscriberCopyFields(
   Subscriber sub, {
   String? password,
   bool passwordVisible = false,
+  SubscriberContacts? contacts,
   DeviceConfig? deviceConfig,
   DeviceCardShown? device,
   DateTime? now,
@@ -1787,6 +1798,7 @@ List<CopyField> subscriberCopyFields(
       sub,
       password: password,
       passwordVisible: passwordVisible,
+      contacts: contacts,
       now: now,
     ),
     ..._LiveSessionCard.copyFields(
@@ -2336,8 +2348,13 @@ class _SubscriberHero extends StatelessWidget {
     this.password,
     required this.passwordVisible,
     required this.onTogglePassword,
+    this.contacts,
   });
   final Subscriber sub;
+
+  /// «أرقام تواصل إضافيّة» القائمة (واتساب ثانٍ وتلغرام — على خادمنا لا الساس). null أو فارغة ⇒ لا صفّ ولا مساحة.
+  /// المالك ١٤ نوفمبر: «الرقم الثاني ومعرف التلي كرام يظهرهن هنا وي كارت» — تحت سطر الهاتف وبشكله.
+  final SubscriberContacts? contacts;
 
   /// null = لم تصل بعد من الـbackend. الباسورد **بلا بوّابة صلاحيّات**
   /// (قرار 2026-08-25): هو بيانات خدمة يحتاجها الدعم لمساعدة المشترك.
@@ -2359,10 +2376,13 @@ class _SubscriberHero extends StatelessWidget {
     Subscriber sub, {
     String? password,
     bool passwordVisible = false,
+    SubscriberContacts? contacts,
     DateTime? now,
   }) {
     final name = _nameField(sub);
     final phone = sub.displayPhone;
+    final wa2 = contacts?.waPhone2?.trim() ?? '';
+    final tg = contacts?.tgContact?.trim() ?? '';
     final price = _salePriceField(sub);
     final exp = sub.parsedExpiration;
     final parent = sub.parentUsername?.trim() ?? '';
@@ -2373,6 +2393,9 @@ class _SubscriberHero extends StatelessWidget {
       if (passwordVisible && (password ?? '').isNotEmpty)
         _passwordField(password!),
       if (phone.isNotEmpty) _phoneField(phone),
+      // بترتيب الكرت: تحت الهاتف.
+      if (wa2.isNotEmpty) _wa2Field(wa2),
+      if (tg.isNotEmpty) _tgField(tg),
       _packageField(sub),
       if (price != null) price,
       if (exp != null) _expiryField(exp),
@@ -2398,6 +2421,14 @@ class _SubscriberHero extends StatelessWidget {
   /// الرقم **المحلّي** (‏07…) كما يُتّصل به — لا ‎9647… كما يخزّنه الساس.
   static CopyField _phoneField(String phone) =>
       CopyField('الهاتف', localPhone(phone), noun: 'الرقم');
+
+  /// الرقم الثاني محلّيّاً (‏07…) كالهاتف — للاتصال والنسخ.
+  static CopyField _wa2Field(String wa2) =>
+      CopyField('واتساب ثانٍ', localPhone(wa2), noun: 'الرقم');
+
+  /// معرّف تلغرام (‎@name‎) أو رقمه كما حُفظ — رقمٌ ينسخ محلّيّاً كالهاتف.
+  static CopyField _tgField(String tg) => CopyField('تلغرام', _tgIsPhone(tg) ? localPhone(tg) : tg,
+      noun: _tgIsPhone(tg) ? 'الرقم' : 'المعرّف');
 
   static CopyField _packageField(Subscriber sub) =>
       CopyField('الباقة', sub.profileName ?? '—', noun: 'اسم الباقة');
@@ -2490,6 +2521,15 @@ class _SubscriberHero extends StatelessWidget {
           if (phone.isNotEmpty) ...[
             const SizedBox(height: Sp.md),
             _phoneRow(context, phone),
+          ],
+          // صفّا «أرقام تواصل إضافيّة» تحت الهاتف — القائم وحده (الكرت لا يكبر بلا معلومة). الإضافة/التعديل من «المزيد».
+          if (_wa2.isNotEmpty) ...[
+            SizedBox(height: phone.isNotEmpty ? Sp.sm : Sp.md),
+            _wa2Row(context, _wa2),
+          ],
+          if (_tg.isNotEmpty) ...[
+            SizedBox(height: phone.isNotEmpty || _wa2.isNotEmpty ? Sp.sm : Sp.md),
+            _tgRow(context, _tg),
           ],
           const SizedBox(height: Sp.md),
           _footer(),
@@ -2843,6 +2883,121 @@ class _SubscriberHero extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  // ───────── أرقام تواصل إضافيّة ─────────
+  //
+  // المالك ١٤ نوفمبر: «الرقم الثاني ومعرف التلي كرام يظهرهن هنا وي كارت». حبّةٌ بشكل حبّة الهاتف لكلّ رقمٍ قائم: الاتصال يميناً،
+  // ثمّ تسميةٌ قصيرة («ثانٍ» / «تلغرام»)، والقيمة عند النسخ، وأيقونة تطبيقها يساراً (واتساب نعناعيّ، تلغرام أزرقه). القيمة لا تُقصّ:
+  // تصغر حين لا تتّسع (٣٢٠ بخطّ ١٫٢، أو معرّفٌ طويل) — رقمٌ ناقص أسوأ من رقمٍ أصغر.
+
+  String get _wa2 => contacts?.waPhone2?.trim() ?? '';
+  String get _tg => contacts?.tgContact?.trim() ?? '';
+
+  /// تلغرام المحفوظ رقمٌ لا معرّف (‎@name‎).
+  static bool _tgIsPhone(String tg) => RegExp(r'^\+?\d[\d\s-]{6,}$').hasMatch(tg.trim());
+
+  /// أرقام الرابط الدوليّة (wa.me / t.me/+) من أيّ صيغة: ‎07…‎ ⇒ ‎9647…‎، ‎00964…‎ ⇒ ‎964…‎؛ غير المفهوم كما هو.
+  static String _intlDigits(String raw) {
+    var d = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (d.startsWith('00')) d = d.substring(2);
+    if (d.length == 11 && d.startsWith('07')) d = '964${d.substring(1)}';
+    if (d.length == 10 && d.startsWith('7')) d = '964$d';
+    return d;
+  }
+
+  static Uri _tgUri(String tg) => _tgIsPhone(tg)
+      ? Uri.parse('https://t.me/+${_intlDigits(tg)}')
+      : Uri.parse('https://t.me/${tg.replaceFirst(RegExp(r'^@'), '')}');
+
+  Widget _contactPill({
+    required Widget lead,
+    required String caption,
+    required String value,
+    required CopyField field,
+    required VoidCallback onCopy,
+    required Widget trail,
+    VoidCallback? onTapValue,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.onBrandFill1,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
+      child: Row(
+        children: [
+          lead,
+          const SizedBox(width: 10),
+          Text(
+            caption,
+            maxLines: 1,
+            style: AppType.muted(color: AppColors.onBrandSecondary).copyWith(fontSize: 11.5),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Copyable.field(
+              field,
+              onBrandSurface: true,
+              child: InkWell(
+                onTap: onTapValue,
+                child: Align(
+                  // عند النسخ كرقم الهاتف فوقه (يسار الصفّ).
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Text(
+                      value,
+                      textDirection: ui.TextDirection.ltr,
+                      maxLines: 1,
+                      style: AppType.body(color: AppColors.onBrand)
+                          .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _OnBrandIcon(icon: Icons.content_copy_rounded, size: 16, onTap: onCopy),
+          const SizedBox(width: 12),
+          trail,
+        ],
+      ),
+    );
+  }
+
+  /// واتساب ثانٍ: اتصال · «ثانٍ» · الرقم · نسخ · واتساب — كسطر الهاتف.
+  Widget _wa2Row(BuildContext context, String wa2) => _contactPill(
+        lead: _OnBrandIcon(icon: Icons.call_rounded, size: 17, onTap: () => _call(context, wa2)),
+        caption: 'ثانٍ',
+        value: wa2,
+        field: _wa2Field(wa2),
+        onTapValue: () => _call(context, wa2),
+        onCopy: () => copyToClipboard(context, localPhone(wa2), label: 'الرقم'),
+        trail: _OnBrandIcon(
+          icon: Icons.chat_rounded,
+          size: 17,
+          color: AppColors.onBrandMint,
+          onTap: () => _openUri(context, Uri.parse('https://wa.me/${_intlDigits(wa2)}')),
+        ),
+      );
+
+  /// تلغرام: (رقمٌ ⇒ اتصال، معرّفٌ ⇒ «@» ساكنة) · «تلغرام» · القيمة · نسخ · فتح المحادثة بتلغرام.
+  Widget _tgRow(BuildContext context, String tg) {
+    final phone = _tgIsPhone(tg);
+    void open() => _openUri(context, _tgUri(tg));
+    return _contactPill(
+      lead: phone
+          ? _OnBrandIcon(icon: Icons.call_rounded, size: 17, onTap: () => _call(context, tg))
+          : const Icon(LucideIcons.atSign, size: 16, color: AppColors.onBrandSecondary),
+      caption: 'تلغرام',
+      value: tg,
+      field: _tgField(tg),
+      onTapValue: open,
+      onCopy: () => copyToClipboard(context, phone ? localPhone(tg) : tg, label: phone ? 'الرقم' : 'المعرّف'),
+      trail: _OnBrandIcon(icon: LucideIcons.send, size: 16, color: AppColors.channelTelegram, onTap: open),
     );
   }
 

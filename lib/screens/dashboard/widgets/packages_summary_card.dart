@@ -8,6 +8,7 @@ import '../../../core/platform/desktop_layout.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../services/app_resumed_signal.dart';
+import '../../../services/dashboard_load_order.dart';
 import '../../../services/dashboard_refresh_signal.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/subscriber_events.dart';
@@ -123,13 +124,19 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
       _data = null;
       _error = null;
     });
-    _load();
+    _load(user: true);
     SharedPreferences.getInstance().then((p) => p.setString(_periodKey, period)).catchError((_) => false);
   }
 
-  Future<void> _load() async {
+  /// [user]: اختيار المدير مدّةً — يجلب فوراً. غيره (الفتح، عمليّة، رجوعٌ للتطبيق) ينتظر المشتركين أوّلاً ([DashboardLoadOrder]،
+  /// المالك ١٤ نوفمبر: «الاولية لتحميل المشتركين ثم بقيه الامور»).
+  Future<void> _load({bool user = false}) async {
     if (!mounted) return;
     final gen = ++_gen;
+    if (!user) {
+      await DashboardLoadOrder.afterSubscribers();
+      if (!mounted || gen != _gen) return;
+    }
     final merged = MergedMode.active.value;
     final focused = merged ? MergedMode.focused : null;
     if (merged && focused == null) {

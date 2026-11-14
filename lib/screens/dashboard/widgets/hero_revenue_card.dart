@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../services/dashboard_load_order.dart';
 import '../../../services/merged_mode.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../api/archive_info.dart';
@@ -52,7 +53,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   @override
   void initState() {
     super.initState();
-    _refresh(_period);
+    _refresh(_period, afterSubs: true);
     // Listen for subscriber mutations app-wide so revenue updates
     // immediately after any activate / extend / pay-debt / etc.
     // op succeeds. Without this the parent DashboardScreen
@@ -87,7 +88,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       _mergedExcluded.clear();
       _mergedSums.clear();
     });
-    _refresh(_period);
+    _refresh(_period, afterSubs: true);
   }
 
   void _onFocusChanged() {
@@ -133,7 +134,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       _failed.clear();
       _mergedSums.clear();
     });
-    _refresh(_period);
+    _refresh(_period, afterSubs: true);
   }
 
   @override
@@ -146,11 +147,17 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     super.dispose();
   }
 
-  Future<void> _refresh(RevenuePeriod p) async {
+  /// [afterSubs]: جلبٌ تلقائيّ (فتح الرئيسيّة، عمليّة، رجوعٌ للتطبيق) ينتظر المشتركين أوّلاً ([DashboardLoadOrder] — المالك
+  /// ١٤ نوفمبر: «الاولية لتحميل المشتركين ثم بقيه الامور»)؛ نقرة المدير على مدّةٍ تجلب فوراً.
+  Future<void> _refresh(RevenuePeriod p, {bool afterSubs = false}) async {
     setState(() {
       _loading = p;
       _failed.remove(p);
     });
+    if (afterSubs) {
+      await DashboardLoadOrder.afterSubscribers();
+      if (!mounted) return;
+    }
     // Safety net: timeout 20 ثانية + catchError — نضمن أن الـUI ما
     // يعلق على spinner للأبد لو الشبكة هنغت أو الـauth refresh دخل
     // بلوب. المدير رفع screenshot 2026-07-22 يوضّح spinner ثابت في

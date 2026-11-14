@@ -261,7 +261,7 @@ class MergedDashboardApi {
     String at(Map<String, dynamic> m) => '${m['created_at'] ?? m['time'] ?? ''}';
     recent.sort((a, b) => at(b).compareTo(at(a)));
     return MergedSum(
-      any ? DailyActivationsResult(activations: act, extensions: ext, recent: recent.take(20).toList()) : null,
+      any ? DailyActivationsResult(activations: act, extensions: ext, recent: recent.take(DashboardApi.recentLimit).toList()) : null,
       excluded,
       byKey: byKey,
       reasons: reasons,
