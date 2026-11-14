@@ -796,6 +796,8 @@ class SubscribersApi {
     // ── الشركة المُضافة: عدّة أشهر (المشروع الوطنيّ، ١ نوفمبر — مفتاح <name>_months) ──
     int? months, // > 1 وحده يُرسل؛ الخادم يعاين طازجاً ويرفض ما لا تقبله الشركة
     num? expectedCost, // الكلفة التي رآها الوكيل في المعاينة — حارسٌ لا مبلغ (تغيّرت ⇒ 409 PRICE_CHANGED بلا تفعيل)
+    // ── «طريق موقع الشحن» (فايبر الجزيرة، ١٤ نوفمبر) ──
+    String? cardPin, // رقم بطاقةٍ خارجيّة (٨ خانات) مع method=='card' — يُرسل مع الطلب وحده ولا يُحفظ
   }) async =>
       (await activateDetailed(
         idx: idx,
@@ -814,6 +816,7 @@ class SubscribersApi {
         confirmCooloff: confirmCooloff,
         months: months,
         expectedCost: expectedCost,
+        cardPin: cardPin,
       ))
           .result;
 
@@ -870,6 +873,7 @@ class SubscribersApi {
     bool confirmCooloff = false,
     int? months,
     num? expectedCost,
+    String? cardPin,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -899,6 +903,8 @@ class SubscribersApi {
           if (confirmCooloff) 'confirmCooloff': true,
           if (months != null && months > 1) 'months': months,
           if (months != null && months > 1 && expectedCost != null) 'expected_cost': expectedCost,
+          // «طريق موقع الشحن»: بطاقةٌ خارجيّة برقمها — للكارت وحده، وغيابه = بطاقات الوكيل في الموقع
+          if (method == 'card' && cardPin != null && cardPin.isNotEmpty) 'cardPin': cardPin,
         },
         // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
         // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
