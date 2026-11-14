@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../login_screen.dart';
+import 'account_dates.dart';
 import 'account_login_screen.dart';
 import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
@@ -231,17 +232,20 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                 ? 'account.status_ended_neutral'.tr()
                 : sub.endsAt == null
                     ? 'account.status_active_neutral'.tr()
-                    : 'account.chip_active_neutral'
-                        .tr(args: [DateFormat('d MMMM y', context.locale.languageCode).format(sub.endsAt!)]))
+                    // «فعّال حتى 2026/12/14» — أرقامٌ لا اسم شهر (المالك ١٤ نوفمبر).
+                    : 'account.chip_active_neutral'.tr(args: [accountDate(sub.endsAt)]))
         // أندرويد أيضاً: المجّانيّ الدائم «مجّاني دائم» لا «مشترك · باقي 36500 يوم».
         : sub.isFreeForever
             ? 'account.chip_free'.tr()
-            : sub.isTrial
-                ? 'account.chip_trial'.tr(args: ['${sub.daysLeft}'])
-                : 'account.chip_active'.tr(args: ['${sub.daysLeft}']);
+            // الأيّام بالتقويم كبقيّة الشاشات؛ يومه الأخير «ينتهي اليوم» لا «باقي 0 يوم».
+            : sub.active && sub.endsAt != null && sub.shownDaysLeft == 0
+                ? 'account.chip_today'.tr()
+                : sub.isTrial
+                    ? 'account.chip_trial'.tr(args: ['${sub.shownDaysLeft}'])
+                    : 'account.chip_active'.tr(args: ['${sub.shownDaysLeft}']);
     // آيفون: لونٌ بحسب قرب الانتهاء لا بحسب «تجربة».
     final warnTone = neutral
-        ? (!sub.active || (!sub.isFreeForever && sub.daysLeft <= 7))
+        ? (!sub.active || (!sub.isFreeForever && sub.shownDaysLeft <= 7))
         : sub.isTrial;
     return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,

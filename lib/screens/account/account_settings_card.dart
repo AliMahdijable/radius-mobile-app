@@ -10,6 +10,7 @@ import '../../services/support_contact.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'account_dates.dart';
 import 'account_login_screen.dart';
 import 'account_widgets.dart';
 import 'my_devices_screen.dart';
@@ -44,10 +45,6 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
     final me = await AccountStatusCache.get(force: force);
     if (mounted) setState(() => _me = me);
   }
-
-  String _date(DateTime? d) => d == null
-      ? '—'
-      : DateFormat('d MMMM y', context.locale.languageCode).format(d);
 
   Future<void> _openSubscription(AccountMe me) async {
     await Navigator.of(context).push(MaterialPageRoute(
@@ -97,6 +94,8 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
     final email = me?.email ?? AccountService.currentUser?.email ?? '';
     final s = me?.subscription;
     final neutral = StorePolicy.hidePurchaseFlows;
+    // الأيّام بالتقويم إلى التاريخ المكتوب (لا تقريب ساعات الخادم) — الرقم نفسه في الرأس والسطر والحبّة.
+    final days = s?.shownDaysLeft ?? 0;
     final String status;
     final Color tone;
     if (s == null) {
@@ -106,13 +105,11 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
       status = (neutral ? 'account.status_ended_neutral' : 'account.status_ended').tr();
       tone = AppColors.error;
     } else if (neutral) {
-      // آيفون: لا «تجربة» ولا «مشترك · باقي X يوم» — حالة الحساب وتاريخه وحدهما (3.1.1).
+      // آيفون: لا «تجربة» ولا «مشترك» — «ينتهي في 2026/12/14 · باقي 30 يوم» وحده (3.1.1).
       status = s.isFreeForever
           ? 'account.chip_free'.tr()
-          : s.endsAt == null
-              ? 'account.status_active_neutral'.tr()
-              : 'account.chip_active_neutral'.tr(args: [_date(s.endsAt)]);
-      tone = !s.isFreeForever && s.daysLeft <= kSubscriptionWarnDays
+          : s.endsLine() ?? 'account.status_active_neutral'.tr();
+      tone = !s.isFreeForever && days <= kSubscriptionWarnDays
           ? AppColors.warning
           : AppColors.success;
     } else if (s.isFreeForever) {
@@ -120,12 +117,11 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
       status = 'account.chip_free'.tr();
       tone = AppColors.success;
     } else {
-      status =
-          '${(s.isTrial ? 'account.chip_trial' : 'account.chip_active').tr(args: [
-            '${s.daysLeft}'
-          ])} · '
-          '${'account.status_until'.tr(args: [_date(s.endsAt)])}';
-      tone = s.isTrial || s.daysLeft <= kSubscriptionWarnDays
+      // «مشترك · ينتهي في 2026/12/14 · باقي 30 يوم» (المالك ١٤ نوفمبر: «ينتهي في فلان مدة ولديك كذا ايام»).
+      final kind = (s.isTrial ? 'account.kind_trial' : 'account.kind_active').tr();
+      final ends = s.endsLine();
+      status = ends == null ? kind : '$kind · $ends';
+      tone = s.isTrial || days <= kSubscriptionWarnDays
           ? AppColors.warning
           : AppColors.success;
     }
@@ -142,8 +138,10 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
                 ? 'account.status_ended'.tr()
                 : s.isFreeForever
                     ? 'account.chip_free'.tr()
-                    : (s.isTrial ? 'account.chip_trial' : 'account.chip_active')
-                        .tr(args: ['${s.daysLeft}']);
+                    : s.endsAt != null && days == 0 // فعّالٌ هنا (المنتهي فوقه)
+                        ? 'account.chip_today'.tr()
+                        : (s.isTrial ? 'account.chip_trial' : 'account.chip_active')
+                            .tr(args: ['$days']);
 
     // مطويٌّ افتراضيّاً بشكل صفوف الإعدادات نفسها؛ الضغط يفتح التفاصيل والأزرار.
     return Material(

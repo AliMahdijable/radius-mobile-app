@@ -9,6 +9,7 @@ import '../../services/support_contact.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'account_dates.dart';
 import 'account_login_screen.dart';
 import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
@@ -54,7 +55,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     super.dispose();
   }
 
-  String _date(DateTime? d) => d == null ? '—' : DateFormat('d MMMM y', context.locale.languageCode).format(d);
+  /// «2026/12/14» — أرقامٌ لا اسم شهر (المالك ١٤ نوفمبر).
+  String _date(DateTime? d) => accountDate(d);
 
   Future<void> _redeem() async {
     final code = _codeCtrl.text.trim();
@@ -144,11 +146,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         bg: AppColors.successSoftBg,
       );
     }
+    // «ينتهي في 2026/12/14 · باقي 30 يوم» (المالك ١٤ نوفمبر: «ينتهي في فلان مدة ولديك كذا ايام»).
+    final days = _sub.shownDaysLeft;
     if (_sub.active && _sub.isTrial) {
       return (
-        // آيفون: «الحساب فعّال» لا «تجربة مجانيّة — باقي X يوم» (3.1.1).
-        title: _neutral ? 'account.status_active_neutral'.tr() : 'account.status_trial'.tr(args: ['${_sub.daysLeft}']),
-        body: 'account.status_until'.tr(args: [_date(_sub.endsAt)]),
+        // آيفون: «الحساب فعّال» لا «تجربة مجانيّة — باقي X يوم» (3.1.1) — والأيّام في السطر تحته.
+        title: _neutral
+            ? 'account.status_active_neutral'.tr()
+            : days == 0 && _sub.endsAt != null
+                ? 'account.status_trial_today'.tr()
+                : 'account.status_trial'.tr(args: ['$days']),
+        // العنوان فيه الأيّام بغير الآيفون ⇒ السطر التاريخ وحده.
+        body: _sub.endsLine(withDays: _neutral) ?? 'account.status_until'.tr(args: [_date(_sub.endsAt)]),
         icon: Icons.hourglass_top_rounded,
         color: AppColors.warning,
         bg: AppColors.warningSoftBg,
@@ -157,7 +166,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (_sub.active) {
       return (
         title: (_neutral ? 'account.status_active_neutral' : 'account.status_active').tr(),
-        body: 'account.status_until'.tr(args: [_date(_sub.endsAt)]),
+        body: _sub.endsLine() ?? 'account.status_until'.tr(args: [_date(_sub.endsAt)]),
         icon: Icons.verified_rounded,
         color: AppColors.success,
         bg: AppColors.successSoftBg,
