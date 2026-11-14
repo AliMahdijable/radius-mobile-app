@@ -55,6 +55,7 @@ import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
 import 'widgets/kit_fiber_card.dart';
 import 'widgets/private_note_card.dart';
+import 'widgets/subscriber_contacts_card.dart';
 import 'connection_alert_flow.dart';
 import '../../widgets/company_tag.dart';
 import '../../widgets/merged_section.dart';
@@ -171,6 +172,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       _note = PrivateNoteController(sub)..load();
     }
     return _note!;
+  }
+
+  /// «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر: واتساب ثانٍ وتلغرام على خادمنا — حين لا يصل رقمه): حالها هنا كالملاحظة — الكرت
+  /// للأرقام القائمة، و«المزيد» يضيف أو يعدّل. «كل الشركات» (مشتركٌ من شركةٍ أخرى) لا يُجلب — يُعدَّل من صفحة الشركة.
+  SubscriberContactsController? _contacts;
+  String? _contactsId;
+  SubscriberContactsController get _subContacts {
+    final id = '${sub.companyKey ?? ''}-${sub.username}';
+    if (_contacts == null || _contactsId != id) {
+      _contacts?.dispose();
+      _contactsId = id;
+      _contacts = SubscriberContactsController(sub)..load();
+    }
+    return _contacts!;
   }
   bool _disconnecting = false;
   bool _alerting = false;
@@ -302,6 +317,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onDataChanged);
     _note?.dispose();
+    _contacts?.dispose();
     super.dispose();
   }
 
@@ -521,6 +537,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       sub: sub,
                       controller: _privateNote,
                     ),
+                    // «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر) — القائمة منها وحدها هنا؛ الإضافة من «المزيد» كالملاحظة.
+                    if (sub.companyKey == null)
+                      SubscriberContactsCard(
+                        key: ValueKey('sub-contacts-${sub.username}'),
+                        controller: _subContacts,
+                        canEdit: _has('subscribers.edit') && _pageLock == null,
+                      ),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود
@@ -1490,6 +1513,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ),
       ]),
       SubActionGroup('subscribers.group_contact'.tr(), [
+        // «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر: «اضافة امكانيه اضافة رقم واتساب ومعرف او رقم تلي كرام للمشترك»): على خادمنا،
+        // تُستعمل حين لا يصل رقمه. المفتاح مطفأ للحساب ⇒ لا زرّ؛ الموظّف بلا subscribers.edit يراه بمكانه مقفلاً.
+        if (sub.companyKey == null && _subContacts.enabled)
+          SubAction(
+            icon: LucideIcons.userPlus,
+            label: (_subContacts.contact?.isEmpty ?? true) ? 'إضافة واتساب ثانٍ أو تلغرام' : 'تعديل الأرقام الإضافيّة',
+            locked: !_has('subscribers.edit'),
+            unavailable: _pageLock,
+            onTap: !_has('subscribers.edit') || !_subContacts.ready ? null : () => _subContacts.edit(context),
+          ),
         if (sub.hasDebt && _shows('subscribers.send_whatsapp'))
           SubAction(
             icon: LucideIcons.bellRing,
