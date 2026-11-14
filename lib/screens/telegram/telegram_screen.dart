@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/telegram_api.dart';
+import '../../api/tg_account_api.dart';
 import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -13,6 +14,7 @@ import 'sheets/telegram_bindings_sheet.dart';
 import 'sheets/telegram_broadcast_sheet.dart';
 import 'sheets/telegram_bulk_links_sheet.dart';
 import 'sheets/telegram_link_generator_sheet.dart';
+import 'widgets/tg_account_card.dart';
 import '../desktop/desk_widgets.dart';
 import '../../widgets/merged_section.dart';
 import '../../services/merged_text.dart';
@@ -44,6 +46,8 @@ class TelegramScreen extends StatefulWidget {
 class _TelegramScreenState extends State<TelegramScreen> {
   bool _loading = true;
   TelegramStatus? _status;
+  /// «تلغرام بحساب الوكيل» (١٤ نوفمبر): على «حسابي» لا يُستعمل البوت ⇒ أقسامه تُخفى بسطرٍ يقول ذلك (كالويب).
+  TgAccountStatus? _tgAcc;
   String? _adminId;
   String? _adminUsername;
 
@@ -152,7 +156,18 @@ class _TelegramScreenState extends State<TelegramScreen> {
                       padding: EdgeInsets.only(
                           bottom: MediaQuery.paddingOf(context).bottom + 32),
                       children: [
-                        if (_status?.connected == true)
+                        // «تلغرام بحساب الوكيل» (١٤ نوفمبر — كالويب): «طريقة الإرسال بتلغرام» (البوت / حسابي) فوق أقسام البوت — لا تظهر
+                        // إن لم تُفتح لحسابه، ولا لشركةٍ أخرى في «كل الشركات» (تُربط من صفحتها)
+                        if (MergedSection.routedCompanyOf(context) == null)
+                          TgAccountCard(
+                            adminId: _adminId!,
+                            onStatus: (s) {
+                              if (mounted) setState(() => _tgAcc = s);
+                            },
+                          ),
+                        if (_tgAcc?.accountMode == true)
+                          _accountModeNote()
+                        else if (_status?.connected == true)
                           ..._connectedContent()
                         else
                           ..._setupContent(),
@@ -162,6 +177,21 @@ class _TelegramScreenState extends State<TelegramScreen> {
       )),
     );
   }
+
+  /// على «حسابي»: سطرٌ مكان أقسام البوت (لا يبدو أنّ الطريقتين معاً).
+  Widget _accountModeNote() => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        child: Container(
+          key: const ValueKey('tg-bot-hidden'),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Text('رسائل تلغرام تخرج الآن من حسابك — البوت لا يُستعمل حتى ترجع إلى «البوت».', style: AppType.muted()),
+        ),
+      );
 
   // ─── SETUP (not connected) ─────────────────────────────────────
 
