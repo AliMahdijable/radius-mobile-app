@@ -10,18 +10,13 @@ import 'tenda_service.dart';
 import 'tplink_agile_service.dart';
 import 'tplink_classic_service.dart';
 import 'tplink_mer_service.dart';
-import 'zte_ont_service.dart';
 
 import '../../models/device_health.dart';
 
 class RouterOps {
   RouterOps._();
 
-  /// الراوتر الضوئيّ من عائلة ZTE/ZXIC (١٤ نوفمبر، HS8546V2 — قراءةٌ وتغييرٌ حقيقيّ وإرجاعٌ مجرَّبة حيّاً بإذن المالك). مفتاحه
-  /// هنا لا مورّد [UbiquitiStatus]: الكرت يمرّره من [OntOpticalInfo] حين `canWifi`.
-  static const zteOnt = 'zteont';
-
-  static const _wifi = {'tenda', 'tpmer', 'tpclassic', 'tpagile', zteOnt};
+  static const _wifi = {'tenda', 'tpmer', 'tpclassic', 'tpagile'};
   static const _reboot = {'tenda', 'tpmer', 'tpclassic', 'tpagile'};
   static const _live = {'tpmer'};
 
@@ -39,7 +34,6 @@ class RouterOps {
         'tpmer' => TplinkMerService.readWifi(host, pass),
         'tpclassic' => TplinkClassicService.readWifi(host, user, pass),
         'tpagile' => TplinkAgileService.readWifi(host, pass, username: user),
-        zteOnt => ZteOntService.readWifi(host, user, pass),
         _ => Future.value(const RouterResult<List<RouterWifi>>.fail(RouterFail.unsupported)),
       };
 
@@ -52,7 +46,6 @@ class RouterOps {
       'tpmer' => TplinkMerService.setWifiPassword(host, pass, newPass),
       'tpclassic' => TplinkClassicService.setWifiPassword(host, user, pass, newPass),
       'tpagile' => TplinkAgileService.setWifiPassword(host, pass, newPass, username: user),
-      zteOnt => ZteOntService.setWifiPassword(host, user, pass, newPass),
       _ => Future.value(const RouterResult<List<RouterWifi>>.fail(RouterFail.unsupported)),
     };
   }
