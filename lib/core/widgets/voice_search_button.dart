@@ -161,6 +161,10 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
         msg.contains('permission')) {
       return 'صلاحية الميكروفون مرفوضة — فعّلها من إعدادات النظام';
     }
+    // جهازٌ بلا مايكروفون (أجهزة الكاشير SUNMI) أو مايكٌ يحجزه تطبيقٌ آخر — speech_to_text: error_audio_error
+    if (msg.contains('error_audio')) {
+      return 'الميكروفون غير متاح على هذا الجهاز';
+    }
     if (msg.contains('error_unknown') || msg.contains('300')) {
       return 'محرّك الصوت الحالي لا يعمل. غيّره من:\n'
           'Settings → Apps → Default apps → Digital assistant → Google';

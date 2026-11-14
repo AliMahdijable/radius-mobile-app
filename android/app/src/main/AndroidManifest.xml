@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- v2: speech_to_text (voice search) + local_auth (biometric login) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- ١٤ نوفمبر: إذن RECORD_AUDIO وحده يجعل Play يشترط مايكروفوناً فيقول «جهازك غير متوافق»
+         لأجهزة الكاشير بلا مايك (SUNMI V2 SE …). المايك اختياريّ: البحث والأمر الصوتيّ وحدهما. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
     <!-- 2026-08-26: تحديد موقع المشترك — geolocator يحتاج FINE أو COARSE.
