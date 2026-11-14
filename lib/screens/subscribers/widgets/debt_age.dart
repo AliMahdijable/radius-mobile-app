@@ -111,7 +111,8 @@ class DebtAgePill extends StatelessWidget {
   /// عرض الشارة كما تُرسم (للقياس قبل البناء — شريط الدين يقرّر بها «بجانب المبلغ أم تحته»).
   static double widthOf(BuildContext context, DebtAge age, {bool dense = false}) {
     final tp = TextPainter(
-      text: TextSpan(text: age.pillText(), style: _textStyle(AppColors.textBody, dense)),
+      // بنمط السياق الفعليّ (كما يرسمه `Text`) — النمط المجرّد يقيس أنقص ببضع نقاط فتُقصّ الشارة.
+      text: TextSpan(text: age.pillText(), style: DefaultTextStyle.of(context).style.merge(_textStyle(AppColors.textBody, dense))),
       textDirection: TextDirection.rtl,
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,

@@ -16,6 +16,7 @@ import '../../../theme/typography.dart';
 import '../../../widgets/company_tag.dart';
 import 'debt_age.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
+import 'split_fit_row.dart';
 import 'usage_on_demand.dart';
 import '../../../services/vpn_now.dart';
 import '../../../widgets/vpn_now_bar.dart' show VpnTag;
@@ -148,7 +149,7 @@ class SubscriberCardV3 extends StatelessWidget {
               children: [
                 _identityRow(st),
                 const SizedBox(height: 11),
-                _planRow(),
+                _planRow(context),
                 // المخطّط يسحب الصفّ الثالث 3px للأعلى فيصير الفراغ 8
                 // بدل 11 — تفصيلة تشدّ الصفّين معاً بصريّاً.
                 const SizedBox(height: 8),
@@ -297,81 +298,102 @@ class SubscriberCardV3 extends StatelessWidget {
 
   // ─────────────────── الصفّ 2 ───────────────────
 
-  Widget _planRow() {
+  /// صفّ الباقة والسعر ←→ الموقع وقياسات الجهاز.
+  ///
+  /// 🐛 ١٤ نوفمبر (المالك: «بوضع المعلومات الهواي جاي الكتابه تطلع من الكارتات»): كان `Row` والقياسات فيه ابنٌ غير مرن —
+  /// فإذا كثرت («وضع VPN»: إشارة + CCQ + الكيبل + شارة VPN) أو كبُر خطّ الهاتف أو ضاقت شاشته خرج النصّ من الكرت (٦٠ حالة
+  /// بالفحص، منها شاشة ٤٨٠). الآن [SplitFitRow]: سطرٌ واحد كما كان ما اتّسع (اسم الباقة يُقصّ أوّلاً حتى بضعة أحرف)،
+  /// وإلّا تنزل القياسات لسطرٍ تحته وتلتفّ فيه — والسعر لا يُدفع خارج الكرت أبداً.
+  Widget _planRow(BuildContext context) {
     final price = sub.price;
-    return Container(
-      padding: const EdgeInsets.only(top: 10),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.divider)),
-      ),
-      child: Row(
-        children: [
-          // ⚠️ محتوى البداية في `Expanded` واحد: كان `Flexible(الاسم)`
-          // و`Spacer()` أخوين في الصفّ نفسه، ولكليهما flex=1 فيتقاسمان
-          // الفراغ — ونصيب `Flexible` يضيع لأنّها بالملاءمة الرخوة تأخذ
-          // مقاسها الطبيعي. النتيجة: مقاييس الشبكة لا تبلغ نهاية الصفّ.
-          Expanded(
-            child: Row(children: [
-              Icon(Icons.inventory_2_rounded,
-                  size: 15, color: AppColors.textHint),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  sub.profileName ?? '—',
-                  style: AppType.body().copyWith(fontSize: 12.5),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    final hasPrice = price != null && price > 0;
+    final lead = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.inventory_2_rounded, size: 15, color: AppColors.textHint),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            sub.profileName ?? '—',
+            style: AppType.body().copyWith(fontSize: 12.5),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+    final tail = !hasPrice
+        ? const SizedBox.shrink()
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(width: 8),
+              Container(
+                width: 3,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: AppColors.grabber,
+                  shape: BoxShape.circle,
                 ),
               ),
-              if (price != null && price > 0) ...[
-                const SizedBox(width: 8),
-                Container(
-                  width: 3,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
+              const SizedBox(width: 8),
+              // مرنٌ صمّامَ أمانٍ فقط (سعرٌ أعرض من الكرت كلّه) — في كلّ عرضٍ واقعيّ يأخذ مقاسه كاملاً.
+              Flexible(
+                child: Text(
                   '${formatIQD(price)} د.ع',
                   style: AppType.body(
                           color: sub.isFixedPrice
                               ? AppColors.brandAccent
                               : AppColors.textMid)
                       .copyWith(fontSize: 12.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                // «أسعار المشتركين»: قفلٌ = سعرٌ ثابت لهذا المشترك، وتنبيهٌ
-                // = باقته تغيّرت منذ التسعير (اختياريّ، لا يمنع شيئاً).
-                if (sub.isFixedPrice) ...[
-                  const SizedBox(width: 3),
-                  Icon(Icons.lock_outline_rounded,
-                      size: 12, color: AppColors.brandAccent),
-                ] else if (sub.needsRepricing) ...[
-                  const SizedBox(width: 3),
-                  Icon(Icons.error_outline,
-                      size: 12, color: AppColors.warning),
-                ],
-              ],
-            ]),
-          ),
-          // زرّ الموقع: للوصول السريع من القائمة بلا فتح الكارت ثمّ
-          // «إجراءات أخرى». يظهر فقط حين يوجد موقع محفوظ.
-          if (onOpenLocation != null && sub.hasLocation) ...[
-            InkResponse(
-              radius: 18,
-              onTap: onOpenLocation,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Icon(Icons.location_on_rounded,
-                    size: 17, color: AppColors.info),
               ),
+              // «أسعار المشتركين»: قفلٌ = سعرٌ ثابت لهذا المشترك، وتنبيهٌ
+              // = باقته تغيّرت منذ التسعير (اختياريّ، لا يمنع شيئاً).
+              if (sub.isFixedPrice) ...[
+                const SizedBox(width: 3),
+                Icon(Icons.lock_outline_rounded,
+                    size: 12, color: AppColors.brandAccent),
+              ] else if (sub.needsRepricing) ...[
+                const SizedBox(width: 3),
+                Icon(Icons.error_outline,
+                    size: 12, color: AppColors.warning),
+              ],
+            ],
+          );
+    final end = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // زرّ الموقع: للوصول السريع من القائمة بلا فتح الكارت ثمّ
+        // «إجراءات أخرى». يظهر فقط حين يوجد موقع محفوظ.
+        if (onOpenLocation != null && sub.hasLocation) ...[
+          InkResponse(
+            radius: 18,
+            onTap: onOpenLocation,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Icon(Icons.location_on_rounded,
+                  size: 17, color: AppColors.info),
             ),
-            const SizedBox(width: 4),
-          ],
-          SubscriberNetworkMetrics(sub: sub),
+          ),
+          const SizedBox(width: 4),
         ],
+        Flexible(child: SubscriberNetworkMetrics(sub: sub, flow: true)),
+      ],
+    );
+    return Container(
+      padding: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
+      child: SplitFitRow(
+        // الأيقونة وفاصلها (20) + ما يكفي بضعة أحرف من اسم الباقة بحجم خطّ الهاتف.
+        minLead: 20 + MediaQuery.textScalerOf(context).scale(24),
+        lead: lead,
+        tail: tail,
+        end: end,
       ),
     );
   }
@@ -388,23 +410,39 @@ class SubscriberCardV3 extends StatelessWidget {
     final session = _sessionVisual();
     return LayoutBuilder(
       builder: (context, c) {
-        final stacked = session != null && c.maxWidth < 340;
+        final labelStyle = AppType.body(color: AppColors.textLabel).copyWith(fontSize: 12.5);
+        final dateStyle = AppType.body().copyWith(fontSize: 12.5, fontWeight: FontWeight.w600);
+        final dateText = _formatExpiry(sub.parsedExpiration);
+        var stacked = session != null && c.maxWidth < 340;
+        // عرض منطقة نصّ الجلسة على السطر المشترك: حصّتها المعتادة (٤ من ٩)، أو أوسع بقدر حاجتها حين يتّسع السطر للاثنين.
+        var sessionRegion = (c.maxWidth - 8) * 4 / 9;
+        if (session != null && !stacked) {
+          // 🐛 ١٤ نوفمبر (المالك: «بوضع المعلومات الهواي جاي الكتابه تطلع من الكارتات»): العتبة وحدها لا ترى حجم خطّ
+          // الهاتف ولا طول النصّ — على 412/430 بخطٍّ كبير، وعلى أيّ عرضٍ بمدّة اتّصالٍ طويلة، كان التاريخ و«متصل منذ…»
+          // يُقصّان بـ«…». الآن بالقياس: كلٌّ في حصّته ⇒ كما كان؛ يتّسعان معاً ⇒ سطرٌ واحد ومنطقة الجلسة بقدر حاجتها؛
+          // وإلّا ينزل نصّ الجلسة لسطره (كما الهواتف الضيّقة).
+          final wE = 15 + 6 + _textWidth(context, 'ينتهي', labelStyle) + 6 + _textWidth(context, dateText, dateStyle);
+          final wS = 14 + 5 + _textWidth(context, session.text, AppType.muted(color: session.color).copyWith(fontSize: 11.5));
+          if (wE + 8 + wS + 1 > c.maxWidth) {
+            stacked = true;
+          } else if (wS + 1 > sessionRegion) {
+            sessionRegion = wS + 1; // الجلسة أطول من حصّتها ⇒ تأخذ حاجتها (والتاريخ يتّسع فيما بقي — المجموع يتّسع)
+          } else if (wE + 1 > c.maxWidth - 8 - sessionRegion) {
+            final left = c.maxWidth - 8 - wE - 1; // التاريخ أطول من حصّته ⇒ تضيق منطقة الجلسة إلى ما بقي
+            sessionRegion = left > wS + 1 ? left : wS + 1;
+          }
+        }
         final expiry = Row(
           children: [
             Icon(Icons.event_rounded, size: 15, color: AppColors.textHint),
             const SizedBox(width: 6),
-            Text(
-              'ينتهي',
-              style: AppType.body(color: AppColors.textLabel)
-                  .copyWith(fontSize: 12.5),
-            ),
+            Text('ينتهي', style: labelStyle),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                _formatExpiry(sub.parsedExpiration),
+                dateText,
                 textDirection: TextDirection.ltr,
-                style: AppType.body()
-                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                style: dateStyle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -441,9 +479,12 @@ class SubscriberCardV3 extends StatelessWidget {
         }
         return Row(
           children: [
-            Flexible(flex: 5, child: expiry),
+            Expanded(child: expiry),
             const SizedBox(width: 8),
-            Flexible(flex: 4, child: sessionRow),
+            SizedBox(
+              width: sessionRegion,
+              child: Align(alignment: AlignmentDirectional.centerStart, child: sessionRow),
+            ),
           ],
         );
       },
@@ -499,21 +540,28 @@ class SubscriberCardV3 extends StatelessWidget {
     final age = DebtAge.of(sub);
     return LayoutBuilder(
       builder: (context, c) {
-        final tight = c.maxWidth < 330;
         final labelStyle = AppType.body(color: AppColors.dangerOnSoft);
         final amountText = '${formatIQD(debt)} د.ع';
         final amountStyle = AppType.bodyStrong(color: AppColors.error).copyWith(fontWeight: FontWeight.w700);
+        final amountNeed = _textWidth(context, 'دين', labelStyle) + 7 + _textWidth(context, amountText, amountStyle);
+        // ما يبقى للمبلغ (وشارة عمره) بعد الأيقونة والزرّين — بنصّيهما أو بأيقونتيهما وحدهما.
+        double freeFor(bool iconsOnly) {
+          var free = c.maxWidth - 2 - 24 - 16 - 7 - 7;
+          if (onSendDebtReminder != null) free -= _MiniButton.widthOf(context, iconsOnly ? '' : 'تذكير دين', filled: false) + 7;
+          if (onPayDebt != null) free -= _MiniButton.widthOf(context, iconsOnly ? '' : 'تسديد', filled: true);
+          return free;
+        }
+
+        // 🐛 ١٤ نوفمبر: العتبة وحدها (330) لا ترى حجم خطّ الهاتف ولا طول المبلغ — «1,250,000 د.ع» كان يُقصّ على 412/430
+        // بخطٍّ كبير والزرّان بنصّيهما. المبلغ أوّلاً: لا يتّسع كاملاً ⇒ يسقط نصّ الزرّين كما على الشاشات الضيّقة.
+        final tight = c.maxWidth < 330 || amountNeed + 2 > freeFor(false);
         // «أيّام الدين» (المالك ٣٠ أكتوبر: «ياخذ من الوجدت مساحه»): بجانب المبلغ حين يتّسعان **كاملين** — المساحة
         // مقيسةٌ لا مفترضة (عرض الشريط ناقص الأيقونة والزرّين بنصّيهما)، فرقمٌ كبير بجانب شارةٍ طويلة لا يُقصّ أبداً؛
         // وإلّا سطرٌ رفيع تحته داخل الشريط نفسه بحشوةٍ أقلّ — لا شريط جديد، والكرت يطول بضع نقاطٍ فقط.
         var ageInline = false;
         if (age != null) {
-          var free = c.maxWidth - 2 - 24 - 16 - 7 - 7;
-          if (onSendDebtReminder != null) free -= _MiniButton.widthOf(context, tight ? '' : 'تذكير دين', filled: false) + 7;
-          if (onPayDebt != null) free -= _MiniButton.widthOf(context, tight ? '' : 'تسديد', filled: true);
-          final need = _textWidth(context, 'دين', labelStyle) + 7 + _textWidth(context, amountText, amountStyle) + 8 +
-              DebtAgePill.widthOf(context, age, dense: true);
-          ageInline = need + 2 <= free;
+          final need = amountNeed + 8 + DebtAgePill.widthOf(context, age, dense: true);
+          ageInline = need + 2 <= freeFor(tight);
         }
         final ageStacked = age != null && !ageInline;
         final amountRow = Row(
@@ -521,12 +569,12 @@ class SubscriberCardV3 extends StatelessWidget {
           children: [
             Text('دين', style: labelStyle),
             const SizedBox(width: 7),
+            // مبلغ مالٍ لا يُقصّ بـ«…» أبداً (يُقرأ رقماً آخر): إن ضاق عنه السطر حتى بعد إسقاط نصّ الزرّين يصغر قليلاً كاملاً.
             Flexible(
-              child: Text(
-                amountText,
-                style: amountStyle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(amountText, style: amountStyle, maxLines: 1),
               ),
             ),
           ],
@@ -852,8 +900,12 @@ class SubscriberCardV3 extends StatelessWidget {
 /// يقرأ من كاش `DeviceProbeApi` فقط ولا يبدأ فحصاً — موجة القائمة هي
 /// من تملك الفحص، وهذا الصفّ يستمع لـ`DeviceProbeBus` فيتحدّث معها.
 class SubscriberNetworkMetrics extends StatelessWidget {
-  const SubscriberNetworkMetrics({super.key, required this.sub, this.wrap = false});
+  const SubscriberNetworkMetrics({super.key, required this.sub, this.wrap = false, this.flow = false});
   final Subscriber sub;
+
+  /// كرت القائمة: سطرٌ واحد بفواصله المعتادة ما اتّسع، ويلتفّ لسطرٍ ثانٍ بدل أن يخرج من الكرت (هاتف ضيّق، خطّ كبير، «وضع
+  /// VPN» بقراءاته الكثيرة). يُحاذى لنهاية السطر كما القياسات في الكرت.
+  final bool flow;
 
   /// جدول الحاسبة: خليّةٌ ضيّقة ⇒ تلتفّ القياسات بدل أن تفيض (الهاتف صفٌّ واحد كما كان).
   final bool wrap;
@@ -930,6 +982,15 @@ class SubscriberNetworkMetrics extends StatelessWidget {
         }
         if (items.isEmpty) return const SizedBox.shrink();
         if (wrap) return Wrap(spacing: 8, runSpacing: 2, children: items);
+        if (flow) {
+          return Wrap(
+            spacing: 11,
+            runSpacing: 4,
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: items,
+          );
+        }
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -974,6 +1035,15 @@ class SubscriberNetworkMetrics extends StatelessWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     items.add(const VpnTag());
     if (wrap) return Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: items);
+    if (flow) {
+      return Wrap(
+        spacing: 9,
+        runSpacing: 4,
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: items,
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1098,9 +1168,13 @@ class _ConnectionIssueBar extends StatelessWidget {
 /// الحشو الرأسي 4 للشبحي و5 للمملوء — لأنّ الشبحي يحمل حدّاً 1px،
 /// فالارتفاع النهائي يتساوى. (تفصيلة من المخطّط.)
 /// عرض نصٍّ بسطرٍ واحد بخطّ التطبيق ومقياس النصّ الحاليّ — لقرار «بجانب المبلغ أم تحته» في شريط الدين.
+///
+/// 🐛 ١٤ نوفمبر: كان يقيس بالنمط المجرّد، و`Text` يرسم بنمط السياق مدموجاً معه (تباعد حروف الثيم) ⇒ القياس أنقص ببضع نقاط
+/// (٥ على «متصل منذ 7 يوم 1س 18د»)، فيُحكَم «يتّسع» لما لا يتّسع ويُقصّ المبلغ أو التاريخ. الآن بالنمط الفعليّ نفسه —
+/// و[context] سياقٌ داخل الكرت (تحت `Material` الذي يضع نمط النصّ الافتراضيّ).
 double _textWidth(BuildContext context, String text, TextStyle style) {
   final tp = TextPainter(
-    text: TextSpan(text: text, style: style),
+    text: TextSpan(text: text, style: DefaultTextStyle.of(context).style.merge(style)),
     textDirection: TextDirection.rtl,
     textScaler: MediaQuery.textScalerOf(context),
     maxLines: 1,
