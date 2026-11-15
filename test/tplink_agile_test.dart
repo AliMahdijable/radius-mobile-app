@@ -54,6 +54,8 @@ class _FakeAgile {
   int seq = 400000;
   int failureCount = 0;
   bool userConflict = false;
+  // الفيرموير الأقدم ($.su، Archer C6): ردّ الدخول الناجح `{"data":"<مُعمّى>"}` بلا `success` (قِيس حيّاً ١٥ نوفمبر).
+  bool omitLoginSuccess = false;
   final sessions = <String, ({String key, String iv, String hash, String cookie})>{};
   final paths = <String>[];
   int loginTries = 0, rejected = 0;
@@ -177,10 +179,8 @@ class _FakeAgile {
         'data': {'stok': stok}
       };
     }
-    return {
-      'success': true,
-      'data': AgileCrypto.aesEncrypt(jsonEncode({'stok': stok}), aes!.key, aes.iv)
-    };
+    final enc = AgileCrypto.aesEncrypt(jsonEncode({'stok': stok}), aes!.key, aes.iv);
+    return omitLoginSuccess ? {'data': enc} : {'success': true, 'data': enc};
   }
 
   static const _payload = {
@@ -343,6 +343,15 @@ void main() {
       expect(TplinkAgileService.flagsOf(d.host).toString(), 'legacy');
       expect(d.lastLoginBody, startsWith('sign='));
       expect(d.lastLoginBody, isNot(contains('operation=')), reason: 'العمليّة داخل المعمّى لا ظاهرة');
+      _expectSnapshot(await TplinkAgileService.readStatus(ss!));
+    });
+
+    test('الأقدم (\$.su، Archer C6): ردّ الدخول بلا success ⇒ يُفكّ ويُقرأ (قِيس حيّاً)', () async {
+      await boot(_Mode.legacy);
+      d.omitLoginSuccess = true;
+      final ss = await TplinkAgileService.login(d.host, 'router-pass');
+      expect(ss, isNotNull, reason: 'بلا `success` لازم ينجح بالفكّ: ${TplinkAgileService.lastIssue(d.host)}');
+      expect(TplinkAgileService.lastIssue(d.host), isNull);
       _expectSnapshot(await TplinkAgileService.readStatus(ss!));
     });
 

@@ -607,7 +607,14 @@ class TplinkAgileService {
     }
     final j = _json(r.body);
     final data = j?['data'];
-    if (j?['success'] == true && (plain ? data is Map : data is String)) {
+    // رمز الخطأ كما تطبّعه الواجهة (`Yl`): errorCode || error || error_code || errorcode، أو داخل data.
+    String code(Object? m) => m is Map ? '${m['errorCode'] ?? m['error'] ?? m['error_code'] ?? m['errorcode'] ?? ''}' : '';
+    final err = code(j).isNotEmpty ? code(j) : code(data);
+    final hasEnc = plain ? data is Map : data is String;
+    // النجاح: `success==true` (فيرموير Vite، Archer AX…) — أو، بالفيرموير الأقدم ($.su، Archer C6)، حمولةٌ مُعمّاة بلا `success`
+    // وبلا رمز خطأ (الجهاز يردّ `{"data":"<مُعمّى>"}` وحدها عند النجاح — قِيس حيّاً ١٥ نوفمبر على C6). فكُّ الحمولة إلى stok
+    // يحسم النجاح لا وجود `success`؛ فشلُ الفكّ أو غياب stok ⇒ أسفل (رمز الخطأ إن وُجد، وإلّا readFailed).
+    if (hasEnc && (j?['success'] == true || err.isEmpty)) {
       try {
         final dec = plain ? <String, dynamic>{'stok': (data as Map)['stok']} : _json(AgileCrypto.aesDecrypt(data as String, aesKey, aesIv));
         final stok = dec?['stok'] ?? (dec?['data'] is Map ? (dec!['data'] as Map)['stok'] : null);
@@ -635,9 +642,6 @@ class TplinkAgileService {
       _note(h, AgileIssue.readFailed, 'login decrypt');
       return null;
     }
-    // رمز الخطأ كما تطبّعه الواجهة (`Yl`): errorCode || error || error_code || errorcode، أو داخل data.
-    String code(Object? m) => m is Map ? '${m['errorCode'] ?? m['error'] ?? m['error_code'] ?? m['errorcode'] ?? ''}' : '';
-    final err = code(j).isNotEmpty ? code(j) : code(data);
     final dd = data is Map ? data : const <String, Object?>{};
     switch (err) {
       case 'login failed':
