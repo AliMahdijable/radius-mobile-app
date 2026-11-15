@@ -156,12 +156,17 @@ class SheetHeaderBar extends StatelessWidget {
     this.tint,
     this.tintBg,
     this.subtitleLtr = false,
+    this.subtitleMaxLines = 1,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onClose;
+
+  /// أسطر السطر الثاني: ١ افتراضاً (يُقصّ بـ«…»). نافذةٌ سطرها يحمل ما يجب أن يُقرأ كاملاً (اسم الشركة التي يُحوَّل من
+  /// محفظتها) ترفعه فيلتفّ بدل أن يُقصّ.
+  final int subtitleMaxLines;
 
   /// لون الأيقونة. الافتراضي `brand`.
   final Color? tint;
@@ -208,7 +213,7 @@ class SheetHeaderBar extends StatelessWidget {
                     subtitle,
                     textDirection: subtitleLtr ? TextDirection.ltr : null,
                     style: AppType.muted().copyWith(fontSize: 11.5),
-                    maxLines: 1,
+                    maxLines: subtitleMaxLines,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],

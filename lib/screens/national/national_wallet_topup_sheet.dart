@@ -372,14 +372,17 @@ class _NationalWalletTopupSheetState extends State<NationalWalletTopupSheet> {
       ]);
     }
     final ready = i != null && (_method == 0 ? i.transferOk : i.cardOk);
+    // «كل الشركات»: المال يُحوَّل من محفظة شركةٍ يجب أن يراها المدير كاملةً قبل التأكيد — اسمها هو السطر (الوصف الطويل كان
+    // يدفعه خارج السطر فيُقصّ كلّه على الهاتف)، ويلتفّ ولا يُقصّ. خارج الوضع: الوصف كما كان، ويلتفّ على الشاشة الضيّقة.
+    final co = MergedMode.rowCompanyName(widget.companyKey);
     return PopScope(
       canPop: !_busy,
       child: DesignSheet(
         header: SheetHeaderBar(
           icon: LucideIcons.wallet,
           title: 'تعبئة محفظة المشترك',
-          // «كل الشركات»: المال يُحوَّل من محفظة شركةٍ يراها المدير قبل التأكيد — اسمها مع السطر
-          subtitle: MergedOps.withCompany('من محفظتك في بوّابة الوطني أو بكارت الشركة', widget.companyKey),
+          subtitle: co != null ? 'في «$co»' : 'من محفظتك في بوّابة الوطني أو بكارت الشركة',
+          subtitleMaxLines: 3,
           onClose: _close,
         ),
         body: body,
