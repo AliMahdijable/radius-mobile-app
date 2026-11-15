@@ -109,11 +109,17 @@ class _PackagesScreenState extends State<PackagesScreen> {
     // الشاشة على تسعير أول مدير فرعي (مطلب 2026-06-12: 'تظهر فارغه
     // الا ابدل بين المدراء'). تسعير المدير الأب نفسه نادراً ما يكون
     // مضبوطاً — لذا نختار فرعي بدلاً من ترك كل الحقول صفر.
+    // ⚠️ ذلك لسوبرنت (معرّفٌ عارٍ) وحده. التسعير المحلّيّ (معرّفٌ مؤهَّل
+    // «speednet-iq:1534» أو شركةٌ مُضافة) يفتح على «تسعيري الخاص»: سعر الوكيل
+    // نفسه هو ما يظهر على كرت مشتركيه ويدخل تفعيلهم — ١٥ نوفمبر (المالك:
+    // «سعرلي براء»): وكيلٌ كتب أسعاره فحُفظت لأوّل فرعيّ، وبقي كرت مشتركيه
+    // وتفعيله على رقم الساس نفسه (100,500 لباقةٍ سعرها 35,000).
     // مدراء المفتوحة صراحةً (قسمٌ «للمفتوحة وحدها»): لا يأخذ وجهة قسم مدراءٍ ظاهرٍ لشركةٍ أخرى ببادئاته
     final mgrs = await CompanyRoute.runOpen(ManagersApi.lite);
     if (!mounted) return;
     setState(() => _managers = mgrs ?? const []);
-    if ((mgrs ?? const []).isNotEmpty) {
+    final selfFirst = _myIdQualified || _mySelfKey != null;
+    if (!selfFirst && (mgrs ?? const []).isNotEmpty) {
       final first = mgrs!.first;
       setState(() {
         _selectedManagerId = first.id;

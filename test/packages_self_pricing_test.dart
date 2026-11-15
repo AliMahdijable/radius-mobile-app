@@ -104,8 +104,10 @@ void main() {
     await simDrain(t);
   });
 
+  // 🚨 ١٥ نوفمبر (المالك: «ليش سعر باقته هلكد؟» ثمّ «سعرلي براء»): الشاشة كانت تفتح على أوّل مديرٍ فرعيّ، فكتب وكيل
+  // `speednet-iq:1534` أسعاره وحفظها فذهبت لفرعيّه `1955` — وبقي كرت مشتركيه وتفعيله على رقم الساس (100,500 بدل 35,000).
   testWidgets(
-      'مدير ساسٍ بعيد بمدراء فرعيّين: يفتح على الأوّل، و«تسعيري الخاص» باسمه يقرأ 175',
+      '🚨 مدير ساسٍ بعيد بمدراء فرعيّين: يفتح على «تسعيري الخاص» (175) وحفظه له، والفرعيّ بالاختيار وحده',
       (t) async {
     await session('next-gen:175');
     server.reply('GET', _managers, 200, {
@@ -118,32 +120,64 @@ void main() {
     priceList(175, [_row(101, 'Economy', 25000)]);
     await open(t);
 
-    expect(server.calls('GET', '/api/v2/price-list/300'), hasLength(1));
-    expect(server.calls('GET', '/api/v2/price-list/175'), isEmpty);
-    expect(field('20,000'), findsOneWidget);
+    expect(server.calls('GET', '/api/v2/price-list/175'), hasLength(1),
+        reason: 'يفتح على أسعاره هو');
+    expect(server.calls('GET', '/api/v2/price-list/300'), isEmpty,
+        reason: 'لا يُفتح على أوّل فرعيّ');
+    expect(field('25,000'), findsOneWidget);
+    expect(find.text('admin@hhnn'), findsOneWidget, reason: 'المختار: هو نفسه');
 
-    await t.tap(find.text('sub1'));
+    // ما كتبه الوكيل فور الفتح يُحفظ له لا لفرعيّه.
+    await saveEconomyAs(t, '26000');
+    var posts = server.bodies('POST', _priceListPost);
+    expect(posts.single['manager_id'], 175, reason: 'تسعيره هو لا الفرعيّ');
+
+    // الفرعيّ ما زال بالاختيار.
+    await t.tap(find.text('admin@hhnn'));
     await t.pumpAndSettle();
     final sheet = find.byType(BottomSheet);
     expect(sheet, findsOneWidget);
-    // صفّ «تسعيري الخاص» باسم صاحب الحساب — كان يعرض اسم المختار (sub1 مرّتين).
+    // صفّ «تسعيري الخاص» باسم صاحب الحساب، معلَّماً.
     final self = find.ancestor(
         of: find.byIcon(LucideIcons.user), matching: find.byType(ListTile));
     expect(
         find.descendant(of: self, matching: find.text('admin@hhnn')),
         findsOneWidget);
-    expect(find.descendant(of: sheet, matching: find.text('sub1')),
+    expect(find.descendant(of: self, matching: find.byIcon(LucideIcons.check)),
         findsOneWidget);
-
-    await t.tap(self);
+    await t.tap(find.descendant(of: sheet, matching: find.text('sub1')));
     await t.pumpAndSettle();
-    expect(server.calls('GET', '/api/v2/price-list/175'), hasLength(1));
-    expect(field('25,000'), findsOneWidget);
+    expect(server.calls('GET', '/api/v2/price-list/300'), hasLength(1));
+    expect(field('20,000'), findsOneWidget);
 
-    await saveEconomyAs(t, '26000');
-    final posts = server.bodies('POST', _priceListPost);
-    expect(posts.single['manager_id'], 175, reason: 'تسعيره هو لا الفرعيّ');
+    await saveEconomyAs(t, '21000');
+    posts = server.bodies('POST', _priceListPost);
+    expect(posts, hasLength(2));
+    expect(posts.last['manager_id'], 300, reason: 'المختار صراحةً');
     expect(server.calls('GET', _packages), isEmpty);
+    await simDrain(t);
+  });
+
+  testWidgets(
+      'سوبرنت (معرّفٌ عارٍ 42) بمدراء فرعيّين: يفتح على أوّل فرعيّ كما طلب ٢٠٢٦-٠٦-١٢',
+      (t) async {
+    await session('42', username: 'admin@supernet');
+    server.reply('GET', _managers, 200, {
+      'success': true,
+      'data': [
+        {'id': 300, 'username': 'sub1'},
+      ],
+    });
+    priceList(300, [_row(101, 'Economy', 20000)]);
+    await open(t);
+
+    expect(server.calls('GET', '/api/v2/price-list/300'), hasLength(1));
+    expect(server.calls('GET', _packages), isEmpty);
+    expect(field('20,000'), findsOneWidget);
+    expect(find.text('sub1'), findsOneWidget, reason: 'المختار: أوّل فرعيّ');
+
+    await saveEconomyAs(t, '22000');
+    expect(server.bodies('POST', _priceListPost).single['manager_id'], 300);
     await simDrain(t);
   });
 
