@@ -403,7 +403,8 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
       showNoPermission(context);
       return;
     }
-    final r = await showNationalWalletTopupSheet(context, sid: _idx);
+    // الكرت لصفوف الشركة المفتوحة وحدها (shows: companyKey == null) ⇒ شركة الصفّ نفسها صراحةً
+    final r = await showNationalWalletTopupSheet(context, sid: _idx, companyKey: widget.sub.companyKey);
     if (!mounted || r == null) return;
     nationalWalletSnack(context, r);
     _retry(NationalSheetSection.wallet);

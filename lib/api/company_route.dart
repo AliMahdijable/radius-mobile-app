@@ -438,6 +438,10 @@ class CompanyRefs {
     'message-exclusion',
   };
 
+  /// «تعبئة محفظة المشترك» للوطنيّ من «كل الشركات» (١٥ نوفمبر — companyRoutingAllow kit-wallet-transfer/kit-wallet-card): التحويل
+  /// والكارت برقم الاشتراك (= رقم صفّ المشترك في شركته) ⇒ مرجع نافذته، كبقيّة كتابات المشترك الواحد. القراءة (…/wallet/topup) بلا مرجع.
+  static final RegExp _walletWrite = RegExp(r'^/api/v2/ftth/subscriptions/(\d{1,12})/wallet/(?:transfer|card)/?$');
+
   static String _k(String key, String idx, CompanyRefKind kind) => '$key|$idx|${kind.name}';
 
   static ({String idx, String tail})? _parse(String path) {
@@ -478,6 +482,10 @@ class CompanyRefs {
     if (m == 'GET') return null;
     final body = _bodySubject(m, path, data);
     if (body != null) return (idx: body, kind: CompanyRefKind.subject);
+    if (m == 'POST') {
+      final w = _walletWrite.firstMatch(path);
+      if (w != null) return (idx: w.group(1)!, kind: CompanyRefKind.subject);
+    }
     final p = _parse(path);
     if (p == null) return null;
     if (m == 'POST' && p.tail == 'activate') return (idx: p.idx, kind: CompanyRefKind.activate);

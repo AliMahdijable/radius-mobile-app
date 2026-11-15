@@ -12,6 +12,7 @@ import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../services/merged_mode.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -24,7 +25,10 @@ import 'national_widgets.dart';
 /// كتابةٌ واحدة بلا إعادة؛ «تمّ» و«لم يتأكّد» يُغلقان النافذة ويُرجعان النتيجة لمن فتحها (إشعارٌ وتحديث)، والرفض يبقى فيها بنصّه.
 
 /// يفتح النافذة؛ يرجع النتيجة إن تمّ أو لم يتأكّد (فتُعاد قراءة المحفظة والدين)، وnull إن أُغلقت بلا شيء.
-Future<WalletTopupResult?> showNationalWalletTopupSheet(BuildContext context, {required String sid}) {
+///
+/// [companyKey] شركة صفّ المشترك في «كل الشركات» (١٥ نوفمبر): النافذة تلتقطها لحظة فتحها — قراءتها وتحويلها وكارتها لشركته هو،
+/// واسمها في رأسها. null ⇒ الشركة المفتوحة (صراحةً في الوضع) — وخارج الوضع كما كان حرفاً.
+Future<WalletTopupResult?> showNationalWalletTopupSheet(BuildContext context, {required String sid, required String? companyKey}) {
   return showAppSheet<WalletTopupResult>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -32,7 +36,7 @@ Future<WalletTopupResult?> showNationalWalletTopupSheet(BuildContext context, {r
     isScrollControlled: true,
     useSafeArea: true,
     isDismissible: false,
-    builder: (_) => NationalWalletTopupSheet(sid: sid),
+    builder: (_) => NationalWalletTopupSheet(sid: sid, companyKey: companyKey),
   );
 }
 
@@ -52,8 +56,11 @@ String walletDigits(String v) {
 }
 
 class NationalWalletTopupSheet extends StatefulWidget {
-  const NationalWalletTopupSheet({super.key, required this.sid});
+  const NationalWalletTopupSheet({super.key, required this.sid, required this.companyKey});
   final String sid;
+
+  /// شركة صفّ المشترك (مفتاحها في «كل الشركات»)، أو null للمفتوحة.
+  final String? companyKey;
 
   @override
   State<NationalWalletTopupSheet> createState() => _NationalWalletTopupSheetState();
@@ -94,7 +101,7 @@ class _NationalWalletTopupSheetState extends State<NationalWalletTopupSheet> {
 
   Future<void> _load() async {
     _poll?.cancel();
-    final r = await NationalWalletApi.info(widget.sid);
+    final r = await NationalWalletApi.info(widget.sid, companyKey: widget.companyKey);
     if (!mounted) return;
     if (r.ok && r.data == null) {
       if (_polls++ < 12) _poll = Timer(const Duration(milliseconds: 2500), _load);
@@ -143,9 +150,12 @@ class _NationalWalletTopupSheetState extends State<NationalWalletTopupSheet> {
       _error = null;
     });
     final card = _method == 1;
+    // «كل الشركات»: مرجع نافذة المشترك في شركته قبل الكتابة (الخادم يرفضها بدونه — لم يُرسل شيء)؛ بلا مفتاح لا شيء.
+    await MergedOps.ensureSubjectAt(widget.companyKey, widget.sid);
     final r = card
-        ? await NationalWalletApi.card(widget.sid, _pinDigits)
-        : await NationalWalletApi.transfer(widget.sid, amount: _amt, payType: _payTypes[_pay], partial: _part, confirmRepeat: confirm);
+        ? await NationalWalletApi.card(widget.sid, _pinDigits, companyKey: widget.companyKey)
+        : await NationalWalletApi.transfer(widget.sid,
+            amount: _amt, payType: _payTypes[_pay], partial: _part, confirmRepeat: confirm, companyKey: widget.companyKey);
     if (!mounted) return;
     if (card) _pin.clear();
     switch (r.state) {
@@ -368,7 +378,8 @@ class _NationalWalletTopupSheetState extends State<NationalWalletTopupSheet> {
         header: SheetHeaderBar(
           icon: LucideIcons.wallet,
           title: 'تعبئة محفظة المشترك',
-          subtitle: 'من محفظتك في بوّابة الوطني أو بكارت الشركة',
+          // «كل الشركات»: المال يُحوَّل من محفظة شركةٍ يراها المدير قبل التأكيد — اسمها مع السطر
+          subtitle: MergedOps.withCompany('من محفظتك في بوّابة الوطني أو بكارت الشركة', widget.companyKey),
           onClose: _close,
         ),
         body: body,

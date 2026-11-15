@@ -513,6 +513,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   num get _managerCost => _readNum('manager_cost');
   num get _currentBalance => _readNum('current_balance');
   num get _managerBalance => _readNum('manager_balance');
+
+  /// الوطنيّ (١٥ نوفمبر): `manager_balance` هنا «حدّ محفظة عضو الفريق» — ما يصرفه هذا المستخدم في البوّابة، لا رصيد الحساب الرئيسيّ
+  /// (الخادم يضع العلَم) ⇒ السطر يُسمّى باسمه.
+  bool get _managerBalanceIsLimit => _data?['manager_balance_is_limit'] == true;
+  String get _managerBalanceLabel => _managerBalanceIsLimit ? 'حدّ محفظتك' : 'dashboard.manager_balance'.tr();
   num get _rewardPoints => _readNum('reward_points');
   String get _profileName =>
       (_data?['profile_name'] ?? widget.sub.profileName ?? '').toString();
@@ -1175,7 +1180,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                   strong: true,
                 ),
                 SheetRowData(
-                  label: 'dashboard.manager_balance'.tr(),
+                  label: _managerBalanceLabel,
                   value: '${formatIQD(_managerBalance.round())} $cur',
                 ),
               ]
@@ -1215,7 +1220,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             strong: true,
           ),
           SheetRowData(
-            label: 'dashboard.manager_balance'.tr(),
+            label: _managerBalanceLabel,
             value: '${formatIQD(_managerBalance.round())} $cur',
           ),
           if (_rewardPoints > 0)
@@ -1590,7 +1595,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       icon: LucideIcons.walletCards,
     );
     if (go != true || !mounted) return;
-    final r = await showNationalWalletTopupSheet(context, sid: idx);
+    // شركة صفّ المشترك (١٥ نوفمبر): النافذة لشركته هو في «كل الشركات» — كانت تسأل الصفحة المفتوحة فتقول «غير موجود»
+    final r = await showNationalWalletTopupSheet(context, sid: idx, companyKey: widget.sub.companyKey);
     if (!mounted || r == null) return;
     await _load();
     if (!mounted) return;

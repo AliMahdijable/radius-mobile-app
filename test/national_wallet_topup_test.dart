@@ -79,7 +79,7 @@ void main() {
     WalletTopupResult? got;
     Future<void> open(WidgetTester t) async {
       got = null;
-      await pumpSim(t, _v, home: (_) => simLauncher((c) async => got = await showNationalWalletTopupSheet(c, sid: _sid)));
+      await pumpSim(t, _v, home: (_) => simLauncher((c) async => got = await showNationalWalletTopupSheet(c, sid: _sid, companyKey: null)));
       await simOpen(t);
       await _settle(t);
     }

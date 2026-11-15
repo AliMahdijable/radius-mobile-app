@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'company_route.dart';
 import 'national_device_api.dart';
 import 'national_sheet_api.dart';
 
@@ -12,6 +13,10 @@ import 'national_sheet_api.dart';
 ///   POST /api/v2/ftth/subscriptions/:sid/wallet/card      {pin}
 /// لصاحب الحساب وحده، خلف مفتاح watani_wallet بالخادم. كتابةٌ واحدة بلا إعادة؛ النتيجة: تمّ / لم يتمّ / لم يتأكّد. رقم الكارت لا
 /// يُخزَّن في التطبيق ولا يُعاد.
+///
+/// «كل الشركات» (١٥ نوفمبر — وكيلٌ بصفحتَي وطنيّ فتح النافذة من شيت تفعيل مشترك صفحةٍ فسألت الصفحة المفتوحة: «غير موجود»): كلّ نداءٍ
+/// يأخذ شركته صراحةً ([companyKey] مفتاح صفّ المشترك؛ null ⇒ المفتوحة صراحةً) — النافذة تلتقطها لحظة فتحها فلا يغيّرها شيءٌ بعدها.
+/// الخادم يوجّه القراءة بمفتاحها والكتابتين بمرجع نافذة المشترك ([CompanyRefs.requireOf])، وخلف مفتاحه wallet_routed.
 
 String _s(dynamic v) => v == null ? '' : v.toString().trim();
 String? _sn(dynamic v) {
@@ -157,7 +162,10 @@ class WalletTopupResult {
       );
     }
     if (code == 'RECENT_DUPLICATE') return WalletTopupResult(WalletTopupState.repeat, code: code, message: msg.isEmpty ? null : msg);
-    if (code == 'OUTCOME_UNKNOWN' || b['outcome'] == 'unknown') {
+    // «كل الشركات»: طبقة التوجيه لا تعرف أثر كتابةٍ انتهت جلسة شركتها في الطريق، أو تعذّر مزوّدها بعد الإرسال، أو عاد ردّها بلا صدى
+    // الشركة ⇒ «لم يتأكّد» (لا «لم يتغيّر شيء» ولا دعوةٌ لإعادةٍ عمياء). بقيّة رموزها رفضٌ قبل المعالج بنصّه (لم يُرسل شيء).
+    final routeUnknown = code == CompanyRouteCodes.sessionExpired || code == CompanyRouteCodes.upstream || code == CompanyRouteCodes.echo;
+    if (code == 'OUTCOME_UNKNOWN' || b['outcome'] == 'unknown' || routeUnknown) {
       return WalletTopupResult(WalletTopupState.unknown, code: code,
           message: msg.isEmpty ? 'لم يتأكّد — افتح محفظة المشترك بعد دقيقة وتحقّق قبل أيّ إعادة' : msg);
     }
@@ -175,10 +183,10 @@ class NationalWalletApi {
 
   static const _ambiguous = 'انقطع الاتّصال قبل الردّ — ربّما تمّ: افتح محفظة المشترك بعد دقيقة وتحقّق قبل أيّ إعادة';
 
-  /// النافذة — ok(info) · locked · fail.
-  static Future<NationalSheetResult<WalletTopupInfo?>> info(String sid) async {
+  /// النافذة — ok(info) · locked · fail. [companyKey] شركة صفّ المشترك في «كل الشركات» (null ⇒ المفتوحة صراحةً).
+  static Future<NationalSheetResult<WalletTopupInfo?>> info(String sid, {required String? companyKey}) async {
     try {
-      final r = await ApiClient.dio.get<dynamic>('${_base(sid)}/topup');
+      final r = await ApiClient.dio.get<dynamic>('${_base(sid)}/topup', options: CompanyRoute.explicit(companyKey));
       final x = NationalDeviceApi.readOf(r.data);
       if (!x.ok || x.data == null) {
         if (x.locked) return NationalSheetResult.locked(x.lock!);
@@ -193,10 +201,10 @@ class NationalWalletApi {
     }
   }
 
-  static Future<WalletTopupResult> _send(String path, Map<String, dynamic> body) async {
+  static Future<WalletTopupResult> _send(String path, Map<String, dynamic> body, String? companyKey) async {
     try {
       final r = await ApiClient.dio.post<dynamic>(path,
-          data: body, options: Options(receiveTimeout: _writeTimeout, sendTimeout: _writeTimeout));
+          data: body, options: CompanyRoute.explicit(companyKey, Options(receiveTimeout: _writeTimeout, sendTimeout: _writeTimeout)));
       return WalletTopupResult.of(r.data);
     } on DioException catch (e) {
       if (!kReleaseMode) debugPrint('🔴 POST wallet: ${e.type} ${e.response?.statusCode}');
@@ -216,14 +224,17 @@ class NationalWalletApi {
   }
 
   /// من محفظة الوكيل إلى محفظة المشترك. [payType]: cash · non-cash · partial-cash ([partial] المدفوع نقداً).
-  static Future<WalletTopupResult> transfer(String sid, {required int amount, required String payType, int? partial, bool confirmRepeat = false}) =>
+  /// [companyKey] شركة صفّ المشترك (null ⇒ المفتوحة صراحةً) — في «كل الشركات» يسبقه سكّ مرجع نافذته (MergedOps.ensureSubjectAt).
+  static Future<WalletTopupResult> transfer(String sid,
+          {required int amount, required String payType, int? partial, bool confirmRepeat = false, required String? companyKey}) =>
       _send('${_base(sid)}/transfer', {
         'amount': amount,
         'paymentType': payType,
         if (payType == 'partial-cash') 'partialAmount': partial ?? 0,
         if (confirmRepeat) 'confirmRepeat': true,
-      });
+      }, companyKey);
 
-  /// بكارت الشركة — الرقم يمرّ للخادم وحده ولا يُحفظ.
-  static Future<WalletTopupResult> card(String sid, String pin) => _send('${_base(sid)}/card', {'pin': pin});
+  /// بكارت الشركة — الرقم يمرّ للخادم وحده ولا يُحفظ. [companyKey] كما في [transfer].
+  static Future<WalletTopupResult> card(String sid, String pin, {required String? companyKey}) =>
+      _send('${_base(sid)}/card', {'pin': pin}, companyKey);
 }
