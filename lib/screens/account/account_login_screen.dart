@@ -16,6 +16,7 @@ import 'account_gate_screen.dart';
 import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
 import 'apple_sign_in_button.dart';
+import 'email_verify_watch.dart';
 import 'employee_login_screen.dart';
 
 enum _Mode { signIn, signUp, verify }
@@ -24,13 +25,19 @@ enum _Mode { signIn, signUp, verify }
 /// Google بضغطة، أو إيميل + كلمة سرّ مع رابط تأكيدٍ على البريد. التجربة
 /// المجّانيّة والتفعيل مربوطان بالبريد المؤكَّد.
 class AccountLoginScreen extends StatefulWidget {
-  const AccountLoginScreen({super.key});
+  const AccountLoginScreen({super.key, this.verifyProbe, this.gateBuilder});
+
+  /// للاختبار: بديل [AccountService.reloadVerified] (قراءة الحساب بعد ضغط رابط التأكيد).
+  final Future<bool> Function()? verifyProbe;
+
+  /// للاختبار: بديل [AccountGateScreen] بعد الدخول.
+  final WidgetBuilder? gateBuilder;
 
   @override
   State<AccountLoginScreen> createState() => _AccountLoginScreenState();
 }
 
-class _AccountLoginScreenState extends State<AccountLoginScreen> {
+class _AccountLoginScreenState extends State<AccountLoginScreen> with WidgetsBindingObserver {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _passFocus = FocusNode();
@@ -47,27 +54,74 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
   /// أيّ دخولٍ جارٍ — يعطّل بقيّة الأزرار حتى لا يتسابق مساران.
   bool get _anyBusy => _busy || _googleBusy || _appleBusy;
 
+  /// غادرت الشاشة إلى البوّابة — لا انتقال ثانٍ (الفحص التلقائيّ والزرّ قد يتأكّدان معاً).
+  bool _gone = false;
+
+  /// «تأكّد البريد» تلقائيّاً (المالك ١٥ نوفمبر): يراقب ما دامت شاشة التأكيد أمامه — عند الرجوع للتطبيق فوراً، ودوريّاً.
+  /// ويندوز أهدأ: فحصه تجديد توكنٍ يُكتب في المخزن الآمن.
+  late final EmailVerifyWatch _verifyWatch = EmailVerifyWatch(
+    probe: widget.verifyProbe ?? AccountService.reloadVerified,
+    onVerified: _autoVerified,
+    fast: Duration(seconds: AppPlatform.isDesktop ? 8 : 4),
+    slow: Duration(seconds: AppPlatform.isDesktop ? 20 : 10),
+  );
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final u = AccountService.currentUser;
     if (u != null && !AccountService.isReady) {
       _mode = _Mode.verify; // دخل سابقاً بإيميل لم يؤكّده بعد
       _emailCtrl.text = u.email ?? '';
     }
+    _syncVerifyWatch();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _verifyWatch.stop();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _passFocus.dispose();
     super.dispose();
   }
 
+  /// المراقبة تعمل في شاشة التأكيد وحدها.
+  void _syncVerifyWatch() {
+    if (_mode == _Mode.verify && !_gone) {
+      if (!_verifyWatch.running) _verifyWatch.start();
+    } else {
+      _verifyWatch.stop();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_mode != _Mode.verify || _gone) return;
+    if (state == AppLifecycleState.resumed) {
+      // رجع من بريده أو متصفّحه — اللحظة الغالبة لاكتمال التأكيد
+      _verifyWatch.checkNow();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _verifyWatch.stop(); // لا فحص والتطبيق بالخلفيّة
+    }
+  }
+
+  /// تأكّد البريد بلا ضغطة. نافذةٌ فوق الشاشة (تأكيد حذف الحساب) أو زرٌّ يعمل ⇒ ينتظر الموعد التالي.
+  bool _autoVerified() {
+    if (!mounted || _gone || _mode != _Mode.verify || _busy) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    HapticFeedback.lightImpact();
+    _toGate();
+    return true;
+  }
+
   void _toGate() {
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AccountGateScreen()));
+    if (!mounted || _gone) return;
+    _gone = true;
+    _verifyWatch.stop();
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: widget.gateBuilder ?? (_) => const AccountGateScreen()));
   }
 
   void _err(Object e) {
@@ -192,6 +246,7 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
         _toGate();
       } else {
         setState(() => _mode = _Mode.verify);
+        _syncVerifyWatch();
         if (created) showAccountSnack(context, 'account.verify_sent'.tr(args: [email]));
       }
     } catch (e) {
@@ -222,7 +277,7 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
   Future<void> _checkVerified() async {
     setState(() => _busy = true);
     try {
-      if (await AccountService.reloadVerified()) {
+      if (await (widget.verifyProbe ?? AccountService.reloadVerified)()) {
         _toGate();
       } else if (mounted) {
         showAccountSnack(context, 'account.verify_not_yet'.tr(), error: true);
@@ -250,6 +305,7 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
       _mode = _Mode.signIn;
       _passCtrl.clear();
     });
+    _syncVerifyWatch();
   }
 
   @override

@@ -1630,7 +1630,7 @@
     "trial_note": "Your first sign-in starts a free 14-day trial",
     "verify_title": "Confirm your email",
     "verify_body": "We sent a confirmation link to {}",
-    "verify_hint": "Open your inbox and tap the confirmation link, then come back and tap “I confirmed my email”. Check your spam folder if you can’t find it.",
+    "verify_hint": "Open your inbox and tap the confirmation link, then come back here — we’ll continue automatically as soon as it’s confirmed. Check your spam folder if you can’t find it.",
     "verify_done": "I confirmed my email — continue",
     "verify_resend": "Resend link",
     "verify_sent": "We sent the confirmation link to {}",
