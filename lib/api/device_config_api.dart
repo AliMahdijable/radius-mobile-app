@@ -249,6 +249,10 @@ class DeviceConfigApi {
     if (company == null && status == 403) _deniedAt = now();
   }
 
+  /// الحساب بلا أيّ صلاحيّةٍ للأجهزة (موظّف) — ليُسمّى سبب تعذّر القراءة في ورقة الإعداد «لا صلاحيّة» لا «أعد المحاولة».
+  /// للشرح بعد رفض الخادم وحده: [fetchFresh] يسأل الخادم دائماً ولا يرفض بها مسبقاً.
+  static bool get lacksPermission => !Perms.hasAny(devicePerms);
+
   /// GET /api/subscribers/:username/device — per-subscriber override.
   /// Returns an empty DeviceConfig when the subscriber has none pinned.
   /// Returns null on hard errors (network/auth) so the caller can
@@ -294,6 +298,28 @@ class DeviceConfigApi {
     } catch (_) {
       noteRoutedFailure(company);
       return const DeviceConfig();
+    }
+  }
+
+  /// قراءةٌ **طازجة** لورقة «إعدادات جهاز المشترك» (١٥ نوفمبر — المالك: «من اخزن الاعتماد يدوي مجرد اخرج وادخل يروح الحفظ»):
+  /// تتخطّى كاش الخمس دقائق، وتُرجع `null` حين **تعذّرت** القراءة (شبكة، رفض، ردٌّ غير ناجح) — لا إعداداً فارغاً.
+  ///
+  /// [fetchConfig] يردّ فارغاً عند التعذّر (الفحص يمضي بالافتراضات)، وهذا لا يصلح لورقةٍ تحفظ: «حفظ وفحص» فوق حقولٍ فارغةٍ
+  /// سببها تعذّر القراءة — أو كاشٌ قديم وجهازٌ آخر حفظ بعده — يمسح ما هو محفوظ (الخادم يكتب الحقول كلّها). نجاحها يحدّث الكاش.
+  static Future<DeviceConfig?> fetchFresh(String username) async {
+    final u = username.trim();
+    if (u.isEmpty) return const DeviceConfig();
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/subscribers/$username/device');
+      _noteDenied(null, r.statusCode);
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final dev = body['device'];
+      final cfg = dev is Map ? DeviceConfig.fromJson(Map<String, dynamic>.from(dev)) : const DeviceConfig();
+      _cache[scoped(null, u)] = _CachedConfig(cfg, DateTime.now());
+      return cfg;
+    } catch (_) {
+      return null;
     }
   }
 

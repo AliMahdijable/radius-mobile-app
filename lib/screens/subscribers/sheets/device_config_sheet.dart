@@ -48,11 +48,34 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
   bool _obscure = true;
   String? _originalIp;
 
+  /// تعذّرت قراءة الإعداد المحفوظ (شبكة، رفض) — الورقة تقول ذلك وتعيد المحاولة، ولا حفظ ولا حذف فوق ما لم يُقرأ: حقولٌ فارغة
+  /// سببها التعذّر كانت تُحفظ فتمسح المحفوظ.
+  bool _loadFailed = false;
+
+  /// كُتب يوزر/كلمة سرّ «الجهاز الثاني» بلا آيبي ولا منفذ وضُغط الحفظ — سطرٌ تحت عنوانه يقول ما ينقص (يزول حين يُكتب أو يُمسح).
+  bool _secondNeedsAddress = false;
+
+  /// اعتماد «الجهاز الثاني» بلا عنوانٍ له: كان يُهمل بصمت والورقة تُغلق كأنّها حفظت (المالك ١٥ نوفمبر: «من اخزن الاعتماد يدوي
+  /// مجرد اخرج وادخل يروح الحفظ») — الآن لا حفظ حتى يُكتب عنوانه، والرسالة تدلّ على مكان اعتماد جهاز المشترك نفسه.
+  static const secondNeedsAddressText =
+      'الجهاز الثاني يحتاج آيبي أو منفذ حتى يُحفظ يوزره وكلمة سرّه. إن قصدت جهاز المشترك نفسه فاكتبهما فوق في «بيانات الدخول للجهاز».';
+
   @override
   void initState() {
     super.initState();
+    for (final c in [_ip2, _port2, _user2, _pass2]) {
+      c.addListener(_onSecondEdited);
+    }
     _load();
   }
+
+  void _onSecondEdited() {
+    if (_secondNeedsAddress && !_secondOrphan) setState(() => _secondNeedsAddress = false);
+  }
+
+  /// يوزر أو كلمة سرّ للجهاز الثاني مكتوبان وعنوانه (الآيبي والمنفذ) فارغ.
+  bool get _secondOrphan =>
+      _ip2.text.trim().isEmpty && _port2.text.trim().isEmpty && (_user2.text.trim().isNotEmpty || _pass2.text.isNotEmpty);
 
   @override
   void dispose() {
@@ -68,26 +91,43 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     super.dispose();
   }
 
+  /// المحفوظ الآن من الخادم (لا من كاش الدقائق الخمس — جهازٌ آخر قد حفظ بعده). تعذّرت القراءة ⇒ [_loadFailed] لا حقولٌ فارغة.
   Future<void> _load() async {
-    final cfg = await DeviceConfigApi.fetchConfig(widget.username);
+    final cfg = await DeviceConfigApi.fetchFresh(widget.username);
     if (!mounted) return;
+    if (cfg == null) {
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
+      return;
+    }
     setState(() {
-      _kind = cfg?.deviceType;
-      _user.text = cfg?.username ?? '';
-      _pass.text = cfg?.password ?? '';
-      final a1 = splitAddress(cfg?.customIp);
+      _kind = cfg.deviceType;
+      _user.text = cfg.username ?? '';
+      _pass.text = cfg.password ?? '';
+      final a1 = splitAddress(cfg.customIp);
       _ip.text = a1.ip;
       _port.text = a1.port;
-      _notes.text = cfg?.notes ?? '';
-      _originalIp = cfg?.customIp;
-      final a2 = splitAddress(cfg?.secondAddress);
+      _notes.text = cfg.notes ?? '';
+      _originalIp = cfg.customIp;
+      final a2 = splitAddress(cfg.secondAddress);
       _ip2.text = a2.ip;
       _port2.text = a2.port;
-      _user2.text = cfg?.secondUsername ?? '';
-      _pass2.text = cfg?.secondPassword ?? '';
-      _originalSecond = cfg?.secondAddress;
+      _user2.text = cfg.secondUsername ?? '';
+      _pass2.text = cfg.secondPassword ?? '';
+      _originalSecond = cfg.secondAddress;
       _loading = false;
+      _loadFailed = false;
     });
+  }
+
+  void _retryLoad() {
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+    _load();
   }
 
   Future<void> _save() async {
@@ -99,6 +139,12 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     final second = joinAddress(_ip2.text, _port2.text);
     if (second.error != null) {
       showSheetSnack(context, 'الجهاز الثاني: ${second.error}', isError: true);
+      return;
+    }
+    // يوزر/كلمة سرّ للجهاز الثاني بلا عنوان: لا يُحفظان (لا جهاز ثانٍ بلا عنوان) — فلا تُغلق الورقة كأنّها حفظتهما.
+    if (_secondOrphan) {
+      setState(() => _secondNeedsAddress = true);
+      showSheetSnack(context, secondNeedsAddressText, isError: true);
       return;
     }
     setState(() => _saving = true);
@@ -171,15 +217,17 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
         label: _saving ? 'جارٍ الحفظ...' : 'حفظ وفحص الجهاز',
         icon: LucideIcons.save,
         busy: _saving,
-        enabled: !_loading,
+        enabled: !_loading && !_loadFailed,
         onPressed: _save,
         leading: SheetFooterIconButton(
           icon: LucideIcons.trash2,
           color: AppColors.error,
-          onTap: _saving ? null : _reset,
+          onTap: _saving || _loading || _loadFailed ? null : _reset,
         ),
       ),
-      body: _loading
+      body: _loadFailed
+          ? _loadFailedBody()
+          : _loading
           ? Padding(
               padding: const EdgeInsets.symmetric(vertical: Sp.mega),
               child: Center(
@@ -218,18 +266,14 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                           icon: LucideIcons.user,
                           label: 'اسم المستخدم',
                           controller: _user,
-                          hint: _kind == DeviceKind.ubiquiti
-                              ? 'ubnt'
-                              : 'telecomadmin',
+                          hint: credHint,
                         ),
                         Divider(height: 1, color: AppColors.divider),
                         _credRow(
                           icon: LucideIcons.lock,
                           label: 'كلمة السر',
                           controller: _pass,
-                          hint: _kind == DeviceKind.ubiquiti
-                              ? 'ubnt'
-                              : 'admintelecom',
+                          hint: credHint,
                           obscure: _obscure,
                           trailing: InkWell(
                             onTap: () => setState(() => _obscure = !_obscure),
@@ -255,13 +299,22 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                 // «الجهاز الثاني» (١٢ نوفمبر — المالك: «المشترك اكو عدهم نانو وراوتر… لازم نضيف فحصين»)
                 SheetSection(
                   label: 'الجهاز الثاني — نانو + راوتر (اختياري)',
-                  footnote: 'الاتّصال على النانو والراوتر خلفه ⇒ اكتب المنفذ المحوّل للراوتر (بورت فورورد بالنانو) وحده · '
-                      'الاتّصال على الراوتر ⇒ اكتب آيبي النانو الثابت',
+                  // بلا «⇒»: لا محرف له في خطّ التطبيق (مربّعٌ فارغ في لقطات الاختبار) — نقطتان بدله.
+                  footnote: 'الاتّصال على النانو والراوتر خلفه: اكتب المنفذ المحوّل للراوتر (بورت فورورد بالنانو) وحده · '
+                      'الاتّصال على الراوتر: اكتب آيبي النانو الثابت',
                   gap: Sp.sm,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _addressRow(_ip2, _port2, hint: 'آيبي المشترك إذا فارغ'),
+                      if (_secondNeedsAddress) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'اكتب آيبي الجهاز الثاني أو منفذه — بلا عنوانٍ لا يُحفظ يوزره وكلمة سرّه.',
+                          key: const ValueKey('second-needs-address'),
+                          style: AppType.micro(color: AppColors.error),
+                        ),
+                      ],
                       const SizedBox(height: Sp.sm),
                       Container(
                         decoration: BoxDecoration(
@@ -276,14 +329,14 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                               icon: LucideIcons.user,
                               label: 'اسم المستخدم',
                               controller: _user2,
-                              hint: 'من «الاعتمادات» إذا فارغ',
+                              hint: credHint,
                             ),
                             Divider(height: 1, color: AppColors.divider),
                             _credRow(
                               icon: LucideIcons.lock,
                               label: 'كلمة السر',
                               controller: _pass2,
-                              hint: 'من «الاعتمادات» إذا فارغ',
+                              hint: credHint,
                               obscure: _obscure2,
                               trailing: InkWell(
                                 onTap: () => setState(() => _obscure2 = !_obscure2),
@@ -326,6 +379,48 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
               ],
             ),
     );
+  }
+
+  /// تلميح حقول اليوزر وكلمة السرّ الفارغة — للجهازين. (كان الأوّل يعرض افتراض المصنّع «telecomadmin / admintelecom» رماديّاً
+  /// فيبدو كأنّه محفوظ، والاعتماد يُكتب في خانتَي الجهاز الثاني بدله.)
+  static const credHint = 'من «الاعتمادات» إذا فارغ';
+
+  static const loadFailedText = 'تعذّر تحميل إعداد الجهاز الآن';
+  static const noPermissionText = 'لا صلاحيّة لإعداد أجهزة المشتركين';
+
+  /// تعذّرت قراءة الإعداد: السبب وزرّ إعادة المحاولة — لا حقول تُملأ ولا حفظ. موظّفٌ بلا صلاحيّة الأجهزة (الخادم يرفضه)
+  /// يقرأ «لا صلاحيّة» لا «أعد المحاولة».
+  Widget _loadFailedBody() {
+    final denied = DeviceConfigApi.lacksPermission;
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Sp.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(denied ? LucideIcons.lock : LucideIcons.wifiOff, size: 28, color: AppColors.textHint),
+            const SizedBox(height: Sp.sm),
+            Text(
+              denied ? noPermissionText : loadFailedText,
+              key: const ValueKey('device-config-load-failed'),
+              textAlign: TextAlign.center,
+              style: AppType.body(color: AppColors.textHi),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              denied ? 'اطلبها من مديرك (صلاحيّات «الأجهزة»).' : 'لا شيء تغيّر في المحفوظ — أعد المحاولة.',
+              textAlign: TextAlign.center,
+              style: AppType.muted(),
+            ),
+            const SizedBox(height: Sp.md),
+            OutlinedButton.icon(
+              key: const ValueKey('device-config-retry'),
+              onPressed: _retryLoad,
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
+              label: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      );
   }
 
   /// عنوان: آيبي (لوحة أرقامٍ بنقطة) + منفذٌ بحقلٍ مستقلّ (لوحة الأرقام على الآيفون بلا «:»).
