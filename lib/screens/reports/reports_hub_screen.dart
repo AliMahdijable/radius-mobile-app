@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/balance_reports_api.dart';
 import '../../api/deleted_debts_api.dart';
 import '../../core/widgets/desk_pressable.dart';
 import '../../core/widgets/permission_locked.dart';
@@ -18,6 +19,7 @@ import '../el/el_reports.dart';
 import 'activations_report_screen.dart';
 import 'activity_log_report_screen.dart';
 import 'all_managers_debts_screen.dart';
+import 'balance_reports_screen.dart';
 import 'daily_activations_report_screen.dart';
 import 'deleted_debts_screen.dart';
 import 'financial_report_screen.dart';
@@ -57,10 +59,20 @@ class ReportsHubScreen extends StatefulWidget {
 class _ReportsHubScreenState extends State<ReportsHubScreen> {
   DeletedDebtsPage? _deletedDebts;
 
+  /// «تقارير الأرصدة» (١٥ نوفمبر): هل فُتحت لصفحة الجلسة ومن أنا فيها — null: لم يُعرف بعد أو تعذّر (لا كرت).
+  /// يبدأ بآخر جوابٍ لهذه الجلسة فيظهر الكرت من أوّل إطار في الفتح الثاني (لا يقفز ما تحته تحت الإصبع).
+  BalanceMe? _balance = BalanceReportsState.last;
+
   @override
   void initState() {
     super.initState();
     _loadDeletedDebts();
+    _loadBalance();
+  }
+
+  Future<void> _loadBalance() async {
+    final me = await BalanceReportsState.refresh();
+    if (mounted) setState(() => _balance = me);
   }
 
   /// «كل الشركات» وفيها شركة ساس صالحة — ديون مدرائها تُقرأ من هنا مهما كانت المفتوحة.
@@ -130,6 +142,21 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
           // ويظلّ يبحث عن الفرق. (حُذفت من هنا بطلب صاحب المشروع.)
           // «كل الشركات» (٨ نوفمبر): ديون مدراء كلّ شركات الساس — تظهر ولو كانت المفتوحة بلا مدراء فرعيّين بنوعها (ايرث لنك/المُضافة)
+          // «تقارير الأرصدة»: الكرت حين تُفتح الميزة للحساب؛ لمدير الصفحة وحده — الموظّف يراه مقفلاً بنصّه. مساراتها للشركة
+          // المفتوحة وحدها فلا يظهر في «كل الشركات».
+          if (_balance?.featureEnabled == true && !MergedMode.active.value)
+            _ReportCard(
+              key: const ValueKey('report-balances'),
+              locked: _balance!.isEmployee,
+              lockedMessage: 'هذا القسم لمدير الصفحة وحده',
+              icon: LucideIcons.walletCards,
+              color: AppColors.success,
+              title: 'تقارير الأرصدة',
+              subtitle: 'لكلّ شحنة رصيد: شگد طبّلك، شگد معوز، وشگد ربحك',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BalanceReportsScreen()),
+              ),
+            ),
           if (permShown(const ['reports.manager_debts']) &&
               (!providerHidesAction('reports.manager_debts') || _mergedSas))
             _ReportCard(
@@ -384,7 +411,9 @@ class _GroupLabel extends StatelessWidget {
 
 class _ReportCard extends StatelessWidget {
   const _ReportCard({
+    super.key,
     this.locked = false,
+    this.lockedMessage,
     required this.icon,
     required this.color,
     required this.title,
@@ -407,9 +436,12 @@ class _ReportCard extends StatelessWidget {
   /// مكان السهم، والنقر رسالةٌ لا تنقّل — فلا يُفتح تقريرٌ يردّه الخادم 403.
   final bool locked;
 
+  /// نصّ القفل حين لا صلاحيّة تُطلب أصلاً (قسمٌ لمدير الصفحة وحده).
+  final String? lockedMessage;
+
   void _open(BuildContext context) {
     if (locked) {
-      showNoPermission(context);
+      showNoPermission(context, message: lockedMessage);
       return;
     }
     HapticFeedback.selectionClick();

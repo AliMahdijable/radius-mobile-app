@@ -495,6 +495,11 @@ void main() {
       expect(reportCards, findsNWidgets(7));
       expect(find.byType(PermLockIcon), findsNWidgets(7));
       expect(find.text('reports.empty_perms'), findsNothing);
+      // «تقارير الأرصدة» تسأل الخادم للموظّف أيضاً (كرتها يظهر له مقفلاً حين تُفتح لصفحته) — مؤقّت Dio الصفريّ يحتاج زمناً يمضي.
+      for (var i = 0; i < 5; i++) {
+        await t.pump(const Duration(milliseconds: 50));
+      }
+      expect(reportCards, findsNWidgets(7));
     });
 
     testWidgets('المدير: لا قفل', (t) async {

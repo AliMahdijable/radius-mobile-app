@@ -1,0 +1,151 @@
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/screens/reports/balance_reports_screen.dart';
+import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
+import 'package:rad_mysvcs/services/permissions_service.dart';
+
+import 'balance_reports/balance_fixture.dart';
+import 'visual_perm/visual_perm_harness.dart';
+
+/// «تقارير الأرصدة» — لقطاتٌ للمراجعة (١٦ نوفمبر): الصفحة بمثال المالك، ورقة التسوية، بعد التسوية، ثلاث فترات، تفاصيل فترةٍ مغلقة
+/// وفلتر «كان دين وتسدّد»، أوّل شحنة، وكرت التقارير — بعرض شاشة المالك (٤٨٠) فاتحاً، وأضيق هاتف (٣٢٠) داكناً.
+/// كلّ لقطةٍ بطول محتواها ([_fit]) وبظلالها الحقيقيّة. بياناتٌ تجريبيّة وحدها.
+/// المخرجات: VISUAL_OUT (أو build/visual_perm المُتجاهَل بgit).
+const _wide = VisualDevice('480', Size(480, 1040), 3);
+const _narrowDark = VisualDevice('320_dark', Size(320, 693), 3, dark: true);
+
+Future<void> _shot(WidgetTester t, String name, VisualDevice d) async {
+  final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(visualRootKey));
+  final png = await t.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: d.dpr);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return data!.buffer.asUint8List();
+  });
+  final f = File('${visualOutDir()}/balance_${name}_${d.tag}.png');
+  f.parent.createSync(recursive: true);
+  f.writeAsBytesSync(png!, flush: true);
+  final ex = t.takeException();
+  expect(ex, isNull, reason: 'استثناء في $name ${d.tag}:\n$ex');
+}
+
+/// طول الشاشة = طول محتوى الصفحة المفتوحة (ولا أقصر من الهاتف): نطوّلها أوّلاً فتُبنى كلّ عناصر القائمة ويصير امتدادها
+/// دقيقاً لا تقديراً، ثمّ نقصّها عليه — صورةٌ واحدة بكلّ الصفحة بلا فراغٍ تحتها. لا يُستعمل وورقةٌ مفتوحة.
+Future<void> _fit(WidgetTester t, VisualDevice d) async {
+  Future<void> resize(double h) async {
+    t.view.physicalSize = Size(d.size.width, h) * d.dpr;
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+  }
+
+  final lists = find.byType(Viewport);
+  if (lists.evaluate().isEmpty) return resize(d.size.height);
+  await resize(6000);
+  final viewport = t.renderObject<RenderViewport>(lists.last);
+  var content = 0.0;
+  for (var s = viewport.firstChild; s != null; s = viewport.childAfter(s)) {
+    content += s.geometry?.scrollExtent ?? 0;
+  }
+  // ما فوق القائمة (الترويسة) وما تحتها (حافّة الشاشة الآمنة) يُضافان لطولها
+  final top = viewport.localToGlobal(Offset.zero).dy;
+  final below = 6000 - (top + viewport.size.height);
+  await resize(math.max(d.size.height, (top + content + below).ceilToDouble()));
+}
+
+void main() {
+  setUpAll(visualSetUpAll);
+
+  Future<void> up(BalanceServer server) async {
+    await visualSetUp(s1bSasOwner);
+    ApiClient.dio.httpClientAdapter = server;
+    PermissionsService.debugSet(isEmployee: false);
+  }
+
+  Future<void> down(WidgetTester t) async {
+    await t.pumpWidget(const SizedBox.shrink());
+    await t.pump(const Duration(seconds: 4));
+    await visualTearDown();
+  }
+
+  Finder k(String key) => find.byKey(ValueKey(key));
+  Future<void> tap(WidgetTester t, Finder f) async {
+    await t.ensureVisible(f);
+    await t.pump();
+    await t.tap(f);
+    await settle(t, seconds: 2);
+  }
+
+  /// الجسم بظلاله الحقيقيّة (الاختبار يرسمها حلقةً سوداء)، وتُعاد قبل فحص ثوابت الإطار.
+  void shots(String name, Future<void> Function(WidgetTester t) body) {
+    testWidgets(name, (t) async {
+      debugDisableShadows = false;
+      try {
+        await body(t);
+        await down(t);
+      } finally {
+        debugDisableShadows = true;
+      }
+    });
+  }
+
+  for (final d in [_wide, _narrowDark]) {
+    shots('مثال المالك ثمّ التسوية ${d.tag}', (t) async {
+      await up(BalanceServer.ownerExample()..balance = 3000);
+      await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+      await settle(t, seconds: 2);
+      await _fit(t, d);
+      await _shot(t, '01_example', d);
+      await tap(t, k('bal-adjust-1'));
+      await _shot(t, '02_adjust_sheet', d);
+      await t.tap(find.descendant(of: k('bal-adjust-source'), matching: find.text('من جيبي')));
+      await t.pump();
+      await t.tap(k('bal-adjust-save'));
+      await settle(t, seconds: 5);
+      await _fit(t, d);
+      await _shot(t, '03_after_adjust_can_close', d);
+    });
+
+    shots('ثلاث فترات وتفاصيل المغلقة ${d.tag}', (t) async {
+      final server = BalanceServer.three()
+        ..balance = 420000
+        ..totals = {'old_paid': 1365000, 'manual_paid': 40000, 'other_paid': 0, 'advance': 0};
+      await up(server);
+      await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+      await settle(t, seconds: 2);
+      await _fit(t, d);
+      await _shot(t, '04_three_periods', d);
+      await tap(t, find.descendant(of: k('bal-period-3'), matching: find.byType(InkWell)).first);
+      await _fit(t, d);
+      await _shot(t, '05_detail_closed', d);
+      await tap(t, k('bal-filter-paid'));
+      await _fit(t, d);
+      await _shot(t, '06_detail_was_debt_paid', d);
+    });
+  }
+
+  shots('أوّل شحنة ${_wide.tag}', (t) async {
+    const d = VisualDevice('480', Size(480, 940), 3);
+    await up(BalanceServer());
+    await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+    await settle(t, seconds: 2);
+    await _shot(t, '07_empty', d);
+    await tap(t, k('bal-first'));
+    await t.enterText(find.descendant(of: k('bal-topup-amount'), matching: find.byType(TextField)), '2000000');
+    await settle(t, seconds: 1);
+    await _shot(t, '08_new_topup', d);
+  });
+
+  shots('كرت التقارير ${_wide.tag}', (t) async {
+    await up(BalanceServer.ownerExample());
+    await pumpVisual(t, _wide, home: (_) => const ReportsHubScreen());
+    await settle(t, seconds: 2);
+    await _fit(t, _wide);
+    await _shot(t, '09_reports_tile', _wide);
+  });
+}
