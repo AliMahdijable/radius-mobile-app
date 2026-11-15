@@ -271,8 +271,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // «المشتركون أوّلاً» (المالك ١٤ نوفمبر): الجولة تُفتح قبل أوّل رسم — كروت الإيرادات والباقات تجلب من initState
     // (قبل أن تصل تفضيلات الأقسام)، فتنتظر المشتركين بدل أن تسبقهم. انظر [DashboardLoadOrder].
     DashboardLoadOrder.begin();
+    // ② (١٦ نوفمبر): المشتركون فوراً، بالتوازي مع «أقسام الرئيسيّة» — ثمّ البقيّة بعد الأقسام وخلف المشتركين كما كانت.
+    // «كل الشركات» بمساره (_refreshMerged بعد الأقسام) كما كان.
+    final subsEarly = !MergedMode.active.value;
+    if (subsEarly) _fetchSubscribers(silent: false);
     _loadSections().then((_) {
-      if (mounted) _refreshLive(silent: false);
+      if (!mounted) return;
+      if (subsEarly && !MergedMode.active.value) {
+        _refreshRestAfterSections();
+      } else {
+        _refreshLive(silent: false);
+      }
     });
     // Re-fetch dashboard KPIs whenever any subscriber operation
     // anywhere in the app succeeds (activate/extend/disconnect/bulk
@@ -613,8 +622,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Dio hang (network drop، auth refresh loop، backend slow query)،
     // الـFuture ما يعلق للأبد. كارت الـUI يصير إلى error state
     // بدل spinner ثابت. أُضيف بعد تقرير المدير 2026-07-22: كارت
-    // البطل + المدينون كانوا يعلقون على spinner لدقائق.
-    const kMaxLoad = Duration(seconds: 20);
+    // البطل + المدينون كانوا يعلقون على spinner لدقائق. (المهلة في [_fetchSubscribers] و[_refreshRest].)
 
     // UX guard: على silent refresh (event-driven أو resume)، لو fetch
     // فشل (r==null) وعندنا بيانات جيّدة سابقة، ما نستبدلها بـerror state.
@@ -642,38 +650,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // قائمة المشتركين تنطلق وحدها أوّلاً (كانت بعد الواتساب وآخر النشاطات وبجانبها)، والبقيّة — الواتساب، آخر النشاطات، الرصيد،
     // الكارتات، وكروت الإيرادات والباقات — تنتظر نهايتها أو ٦ ثوانٍ ([DashboardLoadOrder]).
     DashboardLoadOrder.begin();
-    if (!_canSubs) {
-      DashboardLoadOrder.subscribersDone();
-    } else {
-      DashboardApi.fetchDebtors()
-          .timeout(kMaxLoad, onTimeout: () => null)
-          .catchError((_) => null)
-          .then((r) {
-        // الجولة تمضي أيّاً كانت النتيجة (نجاح، فشل، مهلة) — البقيّة لا تنتظر أكثر من هذا.
-        DashboardLoadOrder.subscribersDone();
-        if (!mounted || MergedMode.active.value) return;
-        if (silent && r == null && _debtorsLive != null) return;
-        setState(() {
-          _debtorsLive = r;
-          _debtorsLoaded = true;
-          if (r != null) _freshAt = DateTime.now();
-        });
-        // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
-        // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
-        AlertsService.refresh();
-        // الحساب الكبير: عدّ المدينين أوّل مرّة يأخذ دقيقةً أو اثنتين في الخادم — نسأل مرّةً بعد ٢٠ثانية لا عند التحديث التالي.
-        if (r != null && r.debtsPending && !_debtsRetry) {
-          _debtsRetry = true;
-          Future.delayed(const Duration(seconds: 20), () {
-            _debtsRetry = false;
-            if (mounted) _refreshLive(silent: true);
-          });
-        }
-      });
-    }
+    _fetchSubscribers(silent: silent);
     unawaited(DashboardLoadOrder.afterSubscribers().then((_) {
       if (!mounted || MergedMode.active.value) return;
       _refreshRest(silent: silent);
+    }));
+  }
+
+  /// قائمة المشتركين (الحلقة والمدينون والجرس) — أوّل ما يُطلب في الرئيسيّة، والبقيّة تنتظر نهايته ([DashboardLoadOrder]).
+  ///
+  /// ② (١٦ نوفمبر ٢٠٢٦ — المالك: «ابدأ بالأول والثاني»): يُطلب من [initState] فوراً بلا انتظار «أقسام الرئيسيّة» — طلبه لا
+  /// يتبع الأقسام أصلاً (`subscribers.view` وحده: الجرس والمدينون يحتاجونه)، وكان ينتظرها ~١ث على المحاكي.
+  void _fetchSubscribers({required bool silent}) {
+    const kMaxLoad = Duration(seconds: 20);
+    if (!_canSubs) {
+      DashboardLoadOrder.subscribersDone();
+      return;
+    }
+    DashboardApi.fetchDebtors()
+        .timeout(kMaxLoad, onTimeout: () => null)
+        .catchError((_) => null)
+        .then((r) {
+      // الجولة تمضي أيّاً كانت النتيجة (نجاح، فشل، مهلة) — البقيّة لا تنتظر أكثر من هذا.
+      DashboardLoadOrder.subscribersDone();
+      if (!mounted || MergedMode.active.value) return;
+      if (silent && r == null && _debtorsLive != null) return;
+      setState(() {
+        _debtorsLive = r;
+        _debtorsLoaded = true;
+        if (r != null) _freshAt = DateTime.now();
+      });
+      // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
+      // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
+      AlertsService.refresh();
+      // الحساب الكبير: عدّ المدينين أوّل مرّة يأخذ دقيقةً أو اثنتين في الخادم — نسأل مرّةً بعد ٢٠ثانية لا عند التحديث التالي.
+      if (r != null && r.debtsPending && !_debtsRetry) {
+        _debtsRetry = true;
+        Future.delayed(const Duration(seconds: 20), () {
+          _debtsRetry = false;
+          if (mounted) _refreshLive(silent: true);
+        });
+      }
+    });
+  }
+
+  /// أوّل فتحٍ بعد وصول «أقسام الرئيسيّة»، والمشتركون بدأوا من [initState] (②): ما كان `_refreshLive(silent: false)` يفعله
+  /// لغيرهم حرفاً — تُسقط علامات الواتساب وآخر النشاطات والرصيد (دوّارةٌ حتى الحيّ، فلا يبقى رصيد القرص معروضاً أطول ممّا كان)،
+  /// ثمّ تُجلب خلف المشتركين أو مهلتهم. علامة المشتركين لا تُمسّ: جلبهم جارٍ أو وصل للتوّ حيّاً.
+  void _refreshRestAfterSections() {
+    setState(() {
+      _waLoaded = false;
+      _activationsLoaded = false;
+      _walletLoaded = false;
+    });
+    unawaited(DashboardLoadOrder.afterSubscribers().then((_) {
+      if (!mounted || MergedMode.active.value) return;
+      _refreshRest(silent: false);
     }));
   }
 

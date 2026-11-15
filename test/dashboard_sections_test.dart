@@ -76,20 +76,29 @@ void main() {
   // كلّه في التطبيق: قراءةٌ واحدة عند الإنشاء، وترتيبٌ يجعل أوّل جلب
   // يسبق وصول التفضيلات.
 
-  test('الأقسام تُقرأ قبل أوّل جلب لا بعده', () {
+  test('الأقسام تُقرأ قبل أوّل جلب لا بعده — عدا المشتركين (لا يتبعون الأقسام)', () {
     // لو انطلق `_refreshLive` قبل `_loadSections` لخرجت النداءات كلّها
     // في أوّل فتح ثمّ أُخفيت نتائجها — إخفاءٌ بصريّ بكلفة كاملة.
-    expect(
-      RegExp(r'_loadSections\(\)\s*\.then\(\(_\)\s*\{\s*if \(mounted\) _refreshLive')
-          .hasMatch(src),
-      isTrue,
-      reason: 'أوّل جلب غير مقيَّد بوصول الأقسام',
-    );
-    expect(
-      RegExp(r'^\s*_refreshLive\(silent: false\);', multiLine: true).hasMatch(src),
-      isFalse,
-      reason: 'بقي جلب غير مقيَّد — يسبق التفضيلات',
-    );
+    //
+    // ② (١٦ نوفمبر ٢٠٢٦): المشتركون وحدهم يسبقون الأقسام — طلبهم لم يكن مبوَّباً بقسمٍ قطّ (`subscribers.view` وحده: الحلقة
+    // والمدينون والجرس)، فانتظارهم الأقسام ~١ث كان انتظاراً بلا فائدة. كلّ ما سواهم ما زال بعد الأقسام.
+    final init = src.substring(src.indexOf('void initState()'), src.indexOf('void _onActiveChanged()'));
+    final then = RegExp(r'_loadSections\(\)\.then\(\(_\) \{([\s\S]*?)\n    \}\);').firstMatch(init);
+    expect(then, isNotNull, reason: 'أوّل جلب غير مقيَّد بوصول الأقسام');
+    final afterSections = then!.group(1)!;
+    expect(afterSections.contains('_refreshLive(silent: false)'), isTrue,
+        reason: '«كل الشركات» وأوّل فتحٍ بلا المشتركين المبكّرين يمرّان بالجلب الكامل بعد الأقسام');
+    expect(afterSections.contains('_refreshRestAfterSections()'), isTrue,
+        reason: 'بقيّة الرئيسيّة (واتساب/نشاطات/رصيد) يجب أن تنتظر الأقسام');
+    // قبل الأقسام: المشتركون وحدهم
+    final beforeSections = init.substring(0, init.indexOf('_loadSections().then'));
+    expect(beforeSections.contains('_refreshLive('), isFalse, reason: 'بقي جلب كامل غير مقيَّد — يسبق التفضيلات');
+    expect(beforeSections.contains('_refreshRest('), isFalse, reason: 'بقيّة الرئيسيّة تسبق التفضيلات');
+    expect(beforeSections.contains('_fetchSubscribers(silent: false)'), isTrue,
+        reason: 'المشتركون لم يعودوا يبدؤون فوراً (②)');
+    // والمشتركون لا يقرؤون الأقسام — وإلّا صار طلبهم قبلها قراءةً لتفضيلاتٍ لم تصل
+    final subs = src.substring(src.indexOf('void _fetchSubscribers('), src.indexOf('void _refreshRestAfterSections()'));
+    expect(subs.contains('_shown('), isFalse, reason: 'طلب المشتركين صار مبوَّباً بقسم — لا يجوز أن يسبق الأقسام');
   });
 
   test('تبدّل النطاق يبلغ الرئيسيّة وهي مركَّبة', () {
