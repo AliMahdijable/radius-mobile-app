@@ -550,7 +550,9 @@ class _LedgerListState<T> extends State<_LedgerList<T>> {
           padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
           child: Row(
             children: [
-              Expanded(child: Text(widget.title, style: AppType.bodyBold(color: AppColors.textHi))),
+              Expanded(
+                child: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+              ),
               // العدد حين في القائمة ما لا يظهر كلّه بخمسة
               if (total > kLedgerListStep)
                 Text(
@@ -613,7 +615,10 @@ class _LedgerListState<T> extends State<_LedgerList<T>> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Flexible(child: Text(label!, textAlign: TextAlign.center, style: AppType.bodyBold(color: color))),
+                    // «تعذّر تحميل المزيد — أعد المحاولة» يلتفّ بأضيق هاتف وخطٍّ مكبَّر
+                    Flexible(
+                      child: Text(label!, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: AppType.bodyBold(color: color)),
+                    ),
                     const SizedBox(width: Sp.x6),
                     Icon(icon, size: 16, color: color),
                   ],
