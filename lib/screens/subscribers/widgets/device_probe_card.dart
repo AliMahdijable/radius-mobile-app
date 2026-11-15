@@ -1643,6 +1643,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             title: 'دخلنا للجهاز بس ما رجعت قراءاته',
             hint: 'حدّث بعد لحظات',
           ),
+        ProbeIssue.unknownLogin => (
+            title: 'راوتر TP-Link بصيغة دخولٍ جديدة علينا',
+            hint: 'عرّفناه راوتر TP-Link، وما أرسلنا يوزر وباسورد حتى لا تنحسب محاولة غلط — نكمّل دعم قراءة هذا الطراز',
+          ),
         _ => null,
       };
 

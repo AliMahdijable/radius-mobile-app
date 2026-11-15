@@ -932,6 +932,8 @@ class DeviceProbeApi {
     // راوترا TP-Link: CGI+GDPR (Archer C50) بيوزر وباسورد، و$.su/MER (Archer C64) بكلمة سرٍّ وحدها (١٢ نوفمبر).
     if (_radioVendorByKey[kindKey] == 'tpcgi') return _probeTpCgiAny(ip, c.tplink, kindKey);
     if (_radioVendorByKey[kindKey] == 'tpmer') return _probeTpMerAny(ip, c.tprouter, kindKey);
+    // WR845N: معرّفٌ راوتر TP-Link بصيغة دخولٍ غير مدعومة بعد — فرعه وحده (تعرّفٌ بلا دخول، لا يطرقه هواوي/airOS).
+    if (_radioVendorByKey[kindKey] == 'tp845') return _probeTp845(ip, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -946,7 +948,7 @@ class DeviceProbeApi {
     }
 
     // First-time أو kind cache cleared — parallel race.
-    final ont = _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
+    final ont = _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory, unlessTplink: true);
     final ubnt = _probeUbntAny(ip, c.ubnt, kindKey, unlessOther: true);
     final others = _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
     // TP-Link يعرّف نفسه بطلبٍ واحد بلا دخول: إن كان هو فنتيجة فرعه هي الجواب — ولو فشلاً بسببه — ولا يُنتظر فرعا هواوي
@@ -958,6 +960,7 @@ class DeviceProbeApi {
     final tenda = _helloTenda(ip);
     final cgi = _helloTpCgi(ip);
     final mer = _helloTpMer(ip);
+    final tp845 = _helloTp845(ip);
     // ١٤ نوفمبر (المالك: «النانوات تفحص https لان بورت فورود اغلبه يستخدمون المشتركين ٨٠»): مشتركٌ خلف بورت فورورد — النانو
     // على 443 وراوتره على 80 بالعنوان نفسه. ردّ الراوتر على 80 كان يحسم وحده فلا يُجرَّب النانو أبداً. الآن: airOS يردّ على
     // https العنوان ⇒ النانو هو الجهاز الأوّل (دخوله على https وحده — لا دخول airOS على راوتر الـ80)، وما لم يُقرأ ⇒ الراوتر كما كان.
@@ -976,8 +979,19 @@ class DeviceProbeApi {
     var tendaDone = false;
     var cgiDone = false;
     var merDone = false;
+    var tp845Done = false;
     void noneYet() {
-      if (!done.isCompleted && othersDone && helloDone && classicDone && agileDone && tendaDone && cgiDone && merDone) done.complete(null);
+      if (!done.isCompleted &&
+          othersDone &&
+          helloDone &&
+          classicDone &&
+          agileDone &&
+          tendaDone &&
+          cgiDone &&
+          merDone &&
+          tp845Done) {
+        done.complete(null);
+      }
     }
     others.then((snap) {
       othersDone = true;
@@ -1042,6 +1056,15 @@ class DeviceProbeApi {
         noneYet();
       }
     });
+    tp845.then((yes) {
+      tp845Done = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(viaRouter(() => _probeTp845(ip, kindKey)));
+      } else {
+        noneYet();
+      }
+    });
     return done.future;
   }
 
@@ -1070,6 +1093,9 @@ class DeviceProbeApi {
   static Future<bool> _isTpCgi(String ip) => _helloTpCgi(ip);
   static Future<bool> _helloTpMer(String ip) => _helloFamily('mer', ip, TplinkMerService.detect);
   static Future<bool> _isTpMer(String ip) => _helloTpMer(ip);
+  // WR845N (صيغة دخول «rawbasic»، ١٥ نوفمبر): تعرّفٌ وحده — صفحة دخولٍ لم تُقَس حيّاً بعد ⇒ نعرّفه راوتراً ولا ندخل.
+  static Future<bool> _helloTp845(String ip) => _helloFamily('tp845', ip, TplinkClassicService.detectRawBasic);
+  static Future<bool> _isTp845(String ip) => _helloTp845(ip);
 
   /// راوتر TP-Link بواجهة CGI+GDPR: مرشّحو قائمة TP-Link (يوزر وباسورد) — دخولٌ بجلسةٍ على اتّصالٍ واحد، القراءة، الخروج
   /// ([TplinkCgiService.readOnce]). المرفوض لا يُعاد، والتالي بعد رفضٍ صريحٍ وحده (عشرٌ غلط تقفل الصفحة ساعتين).
@@ -1152,6 +1178,15 @@ class DeviceProbeApi {
       }
       if (why?.issue != MerIssue.rejected) break;
     }
+    return null;
+  }
+
+  /// WR845N وأشباهه: عرّفناه راوتر TP-Link بصيغة دخول «rawbasic» (مسحٌ بلا دخول) — لكنّ مسار دخوله وقراءته لم يُقَسا حيّاً بعد
+  /// (الجهاز غير واصلٍ وقت الإضافة). **لا نرسل يوزر وباسورد** (قد يُحسب محاولةً على راوترٍ حقيقيّ) ⇒ لا قراءة، والكرت يقول
+  /// «صيغة دخولٍ جديدة» بلا قيمٍ كاذبة. حفظُ المورّد يمنع طرقه بهواوي/airOS كلّ موجة. يكتمل القارئ أوّل ما يرجع الجهاز.
+  static Future<DeviceHealthSnapshot?> _probeTp845(String ip, String kindKey) async {
+    _radioVendorByKey[kindKey] = 'tp845';
+    _tplinkNote(ip, ProbeIssue.unknownLogin, 'wr845n rawbasic — detect only, reader pending live device');
     return null;
   }
 
@@ -1589,11 +1624,13 @@ class DeviceProbeApi {
   /// ⑦: يجرّب مرشّحي ONT بالترتيب (الفائز المحفوظ أوّلاً)، ويقف حين لا يكون الاعتماد هو السبب ([_nextCredWorth]).
   /// [factory] افتراض المصنّع إن كان بالقائمة: يُجرَّب بلا ontSet ⇒ ZTE يردّ «يحتاج اعتمادات» بلا أيّ محاولة دخول.
   static Future<DeviceHealthSnapshot?> _probeOntAny(
-      String ip, List<DeviceCred> cands, String kindKey, {DeviceCred? factory}) async {
+      String ip, List<DeviceCred> cands, String kindKey,
+      {DeviceCred? factory, bool unlessTplink = false}) async {
     final list = _winnerFirst(cands, _ontWinner[kindKey]);
     for (var i = 0; i < list.length; i++) {
       final started = DateTime.now();
-      final snap = await _probeOnt(ip, list[i].username, list[i].password, kindKey, ontSet: list[i] != factory);
+      final snap = await _probeOnt(ip, list[i].username, list[i].password, kindKey,
+          ontSet: list[i] != factory, unlessTplink: unlessTplink);
       if (snap != null) {
         _ontWinner[kindKey] = list[i];
         return snap;
@@ -1621,6 +1658,10 @@ class DeviceProbeApi {
   /// عنوان https للنانو — يُحقن في الاختبار.
   @visibleForTesting
   static String Function(String ip) ubntHttpsHost = (ip) => '$ip:443';
+
+  /// يُنادى عند بدء محاولة دخول هواوي فعليّاً — للتحقّق في الاختبار أنّ موجة النوع الأولى لا تطرق راوتر TP-Link بدخول هواوي.
+  @visibleForTesting
+  static void Function(String ip)? debugOnHuaweiProbe;
 
   static bool _hasPort(String address) => RegExp(r':\d{1,5}$').hasMatch(address.trim());
 
@@ -1682,8 +1723,17 @@ class DeviceProbeApi {
   /// ONT: هواوي (الأصل) أو ZTE (ZXIC MH80، ٢٥ أكتوبر). أوّل مرّة الاثنان معاً والأسبق نجاحاً — فرع ZTE لا يدخل إلّا على
   /// واجهة ZTE ([ZteOntService.detect])، وهواوي على جهاز ZTE يقف عند صفحة رمزه (لا محاولة دخول)؛ فلا محاولةٌ خاطئة تقفل
   /// جهازاً. بعدها المورّد المحفوظ وحده، ويُنسى إن فشل (جهازٌ تبدّل).
+  /// هل العنوان من عائلات راوترات TP-Link (أيّ تعرّفٍ بلا دخول: كلاسيكيّ/Agile/Tenda/CGI/MER/Pharos)؟ الطلبات مخبّأةٌ
+  /// بكاش «رأيته» ٣٠ث، فلا تكلفة شبكةٍ مكرّرة حين تُستدعى داخل الموجة مع تعرّفات الراوتر نفسها.
+  static Future<bool> _anyTpRouter(String ip) async {
+    final r = await Future.wait(
+        [_isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip), _isTpCgi(ip), _isTpMer(ip), _isTp845(ip)]);
+    return r.contains(true);
+  }
+
   static Future<DeviceHealthSnapshot?> _probeOnt(
-      String ip, String user, String pass, String kindKey, {bool ontSet = true}) async {
+      String ip, String user, String pass, String kindKey,
+      {bool ontSet = true, bool unlessTplink = false}) async {
     final known = _ontVendorByKey[kindKey];
     if (known != null) {
       final snap = known == 'zte'
@@ -1695,7 +1745,14 @@ class DeviceProbeApi {
     // التعرّف أوّلاً (صفحةٌ بلا دخول) ثمّ فرعٌ واحد: هواوي لا يطرق جهاز ZTE بطلباته وهو يدخل، ولا العكس.
     _zteMark(ip, 'detect');
     final zte = _isZte(ip);
-    Future<DeviceHealthSnapshot?> huawei() async => await zte ? null : _probeHuawei(ip, user, pass);
+    // أوّل مرّة (موجة النوع): دخول هواوي لا يُرسَل على راوتر TP-Link — تماماً كبوّابة [_probeUbnt] لـairOS. هذا يمنع
+    // إغراق راوترٍ ضعيفٍ بطلب دخولٍ ليس له فيتعذّر قراءته أوّل مرّة. حين يكون النوع معروفاً ONT (تثبيت المدير أو كاش
+    // النوع) لا بوّابة — نثق بأنّه ONT ولا ندع تعرّف راوترٍ خاطئاً يحجب قراءته.
+    Future<DeviceHealthSnapshot?> huawei() async {
+      if (await zte) return null;
+      if (unlessTplink && await _anyTpRouter(ip)) return null;
+      return _probeHuawei(ip, user, pass);
+    }
     Future<DeviceHealthSnapshot?> zteBranch() async =>
         await zte ? _probeZte(ip, user, pass, detected: true, ontSet: ontSet) : null;
     final snap = await _firstNonNull<DeviceHealthSnapshot>([huawei(), zteBranch()]);
@@ -1755,6 +1812,7 @@ class DeviceProbeApi {
 
   static Future<DeviceHealthSnapshot?> _probeHuawei(
       String ip, String user, String pass) async {
+    debugOnHuaweiProbe?.call(ip);
     // ⚠️ ميزانيّةٌ تساوي سقف الفحص: المستدعي يتخلّى عنّا عند
     //    `_probeCap`، و`.timeout` لا يُلغي عملنا. فبلا هذه الميزانيّة
     //    نُكمل ثلاث محاولاتٍ أُخَر (٤٥ ثانية) لا يقرأ نتيجتها أحد —
@@ -1895,8 +1953,9 @@ class DeviceProbeApi {
   static Future<DeviceHealthSnapshot?> _probeUbnt(
       String ip, String user, String pass, {bool unlessOther = false}) async {
     if (unlessOther) {
-      // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها.
-      final other = await Future.wait([_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip), _isTpCgi(ip), _isTpMer(ip)]);
+      // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها. وWR845N (١٥ نوفمبر) كذلك.
+      final other = await Future.wait(
+          [_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip), _isTpCgi(ip), _isTpMer(ip), _isTp845(ip)]);
       if (other.contains(true)) return null;
     }
     final session =

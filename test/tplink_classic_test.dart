@@ -195,6 +195,20 @@ class _FakeApi implements HttpClientAdapter {
 
 void main() {
   group('قراءة صفحات الراوتر (صرفة)', () {
+    test('isRawBasicLogin (WR845N): يميّز صفحة PCSubWin ويستثني الكوكي-MD5 والصفحات الأخرى', () {
+      const wr845 = '<html><head><script>function PCSubWin(){'
+          'document.cookie="Authorization=Basic "+Base64Encoding(pcName.value+":"+pcPassword.value)+";path=/";'
+          'location.reload();}</script></head><body><input id="pcPassword" type="password"></body></html>';
+      expect(TplinkClassicService.isRawBasicLogin(wr845), isTrue);
+      // الكوكي-MD5 (WR940N) فيه httpAutErrorArray ⇒ ليس rawbasic (فرع القراءة يتكفّل به)
+      expect(
+          TplinkClassicService.isRawBasicLogin(
+              'var httpAutErrorArray = new Array(3,1,""); Authorization Base64Encoding pcPassword'),
+          isFalse);
+      // صفحةٌ بلا الدلائل الثلاثة ⇒ ليس rawbasic
+      expect(TplinkClassicService.isRawBasicLogin('<html>login form pcPassword</html>'), isFalse);
+    });
+
     test('new Array: نصوصٌ وأعداد بترتيبها، ومصفوفةٌ متداخلة جارةٌ لا تُربك', () {
       final sp = TpClassicParse.array(_statusPage(), 'statusPara')!;
       expect(sp[4], 13425);
@@ -405,6 +419,69 @@ void main() {
       expect(DeviceProbeApi.issueFor(ip: d.host), isNull);
       final creds = await DeviceProbeApi.resolveTplinkCreds(fallbackIp: d.host);
       expect([creds?.user, creds?.pass], ['admin', '0000'], reason: 'النبضة الحيّة تقرأ بالفائز');
+    });
+
+    test('موجة النوع الأولى لا تطرق راوتر TP-Link بدخول هواوي — يمسك من أوّل مرّة على الراوتر الضعيف', () async {
+      // اعتماد ONT موجودٌ عمداً: بلا البوّابة يُرسَل دخول هواوي على الراوتر (أربع قواعد × مهلة) فيُغرقه ويتعذّر قراءته أوّلاً.
+      api.defaults = {
+        'tplinkUsername': 'admin',
+        'tplinkPassword': '0000',
+        'ontUsername': 'o',
+        'ontPassword': 'o-p',
+      };
+      final huaweiHits = <String>[];
+      DeviceProbeApi.debugOnHuaweiProbe = huaweiHits.add;
+      addTearDown(() => DeviceProbeApi.debugOnHuaweiProbe = null);
+      final snap = await DeviceProbeApi.probe(fallbackIp: d.host, force: true);
+      expect(snap?.ubnt?.vendor, 'tpclassic', reason: 'الراوتر يُقرأ من فرعه');
+      await d.settle();
+      expect(huaweiHits, isEmpty,
+          reason: 'راوتر TP-Link معرّفٌ بلا دخول ⇒ لا محاولة دخول هواوي تطرقه في موجة النوع الأولى');
+    });
+
+    test('WR845N (rawbasic): تعرّفٌ راوتر بلا دخول — صيغة دخولٍ جديدة، ولا هواوي/airOS يطرقانه، والفحص التالي لفرعه', () async {
+      final raw = await HttpServer.bind('127.0.0.1', 0);
+      addTearDown(() => raw.close(force: true));
+      final rawPaths = <String>[];
+      var authTries = 0;
+      raw.listen((r) {
+        rawPaths.add(r.uri.path);
+        final cookie = r.headers.value(HttpHeaders.cookieHeader) ?? '';
+        if (r.headers.value(HttpHeaders.authorizationHeader) != null || cookie.contains('Authorization')) authTries++;
+        r.response
+          ..statusCode = 200
+          ..write('<html><head><script>function PCSubWin(){'
+              'document.cookie="Authorization=Basic "+Base64Encoding(pcName.value+":"+pcPassword.value)+";path=/";'
+              'location.reload();}</script></head><body><input id="pcPassword" type="password"></body></html>')
+          ..close();
+      });
+      final host = '127.0.0.1:${raw.port}';
+      // اعتماد ONT موجودٌ عمداً (ليثبت أنّ هواوي لا يُرسَل)؛ وبلا اعتماد UBNT ⇒ يُجرَّب ubnt/ubnt لولا البوّابة.
+      api.defaults = {'ontUsername': 'o', 'ontPassword': 'o-p', 'tplinkUsername': 'admin', 'tplinkPassword': '0000'};
+      final huaweiHits = <String>[];
+      DeviceProbeApi.debugOnHuaweiProbe = huaweiHits.add;
+      addTearDown(() => DeviceProbeApi.debugOnHuaweiProbe = null);
+
+      final snap = await DeviceProbeApi.probe(fallbackIp: host, force: true);
+      // اهدأ: انتظر فروع الخلفيّة حتى تسكت الطلبات
+      var seen = rawPaths.length;
+      for (var i = 0; i < 60; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        if (rawPaths.length == seen) break;
+        seen = rawPaths.length;
+      }
+
+      expect(snap, isNull, reason: 'تعرّفٌ بلا دخول ⇒ لا قراءة');
+      final why = DeviceProbeApi.issueFor(ip: host);
+      expect([why?.issue, why?.vendor], [ProbeIssue.unknownLogin, 'tplink'],
+          reason: 'راوتر TP-Link بصيغة دخولٍ جديدة — بلا قيمٍ كاذبة');
+      expect(huaweiHits, isEmpty, reason: 'راوتر tp845 معرّفٌ ⇒ دخول هواوي لا يطرقه');
+      expect(authTries, 0, reason: 'تعرّفٌ GET وحده — لا يوزر وباسورد يُرسل (لا يُحسب محاولة على راوترٍ حقيقيّ)');
+
+      // الفحص التالي يذهب لفرعه مباشرةً (المورّد محفوظ) — لا يزال تعرّفاً بلا دخول
+      final snap2 = await DeviceProbeApi.probe(fallbackIp: host, force: true);
+      expect(snap2, isNull);
+      expect(DeviceProbeApi.issueFor(ip: host)?.issue, ProbeIssue.unknownLogin);
     });
 
     test('الفحص التالي يذهب لفرعه وحده — صفحات userRpm فقط', () async {
