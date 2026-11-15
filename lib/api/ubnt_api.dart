@@ -625,6 +625,9 @@ class UbntApi {
             (radio['noise'] ?? radio['noise_level'])?.toString() ?? '';
         map['wlanFrequency'] ??=
             (radio['frequency'] ?? radio['freq'])?.toString() ?? '';
+        // نحفظ تردّد الراديو منفصلاً (لا بـ??=) حتى لا يطمسه تردّد الراديو
+        // الاحتياطيّ ٥ گيگا حين يملأ wlanFrequency على أجهزة الـ60 (AF-60/GigaBeam/Wave).
+        _set(map, 'radioFrequency', radio['frequency'] ?? radio['freq']);
         // معدّلات النقل في radio.link_capacity أو radio.tx_capacity
         map['wlanTxRate'] ??=
             (radio['tx_capacity'] ?? radio['tx_rate'])?.toString() ?? '';
@@ -740,6 +743,7 @@ class UbntApi {
           debugPrint('🔵 af-status.radio keys: ${radio.keys.toList()}');
         }
         map['wlanFrequency'] ??= _asStr(radio['frequency']);
+        _set(map, 'radioFrequency', radio['frequency']);
       }
       map.removeWhere((k, v) => v.isEmpty);
     } catch (e) {
@@ -1097,10 +1101,16 @@ class UbntStats {
     return m.contains('sta') || m.contains('managed');
   }
 
-  /// airFiber 60 (GP/LR) — يظهر عبر platform أو linked_60 من أي station.
+  /// airFiber 60 (GP/LR) · GigaBeam LR · Wave — عبر الطراز أو linked_60 أو تردّد ≥ 50000.
   bool get isAirFiber60 {
     final model = host.devmodel.toLowerCase();
-    if (model.contains('airfiber 60') || model.contains('af-60')) return true;
+    if (model.contains('airfiber 60') ||
+        model.contains('af-60') ||
+        model.contains('gigabeam') ||
+        model.contains('wave')) {
+      return true;
+    }
+    if ((wireless?.frequency ?? 0) >= 50000) return true;
     return stations.any((s) => s.isLinked60);
   }
 
@@ -1440,6 +1450,68 @@ class UbntStats {
           rxRate: _n(m['station${i}_rx']),
           connTime: _n(m['station${i}_uptime']),
         ));
+      }
+    }
+
+    // ── أجهزة ٦٠ گيگا (AF-60-LR · GigaBeam LR · Wave): الوصلة هي راديو الـ60، لا الاحتياطيّ ٥ گيگا ──
+    // حين يكون الاحتياطيّ ٥ شغّالاً يملأ wlanFrequency/wlanSignal (مثلاً 4980 MHz · -89 dBm) فيطمس تردّد الـ60
+    // (من قسم radio) وإشارته (من المحطّة). فنعرض للـ60: التردّد من أوّل مصدرٍ ≥ 50000، والإشارة من المحطّة،
+    // وننزّل الـ5 «احتياطيّ» بالتفاصيل. الطرف الذي يقرأ الـ60 أصلاً (تردّده ≥ 10000) لا يُمسّ.
+    if (!afx && wireless != null) {
+      final radioFreq = _n(m['radioFrequency']);
+      final mFreq = _n(m['freq']);
+      final freqs = <int>[wireless.frequency, radioFreq, mFreq];
+      final linked60 = stations.any((s) => s.isLinked60);
+      final has60Freq = freqs.any((f) => f >= 50000);
+      final model60 = host.devmodel.toLowerCase();
+      final is60 = linked60 ||
+          has60Freq ||
+          model60.contains('af-60') ||
+          model60.contains('airfiber 60') ||
+          model60.contains('gigabeam') ||
+          model60.contains('wave');
+      // الاحتياطيّ ٥ گيگا يملأ تردّد الوصلة (< 10000 MHz) على جهاز ٦٠
+      final isBackup5 = wireless.frequency > 0 && wireless.frequency < 10000;
+      if (is60 && isBackup5) {
+        final f60 = freqs.firstWhere((f) => f >= 50000, orElse: () => 0);
+        // إشارة الـ60 من المحطّة (rssi_data) — سالبة بالـdBm
+        int sig60 = 0;
+        for (final s in stations) {
+          if (s.signal < 0) {
+            sig60 = s.signal;
+            break;
+          }
+        }
+        // الاحتياطيّ ٥ گيگا → التفاصيل (لا يضيع)
+        extras.add((
+          k: 'الراديو الاحتياطيّ (٥ گيگا)',
+          v: '${wireless.frequency} MHz'
+              '${wireless.signal < 0 ? ' · ${wireless.signal} dBm' : ''}',
+        ));
+        // لم نعثر على تردّد الـ60 رغم أنّه جهاز ٦٠ ⇒ سطر تشخيصٍ مؤقّت (يُحذف قبل النشر)
+        if (f60 == 0) {
+          extras.add((
+            k: '⟨تشخيص ٦٠⟩',
+            v: 'wlan=${wireless.frequency} radio=$radioFreq '
+                'freq=$mFreq l60=$linked60 st=${stations.length}',
+          ));
+        }
+        // نبدّل التردّد والإشارة فقط — فيطابق الماستر الطرفَ الذي يقرأ الـ60 أصلاً؛
+        // الباقي (الضجيج، العرض، SNR، المعدّلات) كما هو.
+        wireless = UbntWireless(
+          essid: wireless.essid,
+          mode: wireless.mode,
+          signal: sig60 != 0 ? sig60 : wireless.signal,
+          noise: wireless.noise,
+          explicitSnr: wireless.explicitSnr,
+          ccq: wireless.ccq,
+          txRate: wireless.txRate,
+          rxRate: wireless.rxRate,
+          channel: wireless.channel,
+          frequency: f60, // 62640 (أو «—» إن لم يُكشف) لا 4980
+          distance: wireless.distance,
+          chanbw: wireless.chanbw,
+        );
       }
     }
 
