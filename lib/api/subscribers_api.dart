@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/subscriber.dart';
 import '../services/vitals_reporter.dart';
 import '../services/auth_storage.dart';
+import '../services/known_account_size.dart';
 import '../services/known_slow_list.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'agent_alerts_api.dart';
@@ -245,6 +246,7 @@ class _SubsListCache {
       } else if (await BigSubscribersApi.probe() > 0) {
         return null;
       }
+      final sizeKey = await KnownAccountSize.currentKey(); // الحساب لحظة الطلب (①)
       final sw = Stopwatch()..start();
       final result = await SubscribersApi._loadAllRaw();
       sw.stop();
@@ -254,6 +256,8 @@ class _SubsListCache {
         _servedFromDiskAt = null; // طازجٌ من الشبكة
         // زمنها يعلّم الحساب «معروفاً ببطئه» (≥ ٣ث) أو يمسحه (< ١٫٥ث) — عدد مشتركيه وحده
         unawaited(KnownSlowList.note(sw.elapsed, result.length));
+        // ① حسابٌ قارب حدّ الكبير (≥ ٤٠٠٠ صفّ) ⇒ يُنسى حكم «صغير» فيُسأل الساس قبل القائمة في الفتح القادم (KnownAccountSize)
+        unawaited(KnownAccountSize.noteList(result.length, key: sizeKey));
         return result;
       }
       // لم تصل بعد انتظارٍ طويل (مهلة الخادم ٢٨ث للساس البطيء) ⇒ بطءٌ يُتذكَّر بعدده المعروف؛ الفشل السريع (جلسة/صلاحيّة) لا يُعدّ.

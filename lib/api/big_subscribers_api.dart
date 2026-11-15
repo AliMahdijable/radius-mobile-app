@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
+import '../services/known_account_size.dart';
 import 'api_client.dart';
 
 /// الحسابات الكبيرة (٢١ أكتوبر ٢٠٢٦): من [threshold] مشتركاً فأكثر لا تُطلب القائمة الكاملة — ٨٩ ألف مشترك ≈ ٩٦ث و٥٩
@@ -22,6 +23,12 @@ class BigSubscribersApi {
   static DateTime? _probeAt;
   static String? _probeToken;
   static Future<int>? _probeInFlight;
+
+  /// تجديد حكم الحجم في الخلفيّة ([KnownAccountSize.refreshAfter]) — بعد هذه المدّة من الفتح، فلا يزاحم قائمة المشتركين ولا
+  /// بقيّة الرئيسيّة (مهلتها ٦ث) على الساس والشبكة.
+  @visibleForTesting
+  static Duration backgroundRefreshDelay = const Duration(seconds: 8);
+  static bool _refreshScheduled = false;
 
   /// الملخّص يُطلب من ثلاث جهات معاً (الرئيسية، الجرس، المشتركين) — نداءٌ واحد لكلّ ٢٠ثانية لكلّ فلتر.
   static const Duration _summaryTtl = Duration(seconds: 20);
@@ -54,6 +61,20 @@ class BigSubscribersApi {
     }
     final running = _probeInFlight;
     if (running != null) return running;
+    // ① (١٦ نوفمبر ٢٠٢٦): حسابٌ صغيرٌ يعرفه هذا الجهاز (KnownAccountSize — هامش ٨٠٪ من الحدّ، ≤ ٧ أيّام) ⇒ لا انتظار الساس:
+    // القائمة الحيّة تبدأ فوراً، والحكم يتجدّد في الخلفيّة. الكبير والقريب من الحدّ والمجهول ⇒ الفحص قبل القائمة كما كان.
+    final known = await KnownAccountSize.small();
+    if (known != null) {
+      // فحصٌ من الشبكة بدأ أثناء القراءة (نداءٌ متزامن) — جوابه أحدث
+      final started = _probeInFlight;
+      if (started != null) return started;
+      _probeSize = known.size;
+      _probeTotal = 0;
+      _probeAt = DateTime.now();
+      _probeToken = token;
+      if (known.age >= KnownAccountSize.refreshAfter) _refreshLater(token);
+      return 0;
+    }
     final f = _probe(token);
     _probeInFlight = f;
     try {
@@ -63,8 +84,29 @@ class BigSubscribersApi {
     }
   }
 
+  /// فحصٌ من الشبكة بعد [backgroundRefreshDelay] يُحدّث الحكم المحفوظ — لا ينتظره أحد. مرّةً واحدة لكلّ عمليّة، وللجلسة نفسها.
+  static void _refreshLater(String token) {
+    if (_refreshScheduled) return;
+    _refreshScheduled = true;
+    Future<void>.delayed(backgroundRefreshDelay, () async {
+      _refreshScheduled = false;
+      if (_probeInFlight != null) return;
+      final current = await AuthStorage.readToken();
+      if (current != token) return; // تبدّلت الجلسة/الشركة
+      final f = _probe(token);
+      _probeInFlight = f;
+      try {
+        await f;
+      } finally {
+        if (identical(_probeInFlight, f)) _probeInFlight = null;
+      }
+    });
+  }
+
   static Future<int> _probe(String token) async {
     try {
+      // الحساب لحظة السؤال — الجواب يُحفظ له ولو تبدّلت الشركة قبل وصوله
+      final accountKey = await KnownAccountSize.currentKey();
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/subscribers',
         queryParameters: const {'page': 1, 'size': 1},
@@ -78,6 +120,8 @@ class BigSubscribersApi {
       _probeTotal = big;
       _probeAt = DateTime.now();
       _probeToken = token;
+      // ① الحكم للفتح القادم — من ردٍّ ناجحٍ وحده (ساسٌ متعطّل لحظتها لا يُحفظ «حساباً لا يرقّم»).
+      if (b['success'] == true) unawaited(KnownAccountSize.note(key: accountKey, total: total, paged: paged));
       return big;
     } catch (e) {
       if (kDebugMode) debugPrint('🟡 big probe: $e');
@@ -258,6 +302,8 @@ class BigSubscribersApi {
     _probeAt = null;
     _probeToken = null;
     _probeInFlight = null;
+    // تجديدٌ خلفيّ مجدول للجلسة السابقة يسقط وحده (يقارن التوكن)؛ هذا يسمح بجدولة تجديد الجلسة الجديدة
+    _refreshScheduled = false;
     _summaryCache.clear();
     _summaryInFlight.clear();
     _pageMemo.clear();
