@@ -96,7 +96,8 @@ class _VoidReasonDialogState extends State<_VoidReasonDialog> {
 
 // ─────────────────────────── لوحة الحساب ───────────────────────────
 
-/// لوحة «له / عليه» للموظف: الملخّص، «حركة جديدة» و«كشف الراتب»، القروض، آخر الحركات والكشوف.
+/// لوحة «له / عليه» للموظف: الملخّص، «حركة جديدة» و«كشف الراتب»، ثمّ القروض والحركات والكشوف — كلٌّ في كرته، خمسة أسطرٍ
+/// ثمّ «عرض المزيد» ([_LedgerList]).
 /// المعالجات null ⇒ بلا أزرارها ([selfView]: الموظّف يرى حسابه قراءةً فقط؛ الإلغاء للمدير وحده).
 class EmployeeLedgerPanel extends StatelessWidget {
   const EmployeeLedgerPanel({
@@ -246,58 +247,88 @@ class EmployeeLedgerPanel extends StatelessWidget {
         ),
         if (a.loans.isNotEmpty) ...[
           const SizedBox(height: Sp.lg),
-          Text('القروض', style: AppType.bodyBold(color: AppColors.textHi)),
-          const SizedBox(height: Sp.sm),
-          for (final l in a.loans)
-            _Tile(
+          _LedgerList<LedgerLoan>(
+            name: 'loans',
+            title: 'القروض',
+            account: a,
+            items: a.loans,
+            total: a.loans.length,
+            idOf: (l) => l.id,
+            row: (l) => _LedgerRow(
+              icon: LucideIcons.landmark,
+              tone: AppTone.warning,
               title: 'قرض ${formatIQD(l.principal)}',
-              subtitle: 'القسط ${formatIQD(l.installment)} مع كلّ راتب',
-              amount: 'المتبقّي ${_iqd(l.remaining)}',
+              details: ['القسط ${formatIQD(l.installment)} مع كلّ راتب'],
+              amount: _iqd(l.remaining),
               amountColor: AppColors.textHi,
+              amountLabel: 'المتبقّي',
             ),
+          ),
         ],
         if (a.movements.isNotEmpty) ...[
           const SizedBox(height: Sp.lg),
-          Text(
-            a.movementsTotal > a.movements.length ? 'الحركات (آخر ${a.movements.length} من ${a.movementsTotal})' : 'الحركات',
-            style: AppType.bodyBold(color: AppColors.textHi),
-          ),
-          const SizedBox(height: Sp.sm),
-          for (final m in a.movements)
-            _Tile(
+          _LedgerList<LedgerMove>(
+            name: 'moves',
+            title: 'الحركات',
+            account: a,
+            items: a.movements,
+            total: a.movementsTotal,
+            idOf: (m) => m.id,
+            // الموظّف نفسه يرى ما حمله حسابه وحده (`/me`) — الأقدم عند مديره
+            pager: selfView ? null : (offset, limit) => EmployeeLedgerApi.movements(s.employeeId, offset: offset, limit: limit),
+            capNote: (n) => 'هذه أحدث $n حركة — الأقدم منها عند مديرك.',
+            row: (m) => _LedgerRow(
               key: ValueKey('emp-ledger-move-${m.id}'),
-              title: '${m.label}${m.fromHand ? ' — من النقد الذي بيده' : ''}${m.voided ? ' (ملغاة)' : ''}',
-              subtitle: [
+              icon: ledgerKindIcon(m.kind),
+              tone: m.isMinus ? AppTone.danger : AppTone.success,
+              title: m.label,
+              tag: m.voided ? 'ملغاة' : null,
+              details: [
                 if (m.date != null) iqDateLabel(m.date),
-                if (m.voided) (m.voidReason ?? '') else (m.note ?? ''),
+                if (m.fromHand) 'من النقد الذي بيده',
                 if (m.byEmployee != null) 'سجّلها ${m.byEmployee}',
-              ].where((x) => x.isNotEmpty).join(' · '),
+              ],
+              note: m.voided ? (m.voidReason == null ? null : 'سبب الإلغاء: ${m.voidReason}') : m.note,
               amount: _iqd(m.amount),
-              amountColor: m.voided ? AppColors.textLow : (m.isMinus ? AppColors.error : AppColors.success),
+              amountColor: m.isMinus ? AppColors.error : AppColors.success,
               faded: m.voided,
               onVoid: !m.voided && onVoidMove != null ? () => onVoidMove!(m) : null,
             ),
+          ),
         ],
         if (a.payslips.isNotEmpty) ...[
           const SizedBox(height: Sp.lg),
-          Text('كشوف الرواتب', style: AppType.bodyBold(color: AppColors.textHi)),
-          const SizedBox(height: Sp.sm),
-          for (final p in a.payslips)
-            _Tile(
+          _LedgerList<LedgerPayslip>(
+            name: 'slips',
+            title: 'كشوف الرواتب',
+            account: a,
+            items: a.payslips,
+            total: a.payslipsTotal,
+            idOf: (p) => p.id,
+            pager: selfView ? null : (offset, limit) => EmployeeLedgerApi.payslips(s.employeeId, offset: offset, limit: limit),
+            capNote: (n) => 'هذه أحدث $n كشف — الأقدم منها عند مديرك.',
+            row: (p) => _LedgerRow(
               key: ValueKey('emp-ledger-slip-${p.id}'),
-              title: 'كشف ${p.number}${p.paid ? '' : ' (ملغى)'}${p.periodLabels.isEmpty ? '' : ' — ${p.periodLabels.join('، ')}'}',
-              subtitle: [
+              icon: LucideIcons.receiptText,
+              tone: AppTone.brand,
+              title: 'كشف ${p.number}${p.periodLabels.isEmpty ? '' : ' — ${p.periodLabels.join('، ')}'}',
+              tag: p.paid ? null : 'ملغى',
+              details: [
                 if (p.payDate != null) iqDateLabel(p.payDate),
                 'المستحقّ ${formatIQD(p.gross)}',
+              ],
+              // ما استُقطع ومن أين دُفع بسطرهما (لا يزاحمان التاريخ فيُقصّان بأضيق هاتف)، وسبب الإلغاء للملغى
+              note: [
                 if (p.deducted > 0) 'استُقطع ${formatIQD(p.deducted)}',
                 if (p.fromHand) 'من النقد الذي بيده',
-                if (!p.paid) (p.voidReason ?? ''),
-              ].where((x) => x.isNotEmpty).join(' · '),
+                if (!p.paid && p.voidReason != null) 'سبب الإلغاء: ${p.voidReason}',
+              ].join(' · '),
               amount: _iqd(p.net),
-              amountColor: p.paid ? AppColors.textHi : AppColors.textLow,
+              amountColor: AppColors.textHi,
               faded: !p.paid,
               onVoid: onVoidPayslip != null && latest != null && latest.id == p.id ? () => onVoidPayslip!(p) : null,
             ),
+          ),
         ],
         if (a.isEmpty && !selfView) ...[
           const SizedBox(height: Sp.sm),
@@ -329,67 +360,428 @@ class _Figure extends StatelessWidget {
       );
 }
 
-/// سطرٌ في قوائم اللوحة: عنوانٌ ومبلغ، وتحته التفاصيل، وزرّ «إلغاء» حين يُسمح.
-class _Tile extends StatelessWidget {
-  const _Tile({super.key, required this.title, required this.subtitle, required this.amount, required this.amountColor, this.faded = false, this.onVoid});
+// ─────────────────────────── قوائم اللوحة ───────────────────────────
+
+/// كم سطراً تعرضه كلّ قائمةٍ في اللوحة أوّلاً، وكم تزيد كلّ ضغطة «عرض المزيد» — المالك ١٥ نوفمبر (صورة حساب موظف):
+/// «حركات هنا تصميمها كلش مو صحيح وخلي القراءات اقصى شي ٥ قراءات ويكدر يحمل المزيد وحسن تصميمها».
+const int kLedgerListStep = 5;
+
+/// ما يُطلب من الخادم في كلّ صفحةٍ بعد ما حمله الحساب.
+const int kLedgerListPage = 30;
+
+/// أيقونة نوع الحركة.
+IconData ledgerKindIcon(String kind) => switch (LedgerKind.of(kind)) {
+      LedgerKind.advance => LucideIcons.banknote,
+      LedgerKind.loan => LucideIcons.landmark,
+      LedgerKind.withdraw => LucideIcons.wallet,
+      LedgerKind.bonus => LucideIcons.gift,
+      LedgerKind.deduction => LucideIcons.scissors,
+      LedgerKind.repayment => LucideIcons.handCoins,
+      null => LucideIcons.coins,
+    };
+
+/// قائمةٌ في اللوحة (قروض · حركات · كشوف) — كرتٌ واحد بصفوفٍ يفصلها خطّ، لا صندوقٌ لكلّ سطر.
+///
+/// تعرض [kLedgerListStep] ثمّ «عرض المزيد» يزيدها خمسةً خمسة: ممّا حمله الحساب أوّلاً، ثمّ من الخادم صفحةً صفحة ([pager]).
+/// بلا [pager] (الموظّف يرى حسابه) تقف عند ما حمله الحساب وتقول ذلك ([capNote]). حسابٌ جديد من الخادم (بعد حركةٍ أو إلغاءٍ
+/// أو تحديث) يُسقط الصفحات الإضافيّة — قد تغيّرت — ويُعاد طلبها إن كان المدير يعرضها، فلا يرجع لخمسةٍ تحت يده.
+class _LedgerList<T> extends StatefulWidget {
+  const _LedgerList({
+    super.key,
+    required this.name,
+    required this.title,
+    required this.account,
+    required this.items,
+    required this.total,
+    required this.idOf,
+    required this.row,
+    this.pager,
+    this.capNote,
+  });
+
+  /// جزء مفاتيح الاختبار: `emp-ledger-<name>-more|less|count|retry|cap`.
+  final String name;
   final String title;
-  final String subtitle;
+
+  /// الحساب الذي جاءت منه [items]: تغيّره (لا تساويه) هو إشارة «قراءةٌ جديدة من الخادم».
+  final LedgerAccount account;
+  final List<T> items;
+
+  /// العدد الكلّيّ عند الخادم (≥ ما حُمل).
+  final int total;
+  final int Function(T) idOf;
+  final Widget Function(T) row;
+  final Future<LedgerResult<LedgerPage<T>>> Function(int offset, int limit)? pager;
+
+  /// سطرٌ تحت الكرت حين تقف القائمة عند ما حمله الحساب وعند الخادم أكثر (بلا [pager]).
+  final String Function(int loaded)? capNote;
+
+  @override
+  State<_LedgerList<T>> createState() => _LedgerListState<T>();
+}
+
+class _LedgerListState<T> extends State<_LedgerList<T>> {
+  /// كم سطراً طلب أن يرى.
+  int _want = kLedgerListStep;
+
+  /// صفحاتٌ من الخادم بعد ما حمله الحساب (كما وصلت — التكرار يُصفّى عند العرض).
+  List<T> _extra = const [];
+
+  /// العدد الكلّيّ كما قالته آخر صفحة (أحدث من عدد الحساب).
+  int? _pagedTotal;
+  bool _busy = false;
+  bool _failed = false;
+
+  /// يُبطل ردّاً وصل بعد حسابٍ أحدث.
+  int _gen = 0;
+
+  List<T> get _all {
+    if (_extra.isEmpty) return widget.items;
+    final seen = <int>{for (final x in widget.items) widget.idOf(x)};
+    return [
+      ...widget.items,
+      for (final x in _extra)
+        if (seen.add(widget.idOf(x))) x,
+    ];
+  }
+
+  int _totalFor(int loaded) {
+    final t = _pagedTotal ?? widget.total;
+    return t < loaded ? loaded : t;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LedgerList<T> old) {
+    super.didUpdateWidget(old);
+    if (identical(old.account, widget.account)) return;
+    _gen++;
+    _extra = const [];
+    _pagedTotal = null;
+    _busy = false;
+    _failed = false;
+    if (old.account.summary.employeeId != widget.account.summary.employeeId) _want = kLedgerListStep;
+    // كان يعرض أكثر ممّا يحمله الحساب ⇒ تُعاد صفحاته من الخادم (بلا setState: نحن داخل بناء الأب)
+    if (_want > widget.items.length && widget.pager != null && widget.items.length < widget.total) _fetch(building: true);
+  }
+
+  Future<void> _fetch({bool building = false}) async {
+    final pager = widget.pager;
+    if (pager == null || _busy) return;
+    final gen = _gen;
+    void begin() {
+      _busy = true;
+      _failed = false;
+    }
+
+    building ? begin() : setState(begin);
+    final r = await pager(widget.items.length + _extra.length, kLedgerListPage);
+    if (!mounted || gen != _gen) return;
+    setState(() {
+      _busy = false;
+      final page = r.data;
+      if (page == null) {
+        _failed = true;
+        return;
+      }
+      _extra = [..._extra, ...page.items];
+      // صفحةٌ فارغة = لا شيء بعد ما عندنا مهما قال العدّ (لا «عرض المزيد» يدور بلا نهاية)
+      _pagedTotal = page.items.isEmpty ? _all.length : page.total;
+    });
+  }
+
+  void _more() {
+    final all = _all;
+    final shown = _want < all.length ? _want : all.length;
+    setState(() => _want = shown + kLedgerListStep);
+    if (_want > all.length && all.length < _totalFor(all.length)) _fetch();
+  }
+
+  void _less() => setState(() => _want = kLedgerListStep);
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final all = _all;
+    final shown = _want < all.length ? _want : all.length;
+    final total = _totalFor(all.length);
+    final canPage = widget.pager != null;
+    final hasMore = shown < all.length || (canPage && all.length < total);
+    final capped = !canPage && all.length < total && shown == all.length;
+    final footer = _busy
+        ? _foot(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandAccent)),
+                const SizedBox(width: Sp.sm),
+                Text('جارٍ التحميل…', style: AppType.body(color: AppColors.textMid)),
+              ],
+            ),
+          )
+        : _failed
+            ? _foot(
+                key: ValueKey('emp-ledger-${widget.name}-retry'),
+                onTap: _fetch,
+                icon: LucideIcons.refreshCw,
+                label: 'تعذّر تحميل المزيد — أعد المحاولة',
+                color: AppTone.danger.onSoft,
+              )
+            : hasMore
+                ? _foot(
+                    key: ValueKey('emp-ledger-${widget.name}-more'),
+                    onTap: _more,
+                    icon: LucideIcons.chevronDown,
+                    label: 'عرض المزيد',
+                    color: AppColors.brandAccent,
+                  )
+                : shown > kLedgerListStep
+                    ? _foot(
+                        key: ValueKey('emp-ledger-${widget.name}-less'),
+                        onTap: _less,
+                        icon: LucideIcons.chevronUp,
+                        label: 'عرض أقلّ',
+                        color: AppColors.textMid,
+                      )
+                    : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
+          child: Row(
+            children: [
+              Expanded(child: Text(widget.title, style: AppType.bodyBold(color: AppColors.textHi))),
+              // العدد حين في القائمة ما لا يظهر كلّه بخمسة
+              if (total > kLedgerListStep)
+                Text(
+                  shown < total ? '$shown من $total' : '$total',
+                  key: ValueKey('emp-ledger-${widget.name}-count'),
+                  style: AppType.body(color: AppColors.textMid),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Sp.sm),
+        // Material لا Container: لمسة «إلغاء» و«عرض المزيد» تُرى فوق لون الكرت
+        Material(
+          color: AppColors.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(R.card),
+            side: BorderSide(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < shown; i++) ...[
+                if (i > 0) Divider(height: 1, thickness: 1, indent: Sp.md, endIndent: Sp.md, color: AppColors.divider),
+                widget.row(all[i]),
+              ],
+              if (footer != null) ...[
+                Divider(height: 1, thickness: 1, color: AppColors.divider),
+                footer,
+              ],
+            ],
+          ),
+        ),
+        if (capped && widget.capNote != null) ...[
+          const SizedBox(height: Sp.x6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
+            child: Text(
+              widget.capNote!(all.length),
+              key: ValueKey('emp-ledger-${widget.name}-cap'),
+              style: AppType.micro(color: AppColors.textLow),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// آخر سطرٍ في الكرت: «عرض المزيد» / «عرض أقلّ» / إعادة المحاولة — أو دوّارة التحميل ([child]).
+  Widget _foot({Key? key, VoidCallback? onTap, IconData? icon, String? label, Color? color, Widget? child}) {
+    return InkWell(
+      key: key,
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+          child: Center(
+            child: child ??
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(child: Text(label!, textAlign: TextAlign.center, style: AppType.bodyBold(color: color))),
+                    const SizedBox(width: Sp.x6),
+                    Icon(icon, size: 16, color: color),
+                  ],
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// سطرٌ في قوائم اللوحة: مربّع أيقونةٍ بلون نوعه، العنوان (وشارة «ملغاة») وقبالته المبلغ، وتحته التفاصيل بخطٍّ يُقرأ، ثمّ
+/// الملاحظة. «إلغاء» صغيرٌ هادئ تحت المبلغ (لا أحمر عريض ملاصق له — كان يُقرأ «إلغاء 50,000»).
+class _LedgerRow extends StatelessWidget {
+  const _LedgerRow({
+    super.key,
+    required this.icon,
+    required this.tone,
+    required this.title,
+    required this.amount,
+    required this.amountColor,
+    this.details = const [],
+    this.note,
+    this.tag,
+    this.amountLabel,
+    this.faded = false,
+    this.onVoid,
+  });
+  final IconData icon;
+  final AppTone tone;
+  final String title;
   final String amount;
   final Color amountColor;
+
+  /// التاريخ وما يليه — سطرٌ واحد يلتفّ عند الضيق.
+  final List<String> details;
+
+  /// ملاحظة الحركة (أو سبب إلغائها) — بسطرها.
+  final String? note;
+
+  /// شارةٌ بعد العنوان: «ملغاة» / «ملغى».
+  final String? tag;
+
+  /// كلمةٌ تحت المبلغ تقول ما هو («المتبقّي»).
+  final String? amountLabel;
   final bool faded;
   final VoidCallback? onVoid;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: Sp.x6),
-      padding: EdgeInsetsDirectional.only(start: Sp.md, end: onVoid == null ? Sp.md : Sp.xs, top: Sp.sm, bottom: Sp.sm),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.border),
-      ),
+    Theme.of(context); // theme-dep (dark-mode)
+    final t = faded ? AppTone.neutral : tone;
+    final info = details.where((x) => x.trim().isNotEmpty).join(' · ');
+    final extra = (note ?? '').trim();
+    const pad = Sp.sm + 2;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: Sp.md, end: Sp.md, top: pad),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1, bottom: pad),
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: t.softBg, borderRadius: BorderRadius.circular(R.sm)),
+              child: Icon(icon, size: 17, color: t.fill),
+            ),
+          ),
+          const SizedBox(width: Sp.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // المبلغ على سطر العنوان الأوّل ولو التفّ العنوان؛ ولا يأخذ أكثر من ثلثَي السطر (رقمٌ بتسع خاناتٍ يصغر ولا يفيض)
+                LayoutBuilder(
+                  builder: (context, box) => Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        // Wrap: الشارة تنزل تحت العنوان حين يضيق السطر بدل أن تفيض
+                        child: Wrap(
+                          spacing: Sp.x6,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              title,
+                              // يلتفّ بأضيق هاتف وخطٍّ مكبَّر بدل أن يُقصّ («كشف 2 — تشرين الأوّل 2026»)
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppType.rowValue(color: faded ? AppColors.textLow : AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            if (tag != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(color: AppTone.danger.softBg, borderRadius: BorderRadius.circular(R.pill)),
+                                child: Text(tag!, maxLines: 1, softWrap: false, style: AppType.microBold(color: AppTone.danger.onSoft)),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: Sp.sm),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: box.maxWidth * 0.66),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: Text(
+                            amount,
+                            maxLines: 1,
+                            style: AppType.rowValue(color: faded ? AppColors.textLow : amountColor).copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                              decoration: faded ? TextDecoration.lineThrough : null,
+                              decorationColor: AppColors.textLow,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.bodyBold(color: faded ? AppColors.textLow : AppColors.textHi),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2, bottom: pad),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (info.isNotEmpty) Text(info, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid)),
+                            if (extra.isNotEmpty) ...[
+                              if (info.isNotEmpty) const SizedBox(height: 2),
+                              Text(extra, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.body(color: faded ? AppColors.textMid : AppColors.textBody)),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: Sp.sm),
-                    Text(
-                      amount,
-                      style: AppType.bodyBold(color: amountColor).copyWith(decoration: faded ? TextDecoration.lineThrough : null),
-                    ),
+                    if (onVoid != null)
+                      InkWell(
+                        onTap: onVoid,
+                        borderRadius: BorderRadius.circular(R.sm),
+                        // مساحة اللمس تمتدّ لأسفل السطر (٣٢ نقطة) والكلمة على سطر التفاصيل
+                        child: Padding(
+                          padding: const EdgeInsetsDirectional.only(start: Sp.md, top: 2, bottom: pad + 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(LucideIcons.undo2, size: 13, color: AppColors.textMid),
+                              const SizedBox(width: Sp.xs),
+                              Text('إلغاء', style: AppType.bodyStrong(color: AppColors.textMid)),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (amountLabel != null)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(start: Sp.md, top: 2),
+                        child: Text(amountLabel!, style: AppType.body(color: AppColors.textMid)),
+                      ),
                   ],
                 ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
-                ],
               ],
             ),
           ),
-          if (onVoid != null)
-            TextButton(
-              onPressed: onVoid,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.error,
-                minimumSize: const Size(44, 36),
-                padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('إلغاء'),
-            ),
         ],
       ),
     );

@@ -399,6 +399,13 @@ class LedgerAccount {
   }
 }
 
+/// صفحةٌ من قائمةٍ طويلة (حركات أو كشوف) بعد ما حمله الحساب: صفوفها (الأحدث أوّلاً) والعدد الكلّيّ عند الخادم.
+class LedgerPage<T> {
+  const LedgerPage({required this.items, required this.total});
+  final List<T> items;
+  final int total;
+}
+
 /// فترة راتبٍ في معاينة الكشف.
 class PayslipPeriod {
   const PayslipPeriod({required this.key, required this.label, required this.dueDate, required this.due, required this.amount, required this.selected});
@@ -632,6 +639,27 @@ class EmployeeLedgerApi {
       return LedgerResult(data: a);
     } catch (e) {
       return _fail(e, 'تعذّر تحميل حساب الموظف');
+    }
+  }
+
+  /// صفحةٌ من حركات الموظف بعد أوّل [offset] حركة (الأحدث أوّلاً) — «عرض المزيد» في حسابه. للمدير وصاحب صلاحيّة الرواتب؛
+  /// الموظّف نفسه يرى ما حمله حسابه وحده (`/me`).
+  static Future<LedgerResult<LedgerPage<LedgerMove>>> movements(int id, {required int offset, int limit = 30}) =>
+      _page('$_base/$id/movements', offset, limit, LedgerMove.fromJson, 'تعذّر تحميل الحركات');
+
+  /// صفحةٌ من كشوف رواتبه بعد أوّل [offset] كشف (الأحدث أوّلاً).
+  static Future<LedgerResult<LedgerPage<LedgerPayslip>>> payslips(int id, {required int offset, int limit = 12}) =>
+      _page('$_base/$id/payslips', offset, limit, LedgerPayslip.fromJson, 'تعذّر تحميل الكشوف');
+
+  static Future<LedgerResult<LedgerPage<T>>> _page<T>(String path, int offset, int limit, T? Function(Object?) parse, String fallback) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(path, queryParameters: {'limit': limit, 'offset': offset}, options: _open);
+      final body = r.data ?? const {};
+      final rows = body['data'];
+      if (body['success'] != true || rows is! List) return _refused(body, fallback);
+      return LedgerResult(data: LedgerPage<T>(items: rows.map(parse).whereType<T>().toList(), total: _i(body['total'])));
+    } catch (e) {
+      return _fail(e, fallback);
     }
   }
 

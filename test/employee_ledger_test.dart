@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -221,13 +223,30 @@ void main() {
       expect(find.byKey(const ValueKey('emp-ledger-move')), findsOneWidget);
       expect(find.byKey(const ValueKey('emp-ledger-slip')), findsOneWidget);
       expect(find.text('القروض'), findsOneWidget);
-      expect(find.text('المتبقّي 400,000 د.ع'), findsOneWidget);
-      expect(find.text('سلفة — من النقد الذي بيده'), findsOneWidget);
-      expect(find.textContaining('سجّلها cashier'), findsOneWidget);
-      expect(find.text('خصم (ملغاة)'), findsOneWidget);
-      expect(find.textContaining('سُجّلت خطأً'), findsOneWidget);
+      // القرض: مبلغه المتبقّي وكلمته تحته
+      expect(find.text('قرض 600,000'), findsOneWidget);
+      expect(find.text('400,000 د.ع'), findsOneWidget);
+      expect(find.text('المتبقّي'), findsOneWidget);
+      // الحركة: النوع عنواناً، ومصدرها ومن سجّلها بسطر التفاصيل، وملاحظتها بسطرها
+      Finder inMove(int id, Finder f) => find.descendant(of: find.byKey(ValueKey('emp-ledger-move-$id')), matching: f);
+      expect(inMove(11, find.text('سلفة')), findsOneWidget);
+      expect(inMove(11, find.textContaining('من النقد الذي بيده')), findsOneWidget);
+      expect(inMove(11, find.text('عيد')), findsOneWidget);
+      expect(inMove(11, find.text('100,000 د.ع')), findsOneWidget);
+      expect(inMove(12, find.textContaining('سجّلها cashier')), findsOneWidget);
+      // الملغاة: شارةٌ بعد العنوان، سببها بسطره، ومبلغها مشطوب
+      expect(inMove(13, find.text('خصم')), findsOneWidget);
+      expect(inMove(13, find.text('ملغاة')), findsOneWidget);
+      expect(inMove(13, find.text('سبب الإلغاء: سُجّلت خطأً')), findsOneWidget);
+      expect(t.widget<Text>(inMove(13, find.text('5,000 د.ع'))).style!.decoration, TextDecoration.lineThrough);
       expect(find.text('كشف 2 — تشرين الأوّل 2026'), findsOneWidget);
-      expect(find.text('كشف 1 (ملغى)'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('emp-ledger-slip-3')), matching: find.text('استُقطع 150,000')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('emp-ledger-slip-2')), matching: find.text('كشف 1')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('emp-ledger-slip-2')), matching: find.text('ملغى')), findsOneWidget);
+      // ثلاث حركات وكشفان: لا عدّ ولا «عرض المزيد»
+      expect(find.byKey(const ValueKey('emp-ledger-moves-count')), findsNothing);
+      expect(find.byKey(const ValueKey('emp-ledger-moves-more')), findsNothing);
+      expect(find.byKey(const ValueKey('emp-ledger-slips-more')), findsNothing);
       // الإلغاء: حركتان فعّالتان + آخر كشفٍ مصروف — لا الملغاة ولا الكشف الملغى
       expect(find.text('إلغاء'), findsNWidgets(3));
       await t.tap(find.descendant(of: find.byKey(const ValueKey('emp-ledger-move-11')), matching: find.text('إلغاء')));
@@ -266,6 +285,350 @@ void main() {
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       expect(find.text('خصومات لكشفه القادم'), findsOneWidget);
+    });
+  });
+
+  // المالك ١٥ نوفمبر (صورة حساب موظف): «حركات هنا تصميمها كلش مو صحيح وخلي القراءات اقصى شي ٥ قراءات ويكدر يحمل المزيد».
+  group('قوائم اللوحة: خمسةٌ ثمّ «عرض المزيد»', () {
+    const more = ValueKey('emp-ledger-moves-more');
+    const less = ValueKey('emp-ledger-moves-less');
+    const retry = ValueKey('emp-ledger-moves-retry');
+    const count = ValueKey('emp-ledger-moves-count');
+    Finder move(int id) => find.byKey(ValueKey('emp-ledger-move-$id'));
+    int shownMoves(WidgetTester t) => t.widgetList(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('emp-ledger-move-'))).length;
+    String countText(WidgetTester t) => t.widget<Text>(find.byKey(count)).data!;
+
+    /// حسابٌ يحمل أوّل [loaded] حركة من [all] بعددها الكلّيّ (كما يردّه الخادم).
+    LedgerAccount accountOf(List<Map<String, dynamic>> all, {int loaded = 30}) => LedgerAccount.fromJson(ledgerAccountJson()
+      ..['movements'] = all.take(loaded).toList()
+      ..['movements_total'] = all.length)!;
+
+    Future<void> tapMore(WidgetTester t, [Key key = more]) async {
+      await t.ensureVisible(find.byKey(key));
+      await t.pump();
+      await t.tap(find.byKey(key));
+      await settle(t, frames: 6);
+    }
+
+    /// يعيد بناء الأب (كما تفعل الشاشة بعد تحميل الحساب) — اللوحة تأخذ ما يردّه `account()` لحظتها.
+    late StateSetter rebuild;
+    Future<void> refresh(WidgetTester t) async {
+      rebuild(() {});
+      await settle(t, frames: 6);
+    }
+
+    Widget host(LedgerAccount Function() account, {bool selfView = false, void Function(LedgerMove m)? onVoid}) => app(Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: StatefulBuilder(
+              builder: (c, set) {
+                rebuild = set;
+                return EmployeeLedgerPanel(account: account(), selfView: selfView, onVoidMove: selfView ? null : (onVoid ?? (_) {}));
+              },
+            ),
+          ),
+        ));
+
+    test('القراءة من الخادم: limit و offset، وتُفهم الصفحة وعددها الكلّيّ — والرفض برسالته', () async {
+      server.allMoves = ledgerMovesJson(47);
+      final r = await EmployeeLedgerApi.movements(7, offset: 30, limit: 30);
+      expect(server.movePages, [(30, 30)]);
+      expect(r.ok, isTrue);
+      expect(r.data!.total, 47);
+      expect(r.data!.items.map((m) => m.id).toList(), [for (var i = 17; i >= 1; i--) i]);
+      server.pageReplies.add((409, {'success': false, 'message': 'تعذّر التحميل الآن'}));
+      final bad = await EmployeeLedgerApi.movements(7, offset: 0);
+      expect(bad.ok, isFalse);
+      expect(bad.message, 'تعذّر التحميل الآن');
+      final slips = await EmployeeLedgerApi.payslips(7, offset: 1, limit: 5);
+      expect(server.slipPages, [(1, 5)]);
+      expect(slips.data!.items.single.id, 2);
+      expect(slips.data!.total, 2);
+    });
+
+    testWidgets('١٢ حركة محمولة: خمسٌ، ثمّ خمسٌ، ثمّ الباقي و«عرض أقلّ» — بلا طلبٍ للخادم', (t) async {
+      await phone(t);
+      final a = accountOf(ledgerMovesJson(12));
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      expect(shownMoves(t), 5);
+      expect(move(12), findsOneWidget);
+      expect(move(8), findsOneWidget);
+      expect(move(7), findsNothing);
+      expect(countText(t), '5 من 12');
+      await tapMore(t);
+      expect(shownMoves(t), 10);
+      expect(countText(t), '10 من 12');
+      await tapMore(t);
+      expect(shownMoves(t), 12);
+      expect(countText(t), '12');
+      expect(find.byKey(more), findsNothing);
+      await tapMore(t, less);
+      expect(shownMoves(t), 5);
+      expect(find.byKey(more), findsOneWidget);
+      expect(server.movePages, isEmpty);
+    });
+
+    testWidgets('خمس حركات فأقلّ: الكرت وحده — لا عدّ ولا زرّ', (t) async {
+      await phone(t);
+      final a = accountOf(ledgerMovesJson(5));
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      expect(shownMoves(t), 5);
+      expect(find.byKey(count), findsNothing);
+      expect(find.byKey(more), findsNothing);
+      expect(find.byKey(less), findsNothing);
+    });
+
+    testWidgets('المدير: بعد ما حمله الحساب تُطلب صفحةٌ من الخادم مرّةً، وتُعرض خمسةً خمسة حتى آخرها', (t) async {
+      await phone(t);
+      server.allMoves = ledgerMovesJson(47);
+      final a = accountOf(server.allMoves!);
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      expect(countText(t), '5 من 47');
+      for (var i = 0; i < 5; i++) {
+        await tapMore(t);
+      }
+      expect(shownMoves(t), 30);
+      expect(server.movePages, isEmpty, reason: 'الثلاثون الأولى من الحساب نفسه');
+      await tapMore(t);
+      expect(server.movePages, [(30, 30)]);
+      expect(shownMoves(t), 35);
+      expect(move(13), findsOneWidget);
+      expect(move(12), findsNothing);
+      expect(countText(t), '35 من 47');
+      await tapMore(t);
+      await tapMore(t);
+      await tapMore(t);
+      expect(shownMoves(t), 47);
+      expect(move(1), findsOneWidget);
+      expect(countText(t), '47');
+      expect(find.byKey(more), findsNothing);
+      expect(find.byKey(less), findsOneWidget);
+      expect(server.movePages, [(30, 30)], reason: 'صفحةٌ واحدة حملت الباقي — الضغطات بعدها ممّا حُمل');
+    });
+
+    testWidgets('تعذّر تحميل المزيد: السبب بمكان الزرّ وما ظهر باقٍ — وإعادة المحاولة تكمل', (t) async {
+      await phone(t);
+      server.allMoves = ledgerMovesJson(47);
+      final a = accountOf(server.allMoves!, loaded: 5);
+      server.pageReplies.add((409, {'success': false, 'message': 'تعذّر التحميل الآن'}));
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      await tapMore(t);
+      expect(server.movePages, [(5, 30)]);
+      expect(shownMoves(t), 5);
+      expect(find.text('تعذّر تحميل المزيد — أعد المحاولة'), findsOneWidget);
+      expect(find.byKey(more), findsNothing);
+      await tapMore(t, retry);
+      expect(server.movePages, [(5, 30), (5, 30)]);
+      expect(shownMoves(t), 10);
+      expect(find.byKey(retry), findsNothing);
+    });
+
+    testWidgets('حسابٌ جديد من الخادم (بعد إلغاءٍ أو تحديث): ما حُمّل بعده يُعاد طلبه، ولا يرجع لخمسة', (t) async {
+      await phone(t);
+      server.allMoves = ledgerMovesJson(47);
+      var a = accountOf(server.allMoves!);
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      for (var i = 0; i < 6; i++) {
+        await tapMore(t);
+      }
+      expect(shownMoves(t), 35);
+      expect(find.descendant(of: move(15), matching: find.text('إلغاء')), findsOneWidget);
+      // المدير ألغى الحركة ١٥ (في الصفحة الإضافيّة) فأعادت الشاشة تحميل الحساب
+      server.allMoves = [
+        for (final m in server.allMoves!)
+          if (m['id'] == 15) {...m, 'status': 'voided', 'void': {'reason': 'خطأ'}} else m,
+      ];
+      a = accountOf(server.allMoves!);
+      await refresh(t);
+      expect(server.movePages, [(30, 30), (30, 30)]);
+      expect(shownMoves(t), 35, reason: 'بقي على ما كان يعرضه');
+      expect(find.descendant(of: move(15), matching: find.text('ملغاة')), findsOneWidget);
+      expect(find.descendant(of: move(15), matching: find.text('إلغاء')), findsNothing);
+    });
+
+    testWidgets('إعادة بناءٍ بالحساب نفسه لا تطلب شيئاً ولا تُسقط ما حُمّل', (t) async {
+      await phone(t);
+      server.allMoves = ledgerMovesJson(47);
+      final a = accountOf(server.allMoves!);
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      for (var i = 0; i < 6; i++) {
+        await tapMore(t);
+      }
+      await refresh(t);
+      expect(server.movePages, [(30, 30)]);
+      expect(shownMoves(t), 35);
+    });
+
+    testWidgets('ردٌّ وصل بعد حسابٍ أحدث يُهمل (لا صفوف قديمة تحت حسابٍ جديد)', (t) async {
+      await phone(t);
+      final old = ledgerMovesJson(12);
+      server.allMoves = old;
+      var a = accountOf(old, loaded: 5);
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      // الردّ المحجوز يحمل الصفحة القديمة (٧ حركات) مهما تغيّر «الخادم» بعدها
+      server.pageReplies.add((200, {'success': true, 'data': old.skip(5).toList(), 'total': 12}));
+      server.holdPages = Completer<void>();
+      await t.ensureVisible(find.byKey(more));
+      await t.pump();
+      await t.tap(find.byKey(more));
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.text('جارٍ التحميل…'), findsOneWidget);
+      // أثناء الانتظار: حسابٌ جديد بخمس حركاتٍ كلّها (حُذف الباقي عند «الخادم» افتراضاً)
+      server.allMoves = ledgerMovesJson(12).take(5).toList();
+      a = accountOf(server.allMoves!, loaded: 5);
+      rebuild(() {});
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.text('جارٍ التحميل…'), findsNothing);
+      server.holdPages!.complete();
+      server.holdPages = null;
+      await settle(t, frames: 6);
+      expect(shownMoves(t), 5);
+      expect(find.byKey(more), findsNothing);
+      expect(find.byKey(retry), findsNothing);
+    });
+
+    testWidgets('حركةٌ سُجّلت بين الحساب والصفحة: الصفّ المكرَّر يظهر مرّةً واحدة، والزرّ لا يدور بلا نهاية', (t) async {
+      await phone(t);
+      final old = ledgerMovesJson(47);
+      final a = accountOf(old);
+      // عند «الخادم» الآن حركةٌ أحدث (٤٨) ⇒ كلّ الصفوف انزاحت واحداً
+      server.allMoves = [
+        {'id': 48, 'kind': 'bonus', 'label': 'مكافأة', 'amount': 1000, 'date': '2026-11-15', 'status': 'active'},
+        ...old,
+      ];
+      await t.pumpWidget(host(() => a));
+      await t.pumpAndSettle();
+      for (var i = 0; i < 10; i++) {
+        if (find.byKey(more).evaluate().isEmpty) break;
+        await tapMore(t);
+      }
+      expect(t.takeException(), isNull);
+      expect(move(18), findsOneWidget, reason: 'آخر صفّ الحساب عاد أوّل الصفحة — يُصفّى');
+      expect(shownMoves(t), 47);
+      expect(move(1), findsOneWidget);
+      // العدّ يقول ٤٨ ⇒ ضغطةٌ أخيرة تطلب ما بعد ما حُمّل فتعود فارغة وينتهي الزرّ
+      for (var i = 0; i < 3; i++) {
+        if (find.byKey(more).evaluate().isEmpty) break;
+        await tapMore(t);
+      }
+      expect(find.byKey(more), findsNothing);
+      expect(find.byKey(less), findsOneWidget);
+      expect(server.movePages, [(30, 30), (48, 30)]);
+    });
+
+    testWidgets('الموظّف يرى حسابه: خمسةً خمسة ممّا حمله حسابه وحده، ثمّ سطرٌ يقول أين الأقدم — بلا طلب', (t) async {
+      await phone(t);
+      server.allMoves = ledgerMovesJson(47);
+      final a = accountOf(server.allMoves!);
+      await t.pumpWidget(host(() => a, selfView: true));
+      await t.pumpAndSettle();
+      expect(countText(t), '5 من 47');
+      expect(find.text('إلغاء'), findsNothing);
+      expect(find.byKey(const ValueKey('emp-ledger-moves-cap')), findsNothing);
+      for (var i = 0; i < 5; i++) {
+        await tapMore(t);
+      }
+      expect(shownMoves(t), 30);
+      expect(countText(t), '30 من 47');
+      expect(find.byKey(more), findsNothing);
+      expect(find.text('هذه أحدث 30 حركة — الأقدم منها عند مديرك.'), findsOneWidget);
+      expect(server.movePages, isEmpty);
+    });
+
+    testWidgets('«إلغاء» على صفٍّ ظهر بعد «عرض المزيد» يصل بحركته هو', (t) async {
+      await phone(t);
+      final voided = <int>[];
+      final a = accountOf(ledgerMovesJson(12));
+      await t.pumpWidget(host(() => a, onVoid: (m) => voided.add(m.id)));
+      await t.pumpAndSettle();
+      await tapMore(t);
+      final link = find.descendant(of: move(6), matching: find.text('إلغاء'));
+      await t.ensureVisible(link);
+      await t.pump();
+      await t.tap(link);
+      expect(voided, [6]);
+    });
+
+    testWidgets('كشوف الرواتب بالقاعدة نفسها: خمسةٌ ثمّ المزيد من الخادم', (t) async {
+      await phone(t);
+      Map<String, dynamic> slip(int id) => {
+            'id': id,
+            'number': id,
+            'status': 'paid',
+            'pay_date': '2026-${(id % 12 + 1).toString().padLeft(2, '0')}-28',
+            'gross': 500000,
+            'recover_sum': 0,
+            'installment_sum': 0,
+            'net': 500000,
+            'source': 'box',
+            'periods': [],
+          };
+      server.allSlips = [for (var i = 8; i >= 1; i--) slip(i)];
+      final a = LedgerAccount.fromJson(ledgerAccountJson()
+        ..['payslips'] = server.allSlips!.take(6).toList()
+        ..['payslips_total'] = 8)!;
+      await t.pumpWidget(app(Scaffold(body: SingleChildScrollView(child: EmployeeLedgerPanel(account: a, onVoidPayslip: (_) {})))));
+      await t.pumpAndSettle();
+      Finder slipRow(int id) => find.byKey(ValueKey('emp-ledger-slip-$id'));
+      expect(slipRow(4), findsOneWidget);
+      expect(slipRow(3), findsNothing);
+      expect(t.widget<Text>(find.byKey(const ValueKey('emp-ledger-slips-count'))).data, '5 من 8');
+      // الإلغاء لآخر كشفٍ مصروف وحده
+      expect(find.descendant(of: slipRow(8), matching: find.text('إلغاء')), findsOneWidget);
+      expect(find.descendant(of: slipRow(7), matching: find.text('إلغاء')), findsNothing);
+      await tapMore(t, const ValueKey('emp-ledger-slips-more'));
+      expect(server.slipPages, [(6, 30)]);
+      expect(slipRow(1), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const ValueKey('emp-ledger-slips-count'))).data, '8');
+    });
+
+    testWidgets('بعرض ٣٢٠ وخطٍّ مكبَّر: لا فيضان بأنواعها كلّها وملاحظةٍ طويلة', (t) async {
+      await phone(t, width: 320);
+      final all = ledgerMovesJson(12);
+      all[0] = {...all[0], 'note': 'تسديدٌ نقديّ على دفعتين بعد اتّفاقٍ مع المدير على تأجيل الباقي إلى الشهر القادم', 'amount': 123456789};
+      final a = accountOf(all);
+      await t.pumpWidget(app(MediaQuery(
+        data: const MediaQueryData(size: Size(320, 1400), textScaler: TextScaler.linear(1.2)),
+        child: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: EmployeeLedgerPanel(account: a, onMove: () {}, onPayslip: () {}, onVoidMove: (_) {}, onVoidPayslip: (_) {}),
+          ),
+        ),
+      )));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      await tapMore(t);
+      await tapMore(t);
+      expect(t.takeException(), isNull);
+      expect(shownMoves(t), 12);
+    });
+
+    testWidgets('شاشة الحساب: إلغاء حركةٍ بعد «عرض المزيد» يُبقي ما كان معروضاً', (t) async {
+      await phone(t);
+      server.allMoves = ledgerMovesJson(12);
+      await t.pumpWidget(app(const EmployeeAccountScreen(employeeId: 7, title: 'أحمد', limitsOn: false, ledger: (canWrite: true, canVoid: true))));
+      await t.pumpAndSettle();
+      expect(shownMoves(t), 5);
+      await tapMore(t);
+      expect(shownMoves(t), 10);
+      final link = find.descendant(of: move(11), matching: find.text('إلغاء'));
+      await t.ensureVisible(link);
+      await t.pump();
+      await t.tap(link);
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const ValueKey('emp-ledger-void-reason')), 'سُجّلت مرّتين');
+      await t.tap(find.byKey(const ValueKey('emp-ledger-void-confirm')));
+      await settle(t, frames: 40);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/movements/11/void').single['reason'], 'سُجّلت مرّتين');
+      expect(shownMoves(t), 10);
     });
   });
 

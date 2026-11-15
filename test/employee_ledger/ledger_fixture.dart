@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -111,6 +112,34 @@ Map<String, dynamic> ledgerAccountJson() => {
       ],
       'payslips_total': 2,
     };
+
+/// [n] حركة مصطنعة (الأحدث أوّلاً، أرقامها تنازليّة من [n]) بأنواعٍ متنوّعة — للقوائم الطويلة و«عرض المزيد».
+/// الرابعة ملغاة بسببها، والثالثة سجّلها موظّفٌ بملاحظة، والسلف من النقد الذي بيده.
+List<Map<String, dynamic>> ledgerMovesJson(int n) {
+  const kinds = [
+    ('repayment', 'تسديد'),
+    ('advance', 'سلفة'),
+    ('bonus', 'مكافأة'),
+    ('deduction', 'خصم'),
+    ('withdraw', 'سحب'),
+    ('loan', 'قرض'),
+  ];
+  return [
+    for (var i = 0; i < n; i++)
+      {
+        'id': n - i,
+        'kind': kinds[i % kinds.length].$1,
+        'label': kinds[i % kinds.length].$2,
+        'amount': 25000 * ((i % 4) + 1),
+        'source': kinds[i % kinds.length].$1 == 'advance' ? 'hand' : (kinds[i % kinds.length].$1 == 'loan' ? 'box' : null),
+        'note': i % 6 == 2 ? 'مكافأة تحصيل الشهر' : null,
+        'date': '2026-11-${(15 - (i ~/ 3)).clamp(1, 28).toString().padLeft(2, '0')}',
+        'status': i % 6 == 3 ? 'voided' : 'active',
+        'by_employee': i % 6 == 2 ? {'id': 9, 'username': 'cashier'} : null,
+        if (i % 6 == 3) 'void': {'at': '2026-11-14T10:00:00.000Z', 'by': 'admin', 'reason': 'سُجّلت مرّتين'},
+      },
+  ];
+}
 
 Map<String, dynamic> ledgerPreviewJson() => {
       'employee': {'id': 7, 'username': 'emp1', 'name': 'أحمد'},
@@ -303,7 +332,37 @@ class LedgerServer implements HttpClientAdapter {
 
   /// حساب الموظّف ٧ (و«حسابي») براتبٍ في صفحةٍ أخرى من صفحاته بدل راتبه هنا.
   bool salaryElsewhere = false;
-  Map<String, dynamic> _account() => salaryElsewhere ? (ledgerAccountJson()..['salary'] = elsewhereSalaryJson()) : ledgerAccountJson();
+  Map<String, dynamic> _account() {
+    final a = accountJson?.call() ?? ledgerAccountJson();
+    if (salaryElsewhere) a['salary'] = elsewhereSalaryJson();
+    final moves = allMoves;
+    if (moves != null) {
+      a['movements'] = moves.take(accountMoves).toList();
+      a['movements_total'] = moves.length;
+    }
+    return a;
+  }
+
+  /// حسابٌ بديل للموظّف ٧ (و«حسابي») — null = [ledgerAccountJson].
+  Map<String, dynamic> Function()? accountJson;
+
+  /// كلّ حركات الموظّف ٧ عند «الخادم» (الأحدث أوّلاً): الحساب يحمل أوّل [accountMoves] منها بعددها الكلّيّ، و
+  /// `GET /7/movements?limit&offset` يقطّعها. null ⇒ حركات [ledgerAccountJson] الثلاث.
+  List<Map<String, dynamic>>? allMoves;
+  int accountMoves = 30;
+
+  /// ردودٌ مفروضة لطلبات الصفحات (فشلٌ مثلاً) — تُستهلك بالترتيب قبل التقطيع.
+  final List<(int, Map<String, dynamic>)> pageReplies = [];
+
+  /// `(offset, limit)` كلّ طلب صفحة حركات، بترتيبها.
+  final List<(int, int)> movePages = [];
+
+  /// طلب صفحة الحركات ينتظر اكتمال هذا قبل أن يردّ (ردٌّ يصل متأخّراً).
+  Completer<void>? holdPages;
+
+  /// كلّ كشوف الموظّف ٧ عند «الخادم» (الأحدث أوّلاً) لـ`GET /7/payslips?limit&offset` — null ⇒ كشفا [ledgerAccountJson].
+  List<Map<String, dynamic>>? allSlips;
+  final List<(int, int)> slipPages = [];
 
   /// «الموظف المتّصل الآن» مفتوحةٌ لهذه الصفحة (الافتراض مطفأة: اختبارات الدفتر كما هي).
   bool presenceOn = false;
@@ -423,6 +482,22 @@ class LedgerServer implements HttpClientAdapter {
           'presets': <String, Object>{},
         },
       });
+    } else if (p == '$base/7/movements' && m == 'GET') {
+      final off = int.tryParse('${o.queryParameters['offset']}') ?? 0;
+      final lim = int.tryParse('${o.queryParameters['limit']}') ?? 30;
+      movePages.add((off, lim));
+      final forced = pageReplies.isNotEmpty ? pageReplies.removeAt(0) : null;
+      final hold = holdPages;
+      if (hold != null) await hold.future;
+      // تُقرأ بعد الانتظار: «الخادم» يردّ بما عنده لحظة الردّ
+      final all = allMoves ?? (ledgerAccountJson()['movements'] as List).cast<Map<String, dynamic>>();
+      reply = forced ?? (200, {'success': true, 'data': all.skip(off).take(lim).toList(), 'total': all.length});
+    } else if (p == '$base/7/payslips' && m == 'GET') {
+      final off = int.tryParse('${o.queryParameters['offset']}') ?? 0;
+      final lim = int.tryParse('${o.queryParameters['limit']}') ?? 12;
+      slipPages.add((off, lim));
+      final all = allSlips ?? (ledgerAccountJson()['payslips'] as List).cast<Map<String, dynamic>>();
+      reply = (200, {'success': true, 'data': all.skip(off).take(lim).toList(), 'total': all.length});
     } else if (p == '$base/7/movements' && m == 'POST') {
       reply = moveReplies.isNotEmpty ? moveReplies.removeAt(0) : (200, {'success': true, 'duplicate': false, 'movements': [], 'data': ledgerAccountJson()});
     } else if (p == '$base/7/movements/11/void' && m == 'POST') {
