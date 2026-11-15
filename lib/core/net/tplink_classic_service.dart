@@ -444,22 +444,15 @@ class TplinkClassicService {
     return null;
   }
 
-  /// صفحة دخول «PCWin/PCSubWin» (TL-WR845N وأشباهه الرخيصة القديمة): سكربت الصفحة يبني كوكي
+  /// صفحة دخول «PCWin/PCSubWin» (TL-WR840N v6 · TL-WR845N وأشباههما الرخيصة القديمة): سكربت الصفحة يبني كوكي
   /// `Authorization=Basic Base64Encoding(userName + ":" + password)` بكلمة سرٍّ **خام** (لا MD5)، وبلا `httpAutErrorArray`.
-  /// يميّزها عن الكوكي-MD5 (`httpAutErrorArray`) وعن CGI/GDPR وMER. الدلائل من صفحة 215 الحيّة نفسها (مسحٌ بلا دخول).
+  /// يميّزها عن الكوكي-MD5 (`httpAutErrorArray`) وعن CGI/GDPR وMER. التعرّف والقراءة في `TplinkCgiPlainService` (واجهتها «$.act»
+  /// لا userRpm) — هنا المميِّز وحده.
   static bool isRawBasicLogin(String html) =>
       html.contains('Authorization') &&
       html.contains('Base64Encoding') &&
       html.contains('pcPassword') &&
       !html.contains('httpAutErrorArray');
-
-  /// أهي صفحة دخول «rawbasic» (WR845N)؟ `GET /` **بلا اعتماد** — تعرّفٌ وحده: مسار الدخول والقراءة لهذا الطراز لم يُقَس حيّاً
-  /// بعد (الجهاز غير واصلٍ الآن)، فلا نرسل يوزر وباسورد (قد يُحسب محاولة على راوترٍ حقيقيّ) — نعرّفه راوتر TP-Link ونكتفي.
-  static Future<bool> detectRawBasic(String host) async {
-    final r = await _get(host.trim(), '/', timeout: const Duration(seconds: 5));
-    if (r == null || r.status != 200) return false;
-    return isRawBasicLogin(r.body);
-  }
 
   /// `escape()` في JavaScript (ما يفعله الجهاز نفسه بالكوكي): تبقى الحروف والأرقام و`@*_+-./`، وغيرها `%XX`.
   @visibleForTesting

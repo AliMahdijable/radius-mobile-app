@@ -216,8 +216,9 @@ class CgiParse {
 
   static int? _i(String? v) => v == null ? null : int.tryParse(v.trim());
 
-  /// قراءة الحالة (ترتيب [TplinkCgiService.readActions]) ⇒ لقطة الراوتر.
-  static UbiquitiStatus? status(Map<int, List<Map<String, String>>> o, {required String baseUrl}) {
+  /// قراءة الحالة (ترتيب [TplinkCgiService.readActions]) ⇒ لقطة الراوتر. [vendor]: `tpcgi` (المعمّى، Archer C50) أو `tp845`
+  /// (الخام القديم، WR840N v6 — الكائنات نفسها).
+  static UbiquitiStatus? status(Map<int, List<Map<String, String>>> o, {required String baseUrl, String vendor = 'tpcgi'}) {
     final dev = (o[0] ?? const []).isNotEmpty ? o[0]!.first : const <String, String>{};
     final ppp = o[1] ?? const <Map<String, String>>[];
     final ipc = o[2] ?? const <Map<String, String>>[];
@@ -265,7 +266,7 @@ class CgiParse {
       peerMac: null,
       peerCount: o.containsKey(4) ? clients.length : null,
       baseUrl: baseUrl,
-      vendor: 'tpcgi',
+      vendor: vendor,
       model: hw.isNotEmpty ? hw.replaceAll(RegExp(r'\s+[0-9A-Fa-f]{6,}$'), '') : model,
       wanOnlineSeconds: _i(conn?['uptime']),
       dhcpCount: o.containsKey(3) ? hosts.length : null,

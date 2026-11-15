@@ -439,50 +439,7 @@ void main() {
           reason: 'راوتر TP-Link معرّفٌ بلا دخول ⇒ لا محاولة دخول هواوي تطرقه في موجة النوع الأولى');
     });
 
-    test('WR845N (rawbasic): تعرّفٌ راوتر بلا دخول — صيغة دخولٍ جديدة، ولا هواوي/airOS يطرقانه، والفحص التالي لفرعه', () async {
-      final raw = await HttpServer.bind('127.0.0.1', 0);
-      addTearDown(() => raw.close(force: true));
-      final rawPaths = <String>[];
-      var authTries = 0;
-      raw.listen((r) {
-        rawPaths.add(r.uri.path);
-        final cookie = r.headers.value(HttpHeaders.cookieHeader) ?? '';
-        if (r.headers.value(HttpHeaders.authorizationHeader) != null || cookie.contains('Authorization')) authTries++;
-        r.response
-          ..statusCode = 200
-          ..write('<html><head><script>function PCSubWin(){'
-              'document.cookie="Authorization=Basic "+Base64Encoding(pcName.value+":"+pcPassword.value)+";path=/";'
-              'location.reload();}</script></head><body><input id="pcPassword" type="password"></body></html>')
-          ..close();
-      });
-      final host = '127.0.0.1:${raw.port}';
-      // اعتماد ONT موجودٌ عمداً (ليثبت أنّ هواوي لا يُرسَل)؛ وبلا اعتماد UBNT ⇒ يُجرَّب ubnt/ubnt لولا البوّابة.
-      api.defaults = {'ontUsername': 'o', 'ontPassword': 'o-p', 'tplinkUsername': 'admin', 'tplinkPassword': '0000'};
-      final huaweiHits = <String>[];
-      DeviceProbeApi.debugOnHuaweiProbe = huaweiHits.add;
-      addTearDown(() => DeviceProbeApi.debugOnHuaweiProbe = null);
-
-      final snap = await DeviceProbeApi.probe(fallbackIp: host, force: true);
-      // اهدأ: انتظر فروع الخلفيّة حتى تسكت الطلبات
-      var seen = rawPaths.length;
-      for (var i = 0; i < 60; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-        if (rawPaths.length == seen) break;
-        seen = rawPaths.length;
-      }
-
-      expect(snap, isNull, reason: 'تعرّفٌ بلا دخول ⇒ لا قراءة');
-      final why = DeviceProbeApi.issueFor(ip: host);
-      expect([why?.issue, why?.vendor], [ProbeIssue.unknownLogin, 'tplink'],
-          reason: 'راوتر TP-Link بصيغة دخولٍ جديدة — بلا قيمٍ كاذبة');
-      expect(huaweiHits, isEmpty, reason: 'راوتر tp845 معرّفٌ ⇒ دخول هواوي لا يطرقه');
-      expect(authTries, 0, reason: 'تعرّفٌ GET وحده — لا يوزر وباسورد يُرسل (لا يُحسب محاولة على راوترٍ حقيقيّ)');
-
-      // الفحص التالي يذهب لفرعه مباشرةً (المورّد محفوظ) — لا يزال تعرّفاً بلا دخول
-      final snap2 = await DeviceProbeApi.probe(fallbackIp: host, force: true);
-      expect(snap2, isNull);
-      expect(DeviceProbeApi.issueFor(ip: host)?.issue, ProbeIssue.unknownLogin);
-    });
+    // WR840N v6 / WR845N (صيغة «rawbasic»): صار يُقرأ (١٥ نوفمبر) — تعرّفه وقارئه وفحصه الكامل في tplink_cgi_plain_test.dart.
 
     test('الفحص التالي يذهب لفرعه وحده — صفحات userRpm فقط', () async {
       api.defaults = {'tplinkUsername': 'admin', 'tplinkPassword': '0000'};

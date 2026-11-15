@@ -9,6 +9,7 @@ import '../core/net/huawei_ont_service.dart';
 import '../core/net/tenda_service.dart';
 import '../core/net/zte_ont_service.dart';
 import '../core/net/tplink_agile_service.dart';
+import '../core/net/tplink_cgi_plain_service.dart';
 import '../core/net/tplink_cgi_service.dart';
 import '../core/net/tplink_classic_service.dart';
 import '../core/net/tplink_mer_service.dart';
@@ -273,6 +274,7 @@ class DeviceProbeApi {
     TplinkAgileService.reset();
     TendaService.reset();
     TplinkCgiService.reset();
+    TplinkCgiPlainService.reset();
     TplinkMerService.reset();
     _adminFetch = null;
     _adminFetchBy.clear();
@@ -411,6 +413,7 @@ class DeviceProbeApi {
       TplinkAgileService.forget(effectiveIp, manual: true);
       TendaService.forget(effectiveIp);
       TplinkCgiService.forget(effectiveIp);
+      TplinkCgiPlainService.forget(effectiveIp, manual: true);
       TplinkMerService.forget(effectiveIp);
     }
 
@@ -583,6 +586,7 @@ class DeviceProbeApi {
     TplinkAgileService.forget(ip.trim());
     TendaService.forget(ip.trim());
     TplinkCgiService.forget(ip.trim());
+    TplinkCgiPlainService.forget(ip.trim());
     TplinkMerService.forget(ip.trim());
     _schedulePersist();
   }
@@ -932,8 +936,8 @@ class DeviceProbeApi {
     // راوترا TP-Link: CGI+GDPR (Archer C50) بيوزر وباسورد، و$.su/MER (Archer C64) بكلمة سرٍّ وحدها (١٢ نوفمبر).
     if (_radioVendorByKey[kindKey] == 'tpcgi') return _probeTpCgiAny(ip, c.tplink, kindKey);
     if (_radioVendorByKey[kindKey] == 'tpmer') return _probeTpMerAny(ip, c.tprouter, kindKey);
-    // WR845N: معرّفٌ راوتر TP-Link بصيغة دخولٍ غير مدعومة بعد — فرعه وحده (تعرّفٌ بلا دخول، لا يطرقه هواوي/airOS).
-    if (_radioVendorByKey[kindKey] == 'tp845') return _probeTp845(ip, kindKey);
+    // WR840N v6 / WR845N (واجهة «$.act» القديمة بكوكي خام، ١٥ نوفمبر) — فرعه وحده بيوزر وباسورد قائمة TP-Link.
+    if (_radioVendorByKey[kindKey] == 'tp845') return _probeTp845Any(ip, c.tplink, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -1060,7 +1064,7 @@ class DeviceProbeApi {
       tp845Done = true;
       if (done.isCompleted) return;
       if (yes) {
-        done.complete(viaRouter(() => _probeTp845(ip, kindKey)));
+        done.complete(viaRouter(() => _probeTp845Any(ip, c.tplink, kindKey)));
       } else {
         noneYet();
       }
@@ -1093,8 +1097,8 @@ class DeviceProbeApi {
   static Future<bool> _isTpCgi(String ip) => _helloTpCgi(ip);
   static Future<bool> _helloTpMer(String ip) => _helloFamily('mer', ip, TplinkMerService.detect);
   static Future<bool> _isTpMer(String ip) => _helloTpMer(ip);
-  // WR845N (صيغة دخول «rawbasic»، ١٥ نوفمبر): تعرّفٌ وحده — صفحة دخولٍ لم تُقَس حيّاً بعد ⇒ نعرّفه راوتراً ولا ندخل.
-  static Future<bool> _helloTp845(String ip) => _helloFamily('tp845', ip, TplinkClassicService.detectRawBasic);
+  // WR840N v6 / WR845N (صيغة دخول «rawbasic»، ١٥ نوفمبر): التعرّف بصفحة الدخول بلا اعتماد، ويحفظ عدّاد المحاولات لقراءةٍ تليه.
+  static Future<bool> _helloTp845(String ip) => _helloFamily('tp845', ip, TplinkCgiPlainService.detect);
   static Future<bool> _isTp845(String ip) => _helloTp845(ip);
 
   /// راوتر TP-Link بواجهة CGI+GDPR: مرشّحو قائمة TP-Link (يوزر وباسورد) — دخولٌ بجلسةٍ على اتّصالٍ واحد، القراءة، الخروج
@@ -1181,12 +1185,48 @@ class DeviceProbeApi {
     return null;
   }
 
-  /// WR845N وأشباهه: عرّفناه راوتر TP-Link بصيغة دخول «rawbasic» (مسحٌ بلا دخول) — لكنّ مسار دخوله وقراءته لم يُقَسا حيّاً بعد
-  /// (الجهاز غير واصلٍ وقت الإضافة). **لا نرسل يوزر وباسورد** (قد يُحسب محاولةً على راوترٍ حقيقيّ) ⇒ لا قراءة، والكرت يقول
-  /// «صيغة دخولٍ جديدة» بلا قيمٍ كاذبة. حفظُ المورّد يمنع طرقه بهواوي/airOS كلّ موجة. يكتمل القارئ أوّل ما يرجع الجهاز.
-  static Future<DeviceHealthSnapshot?> _probeTp845(String ip, String kindKey) async {
-    _radioVendorByKey[kindKey] = 'tp845';
-    _tplinkNote(ip, ProbeIssue.unknownLogin, 'wr845n rawbasic — detect only, reader pending live device');
+  /// راوتر TP-Link بواجهة «$.act» القديمة وكوكي خام (TL-WR840N v6 · TL-WR845N — [TplinkCgiPlainService]، مقيسٌ حيّاً ١٥ نوفمبر):
+  /// مرشّحو قائمة TP-Link (يوزر وباسورد). حالة صفحة الدخول تُقرأ قبل أيّ إرسال (مقفل / خمس محاولاتٍ غلط / مديرٌ آخر داخل ⇒ لا
+  /// إرسال)، ثمّ دخول وقراءة وخروج. المرفوض لا يُعاد، والتالي بعد رفضٍ صريحٍ وحده — العاشرة الغلط تقفل الراوتر ساعتين.
+  static Future<DeviceHealthSnapshot?> _probeTp845Any(String ip, List<DeviceCred> cands, String kindKey) async {
+    _radioVendorByKey[kindKey] = TplinkCgiPlainService.vendor;
+    if (cands.isEmpty) {
+      _tplinkNote(ip, ProbeIssue.needsCredentials, 'cgi-plain no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _tplinkWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await TplinkCgiPlainService.readOnce(ip, list[i].username, list[i].password);
+      } catch (_) {
+        _tplinkNote(ip, ProbeIssue.unreachable, 'cgi-plain error');
+        break;
+      }
+      if (status != null) {
+        _tplinkWinner[kindKey] = list[i];
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = TplinkCgiPlainService.lastIssue(ip);
+      _tplinkNote(
+        ip,
+        switch (why?.issue) {
+          CgiPlainIssue.rejected => ProbeIssue.loginRejected,
+          CgiPlainIssue.locked => ProbeIssue.locked,
+          CgiPlainIssue.tooManyFails => ProbeIssue.tooManyFails,
+          CgiPlainIssue.busy => ProbeIssue.busy,
+          CgiPlainIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        'cgi-plain ${why?.trace ?? '?'}',
+        lockLeft: why?.lockLeft,
+      );
+      if (why?.issue == CgiPlainIssue.unreachable) {
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != CgiPlainIssue.rejected) break;
+    }
     return null;
   }
 
@@ -1432,6 +1472,7 @@ class DeviceProbeApi {
     if (known == 'tenda') return _probeTendaAny(ip, tprouter, kindKey);
     if (known == 'tpcgi') return _probeTpCgiAny(ip, tplink, kindKey);
     if (known == 'tpmer') return _probeTpMerAny(ip, tprouter, kindKey);
+    if (known == 'tp845') return _probeTp845Any(ip, tplink, kindKey);
     final hello = await _helloTplink(ip);
     if (hello != null) return _probeTplinkAny(ip, tplink, kindKey, hello: hello);
     final classic = await _helloTpClassic(ip);
@@ -1440,6 +1481,7 @@ class DeviceProbeApi {
     if (await _helloTenda(ip)) return _probeTendaAny(ip, tprouter, kindKey);
     if (await _helloTpCgi(ip)) return _probeTpCgiAny(ip, tplink, kindKey);
     if (await _helloTpMer(ip)) return _probeTpMerAny(ip, tprouter, kindKey);
+    if (await _helloTp845(ip)) return _probeTp845Any(ip, tplink, kindKey);
     return _probeUbntAny(ip, ubnt, kindKey);
   }
 

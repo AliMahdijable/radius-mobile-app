@@ -270,8 +270,11 @@ class UbiquitiStatus {
   /// راوتر TP-Link بواجهة «$.su» وبروتوكول MER (Archer C64 وأخواته على https:8443، ١٢ نوفمبر) — كلمة سرٍّ وحدها.
   bool get isTpMer => vendor == 'tpmer';
 
+  /// راوتر TP-Link بواجهة «$.act» القديمة بلا تعمية وكوكي خام (TL-WR840N v6 · TL-WR845N، ١٥ نوفمبر) — يوزر وباسورد، قراءةٌ وحدها.
+  bool get isTpCgiPlain => vendor == 'tp845';
+
   /// جهاز المشترك راوترٌ منزليّ (لا راديو) — ما يُعرض له يختلف: المتّصلون ومدّة الاتصال لا الإشارة والمنافذ.
-  bool get isRouter => isTpClassic || isTpAgile || isTenda || isTpCgi || isTpMer;
+  bool get isRouter => isTpClassic || isTpAgile || isTenda || isTpCgi || isTpMer || isTpCgiPlain;
 
   /// سرعة ربط منفذ الإنترنت (WAN) بالميغابت كما يقولها الراوتر («100») — null حين لا يصدّرها (TP-Link الكلاسيكيّ وAgile).
   final int? wanLinkMbps;
