@@ -264,7 +264,7 @@ void main() {
       closed = await _closedPort();
       MikrotikCpeService.apiPortOf = (_) => port;
       MikrotikCpeService.winboxPortOf = (_) => closed;
-      MikrotikCpeService.detectTimeout = const Duration(milliseconds: 600);
+      MikrotikCpeService.detectTimeout = const Duration(seconds: 3); // حِمل الحزمة الكاملة يؤخّر اتّصال loopback — المقفول يُرفض فوراً فلا بطء
       // REST وSSH «مقفولان» في الاختبار — لا شبكة حقيقيّة
       MikrotikCpeService.channelFactory = (host, route, user, pass) => route == MtRoute.api
           ? BinaryRouterOsChannel(MikrotikBinaryClient(host: host, port: port, user: user, pass: pass, timeout: const Duration(seconds: 3)))
@@ -384,15 +384,16 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      await DeviceProbeApi.clearAllCaches();
-      MikrotikCpeService.reset();
       MikrotikBinaryClient.trapDoneWait = const Duration(milliseconds: 300);
       d = FakeRouterOs()..sxtNano();
       final port = await d.start();
       closed = await _closedPort();
+      // المنافذ أوّلاً ثمّ التصفير: فروع فحص الاختبار السابق الخلفيّة (يوبيكويتي/هواوي) تسأل تعرّف ميكروتك — لو سألت بين التصفير
+      // والضبط لعرفته على 8728 الحقيقيّ (مقفول) وخبّأت «ليس ميكروتك» ٣٠ث.
       MikrotikCpeService.apiPortOf = (_) => port;
       MikrotikCpeService.winboxPortOf = (_) => closed;
-      MikrotikCpeService.detectTimeout = const Duration(milliseconds: 600);
+      await DeviceProbeApi.clearAllCaches();
+      MikrotikCpeService.detectTimeout = const Duration(seconds: 3); // حِمل الحزمة الكاملة يؤخّر اتّصال loopback — المقفول يُرفض فوراً فلا بطء
       MikrotikCpeService.channelFactory = (host, route, user, pass) => route == MtRoute.api
           ? BinaryRouterOsChannel(MikrotikBinaryClient(host: host, port: port, user: user, pass: pass, timeout: const Duration(seconds: 3)))
           : _DeadChannel();
@@ -414,6 +415,8 @@ void main() {
       DeviceProbeApi.invalidateAdminDefaults();
     });
     tearDown(() async {
+      // فروع السباق الخاسرة تكمل بالخلفيّة بعد أن يحسم الفحص — تُترك تنتهي قبل إيقاف الجهاز وإعادة المنافذ
+      await Future<void>.delayed(const Duration(milliseconds: 500));
       await d.stop();
       MikrotikCpeService.reset();
       MikrotikBinaryClient.trapDoneWait = const Duration(seconds: 2);
