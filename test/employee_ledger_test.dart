@@ -117,7 +117,7 @@ void main() {
       expect(a.movements[2].voidReason, 'سُجّلت خطأً');
       expect(a.payslips, hasLength(2));
       expect(a.latestPaid!.id, 3, reason: 'آخر كشفٍ مصروف — الملغى لا يُحسب');
-      expect(a.payslips.first.periodLabels, ['تشرين الأوّل 2026']);
+      expect(a.payslips.first.periodLabels, ['2026/10'], reason: 'من مفتاح الفترة لا اسم الشهر الذي يرسله الخادم');
       expect(a.payslips.first.deducted, 150000);
       expect(a.featureEnabled, isTrue);
     });
@@ -239,7 +239,7 @@ void main() {
       expect(inMove(13, find.text('ملغاة')), findsOneWidget);
       expect(inMove(13, find.text('سبب الإلغاء: سُجّلت خطأً')), findsOneWidget);
       expect(t.widget<Text>(inMove(13, find.text('5,000 د.ع'))).style!.decoration, TextDecoration.lineThrough);
-      expect(find.text('كشف 2 — تشرين الأوّل 2026'), findsOneWidget);
+      expect(find.text('كشف 2 — 2026/10'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('emp-ledger-slip-3')), matching: find.text('استُقطع 150,000')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('emp-ledger-slip-2')), matching: find.text('كشف 1')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('emp-ledger-slip-2')), matching: find.text('ملغى')), findsOneWidget);
@@ -740,7 +740,7 @@ void main() {
       Object? result;
       await opener(t, (c) => showEmployeePayslipSheet(c, employeeId: 7, name: 'أحمد'), (r) => result = r);
       expect(find.text('كشف الراتب'), findsOneWidget);
-      expect(find.text('تشرين الثاني 2026'), findsOneWidget);
+      expect(find.text('2026/11'), findsOneWidget);
       expect(find.text('الراتب'), findsOneWidget);
       expect(find.text('مكافآت (1)'), findsOneWidget);
       expect(find.text('المستحقّ — ينزل في المصاريف'), findsOneWidget);

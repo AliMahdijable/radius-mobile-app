@@ -653,17 +653,17 @@ DateTime balanceBaghdad(int ms) => DateTime.fromMillisecondsSinceEpoch(ms, isUtc
 int balanceMsFromBaghdad(int year, int month, int day, int hour, int minute) =>
     DateTime.utc(year, month, day, hour - 3, minute).millisecondsSinceEpoch;
 
-/// «10 تشرين الأوّل» (والسنة حين ليست سنة اليوم).
+/// «2026/10/10» (أرقامٌ لا اسم شهر — المالك ١٦ نوفمبر؛ [nowMs] لا أثر له الآن).
 String balanceDay(int ms, {int? nowMs}) =>
     iqDateOf(balanceBaghdad(ms), today: balanceBaghdad(nowMs ?? DateTime.now().millisecondsSinceEpoch));
 
-/// «10 تشرين الأوّل · 14:30».
+/// «2026/10/10 · 14:30».
 String balanceDayTime(int ms, {int? nowMs}) {
   final d = balanceBaghdad(ms);
   return '${balanceDay(ms, nowMs: nowMs)} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
-/// «شحن 10 تشرين الأوّل»؛ وبلا مبلغ بعد: «فترة جديدة» (لا شحن يُسمّى باسمه بعد).
+/// «شحن 2026/10/10»؛ وبلا مبلغ بعد: «فترة جديدة» (لا شحن يُسمّى باسمه بعد).
 String balancePeriodTitle(BalancePeriod p, {int? nowMs}) => p.amountPending ? 'فترة جديدة' : 'شحن ${balanceDay(p.startedAtMs, nowMs: nowMs)}';
 
 String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/ar_date.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 
@@ -293,19 +294,11 @@ String recurringDueDate(String period, int day) {
   return '$period-${d.toString().padLeft(2, '0')}';
 }
 
-/// «تشرين الأوّل 2026».
-String recurringPeriodLabel(String? period) {
-  final m = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(period ?? '');
-  if (m == null) return period ?? '';
-  return '${'rexp.m${int.parse(m.group(2)!)}'.tr()} ${m.group(1)}';
-}
+/// «2026/10» — أرقامٌ لا اسم شهر (المالك ١٦ نوفمبر؛ `ar_date.dart`).
+String recurringPeriodLabel(String? period) => iqPeriodLabel(period);
 
-/// «5 تشرين الأوّل 2026».
-String recurringDateLabel(String? date) {
-  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(date ?? '');
-  if (m == null) return date ?? '';
-  return '${int.parse(m.group(3)!)} ${'rexp.m${int.parse(m.group(2)!)}'.tr()} ${m.group(1)}';
-}
+/// «2026/10/05».
+String recurringDateLabel(String? date) => iqDateLabel(date);
 
 String recurringEveryLabel(int every) => 'rexp.every_$every'.tr();
 
@@ -318,7 +311,7 @@ String recurringScheduleText({required int every, required int day, String? endP
       if (endPeriod != null) 'rexp.until_n'.tr(namedArgs: {'p': recurringPeriodLabel(endPeriod)}),
     ].join(' · ');
 
-/// «تشرين الأوّل 2026 — أُضيفت تلقائيّاً».
+/// «2026/10 — أُضيفت تلقائيّاً».
 String recurringLastText(RecurringRun r) {
   final how = switch ((r.status, r.how)) {
     ('pending', _) => 'rexp.last_pending'.tr(),

@@ -492,7 +492,7 @@ class _ExpenseTile extends StatelessWidget {
                     if (row.isRecurring) ...[
                       const SizedBox(height: 3),
                       ToneChip(
-                        // «ثابتة · تشرين الأوّل 2026» — الشهر بالشارة لا برقمٍ بالملاحظة.
+                        // «ثابتة · 2026/10» — الشهر بالشارة لا بلاحقة الملاحظة.
                         label: (row.recurringPeriod ?? '').isEmpty
                             ? 'rexp.badge'.tr()
                             : '${'rexp.badge'.tr()} · ${iqPeriodLabel(row.recurringPeriod)}',

@@ -330,7 +330,7 @@ class ReportLogTile extends StatelessWidget {
       if (dt == null) return iso;
       final h = dt.hour.toString().padLeft(2, '0');
       final mi = dt.minute.toString().padLeft(2, '0');
-      // «23 تشرين الأوّل · 18:05» لا «2026-10-23 18:05» (المالك ٢٤ أكتوبر).
+      // «2026/10/23 · 18:05» — أرقامٌ لا اسم شهر (المالك ١٦ نوفمبر).
       return '${iqDateOf(dt)} · $h:$mi';
     } catch (_) {
       return iso;

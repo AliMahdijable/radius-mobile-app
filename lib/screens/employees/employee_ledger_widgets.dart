@@ -707,7 +707,7 @@ class _LedgerRow extends StatelessWidget {
                           children: [
                             Text(
                               title,
-                              // يلتفّ بأضيق هاتف وخطٍّ مكبَّر بدل أن يُقصّ («كشف 2 — تشرين الأوّل 2026»)
+                              // يلتفّ بأضيق هاتف وخطٍّ مكبَّر بدل أن يُقصّ («كشف 2 — 2026/10، 2026/11»)
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: AppType.rowValue(color: faded ? AppColors.textLow : AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
