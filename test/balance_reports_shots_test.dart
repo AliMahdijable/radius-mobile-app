@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,11 +13,13 @@ import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 
 import 'balance_reports/balance_fixture.dart';
+import 'balance_reports/contract_server.dart';
 import 'visual_perm/visual_perm_harness.dart';
 
 /// «تقارير الأرصدة» — لقطاتٌ للمراجعة (١٦ نوفمبر): الصفحة بمثال المالك، ورقة التسوية، بعد التسوية، ثلاث فترات، تفاصيل فترةٍ مغلقة
 /// وفلتر «كان دين وتسدّد»، أوّل شحنة، وكرت التقارير — بعرض شاشة المالك (٤٨٠) فاتحاً، وأضيق هاتف (٣٢٠) داكناً.
 /// كلّ لقطةٍ بطول محتواها ([_fit]) وبظلالها الحقيقيّة. بياناتٌ تجريبيّة وحدها.
+/// ١٦ نوفمبر: لقطات المدراء الفرعيّين داخل الحساب من **ردّ الخادم الحقيقيّ** (server_contract_managers.json) بأوقاتٍ مزاحة.
 /// المخرجات: VISUAL_OUT (أو build/visual_perm المُتجاهَل بgit).
 const _wide = VisualDevice('480', Size(480, 1040), 3);
 const _narrowDark = VisualDevice('320_dark', Size(320, 693), 3, dark: true);
@@ -61,7 +65,7 @@ Future<void> _fit(WidgetTester t, VisualDevice d) async {
 void main() {
   setUpAll(visualSetUpAll);
 
-  Future<void> up(BalanceServer server) async {
+  Future<void> up(HttpClientAdapter server) async {
     await visualSetUp(s1bSasOwner);
     ApiClient.dio.httpClientAdapter = server;
     PermissionsService.debugSet(isEmployee: false);
@@ -126,6 +130,33 @@ void main() {
       await tap(t, k('bal-filter-paid'));
       await _fit(t, d);
       await _shot(t, '06_detail_was_debt_paid', d);
+    });
+  }
+
+  /// عقد الخادم ومفتاح المدراء مفتوح، وكلّ أوقاته مزاحةٌ أيّاماً للوراء حتى لا تقع في المستقبل يوم التصوير.
+  Map<String, dynamic> managersContract({int daysBack = 70}) {
+    Object? shift(Object? v, [String key = '']) => switch (v) {
+          final Map m => {for (final e in m.entries) '${e.key}': shift(e.value, '${e.key}')},
+          final List l => [for (final x in l) shift(x)],
+          final int n when key.endsWith('_ms') => n - daysBack * 86400000,
+          _ => v,
+        };
+    return shift(jsonDecode(File('test/balance_reports/server_contract_managers.json').readAsStringSync()))! as Map<String, dynamic>;
+  }
+
+  for (final d in [_wide, _narrowDark]) {
+    shots('المدراء الفرعيّون داخل الحساب ${d.tag}', (t) async {
+      await up(BalanceContractServer(managersContract()));
+      await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+      await settle(t, seconds: 2);
+      await _fit(t, d);
+      await _shot(t, '10_managers_page', d);
+      await tap(t, find.descendant(of: k('bal-period-1'), matching: find.byType(InkWell)).first);
+      await _fit(t, d);
+      await _shot(t, '11_managers_detail', d);
+      await tap(t, k('bal-filter-managers'));
+      await _fit(t, d);
+      await _shot(t, '12_managers_filter', d);
     });
   }
 

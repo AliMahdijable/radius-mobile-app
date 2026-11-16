@@ -439,6 +439,7 @@ class BalanceStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = period;
+    final mg = p.managers;
     final profitSub = p.pocketOutstanding > 0
         ? 'دفعت ${formatIQD(p.pocketOutstanding)} بالتسوية وبعدها ما رجعت'
         : p.isClosed && p.lateProfit > 0
@@ -461,7 +462,13 @@ class BalanceStats extends StatelessWidget {
             tone: AppTone.success,
             label: 'طبّلك',
             value: balanceIqd(p.collected),
-            lines: ['نقد التفعيلات ${formatIQD(p.cashNow)}', 'تسديد ديونها ${formatIQD(p.paidIn)}'],
+            lines: [
+              'نقد التفعيلات ${formatIQD(p.cashNow)}',
+              'تسديد ديونها ${formatIQD(p.paidIn)}',
+              // المدراء الفرعيّون داخل الرقم (حين يفتح الخادم مفتاحهم): ما دخل منهم، وما رُدّ لهم بالسحب
+              if (mg != null && mg.cash + mg.paidIn > 0) 'من المدراء الفرعيّين ${formatIQD(mg.cash + mg.paidIn)}',
+              if (mg != null && mg.withdrawn > 0) 'ناقص سحبٍ من المدراء ${formatIQD(mg.withdrawn)}',
+            ],
           ),
           p.remaining > 0
               ? _Stat(
@@ -489,7 +496,7 @@ class BalanceStats extends StatelessWidget {
             tone: p.debtsOpen > 0 ? AppTone.danger : AppTone.success,
             label: 'ديون الفترة',
             value: balanceIqd(p.debtsOpen),
-            lines: ['باقية من أصل ${formatIQD(p.debtsCreated)}'],
+            lines: ['باقية من أصل ${formatIQD(p.debtsCreated)}', if (mg != null && mg.open > 0) 'منها على المدراء ${formatIQD(mg.open)}'],
           ),
           _Stat(key: const ValueKey('bal-stat-profit'), icon: LucideIcons.trendingUp, tone: AppTone.brand, label: 'ربحك', value: balanceIqd(p.profit), lines: [profitSub]),
         ),

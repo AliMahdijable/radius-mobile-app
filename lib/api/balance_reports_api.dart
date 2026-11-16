@@ -85,14 +85,29 @@ enum BalanceFilter {
   partial('partial', 'جزئي'),
   open('open', 'ديون باقية'),
   paid('paid', 'كان دين وتسدّد'),
-  payments('payments', 'التسديدات');
+  payments('payments', 'التسديدات'),
+
+  /// حركات المدراء الفرعيّين — يأتي عدده حين تدخل الحساب وحده (مفتاحٌ عند الخادم)، فيُعرض حين فيه حركات.
+  managers('managers', 'المدراء');
 
   const BalanceFilter(this.wire, this.label);
   final String wire;
   final String label;
 }
 
-/// حال دين التفعيل.
+/// عمليّة الرصيد مع مديرٍ فرعيّ: شحنٌ نقديّ («طبّلك»)، شحنٌ آجل (دينٌ من ديون الفترة)، تسديدٌ من دينه، أو سحب رصيدٍ منه (ينقص «طبّلك»).
+enum BalanceMgrOp {
+  cash('شحن مدير نقدي'),
+  loan('شحن مدير آجل'),
+  pay('تسديد دين مدير'),
+  withdraw('سحب رصيد من مدير');
+
+  const BalanceMgrOp(this.label);
+  final String label;
+  static BalanceMgrOp? of(Object? v) => switch ('$v') { 'cash' => cash, 'loan' => loan, 'pay' => pay, 'withdraw' => withdraw, _ => null };
+}
+
+/// حال دين التفعيل (أو الشحن الآجل للمدير).
 enum BalanceDebtState {
   none,
   open,
@@ -130,6 +145,40 @@ class BalanceAdjustment {
   }
 }
 
+/// المدراء الفرعيّون في الفترة — أرقامهم **داخلة** في أرقامها: [cash] و[paidIn] في «طبّلك» و[withdrawn] ينقص منه؛ [loans] في
+/// ديون الفترة و[open] في الباقي منها؛ [afterClose] في ربح ما بعد الإغلاق.
+class BalanceManagers {
+  const BalanceManagers({
+    required this.cash,
+    required this.withdrawn,
+    required this.loans,
+    required this.paidIn,
+    required this.open,
+    required this.afterClose,
+    required this.count,
+  });
+  final double cash;
+  final double withdrawn;
+  final double loans;
+  final double paidIn;
+  final double open;
+  final double afterClose;
+  final int count;
+
+  static BalanceManagers? fromJson(Object? j) {
+    if (j is! Map) return null;
+    return BalanceManagers(
+      cash: _n(j['cash']),
+      withdrawn: _n(j['withdrawn']),
+      loans: _n(j['loans']),
+      paidIn: _n(j['paid_in']),
+      open: _n(j['open']),
+      afterClose: _n(j['late']),
+      count: _i(j['count']),
+    );
+  }
+}
+
 class BalancePeriod {
   const BalancePeriod({
     required this.id,
@@ -164,6 +213,7 @@ class BalancePeriod {
     required this.adjustments,
     required this.transfersCount,
     required this.transfersSum,
+    this.managers,
   });
   final int id;
   final int startedAtMs;
@@ -214,6 +264,9 @@ class BalancePeriod {
   final int transfersCount;
   final double transfersSum;
 
+  /// المدراء الفرعيّون حين تدخل تحويلاتهم الحساب (مفتاحٌ عند الخادم) — null: خارج الحساب، و[transfersCount] تنبيهٌ بها.
+  final BalanceManagers? managers;
+
   bool get isClosed => state == BalanceState.closed;
 
   static BalancePeriod? fromJson(Object? j) {
@@ -257,6 +310,7 @@ class BalancePeriod {
       adjustments: adj is List ? adj.map(BalanceAdjustment.fromJson).whereType<BalanceAdjustment>().toList() : const [],
       transfersCount: _i(t['count']),
       transfersSum: _n(t['sum']),
+      managers: BalanceManagers.fromJson(j['managers']),
     );
   }
 }
@@ -274,6 +328,8 @@ class BalanceOverview {
     this.noAmount = 0,
     this.noSnapshot = 0,
     this.transfersUnknown = false,
+    this.managersIncluded = false,
+    this.managersOldPaid = 0,
   });
   final bool featureEnabled;
   final List<BalancePeriod> periods;
@@ -285,6 +341,12 @@ class BalanceOverview {
   final int noAmount;
   final int noSnapshot;
   final bool transfersUnknown;
+
+  /// تحويلات المدراء الفرعيّين داخلةٌ في أرقام الفترات.
+  final bool managersIncluded;
+
+  /// ما سدّده المدراء الفرعيّون من ديونٍ أقدم من أوّل شحنة مسجّلة (أو لا يُعرف شحنها) — خارج حساب الشحنات.
+  final double managersOldPaid;
 
   BalancePeriod? periodOf(int id) {
     for (final p in periods) {
@@ -299,6 +361,7 @@ class BalanceOverview {
         if (manualPaid > 0) (label: 'تسديد ديون يدويّة («إضافة دين» ومبيعات)', value: manualPaid, id: 'manual'),
         if (otherPaid > 0) (label: 'تسديد ديون عُدّلت من خارج النظام', value: otherPaid, id: 'other'),
         if (advance > 0) (label: 'دفعات مقدَّمة لم تُستعمل بعد', value: advance, id: 'advance'),
+        if (managersOldPaid > 0) (label: 'تسديد ديون مدراء فرعيّين أقدم من أوّل شحنة (أو لا يُعرف شحنها)', value: managersOldPaid, id: 'managers'),
       ];
 
   /// أسطر جودة البيانات التي يجب أن يراها الوكيل (لا رقم ناقص بصمت).
@@ -327,11 +390,13 @@ class BalanceOverview {
       noAmount: _i(q['no_amount']),
       noSnapshot: _i(q['no_snapshot']),
       transfersUnknown: q['transfers_unknown'] == true,
+      managersIncluded: j['managers_included'] == true,
+      managersOldPaid: _n(t['managers_old_paid']),
     );
   }
 }
 
-/// حركةٌ في فترة: تفعيل (بحال دينه)، تسديد دين، أو تسوية رصيد.
+/// حركةٌ في فترة: تفعيل (بحال دينه)، تسديد دين، حركة مديرٍ فرعيّ، أو تسوية رصيد.
 sealed class BalanceMove {
   const BalanceMove({required this.key, required this.atMs});
   final String key;
@@ -376,6 +441,25 @@ sealed class BalanceMove {
         );
       case 'adjust':
         return BalanceAdjustMove(key: key, atMs: at, amount: _n(j['amount']), source: BalanceSource.of(j['source']), note: _s(j['note']));
+      case 'manager':
+        final op = BalanceMgrOp.of(j['op']);
+        if (op == null) return null;
+        return BalanceMgrMove(
+          key: key,
+          atMs: at,
+          username: _s(j['username']) ?? '—',
+          op: op,
+          amount: _n(j['amount']),
+          remaining: _n(j['remaining']),
+          debtState: BalanceDebtState.of(j['debt_state']),
+          turnedProfit: '${j['turned']}' == 'profit',
+          paidIn: _n(j['paid_in']),
+          paidLate: _n(j['paid_late']),
+          lastPaidAtMs: _ms(j['last_paid_at_ms']),
+          afterClose: j['after_close'] == true,
+          by: _s(j['by']),
+          note: _s(j['note']),
+        );
     }
     return null;
   }
@@ -435,6 +519,38 @@ class BalanceAdjustMove extends BalanceMove {
   const BalanceAdjustMove({required super.key, required super.atMs, required this.amount, required this.source, this.note});
   final double amount;
   final BalanceSource source;
+  final String? note;
+}
+
+/// حركة رصيدٍ مع مديرٍ فرعيّ ([username] اسمه). حقول الدين للشحن الآجل ([BalanceMgrOp.loan]) وحده.
+class BalanceMgrMove extends BalanceMove {
+  const BalanceMgrMove({
+    required super.key,
+    required super.atMs,
+    required this.username,
+    required this.op,
+    required this.amount,
+    required this.remaining,
+    required this.debtState,
+    required this.turnedProfit,
+    required this.paidIn,
+    required this.paidLate,
+    this.lastPaidAtMs,
+    required this.afterClose,
+    this.by,
+    this.note,
+  });
+  final String username;
+  final BalanceMgrOp op;
+  final double amount;
+  final double remaining;
+  final BalanceDebtState debtState;
+  final bool turnedProfit;
+  final double paidIn;
+  final double paidLate;
+  final int? lastPaidAtMs;
+  final bool afterClose;
+  final String? by;
   final String? note;
 }
 
@@ -499,14 +615,36 @@ String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
     : 'من ${balanceDay(p.startedAtMs, nowMs: nowMs)} إلى ${balanceDay(p.endsAtMs!, nowMs: nowMs)}';
 
 /// حال دين التفعيل بكلامٍ يُقرأ: «كان دين وتسدّد» (نقداً قبل الإغلاق، أو ربحاً بعده) أو ما بقي منه.
-({String text, BalanceTone tone})? balanceDebtNote(BalanceActMove m, {int? nowMs}) {
-  final when = m.lastPaidAtMs == null ? '' : ' — ${balanceDay(m.lastPaidAtMs!, nowMs: nowMs)}';
-  return switch (m.debtState) {
-    BalanceDebtState.paid => m.turnedProfit
+({String text, BalanceTone tone})? balanceDebtNote(BalanceActMove m, {int? nowMs}) => balanceDebtNoteOf(
+      state: m.debtState,
+      turnedProfit: m.turnedProfit,
+      paid: m.paidIn + m.paidLate,
+      remaining: m.remaining,
+      lastPaidAtMs: m.lastPaidAtMs,
+      nowMs: nowMs,
+    );
+
+/// حال دين الشحن الآجل لمديرٍ فرعيّ — بالكلام نفسه (null لغير الآجل).
+({String text, BalanceTone tone})? balanceMgrDebtNote(BalanceMgrMove m, {int? nowMs}) => m.op != BalanceMgrOp.loan
+    ? null
+    : balanceDebtNoteOf(state: m.debtState, turnedProfit: m.turnedProfit, paid: m.paidIn + m.paidLate, remaining: m.remaining, lastPaidAtMs: m.lastPaidAtMs, nowMs: nowMs);
+
+/// حال دينٍ بكلامٍ يُقرأ: «كان دين وتسدّد» (نقداً قبل الإغلاق، أو ربحاً بعده) أو ما بقي منه.
+({String text, BalanceTone tone})? balanceDebtNoteOf({
+  required BalanceDebtState state,
+  required bool turnedProfit,
+  required double paid,
+  required double remaining,
+  int? lastPaidAtMs,
+  int? nowMs,
+}) {
+  final when = lastPaidAtMs == null ? '' : ' — ${balanceDay(lastPaidAtMs, nowMs: nowMs)}';
+  return switch (state) {
+    BalanceDebtState.paid => turnedProfit
         ? (text: 'كان دين وتسدّد بعد الإغلاق — صار ربح$when', tone: BalanceTone.brand)
         : (text: 'كان دين وتسدّد$when', tone: BalanceTone.success),
-    BalanceDebtState.partly => (text: 'تسدّد منه ${formatIQD(m.paidIn + m.paidLate)} · باقي ${formatIQD(m.remaining)}', tone: BalanceTone.warning),
-    BalanceDebtState.open => (text: 'دين باقي ${formatIQD(m.remaining)}', tone: BalanceTone.danger),
+    BalanceDebtState.partly => (text: 'تسدّد منه ${formatIQD(paid)} · باقي ${formatIQD(remaining)}', tone: BalanceTone.warning),
+    BalanceDebtState.open => (text: 'دين باقي ${formatIQD(remaining)}', tone: BalanceTone.danger),
     BalanceDebtState.writtenOff => (text: 'نقص الدين بلا تسديد', tone: BalanceTone.neutral),
     BalanceDebtState.untracked => (text: 'الدين لم يُسجَّل على المشترك', tone: BalanceTone.neutral),
     BalanceDebtState.none => null,

@@ -197,7 +197,8 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        for (final f in BalanceFilter.values) ...[
+                        // «المدراء» تظهر حين في الفترة حركاتٌ لهم داخلة بالحساب وحده
+                        for (final f in BalanceFilter.values.where((f) => f != BalanceFilter.managers || (_counts?[f] ?? 0) > 0)) ...[
                           if (f != BalanceFilter.values.first) const SizedBox(width: Sp.x6),
                           SheetQuickChip(
                             key: ValueKey('bal-filter-${f.wire}'),
@@ -221,6 +222,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
 
   Widget _summary(BalancePeriod p) {
     final closed = p.isClosed;
+    final mg = p.managers;
     Widget rule() => Padding(padding: const EdgeInsets.symmetric(vertical: Sp.xs), child: Divider(height: 1, thickness: 1, color: AppColors.divider));
     return Material(
       key: const ValueKey('bal-summary'),
@@ -252,6 +254,12 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             BalanceLine(label: 'مبيعات الفترة (${p.nActivations} تفعيل)', value: balanceIqd(p.sales)),
             BalanceLine(label: 'نقد التفعيلات', value: balanceIqd(p.cashNow), valueColor: AppTone.success.onSoft),
             BalanceLine(label: 'تسديد ديون الفترة', value: balanceIqd(p.paidIn), valueColor: AppTone.success.onSoft),
+            if (mg != null && mg.cash > 0)
+              BalanceLine(key: const ValueKey('bal-sum-mgr-cash'), label: 'شحن المدراء الفرعيّين نقداً', value: balanceIqd(mg.cash), valueColor: AppTone.success.onSoft),
+            if (mg != null && mg.paidIn > 0)
+              BalanceLine(key: const ValueKey('bal-sum-mgr-paid'), label: 'تسديد ديون المدراء', value: balanceIqd(mg.paidIn), valueColor: AppTone.success.onSoft),
+            if (mg != null && mg.withdrawn > 0)
+              BalanceLine(key: const ValueKey('bal-sum-mgr-withdrawn'), label: 'سحب رصيد من المدراء', value: balanceSigned(mg.withdrawn, sign: '−'), valueColor: AppTone.danger.onSoft),
             rule(),
             BalanceLine(key: const ValueKey('bal-sum-collected'), label: 'طبّلك', value: balanceIqd(p.collected), strong: true),
             if (p.adjustmentsSum > 0) BalanceLine(label: 'تسويات الرصيد', value: balanceIqd(p.adjustmentsSum)),
@@ -263,7 +271,14 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             ),
             rule(),
             BalanceLine(label: 'ديون الفترة', value: balanceIqd(p.debtsCreated)),
-            BalanceLine(label: 'الباقي منها بذمّة المشتركين', value: balanceIqd(p.debtsOpen), valueColor: p.debtsOpen > 0 ? AppTone.danger.onSoft : null),
+            BalanceLine(
+              label: mg != null && mg.loans > 0 ? 'الباقي منها بذمّة المشتركين والمدراء' : 'الباقي منها بذمّة المشتركين',
+              value: balanceIqd(p.debtsOpen),
+              valueColor: p.debtsOpen > 0 ? AppTone.danger.onSoft : null,
+            ),
+            if (mg != null && mg.loans > 0) BalanceLine(key: const ValueKey('bal-sum-mgr-loans'), label: 'منها شحن آجل للمدراء', value: balanceIqd(mg.loans)),
+            if (mg != null && mg.loans > 0)
+              BalanceLine(key: const ValueKey('bal-sum-mgr-open'), label: 'الباقي على المدراء', value: balanceIqd(mg.open), valueColor: mg.open > 0 ? AppTone.danger.onSoft : null),
             if (p.writtenOff > 0) BalanceLine(label: 'نقص منها بلا تسديد (تعديل دين)', value: balanceIqd(p.writtenOff)),
             if (p.untracked > 0) BalanceLine(label: 'آجل لم يُسجَّل دينه على المشترك', value: balanceIqd(p.untracked)),
             if (closed || p.lateProfit > 0)
@@ -430,6 +445,28 @@ class BalanceMoveRow extends StatelessWidget {
         amountColor = AppTone.success.onSoft;
         details = [balanceDayTime(m.atMs, nowMs: nowMs), if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
         status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'دخل «طبّلك»', tone: AppTone.success);
+      case BalanceMgrMove():
+        // شحنٌ نقديّ وتسديد دين: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل: دينٌ بحاله كدين التفعيل.
+        tone = switch (m.op) { BalanceMgrOp.loan => AppTone.warning, BalanceMgrOp.withdraw => AppTone.danger, _ => AppTone.success };
+        icon = switch (m.op) { BalanceMgrOp.pay => LucideIcons.handCoins, BalanceMgrOp.withdraw => LucideIcons.undo2, _ => LucideIcons.users };
+        title = m.username;
+        tags = [(text: m.op.label, tone: tone), if (m.op == BalanceMgrOp.loan && m.afterClose) (text: 'بعد الإغلاق', tone: AppTone.brand)];
+        amount = switch (m.op) {
+          BalanceMgrOp.loan => balanceIqd(m.amount),
+          BalanceMgrOp.withdraw => balanceSigned(m.amount, sign: '−'),
+          _ => balanceSigned(m.amount, sign: '+'),
+        };
+        amountColor = switch (m.op) { BalanceMgrOp.withdraw => AppTone.danger.onSoft, BalanceMgrOp.loan => AppColors.textHi, _ => AppTone.success.onSoft };
+        details = [balanceDayTime(m.atMs, nowMs: nowMs), 'مدير فرعيّ', if (m.by != null) 'نفّذها ${m.by}'];
+        note = m.note;
+        if (m.op == BalanceMgrOp.loan) {
+          final n = balanceMgrDebtNote(m, nowMs: nowMs);
+          status = n == null ? null : (text: n.text, tone: balanceToneOf(n.tone));
+        } else if (m.op == BalanceMgrOp.withdraw) {
+          status = (text: m.afterClose ? 'بعد الإغلاق — نقص من الربح' : 'نقص من «طبّلك»', tone: AppTone.danger);
+        } else {
+          status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'دخل «طبّلك»', tone: AppTone.success);
+        }
       case BalanceAdjustMove():
         tone = AppTone.brand;
         icon = LucideIcons.scale;
