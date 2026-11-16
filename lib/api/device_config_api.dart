@@ -122,6 +122,9 @@ class AdminDeviceDefaults {
     this.tplinkExtra = const [],
     this.tprouterPassword,
     this.tprouterExtra = const [],
+    this.mikrotikUsername,
+    this.mikrotikPassword,
+    this.mikrotikExtra = const [],
   });
   final String? ontUsername;
   final String? ontPassword;
@@ -140,6 +143,12 @@ class AdminDeviceDefaults {
   /// فاعتماده هنا كلمات سرٍّ فقط، مستقلّةٌ عن قائمة [tplinkExtra] ذات اليوزر (CPE Pharos والكلاسيكيّ). الأولى + [maxExtra] إضافيّة.
   final String? tprouterPassword;
   final List<String> tprouterExtra;
+
+  /// ميكروتك عند المشترك (نانو وراوتر، ١٦ نوفمبر — المالك: «نضيفلها اعتمادات»): يوزر وباسورد، الأوّل + [maxExtra] إضافيّة — بلا
+  /// افتراض مصنّع (قواعد الحظر تعدّ الدخول الغلط). كلمة السرّ قد تكون فارغة (admin بلا كلمة) — تُرسل كما هي.
+  final String? mikrotikUsername;
+  final String? mikrotikPassword;
+  final List<DeviceCred> mikrotikExtra;
 
   static const int maxExtra = 2;
 
@@ -160,6 +169,9 @@ class AdminDeviceDefaults {
         tprouterPassword:
             (j['tprouterPassword']?.toString() ?? '').isEmpty ? null : j['tprouterPassword'].toString(),
         tprouterExtra: _passwordList(j['tprouterExtra']),
+        mikrotikUsername: _nullIfBlank(j['mikrotikUsername']?.toString()),
+        mikrotikPassword: (j['mikrotikPassword']?.toString() ?? '').isEmpty ? null : j['mikrotikPassword'].toString(),
+        mikrotikExtra: DeviceCred.listFrom(j['mikrotikExtra']),
       );
 
   /// قائمة كلمات سرٍّ (نصوص غير فارغة) لحدّ [maxExtra] — كلمة السرّ كما هي بلا قصّ.
@@ -189,6 +201,9 @@ class AdminDeviceDefaults {
         'tplinkExtra': [for (final c in tplinkExtra) c.toJson()],
         'tprouterPassword': tprouterPassword,
         'tprouterExtra': tprouterExtra,
+        'mikrotikUsername': mikrotikUsername,
+        'mikrotikPassword': mikrotikPassword,
+        'mikrotikExtra': [for (final c in mikrotikExtra) c.toJson()],
       };
 }
 

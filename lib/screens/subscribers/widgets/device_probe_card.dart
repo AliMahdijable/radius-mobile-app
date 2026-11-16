@@ -440,6 +440,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       if (_isTplink && !TplinkPharosService.hasLive(_snap!.ip)) return;
       // الراوتر الكلاسيكيّ وTenda: نبضتهما الحيّة تحدّث المتّصلين والمدّة — فحصٌ كاملٌ فوقها حملٌ بلا فائدة على معالجٍ صغير.
       if ((_isTpClassic || _isTenda || _isRouterLive) && _trafficTimer != null) return;
+      // ميكروتك (١٦ نوفمبر): نبضته الحيّة تحدّث الإشارة والمتّصلين بجلسةٍ واحدة؛ بلاها (SSH وحده أو رفض) لا دخولٌ جديدٌ كلّ عشر
+      // ثوانٍ — قواعد الحظر بميكروتك تعدّ الاتّصالات الجديدة، وسجلّه يمتلئ.
+      if (_snap?.ubnt?.isMikrotik ?? false) return;
       _refreshQuietly(force: true);
     });
     // عدّاد «آخر تحديث» يتقدّم بنفسه ولو لم يصل جديد — وإلّا جمد
@@ -746,12 +749,22 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _rlRetryAt = null;
       final snap = _snap;
       final u = snap?.ubnt;
-      if (snap != null && u != null && u.vendor == vendor && (x.wanOnlineSeconds != null || x.clients != null)) {
+      if (snap != null &&
+          u != null &&
+          u.vendor == vendor &&
+          (x.wanOnlineSeconds != null || x.clients != null || x.signalDbm != null || x.ccq != null)) {
         setState(() {
           _snap = DeviceHealthSnapshot(
             kind: snap.kind,
             ip: snap.ip,
-            ubnt: u.withLive(wanOnlineSeconds: x.wanOnlineSeconds, peerCount: x.clients?.length, clients: x.clients),
+            ubnt: u.withLive(
+              wanOnlineSeconds: x.wanOnlineSeconds,
+              peerCount: x.clients?.length,
+              clients: x.clients,
+              // نانو ميكروتك: إشارة الوصلة وجودتها من الجلسة الحيّة نفسها
+              signalDbm: x.signalDbm,
+              ccqPercent: x.ccq,
+            ),
           );
           _lastAt = DateTime.now();
         });
@@ -1049,6 +1062,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // ZTE (١٤ نوفمبر): الزرّ حين تكون صفحة إعادة التشغيل المجرَّبة حيّاً في قائمة حساب الوكيل على هذا الجهاز
     // ([ZteOntService.reboot] — HS8546V2 بحساب user). غيرها بلا زرّ: لا زرّ يَعِد بما لم يُجرَّب.
     if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return _snap!.ont!.canReboot;
+    // ميكروتك (١٦ نوفمبر): لا زرّ — المسار العامّ تحته إقلاع النانو بـSSH يوبيكويتي، ولم يُطلب إقلاع RouterOS بعد.
+    if (k == DeviceKind.ubiquiti && (_snap?.ubnt?.isMikrotik ?? false)) return false;
     // الراوتر (١٢ نوفمبر — المالك: «وعمل ريبوت»): بأمر صفحته نفسها للعائلات المبنيّة ([RouterOps.canReboot])، وغيرها بلا زرّ
     // (كان سيُرسل إقلاع النانو بـSSH على منفذٍ مقفول).
     if (k == DeviceKind.ubiquiti && (_snap?.ubnt?.isRouter ?? false)) return RouterOps.canReboot(_snap!.ubnt!.vendor);
@@ -1418,7 +1433,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             ? 'TP-Link'
             : (snap.ubnt?.isRouter ?? false)
                 ? 'راوتر'
-                : 'UBNT',
+                : (snap.ubnt?.isMikrotik ?? false)
+                    ? 'MikroTik'
+                    : 'UBNT',
         _ => 'متصل',
       };
       fg = AppColors.brandOnSoft;
@@ -1549,6 +1566,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   ({String title, String hint}) _whyNoReading() {
     final why = DeviceProbeApi.issueFor(username: widget.username, ip: widget.ip, company: widget.company, slot: widget.slot);
     final left = why?.lockLeft;
+    // ميكروتك (١٦ نوفمبر): يُقرأ بخدمة الـAPI — جمله بكلماته (لا «ضوء» ولا قفل عشر محاولات).
+    if (why?.vendor == 'mikrotik') {
+      final m = _whyNoMikrotik(why!.issue);
+      if (m != null) return m;
+    }
     // TP-Link (١٠ نوفمبر): قفله عشر محاولاتٍ وساعتان (لا ثلاثٌ ودقيقة)، ولا «ضوء» فيه — فجملته بكلماته.
     if (why?.vendor == 'tplink') {
       final tp = _whyNoTplink(why!.issue, left);
@@ -1618,6 +1640,27 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
                 ),
     };
   }
+
+  /// جملة «لا قراءة» لجهاز ميكروتك — null لما يكفيه النصّ العامّ (لا يجاوب).
+  static ({String title, String hint})? _whyNoMikrotik(ProbeIssue issue) => switch (issue) {
+        ProbeIssue.needsCredentials => (
+            title: 'جهاز MikroTik يحتاج يوزر وباسورده',
+            hint: 'اكتبهن بقسم MikroTik من «الاعتمادات» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
+          ),
+        ProbeIssue.loginRejected => (
+            title: 'جهاز MikroTik رفض اليوزر أو الباسورد',
+            hint: 'صحّحهن من «الاعتمادات» أو زرّ الإعدادات — ما نعيد نفس المحاولة حتى ما ينحظر عنوانك',
+          ),
+        ProbeIssue.needsSetup => (
+            title: 'جهاز MikroTik وخدمة الـAPI بيه مقفولة',
+            hint: 'فعّل خدمة api (منفذ 8728) من IP ثمّ Services بالجهاز، بعدها حدّث',
+          ),
+        ProbeIssue.readFailed => (
+            title: 'دخلنا لجهاز MikroTik بس ما رجعت قراءاته',
+            hint: 'حدّث بعد لحظات',
+          ),
+        _ => null,
+      };
 
   /// جملة «لا قراءة» لجهاز TP-Link — null لما يكفيه النصّ العامّ (رفضٌ، مشغول، لا يجاوب).
   static ({String title, String hint})? _whyNoTplink(ProbeIssue issue, int? lockLeft) => switch (issue) {
@@ -2569,9 +2612,13 @@ CopyField _ubntKind(UbiquitiStatus u) {
       ? (u.model.isEmpty ? 'TP-Link' : 'TP-Link ${u.model}')
       : u.isTenda
           ? (u.model.isEmpty ? 'راوتر Tenda' : 'راوتر Tenda ${u.model}')
-          : u.isRouter
-              ? (u.model.isEmpty ? 'راوتر TP-Link' : 'راوتر TP-Link ${u.model}')
-              : null;
+          : u.isMtRouter
+              ? (u.model.isEmpty ? 'راوتر MikroTik' : 'راوتر MikroTik ${u.model}')
+              : u.isMikrotik
+                  ? (u.model.isEmpty ? 'MikroTik' : 'MikroTik ${u.model}')
+                  : u.isRouter
+                      ? (u.model.isEmpty ? 'راوتر TP-Link' : 'راوتر TP-Link ${u.model}')
+                      : null;
   return CopyField(
     'نوع الجهاز',
     brand != null

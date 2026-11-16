@@ -136,7 +136,8 @@ class TowerReading {
 
   static bool _isWirelessPort(String name) {
     final n = name.toLowerCase();
-    return n.startsWith('wlan') || n.startsWith('ath') || n.startsWith('wifi') || n.startsWith('wl');
+    // `air0` = راديو airFiber X (AF-4X/5X…) — بلاه كان «التنزيل» يُخمَّن بالاتّجاه الأكبر بدل ما يستقبله الطرف.
+    return n.startsWith('wlan') || n.startsWith('ath') || n.startsWith('wifi') || n.startsWith('wl') || n.startsWith('air');
   }
 
   static bool _isEtherPort(String name) {
@@ -208,14 +209,18 @@ class TowerReading {
     }
 
     // المنفذ اللاسلكيّ يحمل حِمل المشتركين؛ بلا واحدٍ (راوتر/سويج) نأخذ أنشط منفذ.
+    //
+    // ⚠️ **أنشط** راديو لا أوّله (المالك ١٦ نوفمبر): أجهزة الـ٦٠ (Wave · GigaBeam · AF-60 · Cube 60Pro) فيها راديو احتياطيّ ٥ گيگا
+    // خاملٌ بجانب الـ٦٠ — إن جاء أوّلاً قالت الوصلة «40 bps» وهي تحمل مئة ميغا. ومنفذٌ يعبره ترفكٌ يُحسب ولو قال الجهاز إنّه
+    // طافٍ (حال SNMP لجسورٍ لاسلكيّة لا يُوثق بها؛ العدّاد الذي يتحرّك لا يكذب).
+    int load(PortTraffic p) => (p.rxBps ?? 0) + (p.txBps ?? 0);
     PortTraffic? radioPort;
     PortTraffic? busiest;
     for (final p in ports) {
-      if (!p.up) continue;
-      if (radioPort == null && _isWirelessPort(p.name)) radioPort = p;
-      final load = (p.rxBps ?? 0) + (p.txBps ?? 0);
-      final best = busiest == null ? -1 : (busiest.rxBps ?? 0) + (busiest.txBps ?? 0);
-      if (load > best) busiest = p;
+      if (!p.up && load(p) == 0) continue;
+      if (_isWirelessPort(p.name) && (radioPort == null || load(p) > load(radioPort))) radioPort = p;
+      final best = busiest == null ? -1 : load(busiest);
+      if (load(p) > best) busiest = p;
     }
     if (linkSpeed == null) {
       for (final p in ports) {

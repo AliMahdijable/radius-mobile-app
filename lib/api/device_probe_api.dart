@@ -9,6 +9,7 @@ import '../core/net/huawei_ont_service.dart';
 import '../core/net/tenda_service.dart';
 import '../core/net/zte_ont_service.dart';
 import '../core/net/tplink_agile_service.dart';
+import '../core/net/mikrotik_cpe_service.dart';
 import '../core/net/tplink_cgi_plain_service.dart';
 import '../core/net/tplink_cgi_service.dart';
 import '../core/net/tplink_classic_service.dart';
@@ -276,6 +277,10 @@ class DeviceProbeApi {
     TplinkCgiService.reset();
     TplinkCgiPlainService.reset();
     TplinkMerService.reset();
+    _mikrotikWinner.clear();
+    _mtHello.clear();
+    _mtSeen.clear();
+    MikrotikCpeService.clear();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -415,6 +420,7 @@ class DeviceProbeApi {
       TplinkCgiService.forget(effectiveIp);
       TplinkCgiPlainService.forget(effectiveIp, manual: true);
       TplinkMerService.forget(effectiveIp);
+      MikrotikCpeService.forget(effectiveIp);
     }
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
@@ -492,8 +498,13 @@ class DeviceProbeApi {
     final t = _tplinkIssue[effectiveIp];
     final freshT = t != null && !t.at.isBefore(started) ? t : null;
     final fresh = freshT ?? (z != null && !z.at.isBefore(started) ? z : null);
-    // فرع Tenda يكتب في سجلّ TP-Link نفسه (بأثرٍ يبدأ بـ«tplink tenda») — جملة الكرت باسمه لا باسم TP-Link.
-    final vendor = fresh == null ? null : (freshT != null ? (freshT.trace.startsWith('tplink tenda') ? 'tenda' : 'tplink') : 'zte');
+    // فرع Tenda يكتب في سجلّ TP-Link نفسه (بأثرٍ يبدأ بـ«tplink tenda») — جملة الكرت باسمه لا باسم TP-Link. وميكروتك كذلك
+    // (أثرٌ يبدأ بـ«mikrotik»).
+    final vendor = fresh == null
+        ? null
+        : (freshT != null
+            ? (freshT.trace.startsWith('tplink tenda') ? 'tenda' : (freshT.trace.startsWith('mikrotik') ? 'mikrotik' : 'tplink'))
+            : 'zte');
     if (snap == null) {
       final issue = (issue: fresh?.issue ?? ProbeIssue.unreachable, lockLeft: fresh?.lockLeft, at: now, vendor: vendor);
       _issueByKey[ipKey] = issue;
@@ -533,8 +544,9 @@ class DeviceProbeApi {
       // حتى المحاولة القادمة تفجّر parallel وتلقّط لو الجهاز اتبدّل.
       _kindByIp.remove(ipKey);
       // TP-Link المعروف يبقى معروفاً (فرعه يمسحه حين لا يعود الجهاز يعرّف نفسه): فشله بسببه — رفضٌ أو مشغول — لا يُرجع
-      // طلبات هواوي وUBNT إليه كلّ موجة.
-      if (_radioVendorByKey[ipKey] != 'tplink') _radioVendorByKey.remove(ipKey);
+      // طلبات هواوي وUBNT إليه كلّ موجة. وميكروتك مثله (١٦ نوفمبر): دخول airOS/هواوي عليه كلّ موجة ضجيجٌ في سجلّه.
+      final kv = _radioVendorByKey[ipKey];
+      if (kv != 'tplink' && !MikrotikCpeService.isVendor(kv)) _radioVendorByKey.remove(ipKey);
     }
     _schedulePersist();
     if (timedOut) _keepLate(run, entry, ipKey, userKey);
@@ -588,6 +600,9 @@ class DeviceProbeApi {
     TplinkCgiService.forget(ip.trim());
     TplinkCgiPlainService.forget(ip.trim());
     TplinkMerService.forget(ip.trim());
+    _mikrotikWinner.remove(k);
+    _mtSeen.remove(ip.trim());
+    MikrotikCpeService.forget(ip.trim());
     _schedulePersist();
   }
 
@@ -923,7 +938,7 @@ class DeviceProbeApi {
 
     // Admin pinned kind → probe واحد فقط. «Ubiquiti» = جهاز المشترك اللاسلكيّ: يوبيكويتي أو TP-Link ([_probeRadio]).
     if (overridesOnt) return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
-    if (overridesUbnt) return _probeRadio(ip, c.ubnt, c.tplink, c.tprouter, kindKey);
+    if (overridesUbnt) return _probeRadio(ip, c.ubnt, c.tplink, c.tprouter, c.mikrotik, kindKey);
 
     // جهازٌ عُرف أنّه TP-Link (ولو فشل دخوله: رفضٌ أو مشغول) ⇒ فرعه وحده — لا تطرقه طلبات هواوي وUBNT كلّ موجة.
     if (_radioVendorByKey[kindKey] == 'tplink') return _probeTplinkAny(ip, c.tplink, kindKey);
@@ -938,6 +953,8 @@ class DeviceProbeApi {
     if (_radioVendorByKey[kindKey] == 'tpmer') return _probeTpMerAny(ip, c.tprouter, kindKey);
     // WR840N v6 / WR845N (واجهة «$.act» القديمة بكوكي خام، ١٥ نوفمبر) — فرعه وحده بيوزر وباسورد قائمة TP-Link.
     if (_radioVendorByKey[kindKey] == 'tp845') return _probeTp845Any(ip, c.tplink, kindKey);
+    // ميكروتك (نانو أو راوتر، ١٦ نوفمبر) — فرعه وحده بقائمة ميكروتك.
+    if (MikrotikCpeService.isVendor(_radioVendorByKey[kindKey])) return _probeMikrotikAny(ip, c.mikrotik, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -948,7 +965,7 @@ class DeviceProbeApi {
       return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
     }
     if (knownKind == DeviceKind.ubiquiti) {
-      return _probeRadio(ip, c.ubnt, c.tplink, c.tprouter, kindKey);
+      return _probeRadio(ip, c.ubnt, c.tplink, c.tprouter, c.mikrotik, kindKey);
     }
 
     // First-time أو kind cache cleared — parallel race.
@@ -965,6 +982,8 @@ class DeviceProbeApi {
     final cgi = _helloTpCgi(ip);
     final mer = _helloTpMer(ip);
     final tp845 = _helloTp845(ip);
+    // ميكروتك (١٦ نوفمبر): منفذ الـAPI أو Winbox يقبل الاتّصال — بلا إرسال شيء.
+    final mikrotik = _helloMikrotik(ip);
     // ١٤ نوفمبر (المالك: «النانوات تفحص https لان بورت فورود اغلبه يستخدمون المشتركين ٨٠»): مشتركٌ خلف بورت فورورد — النانو
     // على 443 وراوتره على 80 بالعنوان نفسه. ردّ الراوتر على 80 كان يحسم وحده فلا يُجرَّب النانو أبداً. الآن: airOS يردّ على
     // https العنوان ⇒ النانو هو الجهاز الأوّل (دخوله على https وحده — لا دخول airOS على راوتر الـ80)، وما لم يُقرأ ⇒ الراوتر كما كان.
@@ -984,6 +1003,7 @@ class DeviceProbeApi {
     var cgiDone = false;
     var merDone = false;
     var tp845Done = false;
+    var mikrotikDone = false;
     void noneYet() {
       if (!done.isCompleted &&
           othersDone &&
@@ -993,7 +1013,8 @@ class DeviceProbeApi {
           tendaDone &&
           cgiDone &&
           merDone &&
-          tp845Done) {
+          tp845Done &&
+          mikrotikDone) {
         done.complete(null);
       }
     }
@@ -1069,7 +1090,84 @@ class DeviceProbeApi {
         noneYet();
       }
     });
+    mikrotik.then((yes) {
+      mikrotikDone = true;
+      if (done.isCompleted) return;
+      if (yes) {
+        done.complete(viaRouter(() => _probeMikrotikAny(ip, c.mikrotik, kindKey)));
+      } else {
+        noneYet();
+      }
+    });
     return done.future;
+  }
+
+  /// تعرّف ميكروتك الجاري لكلّ عنوان (منفذا الـAPI وWinbox) — نصف دقيقة كغيره. لا ينتظر تعرّف Pharos: اتّصال TCP على منفذٍ
+  /// غير الويب لا يمسّ الـnonce الذي حفظه.
+  static final _mtHello = <String, Future<bool>>{};
+  static final _mtSeen = <String, ({bool yes, DateTime at})>{};
+
+  static Future<bool> _helloMikrotik(String ip) {
+    final running = _mtHello[ip];
+    if (running != null) return running;
+    final seen = _mtSeen[ip];
+    if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
+    final f = MikrotikCpeService.detect(ip).catchError((Object _) => false);
+    _mtHello[ip] = f;
+    f.then((y) => _mtSeen[ip] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _mtHello.remove(ip));
+    return f;
+  }
+
+  static Future<bool> _isMikrotik(String ip) => _helloMikrotik(ip);
+
+  /// الاعتماد الذي دخل على كلّ جهاز ميكروتك (بمفتاح كاش النوع) — النبضة الحيّة تستعمله ([resolveTplinkCreds]).
+  static final _mikrotikWinner = <String, DeviceCred>{};
+
+  static void _mikrotikNote(String ip, ProbeIssue issue, String trace) =>
+      _tplinkIssue[ip] = (issue: issue, lockLeft: null, at: DateTime.now(), trace: 'mikrotik $trace');
+
+  /// جهاز ميكروتك (نانو أو راوتر): مرشّحو قائمة ميكروتك بالترتيب (الفائز أوّلاً) — قناة RouterOS ([MikrotikCpeService.readOnce]).
+  /// المرفوض لا يُعاد، والتالي بعد رفضٍ صريحٍ وحده؛ لا افتراض مصنّع.
+  static Future<DeviceHealthSnapshot?> _probeMikrotikAny(String ip, List<DeviceCred> cands, String kindKey) async {
+    if (!MikrotikCpeService.isVendor(_radioVendorByKey[kindKey])) _radioVendorByKey[kindKey] = MikrotikCpeService.vendorRadio;
+    if (cands.isEmpty) {
+      _mikrotikNote(ip, ProbeIssue.needsCredentials, 'no-creds');
+      return null;
+    }
+    final list = _winnerFirst(cands, _mikrotikWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      UbiquitiStatus? status;
+      try {
+        status = await MikrotikCpeService.readOnce(ip, list[i].username, list[i].password);
+      } catch (_) {
+        _mikrotikNote(ip, ProbeIssue.unreachable, 'error');
+        break;
+      }
+      if (status != null) {
+        _mikrotikWinner[kindKey] = list[i];
+        _radioVendorByKey[kindKey] = status.vendor;
+        return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+      }
+      final why = MikrotikCpeService.lastIssue(ip);
+      _mikrotikNote(
+        ip,
+        switch (why?.issue) {
+          MtCpeIssue.rejected => ProbeIssue.loginRejected,
+          MtCpeIssue.apiClosed => ProbeIssue.needsSetup,
+          MtCpeIssue.readFailed => ProbeIssue.readFailed,
+          _ => ProbeIssue.unreachable,
+        },
+        why?.trace ?? '?',
+      );
+      if (why?.issue == MtCpeIssue.unreachable) {
+        // لم يعد يجيب على أيّ طريق ⇒ الموجة التالية تبحث من جديد (لعلّه تبدّل)
+        _radioVendorByKey.remove(kindKey);
+        break;
+      }
+      if (why?.issue != MtCpeIssue.rejected) break;
+    }
+    return null;
   }
 
   /// تعرّف عائلات الراوترات الجديدة (CGI، MER) الجاري لكلّ عنوان — نصف دقيقة كغيره، و**بعد** أن يقول تعرّف Pharos «ليس أنا».
@@ -1460,9 +1558,10 @@ class DeviceProbeApi {
 
   /// جهاز المشترك اللاسلكيّ (النوع «Ubiquiti» مثبَّتاً أو معروفاً من قبل): يوبيكويتي أو TP-Link. المورّد المحفوظ وحده —
   /// يوبيكويتي كما كان حرفاً بلا أيّ طلبٍ زائد — وإلّا التعرّف أوّلاً (طلبٌ بلا دخول) ثمّ فرعٌ واحد.
-  static Future<DeviceHealthSnapshot?> _probeRadio(
-      String ip, List<DeviceCred> ubnt, List<DeviceCred> tplink, List<DeviceCred> tprouter, String kindKey) async {
+  static Future<DeviceHealthSnapshot?> _probeRadio(String ip, List<DeviceCred> ubnt, List<DeviceCred> tplink,
+      List<DeviceCred> tprouter, List<DeviceCred> mikrotik, String kindKey) async {
     final known = _radioVendorByKey[kindKey];
+    if (MikrotikCpeService.isVendor(known)) return _probeMikrotikAny(ip, mikrotik, kindKey);
     // نانو على https وعلى الـ80 جهازٌ آخر ⇒ https وحده (لا دخول airOS على راوتر الـ80 حين يسقط النانو)
     if (known == 'ubnt') return _ubntHttpsOnly.contains(kindKey) ? _probeUbntHttps(ip, ubnt, kindKey) : _probeUbntAny(ip, ubnt, kindKey);
     if (known == 'tplink') return _probeTplinkAny(ip, tplink, kindKey);
@@ -1482,6 +1581,7 @@ class DeviceProbeApi {
     if (await _helloTpCgi(ip)) return _probeTpCgiAny(ip, tplink, kindKey);
     if (await _helloTpMer(ip)) return _probeTpMerAny(ip, tprouter, kindKey);
     if (await _helloTp845(ip)) return _probeTp845Any(ip, tplink, kindKey);
+    if (await _helloMikrotik(ip)) return _probeMikrotikAny(ip, mikrotik, kindKey);
     return _probeUbntAny(ip, ubnt, kindKey);
   }
 
@@ -1592,8 +1692,18 @@ class DeviceProbeApi {
   ///
   /// [tplink] (١٠ نوفمبر): اعتماد المشترك وحده، وإلّا خانة المدير الأولى ثمّ إضافيّاه — **بلا افتراض مصنّع أبداً**: جهاز
   /// TP-Link يعدّ المحاولات الغلط من كلّ الهواتف ويقفل صفحته عند عشر.
+  ///
+  /// [mikrotik] (١٦ نوفمبر): اعتماد المشترك وحده، وإلّا خانة المدير الأولى ثمّ إضافيّاه — **بلا افتراض مصنّع** (قواعد الحظر بميكروتك
+  /// تعدّ الدخول الغلط). كلمة سرٍّ فارغة لاعتمادٍ بيوزر تُرسل فارغة (admin بلا كلمة سرّ).
   @visibleForTesting
-  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory, List<DeviceCred> tplink, List<DeviceCred> tprouter}) candidatesFor(
+  static ({
+    List<DeviceCred> ont,
+    List<DeviceCred> ubnt,
+    DeviceCred? ontFactory,
+    List<DeviceCred> tplink,
+    List<DeviceCred> tprouter,
+    List<DeviceCred> mikrotik,
+  }) candidatesFor(
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) {
@@ -1651,7 +1761,24 @@ class DeviceProbeApi {
     for (final e in defaults.tplinkExtra) {
       addRouterPass(e.password);
     }
-    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory, tplink: tplink, tprouter: tprouter);
+    final mikrotik = <DeviceCred>[];
+    if (ubntOwn) {
+      mikrotik.add(DeviceCred(user, cfg?.password ?? ''));
+    } else {
+      final first = defaults.mikrotikUsername?.trim() ?? '';
+      if (first.isNotEmpty) mikrotik.add(DeviceCred(first, defaults.mikrotikPassword ?? ''));
+      for (final e in defaults.mikrotikExtra) {
+        if (!mikrotik.contains(e)) mikrotik.add(e);
+      }
+    }
+    return (
+      ont: ont.list,
+      ubnt: ubnt.list,
+      ontFactory: ont.factory,
+      tplink: tplink,
+      tprouter: tprouter,
+      mikrotik: mikrotik,
+    );
   }
 
   /// ⑦: الاعتماد الذي دخل على كلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يبدأ به، وجلسة الترافيك وإعادة التشغيل
@@ -1719,8 +1846,15 @@ class DeviceProbeApi {
     final f = UbiquitiService.looksAirOsHttps(ip).then((yes) {
       _airOsSeen[ip] = (yes: yes, at: DateTime.now());
       return yes;
-    }).whenComplete(() => _airOsRunning.remove(ip));
+    });
     _airOsRunning[ip] = f;
+    // 🐛 ١٦ نوفمبر: كان `.whenComplete(() => _airOsRunning.remove(ip))` مسلسلاً في [f] نفسه — `remove` يُرجع [f]، و`whenComplete`
+    // ينتظر ما يُرجعه ⇒ [f] ينتظر نفسه فلا يكتمل أبداً. فكلّ أوّل فحصٍ لراوتر (TP-Link بعائلاته · Tenda · WR840 · ميكروتك) يعلق في
+    // [viaRouter] حتى سقف الفحص ⇒ «تعذّرت قراءته»، وينجح الثاني خلال ٣٠ث من ذاكرة [_airOsSeen] وحدها (منذ 4c9357b9، إصدار 181).
+    // الحذف سطرٌ منفصل يُهمَل ناتجه، والجسم لا يُرجع شيئاً.
+    f.whenComplete(() {
+      _airOsRunning.remove(ip);
+    });
     return f;
   }
 
@@ -1768,8 +1902,17 @@ class DeviceProbeApi {
   /// هل العنوان من عائلات راوترات TP-Link (أيّ تعرّفٍ بلا دخول: كلاسيكيّ/Agile/Tenda/CGI/MER/Pharos)؟ الطلبات مخبّأةٌ
   /// بكاش «رأيته» ٣٠ث، فلا تكلفة شبكةٍ مكرّرة حين تُستدعى داخل الموجة مع تعرّفات الراوتر نفسها.
   static Future<bool> _anyTpRouter(String ip) async {
-    final r = await Future.wait(
-        [_isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip), _isTpCgi(ip), _isTpMer(ip), _isTp845(ip)]);
+    // وميكروتك (١٦ نوفمبر): لا دخول هواوي على RouterOS — صفحةٌ ليست له وضجيجٌ في سجلّه.
+    final r = await Future.wait([
+      _isTplink(ip),
+      _isTpClassic(ip),
+      _isTpAgile(ip),
+      _isTenda(ip),
+      _isTpCgi(ip),
+      _isTpMer(ip),
+      _isTp845(ip),
+      _isMikrotik(ip),
+    ]);
     return r.contains(true);
   }
 
@@ -1938,6 +2081,15 @@ class DeviceProbeApi {
     cfg = slotTarget.cfg;
     if (effectiveIp.isEmpty) return null;
     final key = _k(company, effectiveIp);
+    // ميكروتك (١٦ نوفمبر): فائزه وقائمته — النبضة الحيّة للنانو والراوتر تمرّ من هنا ([RouterOps.openLive]).
+    final vendorNow = _radioVendorByKey[key] ?? _snapCache[key]?.snap?.ubnt?.vendor;
+    if (MikrotikCpeService.isVendor(vendorNow)) {
+      final mw = _mikrotikWinner[key];
+      if (mw != null) return (ip: effectiveIp, user: mw.username, pass: mw.password);
+      final mc = candidatesFor(cfg, await _loadAdminDefaults(company)).mikrotik;
+      if (mc.isEmpty) return null;
+      return (ip: effectiveIp, user: mc.first.username, pass: mc.first.password);
+    }
     final won = _tplinkWinner[key];
     if (won != null) return (ip: effectiveIp, user: won.username, pass: won.password);
     // 🐛 ١٢ نوفمبر: بلا فائزٍ في هذا التشغيل (فتحٌ من الكاش قبل أن يكمل الفحص) كان الاحتياط قائمة TP-Link (يوزر وباسورد) دائماً —
@@ -1995,9 +2147,18 @@ class DeviceProbeApi {
   static Future<DeviceHealthSnapshot?> _probeUbnt(
       String ip, String user, String pass, {bool unlessOther = false}) async {
     if (unlessOther) {
-      // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها. وWR845N (١٥ نوفمبر) كذلك.
-      final other = await Future.wait(
-          [_isZte(ip), _isTplink(ip), _isTpClassic(ip), _isTpAgile(ip), _isTenda(ip), _isTpCgi(ip), _isTpMer(ip), _isTp845(ip)]);
+      // والراوتر الكلاسيكيّ (١١ نوفمبر): لا دخول airOS على جهازٍ ليس لها. وWR845N (١٥ نوفمبر) كذلك. وميكروتك (١٦ نوفمبر).
+      final other = await Future.wait([
+        _isZte(ip),
+        _isTplink(ip),
+        _isTpClassic(ip),
+        _isTpAgile(ip),
+        _isTenda(ip),
+        _isTpCgi(ip),
+        _isTpMer(ip),
+        _isTp845(ip),
+        _isMikrotik(ip),
+      ]);
       if (other.contains(true)) return null;
     }
     final session =

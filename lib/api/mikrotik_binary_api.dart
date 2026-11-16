@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show md5;
 import 'package:flutter/foundation.dart';
 
 import '../core/net/device_net.dart';
@@ -68,22 +69,49 @@ class MikrotikBinaryClient {
   }
 
   /// Login — RouterOS 6.43+ يقبل plain login (اسم + password في نفس sentence).
-  /// الإصدارات القديمة (<6.43) تحتاج challenge-response (لم نُدعمها هنا،
-  /// من النادر جداً أن يكون الراوتر أقدم من ذلك في 2026).
+  ///
+  /// الإصدارات الأقدم (<6.43) تتجاهل الاسم وكلمة السرّ وتردّ `!done =ret=<تحدٍّ>`، ثمّ تنتظر
+  /// `/login =name= =response=00<md5(0 + كلمة السرّ + التحدّي)>` (التوثيق الرسميّ). كانت تُعدّ «دخولاً» فيرفض الجهاز
+  /// كلّ أمرٍ بعده (١٦ نوفمبر — نانوات ميكروتك القديمة عند المشتركين كثيرٌ منها على 6.3x/6.40 لم تُحدَّث).
   Future<void> login() async {
     final sentence = ['/login', '=name=$user', '=password=$pass'];
     await _writeSentence(sentence);
-    final reply = await _readSentence();
+    var reply = await _readSentence();
+    final challenge = _challengeOf(reply);
+    if (challenge != null) {
+      await _writeSentence(['/login', '=name=$user', '=response=${challengeResponse(pass, challenge)}']);
+      reply = await _readSentence();
+    }
     // نجاح: !done. فشل: !trap =message=...
     if (reply.isEmpty || reply.first != '!done') {
       final err = reply.firstWhere((w) => w.startsWith('=message='),
           orElse: () => '=message=login failed');
+      // بعد !trap يتبعها !done — تُقرأ فلا يقرأها الأمر التالي ردّاً له (اتّصال الرفض يُغلق عادةً، لكن لا نفترض)
+      if (reply.isNotEmpty && reply.first == '!trap') {
+        try {
+          await _readSentence(deadline: DateTime.now().add(trapDoneWait));
+        } catch (_) {}
+      }
       throw MikrotikBinaryException(
         err.substring('=message='.length),
-        code: reply.first == '!trap' ? 'auth' : null,
+        code: reply.isNotEmpty && reply.first == '!trap' ? 'auth' : null,
       );
     }
   }
+
+  /// `!done =ret=<hex>` من RouterOS قبل 6.43 ⇒ التحدّي (بايتات)، وإلّا null (الحديث يردّ `!done` بلا ret).
+  static List<int>? _challengeOf(List<String> reply) {
+    if (reply.isEmpty || reply.first != '!done') return null;
+    final ret = reply.firstWhere((w) => w.startsWith('=ret='), orElse: () => '');
+    final hex = ret.isEmpty ? '' : ret.substring('=ret='.length);
+    if (hex.length != 32 || !RegExp(r'^[0-9a-fA-F]{32}$').hasMatch(hex)) return null;
+    return [for (var i = 0; i < 32; i += 2) int.parse(hex.substring(i, i + 2), radix: 16)];
+  }
+
+  /// `00` + md5(بايت صفر + كلمة السرّ + التحدّي) بالست عشريّ — ردّ الدخول القديم.
+  @visibleForTesting
+  static String challengeResponse(String pass, List<int> challenge) =>
+      '00${md5.convert([0, ...utf8.encode(pass), ...challenge])}';
 
   /// أمرٌ واحدٌ في كلّ مرّة على هذا الاتّصال — مَن تخلّى عن انتظاره (`Future.timeout` عند المنادي) يبقى يقرأ، فلا
   /// يبدأ أمرٌ بعده قارئاً ثانياً على طابور البايتات نفسه (كانت الردود تختلط).

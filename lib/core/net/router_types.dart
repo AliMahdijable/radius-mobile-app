@@ -64,13 +64,27 @@ class RouterReboot {
 /// عيّنة النبضة الحيّة: عدّادات بايت تراكميّة ([rxBytes]/[txBytes] — المعدّل فرق عيّنتين) أو معدّلٌ جاهز ([downBps]/[upBps])،
 /// ومعها المتّصلون الآن ومدّة اتّصال الإنترنت إن قرأها.
 class RouterSample {
-  const RouterSample({this.rxBytes, this.txBytes, this.downBps, this.upBps, this.clients, this.wanOnlineSeconds, this.at});
+  const RouterSample({
+    this.rxBytes,
+    this.txBytes,
+    this.downBps,
+    this.upBps,
+    this.clients,
+    this.wanOnlineSeconds,
+    this.signalDbm,
+    this.ccq,
+    this.at,
+  });
   final int? rxBytes;
   final int? txBytes;
   final int? downBps;
   final int? upBps;
   final List<RouterClient>? clients;
   final int? wanOnlineSeconds;
+
+  /// إشارة الوصلة وجودتها (نانو ميكروتك بنبضته الحيّة — ١٦ نوفمبر) — null لغير النانو أو حين لم تُقرأ في هذه النبضة.
+  final int? signalDbm;
+  final int? ccq;
   final DateTime? at;
 }
 

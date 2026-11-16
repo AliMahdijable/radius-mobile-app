@@ -5,6 +5,7 @@
 // ⛔ إعادة ضبط المصنع لا تمرّ من هنا أبداً: لكلّ عائلةٍ جارُ زرّ الإقلاع في صفحتها يمسح الجهاز (MER code=5 · Tenda action=restore ·
 // CGI ACT_FACTORY_RESET) — اختباراتها تتأكّد أنّها لا تُطلب.
 
+import 'mikrotik_cpe_service.dart';
 import 'router_types.dart';
 import 'tenda_service.dart';
 import 'tplink_agile_service.dart';
@@ -18,7 +19,8 @@ class RouterOps {
 
   static const _wifi = {'tenda', 'tpmer', 'tpclassic', 'tpagile'};
   static const _reboot = {'tenda', 'tpmer', 'tpclassic', 'tpagile'};
-  static const _live = {'tpmer'};
+  // ميكروتك (نانو وراوتر، ١٦ نوفمبر): جلسة API واحدة و`monitor-traffic` بمعدّلٍ جاهز — ولا مسار SSH يوبيكويتي على الجهاز أبداً.
+  static const _live = {'tpmer', MikrotikCpeService.vendorRadio, MikrotikCpeService.vendorRouter};
 
   /// عرض كلمة سرّ الواي فاي وتغييرها مبنيٌّ ومجرَّبٌ لهذه العائلة.
   static bool canWifi(String vendor) => _wifi.contains(vendor);
@@ -60,6 +62,7 @@ class RouterOps {
 
   static Future<RouterLive?> openLive(String vendor, String host, String user, String pass) => switch (vendor) {
         'tpmer' => TplinkMerService.openLive(host, pass),
+        MikrotikCpeService.vendorRadio || MikrotikCpeService.vendorRouter => MikrotikCpeService.openLive(host, user, pass),
         _ => Future.value(null),
       };
 }

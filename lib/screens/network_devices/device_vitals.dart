@@ -703,7 +703,7 @@ class DeviceVitals {
           rethrow;
         }
       case 'mimosa':
-        return _mimosa(d, creds, detailed);
+        return _mimosa(d, creds, detailed, prev);
       case 'cisco':
         return _cisco(d, creds, detailed);
       case 'ruijie':
@@ -1121,7 +1121,7 @@ class DeviceVitals {
   // فلا فارق عدّادات يُحسب. المرور يظهر معدّلاً لحظيّاً في «إضافات».
 
   static Future<ProbeResult> _mimosa(
-      NetworkDevice d, Map<String, dynamic> creds, bool detailed) async {
+      NetworkDevice d, Map<String, dynamic> creds, bool detailed, CounterSample? prev) async {
     final community =
         (creds['community'] ?? creds['user'] ?? 'public').toString();
     final s = await MimosaApi.fetchStats(
@@ -1129,6 +1129,23 @@ class DeviceVitals {
       port: d.apiPort ?? 161,
       community: community,
     );
+    // عدّادات واجهاته (IF-MIB) تصل مع الجلسة نفسها ([MimosaStats.counters]) وتُرسم بها «سير الترفك» في لوحته — كانت تُرمى هنا
+    // فلا منافذ ولا معدّل: «الترابط» يقول «يعمل» بلا رقم لكلّ لنك ميموزا (المالك ١٦ نوفمبر). الحلقة المحلّيّة خارجها، ولا حال
+    // تشغيلٍ في هذه العدّادات: واجهةٌ تُرى «تعمل» (جدول الواجهات وحده عنده) ومعدّلها من فارق عيّنتين كبقيّة العلامات.
+    final counters = <String, ({int rx, int tx})>{};
+    final ports = <PortTraffic>[];
+    for (final c in s.counters) {
+      if (c.name.trim().toLowerCase() == 'lo') continue;
+      counters[c.name] = (rx: c.rxOctets, tx: c.txOctets);
+      final r = _rate(c.name, c.rxOctets, c.txOctets, prev);
+      ports.add(PortTraffic(
+        name: c.name,
+        up: true,
+        rxBps: r.rx,
+        txBps: r.tx,
+        physical: isWiredPortName(c.name),
+      ));
+    }
     // سكتر PtMP (A5/C5 بوضع AP): محطّاته للبطاقة المفتوحة/الكبيرة وحدها — مسحتا SNMP إضافيّتان، والمطويّة تكتفي بالثلاثة.
     final isAp = s.wirelessMode == 1 ? true : (s.wirelessMode == 2 ? false : null);
     var clients = const <MimosaClient>[];
@@ -1212,6 +1229,7 @@ class DeviceVitals {
         uptime: s.linkUptimeSec == null ? null : fmtUptime(s.linkUptimeSec!),
         firmware: s.firmwareVersion,
         model: s.deviceName,
+        ports: ports,
         peers: [
           for (final c in clients)
             if (c.online)
@@ -1243,7 +1261,7 @@ class DeviceVitals {
           if (s.serialNumber != null) (k: 'التسلسل', v: s.serialNumber!),
         ],
       ),
-      counters: const {},
+      counters: counters,
       raw: s,
     );
   }
