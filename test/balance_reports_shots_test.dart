@@ -20,6 +20,7 @@ import 'visual_perm/visual_perm_harness.dart';
 /// وفلتر «كان دين وتسدّد»، أوّل شحنة، وكرت التقارير — بعرض شاشة المالك (٤٨٠) فاتحاً، وأضيق هاتف (٣٢٠) داكناً.
 /// كلّ لقطةٍ بطول محتواها ([_fit]) وبظلالها الحقيقيّة. بياناتٌ تجريبيّة وحدها.
 /// ١٦ نوفمبر: لقطات المدراء الفرعيّين داخل الحساب من **ردّ الخادم الحقيقيّ** (server_contract_managers.json) بأوقاتٍ مزاحة.
+/// ١٦ نوفمبر مساءً: «الفترة التالية تُفتح عند الإغلاق» — 20 تأكيد الإغلاق · 21 الفترة بلا مبلغ · 22 ورقة المبلغ · 23 تفاصيلها · 24 المغلقة المقفلة.
 /// المخرجات: VISUAL_OUT (أو build/visual_perm المُتجاهَل بgit).
 const _wide = VisualDevice('480', Size(480, 1040), 3);
 const _narrowDark = VisualDevice('320_dark', Size(320, 693), 3, dark: true);
@@ -157,6 +158,42 @@ void main() {
       await tap(t, k('bal-filter-managers'));
       await _fit(t, d);
       await _shot(t, '12_managers_filter', d);
+    });
+  }
+
+  // «الفترة التالية تُفتح عند الإغلاق» (١٦ نوفمبر مساءً): تأكيد الإغلاق بجملته، الفترة بلا مبلغ بتنبيهها، ورقة «كتابة مبلغ الشحن»،
+  // تفاصيلها، وتفاصيل المغلقة بسطر قفلها.
+  for (final d in [_wide, _narrowDark]) {
+    shots('الفترة التالية — تأكيد الإغلاق ${d.tag}', (t) async {
+      final server = BalanceServer.ownerExample()..autoNext = true;
+      server.periods.first['amount'] = 1750000;
+      await up(server);
+      await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+      await settle(t, seconds: 2);
+      await tap(t, k('bal-close-1'));
+      await _shot(t, '20_next_close_confirm', d);
+    });
+
+    shots('الفترة التالية — بلا مبلغ ومبلغها وتفاصيلها والقفل ${d.tag}', (t) async {
+      await up(BalanceServer.closedWithPending()..balance = 640000);
+      await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+      await settle(t, seconds: 2);
+      await _fit(t, d);
+      await _shot(t, '21_next_pending_page', d);
+      await tap(t, k('bal-amount-btn'));
+      await t.enterText(find.descendant(of: k('bal-topup-amount'), matching: find.byType(TextField)), '2000000');
+      await settle(t, seconds: 1);
+      await _shot(t, '22_next_amount_sheet', d);
+      await t.tapAt(const Offset(8, 8));
+      await settle(t, seconds: 2);
+      await tap(t, k('bal-detail-2'));
+      await _fit(t, d);
+      await _shot(t, '23_next_pending_detail', d);
+      Navigator.of(t.element(find.byKey(const ValueKey('bal-detail-list')))).pop();
+      await settle(t, seconds: 2);
+      await tap(t, find.descendant(of: k('bal-period-1'), matching: find.byType(InkWell)).first);
+      await _fit(t, d);
+      await _shot(t, '24_next_locked_detail', d);
     });
   }
 
