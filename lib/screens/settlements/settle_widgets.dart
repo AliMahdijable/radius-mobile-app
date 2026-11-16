@@ -41,12 +41,12 @@ String settleMoney(num n) =>
   );
 }
 
-/// «الخميس 1 تشرين الأوّل · 21:40» بتوقيت الجهاز (الأجهزة في العراق).
+/// «الخميس 2026/10/01 · 21:40» بتوقيت الجهاز (الأجهزة في العراق).
 String settleWhen(DateTime? d, {bool weekday = false}) {
   if (d == null) return '—';
   final l = d.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
-  // «23 تشرين الأوّل · 00:00» لا «2026-10-23 00:00» (المالك ٢٤ أكتوبر).
+  // «2026/10/23 · 00:00» — أرقامٌ لا اسم شهر (المالك ١٦ نوفمبر).
   final s = '${iqDateOf(l)} · ${two(l.hour)}:${two(l.minute)}';
   return weekday ? '${'settle.wd${l.weekday}'.tr()} $s' : s;
 }
