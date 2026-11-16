@@ -1474,43 +1474,43 @@ class UbntStats {
       final isBackup5 = wireless.frequency > 0 && wireless.frequency < 10000;
       if (is60 && isBackup5) {
         final f60 = freqs.firstWhere((f) => f >= 50000, orElse: () => 0);
-        // إشارة الـ60 من المحطّة (rssi_data) — سالبة بالـdBm
-        int sig60 = 0;
+        // محطّة الـ60 (prs_sta: rssi_data · snr · السعة · المسافة): linked_60 أوّلاً، ثمّ أوّل محطّةٍ بإشارةٍ سالبة.
+        UbntStation? st60;
         for (final s in stations) {
-          if (s.signal < 0) {
-            sig60 = s.signal;
+          if (s.isLinked60 && s.signal < 0) {
+            st60 = s;
             break;
           }
         }
-        // الاحتياطيّ ٥ گيگا → التفاصيل (لا يضيع)
+        st60 ??= stations.where((s) => s.signal < 0).firstOrNull;
+        // 🐛 ١٦ نوفمبر (المالك بلقطة MASTER_ZAA2 بعد الإصلاح الأوّل: التردّد 62640 صحيح، و«عرض القناة 80» و«سرعة الربط 585 ·
+        // إرسال 780» و«الضجيج ‎-88» بقيت): كلّ أرقام قسم wireless هنا للراديو الاحتياطيّ ٥ — 80 MHz لا وجود له على الـ60
+        // (قنواته 2160)، و585/780 سرعتا 802.11ac بعرض 80 واثنين، والضجيج ‎-88 ضجيج الـ٥. فتنزل كلّها لسطر الاحتياطيّ،
+        // وخانات الوصلة من الـ60 وحده: التردّد (radio)، والإشارة والـSNR والسعة والمسافة (المحطّة). ما لا يُقرأ للـ60 «—».
+        final b = wireless;
+        final rate5 = b.rxRate > 0 ? b.rxRate : b.txRate;
         extras.add((
-          k: 'الراديو الاحتياطيّ (٥ گيگا)',
-          v: '${wireless.frequency} MHz'
-              '${wireless.signal < 0 ? ' · ${wireless.signal} dBm' : ''}',
+          k: 'الراديو الاحتياطيّ (٥ غيغا)',
+          v: [
+            '${b.frequency} MHz',
+            if (b.signal < 0) '${b.signal} dBm',
+            if (b.chanbw > 0) 'عرض ${b.chanbw} MHz',
+            if (rate5 > 0) '$rate5 Mbps',
+          ].join(' · '),
         ));
-        // لم نعثر على تردّد الـ60 رغم أنّه جهاز ٦٠ ⇒ سطر تشخيصٍ مؤقّت (يُحذف قبل النشر)
-        if (f60 == 0) {
-          extras.add((
-            k: '⟨تشخيص ٦٠⟩',
-            v: 'wlan=${wireless.frequency} radio=$radioFreq '
-                'freq=$mFreq l60=$linked60 st=${stations.length}',
-          ));
-        }
-        // نبدّل التردّد والإشارة فقط — فيطابق الماستر الطرفَ الذي يقرأ الـ60 أصلاً؛
-        // الباقي (الضجيج، العرض، SNR، المعدّلات) كما هو.
         wireless = UbntWireless(
-          essid: wireless.essid,
-          mode: wireless.mode,
-          signal: sig60 != 0 ? sig60 : wireless.signal,
-          noise: wireless.noise,
-          explicitSnr: wireless.explicitSnr,
-          ccq: wireless.ccq,
-          txRate: wireless.txRate,
-          rxRate: wireless.rxRate,
-          channel: wireless.channel,
+          essid: b.essid,
+          mode: b.mode,
+          signal: st60?.signal ?? 0, // لا إشارة الـ٥ مكانها
+          noise: 0, // الـ60 بلا ضجيجٍ مقروء — و‎-88 للـ٥
+          explicitSnr: st60?.explicitSnr ?? b.explicitSnr,
+          ccq: 0, // لا CCQ على الـ60
+          txRate: st60?.txRate ?? 0, // سعة الـ60 من prs_sta
+          rxRate: st60?.rxRate ?? 0,
+          channel: 0,
           frequency: f60, // 62640 (أو «—» إن لم يُكشف) لا 4980
-          distance: wireless.distance,
-          chanbw: wireless.chanbw,
+          distance: st60?.distanceMeters ?? b.distance,
+          chanbw: b.chanbw >= 1000 ? b.chanbw : 0, // 2160 للـ60؛ ما دون الألف عرض الـ٥
         );
       }
     }

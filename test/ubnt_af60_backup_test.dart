@@ -14,8 +14,8 @@ void main() {
           'prs_sta': {
             'rssi_data': rssi,
             'snr': 18,
-            'dl_capacity': 780000, // Kbps ⇒ 780 Mbps
-            'ul_capacity': 866000,
+            'dl_capacity': 1540000, // Kbps ⇒ 1540 Mbps (سعة الـ60 — غير سرعتي الـ٥ 585/780)
+            'ul_capacity': 1925000,
             'distance': 481,
             'uptime': 5550000,
           },
@@ -48,6 +48,59 @@ void main() {
       expect(backup.first.v, contains('4980'));
       // لا سطر تشخيصٍ ما دام التردّد وُجد
       expect(s.extras.where((e) => e.k.contains('تشخيص')), isEmpty);
+    });
+
+    test('🚨 ١٦ نوفمبر (لقطة MASTER_ZAA2): العرض 80 والسرعة 585/780 والضجيج ‎-88 للاحتياطيّ ٥ ⇒ سطره، والخانات من الـ60', () {
+      final m = {
+        'platform': 'GigaBeam LR',
+        'wlanEssid': '@ZAA2',
+        'wlanMode': 'sta',
+        'wlanSignal': '-89', // الاحتياطيّ ٥
+        'wlanFrequency': '4980',
+        'radioFrequency': '62640',
+        'wlanNoiseFloor': '-88',
+        'wlanChanWidth': '80',
+        'wlanCcq': '91',
+        'wlanTxRate': '780', // 802.11ac ‏VHT80 ×2 — سرعتا الـ٥
+        'wlanRxRate': '585',
+        'wlanDistance': '480',
+        'station1_snr': '18',
+      };
+      final s = UbntStats.fromMcaStatus(m, wstalistStations: sta60(rssi: -54));
+      final w = s.wireless!;
+      expect(w.frequency, 62640);
+      expect(w.signal, -54, reason: 'إشارة الـ60 من المحطّة');
+      expect(w.snr, 18, reason: 'SNR الـ60 (prs_sta.snr) لا المحسوب من ضجيج الـ٥');
+      expect((w.txRate, w.rxRate), (1540, 1925), reason: 'سعة الـ60 من prs_sta لا 780/585');
+      expect(w.hasNoise, isFalse, reason: '‎-88 ضجيج الـ٥ — لا يُعرض للـ60');
+      expect(w.chanbw, 0, reason: '80 MHz لا وجود له على الـ60 ⇒ «—»');
+      expect(w.hasCcq, isFalse, reason: 'لا CCQ على الـ60');
+      expect(w.distance, 481, reason: 'مسافة المحطّة (prs_sta)');
+      final backup = s.extras.singleWhere((e) => e.k.contains('الاحتياطيّ'));
+      expect(backup.k, 'الراديو الاحتياطيّ (٥ غيغا)');
+      expect(backup.v, '4980 MHz · -89 dBm · عرض 80 MHz · 585 Mbps');
+    });
+
+    test('الاحتياطيّ ٥ شغّال ولا محطّة ٦٠ مقروءة ⇒ «—» للإشارة والسرعة، لا أرقام الـ٥', () {
+      final m = {
+        'platform': 'GigaBeam LR',
+        'wlanEssid': '@ZAA2',
+        'wlanMode': 'sta',
+        'wlanSignal': '-89',
+        'wlanFrequency': '4980',
+        'radioFrequency': '62640',
+        'wlanNoiseFloor': '-88',
+        'wlanChanWidth': '80',
+        'wlanTxRate': '780',
+        'wlanRxRate': '585',
+      };
+      final s = UbntStats.fromMcaStatus(m, wstalistStations: const []);
+      final w = s.wireless!;
+      expect(w.frequency, 62640);
+      expect(w.signal, 0, reason: '«—» لا ‎-89');
+      expect((w.txRate, w.rxRate), (0, 0), reason: '«—» لا 780/585');
+      expect(w.snr, isNull);
+      expect(s.extras.singleWhere((e) => e.k.contains('الاحتياطيّ')).v, contains('585 Mbps'));
     });
 
     test('السلف: الاحتياطيّ ٥ خامل ⇒ الـ60 مقروءٌ أصلاً (62640) — بلا تبديل ولا «احتياطيّ»', () {
@@ -84,7 +137,7 @@ void main() {
       expect(s.extras.where((e) => e.k.contains('الاحتياطيّ')), isEmpty);
     });
 
-    test('جهاز ٦٠ بلا تردّد ٦٠ مكشوف ⇒ «—» لا 4980، وسطر تشخيصٍ مؤقّت', () {
+    test('جهاز ٦٠ بلا تردّد ٦٠ مكشوف ⇒ «—» لا 4980، وبلا سطر تشخيص (حُذف قبل 186)', () {
       final m = {
         'platform': 'GigaBeam LR',
         'wlanEssid': '@ZAA2',
@@ -95,7 +148,7 @@ void main() {
       final s = UbntStats.fromMcaStatus(m, wstalistStations: sta60());
       expect(s.wireless!.frequency, 0, reason: '«—» لا 4980 الاحتياطيّ');
       expect(s.wireless!.signal, -53, reason: 'الإشارة من المحطّة تبقى صحيحة');
-      expect(s.extras.where((e) => e.k.contains('تشخيص')), hasLength(1));
+      expect(s.extras.where((e) => e.k.contains('تشخيص')), isEmpty, reason: 'السطر المؤقّت «⟨تشخيص ٦٠⟩» حُذف');
     });
   });
 }
