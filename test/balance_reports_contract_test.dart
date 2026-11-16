@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -14,6 +12,7 @@ import 'package:rad_mysvcs/screens/reports/balance_reports_screen.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'balance_reports/contract_server.dart';
 import 'employee_ledger/ledger_fixture.dart' show LedgerDiskLoader;
 
 /// «تقارير الأرصدة» — عقد الخادم (١٦ نوفمبر): `balance_reports/server_contract.json` **ولّده كود الخادم الحيّ نفسه**
@@ -21,6 +20,8 @@ import 'employee_ledger/ledger_fixture.dart' show LedgerDiskLoader;
 /// (المولّد: `~/kits/balance_reports/gen_contract.js <شجرة الخادم>` على الخادم، ونسخته `~/release_work/balance_reports/contract/`).
 /// هنا: نماذج التطبيق تقرأ كلّ حقلٍ بمفتاحه الصحيح (مفتاحٌ خطأ = صفرٌ صامت على الشاشة)، مفتاحٌ جديد من الخادم بلا قرارٍ
 /// هنا يُفشل الاختبار، ثمّ الشاشتان تعرضان الردّ الحقيقيّ بأرقامه وحالات ديونه الستّ.
+/// ١٦ نوفمبر: عقدٌ ثانٍ `server_contract_managers.json` (المولّد بوضع «managers» — مفتاح المدراء الفرعيّين مفتوح): أرقامهم داخل
+/// الفترات، حركاتهم بعمليّاتها الأربع، فلترهم، وما سُدّد من ديونهم القديمة؛ والعقد الأوّل (المفتاح مطفأ) يبقى كما كان حرفاً.
 /// الحركات: ثلاث فترات (مغلقة، بانتظار الإغلاق، جارية) فيها نقدي/آجل/جزئي بلهجتَي الساس وايرث لنك، دينٌ قديم، دينٌ يدويّ،
 /// دفعةٌ مقدَّمة، نقدٌ زائد يسدّ الأقدم، تسديدٌ قبل الإغلاق وبعده، دينٌ لم يُسجَّل، دينٌ نقص خارج النظام، وإلغاء تسديد.
 void main() {
@@ -167,10 +168,12 @@ void main() {
         final items = ((dj['movements'] as Map)['items'] as List).cast<Map<String, dynamic>>();
         expect(page.items.length, items.length, reason: 'لا حركة تسقط عند القراءة');
         expect([page.total, page.offset], [(dj['movements'] as Map)['total'], (dj['movements'] as Map)['offset']]);
-        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.map((f) => f.wire).toSet(), reason: 'فلاتر الخادم = فلاتر التطبيق');
+        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.where((f) => f != BalanceFilter.managers).map((f) => f.wire).toSet(),
+            reason: 'فلاتر الخادم = فلاتر التطبيق (و«المدراء» لا يأتي ومفتاحهم مطفأ)');
         for (final f in BalanceFilter.values) {
-          expect(page.counts[f], (dj['counts'] as Map)[f.wire], reason: 'عدد ${f.wire}');
+          expect(page.counts[f], (dj['counts'] as Map)[f.wire] ?? 0, reason: 'عدد ${f.wire}');
         }
+        expect(page.period.managers, isNull, reason: 'مفتاح المدراء مطفأ ⇒ لا أرقام مدراء');
         same(page.period.collected, pj['collected'], 'فترة التفاصيل = فترة اللوحة');
         for (var i = 0; i < items.length; i++) {
           final j = items[i];
@@ -242,6 +245,257 @@ void main() {
     });
   });
 
+  group('المدراء الفرعيّون داخل الحساب — ردّ الخادم ومفتاحهم مفتوح', () {
+    // server_contract_managers.json: المولّد نفسه بوضع «managers» (شحنٌ نقديّ وآجل، تسديدٌ قبل الإغلاق وبعده، سحب، دينٌ قديم).
+    final on = jsonDecode(File('test/balance_reports/server_contract_managers.json').readAsStringSync()) as Map<String, dynamic>;
+    final ov = (on['overview'] as Map)['data'] as Map<String, dynamic>;
+    final ps = (ov['periods'] as List).cast<Map<String, dynamic>>();
+    Map<String, dynamic> det(int id) => ((on['details'] as Map)['$id'] as Map)['data'] as Map<String, dynamic>;
+
+    test('اللوحة: managers_included، أرقام المدراء بمفاتيحها، وما سُدّد من القديم — والأرقام محسوبةٌ باليد', () {
+      expect(ov.keys.toSet(), {'feature_enabled', 'can_manage', 'now_ms', 'managers_included', 'periods', 'totals', 'quality'});
+      expect((ov['totals'] as Map).keys.toSet(), {'old_paid', 'manual_paid', 'other_paid', 'advance', 'closed_net', 'debts_open', 'managers_old_paid'});
+      final o = BalanceOverview.fromJson(ov)!;
+      expect([o.managersIncluded, o.managersOldPaid], [true, 70000]);
+      expect(o.outside.map((x) => (x.id, x.value)).toList(), [('old', 30000.0), ('manual', 25000.0), ('managers', 70000.0)]);
+      for (var i = 0; i < ps.length; i++) {
+        final j = ps[i]['managers'] as Map;
+        final m = o.periods[i].managers!;
+        expect(j.keys.toSet(), {'cash', 'withdrawn', 'loans', 'paid_in', 'open', 'late', 'count'}, reason: 'مفتاحٌ جديد من الخادم بلا قرار');
+        expect([m.cash, m.withdrawn, m.loans, m.paidIn, m.open, m.afterClose, m.count],
+            [j['cash'], j['withdrawn'], j['loans'], j['paid_in'], j['open'], j['late'], j['count']].map((x) => x is int && x == j['count'] ? x : (x as num).toDouble()).toList());
+        expect(ps[i].keys.toSet().difference({'managers'}).length, 28, reason: 'بقيّة مفاتيح الفترة كما هي');
+        expect([o.periods[i].transfersCount, o.periods[i].transfersSum], [0, 0], reason: 'لا تنبيه «غير داخلة» وهي داخلة');
+      }
+      // المغلقة: 170 ألفاً من المشتركين + 50 نقديّ + 30 تسديد − 10 سحب = 240؛ بعد الإغلاق 80 + 50 = 130؛ الصافي 70
+      final closed = o.periods.last;
+      expect([closed.collected, closed.cashNow, closed.paidIn, closed.adjustmentsSum, closed.lateProfit, closed.net, closed.profit, closed.debtsCreated, closed.debtsOpen, closed.incomeInWindow],
+          [240000, 85000, 85000, 60000, 130000, 70000, 70000, 295000, 50000, 100000]);
+      final m1 = closed.managers!;
+      expect([m1.cash, m1.withdrawn, m1.loans, m1.paidIn, m1.open, m1.afterClose, m1.count], [50000, 10000, 80000, 30000, 0, 50000, 5]);
+      expect(closed.collected, closed.cashNow + closed.paidIn + m1.cash + m1.paidIn - m1.withdrawn);
+      final waiting = o.periods[1];
+      expect([waiting.collected, waiting.remaining, waiting.debtsOpen, waiting.managers!.loans, waiting.managers!.paidIn, waiting.managers!.open], [170000, 30000, 30000, 40000, 10000, 30000]);
+      final running = o.periods.first;
+      expect([running.collected, running.remaining, running.debtsCreated, running.debtsOpen, running.managers!.cash, running.managers!.open], [120000, 280000, 165000, 120000, 25000, 30000]);
+    });
+
+    final mgrFields = <String, Object? Function(BalanceMgrMove)?>{
+      'key': (m) => m.key,
+      'kind': null, // يختار الصنف
+      'op': (m) => m.op.name,
+      'at_ms': (m) => m.atMs,
+      'sub': null, // معرّف المدير — لا يُعرض
+      'username': (m) => m.username,
+      'amount': (m) => m.amount,
+      'remaining': (m) => m.remaining,
+      'debt_state': (m) => m.debtState.name,
+      'turned': null, // أدناه
+      'paid_in': (m) => m.paidIn,
+      'paid_late': (m) => m.paidLate,
+      'last_paid_at_ms': (m) => m.lastPaidAtMs,
+      'after_close': (m) => m.afterClose,
+      'by': (m) => m.by,
+      'note': (m) => m.note,
+    };
+
+    test('حركات المدراء: كلّ مفتاحٍ بقارئه، العمليّات الأربع، والأعداد بفلتر «المدراء»', () {
+      final ops = <BalanceMgrOp>{};
+      var n = 0;
+      for (final pj in ps) {
+        final dj = det(pj['id'] as int);
+        final page = BalancePeriodPage.fromJson(dj)!;
+        final items = ((dj['movements'] as Map)['items'] as List).cast<Map<String, dynamic>>();
+        expect(page.items.length, items.length, reason: 'لا حركة تسقط عند القراءة');
+        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.map((f) => f.wire).toSet(), reason: 'فلاتر الخادم = فلاتر التطبيق');
+        for (final f in BalanceFilter.values) {
+          expect(page.counts[f], (dj['counts'] as Map)[f.wire], reason: 'عدد ${f.wire}');
+        }
+        expect(page.counts[BalanceFilter.managers], items.where((x) => x['kind'] == 'manager').length);
+        for (var i = 0; i < items.length; i++) {
+          final j = items[i];
+          if (j['kind'] != 'manager') continue;
+          n++;
+          final m = page.items[i] as BalanceMgrMove;
+          expect(j.keys.toSet().difference(mgrFields.keys.toSet()), isEmpty, reason: 'مفتاح حركة مديرٍ جديد من الخادم');
+          expect(mgrFields.keys.toSet().difference(j.keys.toSet()), isEmpty, reason: 'مفتاحٌ لا يرسله الخادم');
+          for (final e in mgrFields.entries) {
+            if (e.value != null) same(e.value!(m), j[e.key], '${j['key']}: ${e.key}');
+          }
+          expect(m.turnedProfit, j['turned'] == 'profit');
+          ops.add(m.op);
+        }
+      }
+      expect(ops, BalanceMgrOp.values.toSet(), reason: 'العقد يغطّي العمليّات الأربع');
+      expect(n, 9);
+      expect(BalanceMove.fromJson({'key': 'm1', 'kind': 'manager', 'op': 'bonus', 'at_ms': 1}), isNull, reason: 'عمليّةٌ لا نعرفها لا تُعرض خطأً');
+    });
+
+    test('علامة الشحن الآجل للمدير: تسدّد بعد الإغلاق ربحاً، تسدّد بعضه، أو باقٍ — وغير الآجل بلا علامة دين', () {
+      BalanceMgrMove mv(int period, String key) =>
+          BalanceMove.fromJson(((det(period)['movements'] as Map)['items'] as List).cast<Map<String, dynamic>>().firstWhere((x) => x['key'] == key))! as BalanceMgrMove;
+      expect(balanceMgrDebtNote(mv(1, 'm3'))?.text, startsWith('كان دين وتسدّد بعد الإغلاق — صار ربح — '));
+      expect(balanceMgrDebtNote(mv(2, 'm9'))?.text, 'تسدّد منه 10,000 · باقي 30,000');
+      expect(balanceMgrDebtNote(mv(3, 'm11'))?.text, 'دين باقي 30,000');
+      expect(balanceMgrDebtNote(mv(1, 'm2')), isNull, reason: 'شحنٌ نقديّ');
+      expect(balanceMgrDebtNote(mv(1, 'm5')), isNull, reason: 'سحب');
+      expect([mv(1, 'm8pl').op, mv(1, 'm8pl').afterClose, mv(1, 'm4p').afterClose], [BalanceMgrOp.pay, true, false]);
+    });
+
+    group('الشاشتان', () {
+      late BalanceContractServer server;
+      setUp(() async {
+        FlutterSecureStorage.setMockInitialValues({});
+        SharedPreferences.setMockInitialValues({});
+        await EasyLocalization.ensureInitialized();
+        PermissionsService.debugReset();
+        PermissionsService.debugSet(isEmployee: false);
+        BalanceReportsState.reset();
+        server = BalanceContractServer(on);
+        ApiClient.dio.httpClientAdapter = server;
+      });
+      tearDown(PermissionsService.debugReset);
+
+      Widget app(Widget child, {double textScale = 1}) => EasyLocalization(
+            supportedLocales: const [Locale('ar'), Locale('en')],
+            path: 'assets/translations',
+            startLocale: const Locale('ar'),
+            fallbackLocale: const Locale('ar'),
+            saveLocale: false,
+            assetLoader: const LedgerDiskLoader(),
+            child: Builder(
+              builder: (c) => MaterialApp(
+                locale: c.locale,
+                supportedLocales: c.supportedLocales,
+                localizationsDelegates: c.localizationDelegates,
+                builder: (ctx, w) => MediaQuery(data: MediaQuery.of(ctx).copyWith(textScaler: TextScaler.linear(textScale)), child: w!),
+                home: Directionality(textDirection: TextDirection.rtl, child: child),
+              ),
+            ),
+          );
+      Future<void> settle(WidgetTester t) async {
+        for (var i = 0; i < 20; i++) {
+          await t.pump(const Duration(milliseconds: 100));
+        }
+      }
+
+      Finder k(String key) => find.byKey(ValueKey(key));
+      Finder inKey(String key, String text) => find.descendant(of: k(key), matching: find.text(text));
+      Future<void> tap(WidgetTester t, Finder f) async {
+        await t.ensureVisible(f);
+        await t.pump();
+        await t.tap(f);
+        await settle(t);
+      }
+
+      Future<void> end(WidgetTester t) async {
+        await t.pumpWidget(const SizedBox.shrink());
+        await t.pump(const Duration(seconds: 4));
+      }
+
+      testWidgets('الصفحة: «طبّلك» بسطر المدراء، ديون الفترة «منها على المدراء»، لا تنبيه «غير داخلة»، وخارج الحساب', (t) async {
+        t.view.physicalSize = const Size(400, 3400);
+        t.view.devicePixelRatio = 1.0;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(app(const BalanceReportsScreen()));
+        await settle(t);
+        expect(t.takeException(), isNull);
+        expect(inKey('bal-stat-collected', '120,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-stat-collected', 'من المدراء الفرعيّين 25,000'), findsOneWidget);
+        expect(inKey('bal-stat-collected', 'نقد التفعيلات 50,000'), findsOneWidget);
+        expect(find.descendant(of: k('bal-stat-collected'), matching: find.textContaining('ناقص سحبٍ')), findsNothing, reason: 'لا سحب في الجارية');
+        expect(inKey('bal-stat-debts', '120,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-stat-debts', 'باقية من أصل 165,000'), findsOneWidget);
+        expect(inKey('bal-stat-debts', 'منها على المدراء 30,000'), findsOneWidget);
+        expect(k('bal-transfers'), findsNothing);
+        expect(inKey('bal-outside', '70,000 د.ع'), findsOneWidget);
+        expect(find.descendant(of: k('bal-outside'), matching: find.textContaining('تسديد ديون مدراء فرعيّين أقدم من أوّل شحنة')), findsOneWidget);
+        expect(find.descendant(of: k('bal-period-2'), matching: find.text('170,000')), findsOneWidget);
+        expect(find.descendant(of: k('bal-period-1'), matching: find.text('240,000')), findsOneWidget);
+        await end(t);
+      });
+
+      testWidgets('بلاطة «طبّلك» لفترةٍ فيها شحنٌ نقديّ وتسديدٌ وسحب: ما دخل من المدراء مجموعاً، والسحب بسطره', (t) async {
+        t.view.physicalSize = const Size(400, 900);
+        t.view.devicePixelRatio = 1.0;
+        addTearDown(t.view.reset);
+        final closed = BalanceOverview.fromJson(ov)!.periods.last;
+        await t.pumpWidget(app(Scaffold(body: SingleChildScrollView(child: BalanceStats(period: closed)))));
+        await settle(t);
+        expect(inKey('bal-stat-collected', '240,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-stat-collected', 'من المدراء الفرعيّين 80,000'), findsOneWidget, reason: '50 ألفاً نقديّ + 30 ألفاً تسديد');
+        expect(inKey('bal-stat-collected', 'ناقص سحبٍ من المدراء 10,000'), findsOneWidget);
+        expect(find.descendant(of: k('bal-stat-debts'), matching: find.textContaining('منها على المدراء')), findsNothing, reason: 'دين المدير تسدّد كلّه');
+        expect(t.takeException(), isNull);
+        await end(t);
+      });
+
+      testWidgets('تفاصيل المغلقة: أسطر المدراء في الخلاصة، شريحة «المدراء 5»، والحركات الخمس بإشاراتها وعلاماتها', (t) async {
+        t.view.physicalSize = const Size(400, 4600);
+        t.view.devicePixelRatio = 1.0;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(app(const BalanceReportsScreen()));
+        await settle(t);
+        await tap(t, find.descendant(of: k('bal-period-1'), matching: find.byType(InkWell)).first);
+        expect(t.takeException(), isNull);
+        expect(inKey('bal-sum-collected', '240,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-sum-mgr-cash', '50,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-sum-mgr-paid', '30,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-sum-mgr-withdrawn', balanceSigned(10000, sign: '−')), findsOneWidget);
+        expect(inKey('bal-sum-mgr-loans', '80,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-sum-mgr-open', '0 د.ع'), findsOneWidget);
+        expect(inKey('bal-summary', 'الباقي منها بذمّة المشتركين والمدراء'), findsOneWidget);
+        expect(inKey('bal-sum-late', '130,000 د.ع'), findsOneWidget);
+        expect(inKey('bal-sum-net', balanceSigned(70000)), findsOneWidget);
+        expect(find.text('الكل 20'), findsOneWidget);
+        expect(find.text('المدراء 5'), findsOneWidget);
+        await tap(t, k('bal-filter-managers'));
+        expect(server.filters.last, 'managers');
+        final rows = t.widgetList<BalanceMoveRow>(find.byType(BalanceMoveRow)).map((r) => r.move).toList();
+        expect(rows.length, 5);
+        expect(rows.every((m) => m is BalanceMgrMove), isTrue);
+        expect(rows.cast<BalanceMgrMove>().map((m) => m.op.name).toList(), ['pay', 'withdraw', 'pay', 'loan', 'cash']);
+        final statuses = t.widgetList<BalanceMoveStatus>(k('bal-move-status')).map((c) => c.text).toList();
+        expect(statuses.length, 5);
+        expect(statuses[0], 'بعد الإغلاق — صار ربح');
+        expect(statuses[1], 'نقص من «طبّلك»');
+        expect(statuses[2], 'دخل «طبّلك»');
+        expect(statuses[3], startsWith('كان دين وتسدّد بعد الإغلاق — صار ربح — '));
+        expect(statuses[4], 'دخل «طبّلك»');
+        expect(find.text(balanceSigned(10000, sign: '−')), findsWidgets, reason: 'السحب بإشارته');
+        expect(find.text(balanceSigned(50000, sign: '+')), findsWidgets, reason: 'الشحن النقديّ بإشارته');
+        expect(find.text('شحن مدير آجل'), findsOneWidget);
+        expect(find.text('سحب رصيد من مدير'), findsOneWidget);
+        expect(find.text('تسديد دين مدير'), findsNWidgets(2));
+        expect(find.textContaining('مدير فرعيّ'), findsNWidgets(5));
+        expect(t.takeException(), isNull);
+        await end(t);
+      });
+
+      testWidgets('الشكل بأضيق هاتف وخطٍّ ×1.2: الصفحة والتفاصيل وحركات المدراء بلا فيض، وعلاماتهم كاملةٌ داخل كرتها', (t) async {
+        for (final width in [320.0, 390.0, 480.0]) {
+          t.view.physicalSize = Size(width, 5200);
+          t.view.devicePixelRatio = 1.0;
+          addTearDown(t.view.reset);
+          await t.pumpWidget(app(const BalanceReportsScreen(), textScale: 1.2));
+          await settle(t);
+          expect(t.takeException(), isNull, reason: 'الصفحة @$width');
+          await tap(t, find.descendant(of: k('bal-period-1'), matching: find.byType(InkWell)).first);
+          expect(t.takeException(), isNull, reason: 'التفاصيل @$width');
+          await tap(t, k('bal-filter-managers'));
+          expect(t.takeException(), isNull, reason: 'حركات المدراء @$width');
+          final card = t.getRect(k('bal-moves'));
+          for (final e in find.byKey(const ValueKey('bal-move-status')).evaluate()) {
+            final box = e.renderObject! as RenderBox;
+            final r = box.localToGlobal(Offset.zero) & box.size;
+            expect(r.left >= card.left && r.right <= card.right, isTrue, reason: 'علامةٌ خارج الكرت @$width');
+          }
+          await end(t);
+        }
+      });
+    });
+  });
+
   group('الشاشتان تعرضان الردّ الحقيقيّ', () {
     setUp(() async {
       FlutterSecureStorage.setMockInitialValues({});
@@ -250,7 +504,7 @@ void main() {
       PermissionsService.debugReset();
       PermissionsService.debugSet(isEmployee: false);
       BalanceReportsState.reset();
-      ApiClient.dio.httpClientAdapter = _ContractServer(contract);
+      ApiClient.dio.httpClientAdapter = BalanceContractServer(contract);
     });
     tearDown(PermissionsService.debugReset);
 
@@ -337,38 +591,4 @@ void main() {
       await t.pump(const Duration(seconds: 4));
     });
   });
-}
-
-/// يجيب بردود العقد كما هي: «من أنا»، اللوحة، وتفاصيل كلّ فترة (كلّ حركاتها في صفحةٍ واحدة).
-class _ContractServer implements HttpClientAdapter {
-  _ContractServer(this.contract);
-  final Map<String, dynamic> contract;
-
-  static final _period = RegExp(r'^/api/v2/balance-reports/periods/(\d+)$');
-
-  @override
-  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
-    Object? body;
-    var status = 200;
-    final m = _period.firstMatch(o.path);
-    if (o.path == '/api/v2/admin-widgets') {
-      body = {'success': true, 'points': 0, 'balance': 120000};
-    } else if (o.path == '/api/v2/balance-reports/me') {
-      body = contract['me_manager'];
-    } else if (o.path == '/api/v2/balance-reports' && o.method == 'GET') {
-      body = contract['overview'];
-    } else if (m != null && o.method == 'GET') {
-      body = (contract['details'] as Map)[m.group(1)];
-    }
-    if (body == null) {
-      status = 404;
-      body = {'success': false, 'message': 'غير موجود'};
-    }
-    return ResponseBody.fromString(jsonEncode(body), status, headers: {
-      Headers.contentTypeHeader: [Headers.jsonContentType],
-    });
-  }
-
-  @override
-  void close({bool force = false}) {}
 }
