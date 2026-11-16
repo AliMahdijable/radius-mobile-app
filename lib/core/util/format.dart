@@ -10,6 +10,10 @@ String formatIQD(num value) {
   return s.replaceAllMapped(_grouper, (m) => '${m[1]},');
 }
 
+/// كـ[formatIQD] لكن **بإشارة السالب** («−110,378,803»): لرصيدٍ قد يكون بالسالب — رصيد المدير في الساس (مديرٌ يعمل بالآجل،
+/// والأدمن الرئيسيّ رصيده سالبٌ دائماً). يُعرض في نصٍّ اتّجاهه LTR (صفوف الأوراق) أو معزول — وإلّا قفز الناقص يمين الرقم.
+String formatIQDSigned(num value) => '${value < 0 ? '−' : ''}${formatIQD(value)}';
+
 /// 0.12 → "+12%", -0.05 → "-5%", 0 → "0%".
 String formatDeltaPct(double ratio) {
   final pct = (ratio * 100).round();

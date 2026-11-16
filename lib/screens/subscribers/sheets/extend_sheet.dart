@@ -191,8 +191,16 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (_method == _Method.points) {
       return _pointsBalance >= _selectedPoints && _selectedPoints > 0;
     }
-    return _selectedPrice > 0 && _managerBalance >= _selectedPrice;
+    // الرصيد لا يمنع: القرار للساس ([_balanceShort]) — كالموقع وكورقة التفعيل.
+    return _selectedPrice > 0;
   }
+
+  /// الرصيد أقلّ من المبلغ، أو بالسالب: **لا يُمنع التمديد** — الساس هو من يقرّر. المالك ١٦ نوفمبر (لقطة وكيل: «رصيد المدير
+  /// 110,378,803» والزرّ «الرصيد غير كافٍ»): رصيده في الساس **سالب** (يعمل بالآجل/أدمن رئيسيّ) وكان يُعرض بلا ناقص، والمنع هنا
+  /// يحرمه تمديداً يقبله الساس. الموقع لا يمنع منذ زمن («لا منع بالرصيد — الساس يحكم»: سعر القائمة قد يفوق سعر المدير
+  /// الفعليّ)، وورقة التفعيل كذلك. يبقى تنبيهٌ ظاهر، ورفض الساس يصل برسالته.
+  bool get _balanceShort =>
+      !_freeMode && !_isEarthlink && _method == _Method.balance && _selectedPkg != null && _selectedPrice > 0 && _managerBalance < _selectedPrice;
 
   String? get _disabledReason {
     if (_selectedPkg == null || _freeMode) return null;
@@ -203,9 +211,6 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       }
     } else {
       if (_selectedPrice <= 0) return 'sheets.no_price'.tr();
-      if (_managerBalance < _selectedPrice) {
-        return 'sheets.insufficient_balance'.tr();
-      }
     }
     return null;
   }
@@ -369,7 +374,9 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           if (!_isEarthlink && !_freeMode)
             SheetRowData(
               label: 'dashboard.manager_balance'.tr(),
-              value: '${formatIQD(_managerBalance.round())} $cur',
+              // بإشارته: السالب كان يُعرض رصيداً موجوداً ([formatIQD] يُسقط الناقص)
+              value: '${formatIQDSigned(_managerBalance.round())} $cur',
+              valueColor: _managerBalance < 0 ? AppColors.error : null,
             ),
           if (_pointsBalance > 0 && !_freeMode)
             SheetRowData(
@@ -464,6 +471,16 @@ class _ExtendSheetState extends State<_ExtendSheet> {
               },
             ),
           ),
+          if (_balanceShort) ...[
+            const SizedBox(height: Sp.sm),
+            Text(
+              _managerBalance < 0
+                  ? 'رصيدك في الساس بالسالب — يُرسَل التمديد والقرار للساس، وقد يرفضه'
+                  : 'رصيدك أقلّ من المبلغ المطلوب — يُرسَل التمديد والقرار للساس، وقد يرفضه',
+              key: const ValueKey('extend-balance-short'),
+              style: AppType.muted(color: AppColors.warning).copyWith(fontSize: 12.5, height: 1.4),
+            ),
+          ],
         ],
       ],
     ];

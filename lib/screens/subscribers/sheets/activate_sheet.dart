@@ -1181,7 +1181,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                 ),
                 SheetRowData(
                   label: _managerBalanceLabel,
-                  value: '${formatIQD(_managerBalance.round())} $cur',
+                  value: '${formatIQDSigned(_managerBalance.round())} $cur',
+                  valueColor: _managerBalance < 0 ? AppColors.error : null,
                 ),
               ]
             : [
@@ -1221,7 +1222,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ),
           SheetRowData(
             label: _managerBalanceLabel,
-            value: '${formatIQD(_managerBalance.round())} $cur',
+            // بإشارته (١٦ نوفمبر): رصيدٌ سالب في الساس كان يُعرض رصيداً موجوداً — [formatIQD] يُسقط الناقص
+            value: '${formatIQDSigned(_managerBalance.round())} $cur',
+            valueColor: _managerBalance < 0 ? AppColors.error : null,
           ),
           if (_rewardPoints > 0)
             SheetRowData(
