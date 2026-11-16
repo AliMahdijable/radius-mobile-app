@@ -8,6 +8,8 @@ import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/tower/tower_reading.dart';
 import 'package:rad_mysvcs/screens/network_devices/tower/tower_topology_logic.dart';
 
+import 'support/ubnt_gen3_fixtures.dart';
+
 /// المالك ١٦ نوفمبر (صورة «الترابط»: أربع وصلات «يعمل» بلا رقم): «اللنكات روجي ولنكات ميموسا ولنكات يوبيكويتي اتأكّد جاي
 /// تعرض سير الترفك». هنا كلّ علامةٍ بقراءتين متتاليتين عبر **بانيها الحقيقيّ** (`DeviceVitals.fetch` بمنفذ الاختبار) ثمّ
 /// [TowerReading.fromProbe] ثمّ [LinkFlow.of] — كما يقرأ مسبار الأبراج تماماً، والعيّنة السابقة قبل ٢٠ ثانية.
@@ -46,6 +48,19 @@ Future<TowerReading> _twoReads(NetworkDevice d, void Function(int round) arm) as
     detailed: true,
   );
   return TowerReading.fromProbe(r2);
+}
+
+/// ناتج `mca-status` (سطورٌ بـ`مفتاح=قيمة` مفصولةٌ بفواصل) ⇒ خريطة، كما يفعل القارئ الحقيقيّ.
+Map<String, String> _parseMca(String out) {
+  final map = <String, String>{};
+  for (final line in out.split('\n')) {
+    for (final part in line.trim().split(',')) {
+      final eq = part.indexOf('=');
+      if (eq <= 0) continue;
+      map.putIfAbsent(part.substring(0, eq).trim(), () => part.substring(eq + 1).trim());
+    }
+  }
+  return map;
 }
 
 UbntInterface _ui(String n, int rx, int tx) =>
@@ -146,6 +161,114 @@ void main() {
       final big = [f.toSubBps!, f.toMainBps!]..sort();
       expect(big[1], _near(_bps(down)));
       expect(big[0], _near(_bps(upB)));
+    });
+
+    // ── airFiber X: المالك ١٦ نوفمبر (صورة «الترابط»، لنك AF-4X تحته ستّ سكترات يقرأ «9 Kbps ↓ 22 Kbps ↑»): «البارحة من صلحنا
+    // بوضع سير الترفك تأثّر عدنا الجهاز 4x». القراءة هنا من **ردّ AF-4X الحقيقيّ** ([af4xMcaStatus]) بعدّادَي منفذ بياناته
+    // يتقدّمان، وواجهة `air0` كما يُرجعها ifconfig: ترفك إدارةٍ بالكيلوبتات (على الجهاز الحقيقيّ 50 ميغابايت منذ الإقلاع مقابل
+    // 10 تيرابايت على منفذ البيانات).
+    group('airFiber X (AF-4X) — ما يعبر الهواء من منفذ البيانات لا من air0', () {
+      // ترفك الإدارة على air0 خلال ٢٠ث: 9 كيلوبت وارد و22 صادر — رقما صورة المالك.
+      const mgmtRx = 22500;
+      const mgmtTx = 55000;
+
+      /// [toSub]/[toMain] بايتات عبرت اللنك خلال الدورة. طرف الرئيسيّ (master) يستقبل ما ينزل للفرع من شبكة برجه على منفذ
+      /// البيانات ويُخرج منه ما صعد؛ وطرف الفرعيّ (slave) بالعكس.
+      UbntStats af4x(int k, {required bool slave, int toSub = down, int toMain = upB}) {
+        final lanRx = slave ? toMain : toSub;
+        final lanTx = slave ? toSub : toMain;
+        final text = af4xMcaStatus
+            .replaceFirst('lanRxBytes=10096866039227', 'lanRxBytes=${10096866039227 + k * lanRx}')
+            .replaceFirst('lanTxBytes=780197904550', 'lanTxBytes=${780197904550 + k * lanTx}')
+            .replaceFirst('afOpmode=master', slave ? 'afOpmode=slave' : 'afOpmode=master');
+        // الثابت يحمل العدّادَين والوضع بالشكل الذي نستبدله (وإلّا فالاختبار يقرأ أرقاماً لا تتحرّك)
+        for (final key in ['lanRxBytes=10096866039227', 'lanTxBytes=780197904550', 'afOpmode=master']) {
+          expect(key.allMatches(af4xMcaStatus), hasLength(1), reason: key);
+        }
+        return UbntStats.fromMcaStatus(_parseMca(text), interfaces: [
+          // eth0 كما يُرجعه ifconfig على الجهاز: منفذ إدارةٍ مطفأ (الباني يضع مكانه منفذ البيانات من lan*)
+          const {'name': 'eth0', 'up': 'true', 'rx_bytes': '0', 'tx_bytes': '0', 'speed': '10'},
+          {'name': 'air0', 'up': 'true', 'rx_bytes': '${49939212 + k * mgmtRx}', 'tx_bytes': '${69051794 + k * mgmtTx}'},
+        ]);
+      }
+
+      Future<TowerReading> read(int id, {required bool slave, int toSub = down, int toMain = upB}) =>
+          _twoReads(_dev(id, 'ubnt', model: 'airFiber 4X'), (k) {
+            UbntApi.debugFetch = () async => af4x(k, slave: slave, toSub: toSub, toMain: toMain);
+          });
+
+      test('طرف الفرعيّ (slave): ينزل للفرع ما يخرجه منفذ بياناته — لا كيلوبتات air0', () async {
+        final r = await read(11, slave: true);
+        final f = LinkFlow.of(rb: r);
+        expect(f.toSubBps, _near(_bps(down)), reason: 'كان ${_bps(mgmtRx)} bps (استقبال air0 = ترفك الإدارة)');
+        expect(f.toMainBps, _near(_bps(upB)), reason: 'كان ${_bps(mgmtTx)} bps');
+        // وبطاقة البرج للجهاز نفسه: المستقبِل ينزّل ما يستقبله راديوه
+        expect(r.downBps, _near(_bps(down)));
+        expect(r.upBps, _near(_bps(upB)));
+      });
+
+      test('طرف الرئيسيّ (master) وحده: ينزل للفرع ما يستقبله منفذ بياناته من شبكة برجه', () async {
+        final r = await read(12, slave: false);
+        final f = LinkFlow.of(ra: r);
+        expect(f.toSubBps, _near(_bps(down)));
+        expect(f.toMainBps, _near(_bps(upB)));
+      });
+
+      test('الطرفان معاً يتّفقان، ولا يدخل air0 في «أنشط منفذ» ولا في عدّ المنافذ السلكيّة', () async {
+        final a = await read(13, slave: false);
+        final b = await read(14, slave: true);
+        final f = LinkFlow.of(ra: a, rb: b);
+        expect(f.toSubBps, _near(_bps(down)));
+        expect(f.toMainBps, _near(_bps(upB)));
+        for (final r in [a, b]) {
+          expect(r.busiestPort?.name, 'eth0', reason: 'منفذ البيانات (lan*)');
+          expect(r.portsUp, 1);
+          expect(r.portsTotal, 1);
+          expect(r.wiredPorts.map((p) => p.name), ['eth0']);
+        }
+      });
+
+      test('لنك رفعُه أكبر من تنزيله: الاتّجاه من العدّاد لا «الأكبر ينزل»', () async {
+        // يصعد من الفرعيّ ١٠٠ ميغا وينزل له ١٠ (مصدر النت عند الفرعيّ) — يُعرض كما هو لا مقلوباً
+        final b = await read(15, slave: true, toSub: upB, toMain: down);
+        final a = await read(16, slave: false, toSub: upB, toMain: down);
+        for (final f in [LinkFlow.of(rb: b), LinkFlow.of(ra: a), LinkFlow.of(ra: a, rb: b)]) {
+          expect(f.toSubBps, _near(_bps(upB)));
+          expect(f.toMainBps, _near(_bps(down)));
+        }
+      });
+
+      test('القراءة الأولى (بلا عيّنة سابقة): لا رقم — لا معدّل air0 ولا صفر', () async {
+        final d = _dev(17, 'ubnt', model: 'airFiber 4X');
+        NetworkDevicesApi.debugSeedCredentials(d.id, {'user': 'u', 'pass': 'p'}, DateTime.now());
+        UbntApi.debugFetch = () async => af4x(0, slave: true);
+        final r = TowerReading.fromProbe(await DeviceVitals.fetch(d, detailed: true));
+        final f = LinkFlow.of(rb: r);
+        expect(f.toSubBps, isNull);
+        expect(f.toMainBps, isNull);
+        expect(r.downBps, isNull);
+        expect(r.busiestPort, isNull);
+      });
+
+      test('منفذ البيانات بلا عدّادات lan* (برنامجٌ قديم): «—» لا ترفك الإدارة', () async {
+        final r = await _twoReads(_dev(18, 'ubnt', model: 'airFiber 4X'), (k) {
+          final text = af4xMcaStatus
+              .replaceFirst(RegExp(r'lanRxBytes=\d+\n'), '')
+              .replaceFirst(RegExp(r'lanTxBytes=\d+\n'), '')
+              .replaceFirst('afOpmode=master', 'afOpmode=slave');
+          UbntApi.debugFetch = () async => UbntStats.fromMcaStatus(_parseMca(text), interfaces: [
+                const {'name': 'eth0', 'up': 'true', 'rx_bytes': '0', 'tx_bytes': '0', 'speed': '10'},
+                {'name': 'air0', 'up': 'true', 'rx_bytes': '${49939212 + k * mgmtRx}', 'tx_bytes': '${69051794 + k * mgmtTx}'},
+              ]);
+        });
+        final f = LinkFlow.of(rb: r);
+        // لا رقما air0 (9 و22 كيلوبت)، ولا صفر eth0 الإداريّ المطفأ كأنّه «لا ترفك»: لم يُقرأ ⇒ null («—»)
+        expect(f.toSubBps, isNull);
+        expect(f.toMainBps, isNull);
+        expect(r.downBps, isNull);
+        expect(r.upBps, isNull);
+        expect(r.busiestPort, isNull);
+      });
     });
 
     test('روجي airMetro (جسر) — منافذ IF-MIB بعدّاداتها', () async {

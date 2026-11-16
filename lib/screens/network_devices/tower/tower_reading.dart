@@ -62,6 +62,7 @@ class TowerReading {
 
   /// ما تستقبله الواجهة اللاسلكيّة وما ترسله كما قرأهما الجهاز (بلا تفسير «تنزيل/رفع») — «الترابط» يحسب بهما سير الترافيك
   /// من البرج الرئيسيّ للفرعيّ: ما يرسله طرف الرئيسيّ = ما يستقبله طرف الفرعيّ. null بلا واجهةٍ لاسلكيّة مقروءة.
+  /// airFiber X: من منفذ البيانات معكوساً (ما يستقبله المنفذ يرسله الراديو) — واجهته `air0` لا يمرّ بها الترفك ([fromProbe]).
   final int? radioRxBps;
   final int? radioTxBps;
 
@@ -136,7 +137,7 @@ class TowerReading {
 
   static bool _isWirelessPort(String name) {
     final n = name.toLowerCase();
-    // `air0` = راديو airFiber X (AF-4X/5X…) — بلاه كان «التنزيل» يُخمَّن بالاتّجاه الأكبر بدل ما يستقبله الطرف.
+    // `air0` واجهةٌ لاسلكيّة بالاسم (فلا تُعدّ منفذ شبكةٍ سلكيّاً) — لكنّها على airFiber X **ليست مصدر ترفك**: انظر [fromProbe].
     return n.startsWith('wlan') || n.startsWith('ath') || n.startsWith('wifi') || n.startsWith('wl') || n.startsWith('air');
   }
 
@@ -213,15 +214,33 @@ class TowerReading {
     // ⚠️ **أنشط** راديو لا أوّله (المالك ١٦ نوفمبر): أجهزة الـ٦٠ (Wave · GigaBeam · AF-60 · Cube 60Pro) فيها راديو احتياطيّ ٥ گيگا
     // خاملٌ بجانب الـ٦٠ — إن جاء أوّلاً قالت الوصلة «40 bps» وهي تحمل مئة ميغا. ومنفذٌ يعبره ترفكٌ يُحسب ولو قال الجهاز إنّه
     // طافٍ (حال SNMP لجسورٍ لاسلكيّة لا يُوثق بها؛ العدّاد الذي يتحرّك لا يكذب).
+    //
+    // 🚨 **airFiber X** (قراءته بمفاتيح `af*`): مسار بياناته في العتاد ولا يمرّ بواجهة لينكس `air0` — عدّاداتها ترفك الإدارة
+    // وحده (AF-4X حقيقيّ: 50 ميغابايت عليها مقابل 10 تيرابايت على منفذ البيانات). عُدّت «الراديو» يوماً واحداً فقرأ لنك
+    // الوكيل «9 Kbps ↓ 22 Kbps ↑» وتحته ستّ سكترات (المالك ١٦ نوفمبر: «تأثّر عدنا الجهاز 4x»). فلا هي راديو ولا «أنشط منفذ»،
+    // وما يعبر الهواء يُؤخذ من منفذ البيانات — الجهاز جسرٌ شفّاف بين منفذه وهوائه: ما **يستقبله** المنفذ من شبكة البرج
+    // **يرسله** الراديو، وما يستقبله الراديو يخرج من المنفذ. فالاتّجاه من العدّاد نفسه، لا تخمينٌ بالأكبر.
+    // منفذ البيانات بعدّادَيه (`lan*`) هو مصدره الوحيد؛ إن لم يقلهما الجهاز فلا مصدر ⇒ «—»: لا كيلوبتات `air0`، ولا صفر منفذ
+    // الإدارة المطفأ كأنّه «لا ترفك».
+    final afx = raw is UbntStats && raw.airFiberX;
+    final afxDataName = raw is UbntStats ? raw.afDataPort : null;
     int load(PortTraffic p) => (p.rxBps ?? 0) + (p.txBps ?? 0);
     PortTraffic? radioPort;
     PortTraffic? busiest;
+    PortTraffic? afxData;
     for (final p in ports) {
       if (!p.up && load(p) == 0) continue;
+      if (afx) {
+        if (afxDataName != null && p.name == afxDataName) busiest = afxData = p;
+        continue;
+      }
       if (_isWirelessPort(p.name) && (radioPort == null || load(p) > load(radioPort))) radioPort = p;
       final best = busiest == null ? -1 : load(busiest);
       if (load(p) > best) busiest = p;
     }
+    final radioRx = afx ? afxData?.txBps : radioPort?.rxBps;
+    final radioTx = afx ? afxData?.rxBps : radioPort?.txBps;
+    final radioRead = afx ? (radioRx != null || radioTx != null) : radioPort != null;
     if (linkSpeed == null) {
       for (final p in ports) {
         if (p.up && _isEtherPort(p.name) && (p.linkSpeed ?? '').isNotEmpty) {
@@ -235,9 +254,9 @@ class TowerReading {
     int? up;
     final probeAp = wireless && peers.length >= 2;
     final station = (mode ?? '').toLowerCase().startsWith('sta') || (mode ?? '').toLowerCase().contains('station');
-    if (radioPort != null) {
-      final rx = radioPort.rxBps;
-      final tx = radioPort.txBps;
+    if (radioRead) {
+      final rx = radioRx;
+      final tx = radioTx;
       if (station) {
         // مستقبِل (sta): ينزّل ما يستقبله (rx) ويرفع ما يرسله (tx).
         down = rx;
@@ -271,8 +290,8 @@ class TowerReading {
       signal: (station || !probeAp) ? (ownSignal ?? peerSignal) : (peerSignal ?? ownSignal),
       downBps: down,
       upBps: up,
-      radioRxBps: radioPort?.rxBps,
-      radioTxBps: radioPort?.txBps,
+      radioRxBps: radioRx,
+      radioTxBps: radioTx,
       frequency: frequency,
       channelWidth: channelWidth,
       noise: noise,
