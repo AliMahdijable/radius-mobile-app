@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/account_api.dart';
 import '../api/api_client.dart';
@@ -12,6 +13,7 @@ import '../models/app_notification.dart';
 import 'account_service.dart';
 import 'auth_storage.dart';
 import 'desktop_push_service.dart';
+import 'device_alerts_service.dart';
 import 'inbox_service.dart';
 import 'app_version.dart';
 
@@ -78,7 +80,96 @@ class FcmService {
     _lastAccountKey = null;
     _lastAccountToken = null;
     accountUid = () => AccountService.currentUser?.uid;
+    debugShowSystem = null;
+    isAndroid = () => !kIsWeb && Platform.isAndroid;
   }
+
+  /// قناة دفع الخادم (١٦ نوفمبر — المالك: «من يفتح المشترك تذكره شعار للتطبيق البرو مجاي يوصل»). الخادم يرسل كلّ دفعه على
+  /// `mysvcs_fcm` (وهي في المانيفست قناةً افتراضيّة) لكنّ التطبيق لم يُنشئها قطّ ⇒ أندرويد يضعها في «متفرّقات» الاحتياطيّة بأهميّةٍ
+  /// افتراضيّة: تصل للشريط بلا نافذةٍ منبثقة (مقيس على 3.0.20+185 بالمحاكي: channel=fcm_fallback_notification_channel، importance=3).
+  /// تُنشأ هنا مرّةً بأهميّةٍ عالية (والمستخدم يملك تعديلها بعد ذلك من إعدادات الهاتف).
+  static const channelId = 'mysvcs_fcm';
+  static const _channelName = 'إشعارات الحساب';
+
+  /// أنواعٌ تحتاج صوتاً ونافذةً منبثقة ولو كان التطبيق مفتوحاً: كانت شريطاً صامتاً ٤ ثوانٍ بلا أثرٍ في شريط الإشعارات فيفوت الوكيل.
+  static const urgentTypes = {'portal_ticket', 'renew_request'};
+
+  @visibleForTesting
+  static Future<void> Function(AppNotification n)? debugShowSystem;
+  @visibleForTesting
+  static bool Function() isAndroid = () => !kIsWeb && Platform.isAndroid;
+
+  static Future<void> _ensureChannel() async {
+    if (!isAndroid()) return;
+    try {
+      await DeviceAlertsService.instance.init();
+      await FlutterLocalNotificationsPlugin()
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(const AndroidNotificationChannel(
+            channelId,
+            _channelName,
+            description: 'تذاكر المشتركين وطلبات التجديد وتنبيهات الحساب',
+            importance: Importance.high,
+          ));
+    } catch (e) {
+      if (kDebugMode) debugPrint('FCM channel failed: $e');
+    }
+  }
+
+  static bool _tapHooked = false;
+
+  /// نقر إشعار النظام الذي أظهرناه والتطبيق مفتوح ⇒ وجهة الإشعار نفسها (المحادثة/الطلب)، وما ليس لنا يمرّ لمستقبِله السابق.
+  static void _hookTap() {
+    if (_tapHooked) return;
+    _tapHooked = true;
+    final prev = DeviceAlertsService.onTap;
+    DeviceAlertsService.onTap = (r) {
+      final p = r.payload;
+      if (p != null && p.startsWith('fcm:')) {
+        final id = p.substring(4);
+        for (final n in InboxService.all) {
+          if (n.id == id) {
+            unawaited(InboxService.markRead(n.id));
+            onNotificationTap?.call(n);
+            return;
+          }
+        }
+        return;
+      }
+      prev?.call(r);
+    };
+  }
+
+  /// إشعار نظامٍ (صوت + نافذة منبثقة) لنوعٍ عاجل وصل والتطبيق مفتوح — أندرويد وحده (آيفون يعرضه بنفسه: خيارات العرض أعلاه).
+  static Future<void> _showSystem(AppNotification n) async {
+    if (!urgentTypes.contains(n.data['type'])) return;
+    final f = debugShowSystem;
+    if (f != null) return f(n);
+    if (!isAndroid()) return;
+    try {
+      _hookTap();
+      await FlutterLocalNotificationsPlugin().show(
+        n.id.hashCode & 0x7FFFFFFF,
+        n.title,
+        n.body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            _channelName,
+            importance: Importance.high,
+            priority: Priority.high,
+            visibility: NotificationVisibility.public,
+          ),
+        ),
+        payload: 'fcm:${n.id}',
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('FCM system notification failed: $e');
+    }
+  }
+
+  @visibleForTesting
+  static Future<void> debugForeground(RemoteMessage m) => _handleForeground(m);
 
   /// يجب استدعاؤها بعد نجاح تسجيل الدخول وحفظ الجلسة. آمنة الاستدعاء
   /// المتكرر (idempotent).
@@ -102,6 +193,9 @@ class FcmService {
       if (kDebugMode) debugPrint('FCM requestPermission failed: $e');
       // لا نُوقف — العملية تكمّل حتى لو الـpermission في وضع مبهم.
     }
+
+    // 1b) قناة الدفع بأهميّةٍ عالية (أندرويد) — قبل أن يصل أيّ دفع.
+    await _ensureChannel();
 
     // 2) foreground presentation options (iOS)
     if (Platform.isIOS) {
@@ -294,6 +388,7 @@ class FcmService {
     final n = _fromRemote(m);
     await InboxService.add(n);
     onForegroundNotification?.call(n);
+    await _showSystem(n);
   }
 
   static Future<void> _handleOpenedApp(RemoteMessage m) async {
