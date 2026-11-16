@@ -20,6 +20,10 @@ import 'employee_limits_api.dart' show LimitsResult;
 /// - كلّ نداءٍ بشركته **صراحةً** من مستدعيه ([CompanyRoute.explicit] — null = المفتوحة): «كل الشركات» (١٦ نوفمبر — المالك:
 ///   «اي ضيفها بالتطبيق») يعرض شركة الشريط بمكانها، فالقسم يمرّر مفتاحها لكلّ قراءةٍ وكتابة؛ والكتابة الموجَّهة بما يقوله الخادم
 ///   لها (`routed_writes` في ردّ `/me` ⇐ balance_routed).
+/// - «الفترة التالية تُفتح عند الإغلاق» (١٦ نوفمبر مساءً — المالك: «من يسوي غلق فترة تنفتح فترة بدون سعر مفتوحة… وعليها تنبيه…
+///   بمجرد ما الفترة الجديدة صار بها حركة… القديمة تنقفل نهائيا»): حين يفتح الخادم مفتاحها للصفحة يأتي `auto_next` في اللوحة؛
+///   إغلاق آخر فترة يفتح فترةً بلا مبلغ (`amount_pending` — محصَّلها حقيقيّ، والمتبقّي والربح لا يُعرفان حتى يُكتب مبلغها بـPUT amount)،
+///   والمغلقة التي صار في التي بعدها حركة تأتي `reopen_locked` (إلغاء إغلاقها مرفوض). والمفتاح مطفأ: الردّ كما كان بلا هذه الحقول.
 typedef BalanceResult<T> = LimitsResult<T>;
 
 double _n(Object? v) {
@@ -216,6 +220,8 @@ class BalancePeriod {
     required this.transfersCount,
     required this.transfersSum,
     this.managers,
+    this.amountPending = false,
+    this.reopenLocked = false,
   });
   final int id;
   final int startedAtMs;
@@ -223,8 +229,15 @@ class BalancePeriod {
   /// وقت الشحنة التالية، أو null للأحدث.
   final int? endsAtMs;
 
-  /// مبلغ الشحنة (السقف).
+  /// مبلغ الشحنة (السقف). صفرٌ مع [amountPending]: لم يُكتب بعد.
   final double amount;
+
+  /// فترةٌ فُتحت بإغلاق سابقتها ولم يُكتب مبلغ شحنها: [remaining] و[net] و[profit] لا تُعرف (تأتي أصفاراً — تُعرض «—»)،
+  /// ولا تُغلق ولا تُسوّى حتى يُكتب.
+  final bool amountPending;
+
+  /// مغلقةٌ فُتحت بإغلاقها فترةٌ صار فيها حركة: إلغاء إغلاقها مرفوضٌ نهائيّاً.
+  final bool reopenLocked;
   final String? note;
   final BalanceState state;
   final int? closedAtMs;
@@ -313,6 +326,8 @@ class BalancePeriod {
       transfersCount: _i(t['count']),
       transfersSum: _n(t['sum']),
       managers: BalanceManagers.fromJson(j['managers']),
+      amountPending: j['amount_pending'] == true,
+      reopenLocked: j['reopen_locked'] == true,
     );
   }
 }
@@ -332,8 +347,11 @@ class BalanceOverview {
     this.transfersUnknown = false,
     this.managersIncluded = false,
     this.managersOldPaid = 0,
+    this.autoNext = false,
   });
   final bool featureEnabled;
+
+  /// الأحدث أوّلاً.
   final List<BalancePeriod> periods;
   final double oldPaid;
   final double manualPaid;
@@ -350,12 +368,43 @@ class BalanceOverview {
   /// ما سدّده المدراء الفرعيّون من ديونٍ أقدم من أوّل شحنة مسجّلة (أو لا يُعرف شحنها) — خارج حساب الشحنات.
   final double managersOldPaid;
 
+  /// إغلاق آخر فترة يفتح بعدها فترةً بلا مبلغ (مفتاح الخادم مفتوحٌ للصفحة).
+  final bool autoNext;
+
   BalancePeriod? periodOf(int id) {
     for (final p in periods) {
       if (p.id == id) return p;
     }
     return null;
   }
+
+  /// الفترة المفتوحة التي تنتظر مبلغ شحنها (الشحن الجديد يُكتب عليها — لا فترة أخرى فوقها)، أو null.
+  BalancePeriod? get waitingAmount {
+    for (final p in periods) {
+      if (p.amountPending && !p.isClosed) return p;
+    }
+    return null;
+  }
+
+  /// الفترة التي فُتحت بإغلاق [p]: تاليتها وتبدأ من لحظة إغلاقها نفسها — أو null.
+  BalancePeriod? openedAfter(BalancePeriod p) {
+    if (p.closedAtMs == null) return null;
+    final i = periods.indexWhere((x) => x.id == p.id);
+    if (i <= 0) return null;
+    final next = periods[i - 1];
+    return next.startedAtMs == p.closedAtMs ? next : null;
+  }
+
+  /// هل فُتحت [p] بإغلاق سابقتها؟ والمفتاح مفتوح ([autoNext]): لا تُحذف ولا يتغيّر تاريخها ما دامت تلك مغلقة.
+  bool openedByClose(BalancePeriod p) {
+    final i = periods.indexWhere((x) => x.id == p.id);
+    if (i < 0 || i + 1 >= periods.length) return false;
+    final prev = periods[i + 1];
+    return prev.closedAtMs != null && prev.closedAtMs == p.startedAtMs;
+  }
+
+  /// [p] مثبَّتة: فُتحت بإغلاق سابقتها والمفتاح مفتوح — لا زرّ حذف، وتعديلها بلا تاريخ.
+  bool pinned(BalancePeriod p) => autoNext && openedByClose(p);
 
   /// ما دخل من غير تفعيلات الفترات (لا يدخل مبلغ أيّ شحنة) — بتسمياته.
   List<({String label, double value, String id})> get outside => [
@@ -394,6 +443,7 @@ class BalanceOverview {
       transfersUnknown: q['transfers_unknown'] == true,
       managersIncluded: j['managers_included'] == true,
       managersOldPaid: _n(t['managers_old_paid']),
+      autoNext: j['auto_next'] == true,
     );
   }
 }
@@ -613,7 +663,8 @@ String balanceDayTime(int ms, {int? nowMs}) {
   return '${balanceDay(ms, nowMs: nowMs)} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
-String balancePeriodTitle(BalancePeriod p, {int? nowMs}) => 'شحن ${balanceDay(p.startedAtMs, nowMs: nowMs)}';
+/// «شحن 10 تشرين الأوّل»؛ وبلا مبلغ بعد: «فترة جديدة» (لا شحن يُسمّى باسمه بعد).
+String balancePeriodTitle(BalancePeriod p, {int? nowMs}) => p.amountPending ? 'فترة جديدة' : 'شحن ${balanceDay(p.startedAtMs, nowMs: nowMs)}';
 
 String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
     ? 'من ${balanceDay(p.startedAtMs, nowMs: nowMs)} حتى الآن'
@@ -659,12 +710,17 @@ String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
 /// متى نعدّ الرصيد «خلص»: دون واحدٍ بالمئة من الشحنة أو عشرة آلاف (أقلّ من أرخص تفعيل).
 double balanceLowMark(double amount) => max(10000, (amount * 0.01).roundToDouble());
 
-enum BalanceBannerKind { done, ended, empty }
+enum BalanceBannerKind { done, ended, empty, amount }
 
-/// تنبيه الفترة: اكتمل المبلغ فيصحّ الإغلاق · انتهت (سُجّلت شحنةٌ بعدها) ولم تكتمل · الرصيد خلص ولم تكتمل.
+/// نصّ تنبيه الفترة التي بلا مبلغ (في الكرت وفي التفاصيل).
+const balanceAmountPendingText = 'هذه الفترة بلا مبلغ شحن — اكتب مبلغها ليظهر المتبقّي والربح';
+
+/// تنبيه الفترة: بلا مبلغ شحن بعد · اكتمل المبلغ فيصحّ الإغلاق · انتهت (سُجّلت شحنةٌ بعدها) ولم تكتمل · الرصيد خلص ولم تكتمل.
 /// [liveBalance]: رصيد الوكيل الآن، أو null إن لم يُعرف (فلا نقول «خلص» بلا علم).
 ({BalanceBannerKind kind, String text})? balanceBanner(BalancePeriod p, num? liveBalance) {
   if (p.isClosed) return null;
+  // بلا مبلغ: لا «اكتمل» ولا «نفد رصيدك» (كلاهما يقيس على مبلغٍ لم يُكتب)
+  if (p.amountPending) return (kind: BalanceBannerKind.amount, text: balanceAmountPendingText);
   if (p.canClose) return (kind: BalanceBannerKind.done, text: 'اكتمل مبلغ الشحن — يمكنك إغلاق الفترة');
   if (p.state == BalanceState.waiting) {
     return (kind: BalanceBannerKind.ended, text: 'انتهت هذه الفترة ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}');

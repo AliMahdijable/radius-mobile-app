@@ -196,8 +196,42 @@ class BalanceServer implements HttpClientAdapter {
     return s;
   }
 
+  /// مغلقةٌ فُتحت بإغلاقها فترةٌ بلا مبلغ فيها [moves] حركة (والمفتاح مفتوح): المحصَّل 445,000 والديون 150,000 حقيقيّان.
+  factory BalanceServer.closedWithPending({int moves = 17, bool long = false, bool big = false}) {
+    final s = BalanceServer()..autoNext = true;
+    // لحظة الإغلاق بثوانيها (لا دقيقةٌ تامّة): ورقة المبلغ لا ترسل تاريخاً ولو قرّبته الواجهة للدقيقة
+    final t1 = balanceStart(9, 14) + 37000;
+    final closed = balancePeriodJson(id: 1, start: balanceStart(40), closed: t1, amount: 1750000, cash: 1450000, paidIn: 300000, debts: 900000, open: 250000, late: 120000);
+    final pend = balancePeriodJson(
+        id: 2, start: t1, amount: 0, cash: big ? 1385000000 : 385000, paidIn: 60000, debts: 210000, open: 150000, counts: {'cash': 9, 'credit': 5, 'partial': 1, 'payments': 2, 'activations': 15});
+    s.periods.addAll([closed, pend]);
+    s.moves[1] = balanceMovesJson(closed, 12);
+    s.moves[2] = balanceMovesJson(pend, moves, long: long, big: big);
+    return s;
+  }
+
   bool enabled = true;
   bool employee = false;
+
+  /// «الفترة التالية تُفتح عند الإغلاق»: مفتاح الخادم لهذه الصفحة (مطفأ ⇒ الخادم الوهميّ كما كان حرفاً).
+  bool autoNext = false;
+
+  /// الخادم يرفض إلغاء الإغلاق: حركةٌ وصلت للفترة الجديدة بعد آخر قراءة — وبعده تأتي المغلقة مقفلة.
+  bool reopenRace = false;
+  bool _raceSeen = false;
+
+  /// التي فُتحت بإغلاق [p] (تبدأ من لحظة إغلاقها) / هل فُتحت [p] بإغلاق سابقتها / هل فيها حركة — كما في الخادم.
+  Map<String, dynamic>? _after(Map<String, dynamic> p) {
+    if (p['closed_at_ms'] == null) return null;
+    for (final x in periods) {
+      if (x['id'] != p['id'] && x['started_at_ms'] == p['closed_at_ms']) return x;
+    }
+    return null;
+  }
+
+  bool _byClose(Map<String, dynamic> p) => periods.any((x) => x['id'] != p['id'] && x['closed_at_ms'] != null && x['closed_at_ms'] == p['started_at_ms']);
+  bool _moved(Map<String, dynamic> p) => (moves[p['id']] ?? const []).isNotEmpty;
+  static bool _noAmount(Map<String, dynamic> p) => (p['amount'] as num) <= 0;
 
   /// سؤال «هل الميزة مفتوحة؟» يفشل (عثرة شبكة) — وعدّاد أسئلته.
   bool meFail = false;
@@ -250,6 +284,15 @@ class BalanceServer implements HttpClientAdapter {
     p['net'] = net;
     p['profit'] = net > 0 ? net : 0;
     p['pocket_outstanding'] = pocket <= 0 ? 0 : (pocket < adj ? pocket : adj);
+    // بلا مبلغ شحن بعد (فُتحت بإغلاق سابقتها): كما يردّها الخادم — المحصَّل حقيقيّ، ولا إغلاق ولا صافٍ ولا ربح
+    if (amount <= 0) {
+      p['amount_pending'] = true;
+      p['can_close'] = false;
+      p['net'] = 0;
+      p['profit'] = 0;
+    } else {
+      p.remove('amount_pending');
+    }
   }
 
   Map<String, dynamic> overview() {
@@ -258,10 +301,19 @@ class BalanceServer implements HttpClientAdapter {
       sorted[i]['ends_at_ms'] = i == 0 ? null : sorted[i - 1]['started_at_ms'];
       _recalc(sorted[i], i == 0);
     }
+    for (final p in sorted) {
+      final nx = autoNext ? _after(p) : null;
+      if (nx != null && (_moved(nx) || _raceSeen)) {
+        p['reopen_locked'] = true;
+      } else {
+        p.remove('reopen_locked');
+      }
+    }
     return {
       'feature_enabled': true,
       'can_manage': true,
       'now_ms': balanceNowMs,
+      if (autoNext) 'auto_next': true,
       'periods': sorted,
       'totals': totals ?? {'old_paid': 0, 'manual_paid': 0, 'other_paid': 0, 'advance': 0, 'closed_net': 0, 'debts_open': 0},
       'quality': quality ?? {'rows': 100, 'no_price': 0, 'no_amount': 0, 'no_snapshot': 0, 'drift': 0, 'transfers_unknown': false},
@@ -332,6 +384,9 @@ class BalanceServer implements HttpClientAdapter {
     final id = pm.group(1) == null ? null : int.parse(pm.group(1)!);
     if (m != 'GET') writes.add(BalanceWrite(m, p, body));
     if (id == null && m == 'POST') {
+      for (final x in periods) {
+        if (_noAmount(x)) return _refuse('AMOUNT_PENDING', 'عندك فترة مفتوحة بلا مبلغ شحن — اكتب مبلغها أوّلاً', {'period_id': x['id']});
+      }
       if (periods.any((x) => x['started_at_ms'] == body['started_at_ms'])) return _refuse('SAME_START', 'توجد شحنة مسجّلة بهذا التاريخ والوقت نفسه');
       final np = balancePeriodJson(id: _nextId++, start: body['started_at_ms'] as int, amount: body['amount'] as num, cash: 0, paidIn: 0, debts: 0, open: 0, note: '${body['note'] ?? ''}'.isEmpty ? null : '${body['note']}', counts: {'cash': 0, 'credit': 0, 'partial': 0, 'payments': 0, 'activations': 0});
       periods.add(np);
@@ -372,12 +427,18 @@ class BalanceServer implements HttpClientAdapter {
       }
       if (m == 'PUT') {
         if (period['closed_at_ms'] != null) return _refuse('PERIOD_CLOSED', 'الفترة مغلقة — ألغِ إغلاقها أوّلاً ثمّ عدّل');
+        if (autoNext && _byClose(period) && body['started_at_ms'] != null && body['started_at_ms'] != period['started_at_ms']) {
+          return _refuse('START_PINNED', 'هذه الفترة تبدأ من لحظة إغلاق الفترة التي قبلها — تاريخها لا يتغيّر');
+        }
         if (body['amount'] != null) period['amount'] = body['amount'];
         if (body['started_at_ms'] != null) period['started_at_ms'] = body['started_at_ms'];
         if (body.containsKey('note')) period['note'] = '${body['note'] ?? ''}'.isEmpty ? null : body['note'];
         return _done({'id': id});
       }
       if (m == 'DELETE') {
+        if (autoNext && _byClose(period)) {
+          return _refuse('AUTO_PERIOD', 'هذه الفترة فُتحت بإغلاق الفترة التي قبلها فلا تُحذف — للرجوع ألغِ إغلاق السابقة (ما دامت هذه بلا حركات)');
+        }
         periods.removeWhere((x) => x['id'] == id);
         return _done({'id': id, 'deleted': true});
       }
@@ -385,6 +446,7 @@ class BalanceServer implements HttpClientAdapter {
     if (sub == 'adjustments') {
       if (m == 'POST') {
         overview();
+        if (_noAmount(period)) return _refuse('AMOUNT_PENDING', 'اكتب مبلغ الشحن لهذه الفترة أوّلاً — ثمّ أضف التسوية');
         if (adjustFail != null) return _refuse('${adjustFail!['code']}', '${adjustFail!['message']}');
         final amount = body['amount'] as num;
         if (amount > (period['remaining'] as num) + 0.5) return _refuse('OVER_REMAINING', 'المبلغ أكبر من المعوز', {'remaining': period['remaining']});
@@ -401,12 +463,30 @@ class BalanceServer implements HttpClientAdapter {
       }
     }
     if (sub == 'close' && m == 'POST') {
-      overview();
+      final view = overview();
+      if (_noAmount(period)) return _refuse('AMOUNT_PENDING', 'اكتب مبلغ الشحن لهذه الفترة أوّلاً — لا تُغلق فترةٌ بلا مبلغ');
       if (period['can_close'] != true) return _refuse('NOT_COVERED', 'مبلغ الشحنة لم يكتمل بعد', {'remaining': period['remaining']});
+      if (autoNext && ((view['periods'] as List).first as Map)['id'] == id) {
+        // آخر فترة والمفتاح مفتوح: تُغلق وتُفتح معها فترةٌ بلا مبلغ من لحظة الإغلاق نفسها
+        final t = balanceNowMs + 1000;
+        period['closed_at_ms'] = t;
+        final np = balancePeriodJson(id: _nextId++, start: t, amount: 0, cash: 0, paidIn: 0, debts: 0, open: 0, counts: {'cash': 0, 'credit': 0, 'partial': 0, 'payments': 0, 'activations': 0});
+        periods.add(np);
+        moves[np['id'] as int] = [];
+        return _done({'id': id, 'closed': true, 'next_id': np['id']});
+      }
       period['closed_at_ms'] = balanceNowMs;
       return _done({'id': id, 'closed': true});
     }
     if (sub == 'reopen' && m == 'POST') {
+      final nx = autoNext ? _after(period) : null;
+      if (nx != null && reopenRace) _raceSeen = true;
+      if (nx != null && (_moved(nx) || reopenRace)) return _refuse('REOPEN_LOCKED', 'لا يُلغى إغلاق هذه الفترة — الفترة التي بعدها صار فيها حركات');
+      if (nx != null && _noAmount(nx)) {
+        periods.removeWhere((x) => x['id'] == nx['id']);
+        period['closed_at_ms'] = null;
+        return _done({'id': id, 'closed': false, 'removed_id': nx['id']});
+      }
       period['closed_at_ms'] = null;
       return _done({'id': id, 'closed': false});
     }

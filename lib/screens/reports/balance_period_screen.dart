@@ -204,6 +204,11 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
                 key: const ValueKey('bal-detail-list'),
                 padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.huge * 2),
                 children: [
+                  // بلا مبلغ شحن بعد: التنبيه نفسه فوق الخلاصة (والزرّ تحتها)
+                  if (p.amountPending && !p.isClosed) ...[
+                    const BalanceBannerBox(key: ValueKey('bal-banner'), kind: BalanceBannerKind.amount, text: balanceAmountPendingText),
+                    const SizedBox(height: Sp.md),
+                  ],
                   _summary(p),
                   if (p.adjustments.isNotEmpty) ...[
                     const SizedBox(height: Sp.md),
@@ -270,7 +275,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
               ],
             ),
             const SizedBox(height: Sp.sm),
-            BalanceLine(label: 'مبلغ الشحن', value: balanceIqd(p.amount), strong: true),
+            BalanceLine(key: const ValueKey('bal-sum-amount'), label: 'مبلغ الشحن', value: p.amountPending ? 'لم يُكتب بعد' : balanceIqd(p.amount), strong: true),
             // العدد بجانب المبيعات وحدها (كلّ تفعيلات الفترة). النقد والتسديد والديون بلا عدد: أعداد الخادم تشمل ما وقع بعد
             // الإغلاق (صار ربحاً لا «طبّلك») فلا تطابق مبالغها — والأعداد الدقيقة على شرائح الفلاتر تحتها.
             BalanceLine(label: 'مبيعات الفترة (${p.nActivations} تفعيل)', value: balanceIqd(p.sales)),
@@ -285,12 +290,16 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             rule(),
             BalanceLine(key: const ValueKey('bal-sum-collected'), label: 'المحصَّل', value: balanceIqd(p.collected), strong: true),
             if (p.adjustmentsSum > 0) BalanceLine(label: 'تسويات الرصيد', value: balanceIqd(p.adjustmentsSum)),
-            BalanceLine(
-              key: const ValueKey('bal-sum-remaining'),
-              label: 'المتبقّي من مبلغ الشحن',
-              value: p.remaining > 0 ? balanceIqd(p.remaining) : 'مكتمل',
-              valueColor: p.remaining > 0 ? AppTone.danger.onSoft : AppTone.success.onSoft,
-            ),
+            // بلا مبلغ: المتبقّي والصافي لا يُعرفان قبل المبلغ («—» لا صفر ولا «مكتمل»)
+            if (p.amountPending)
+              const BalanceLine(key: ValueKey('bal-sum-remaining'), label: 'المتبقّي من مبلغ الشحن', value: '—')
+            else
+              BalanceLine(
+                key: const ValueKey('bal-sum-remaining'),
+                label: 'المتبقّي من مبلغ الشحن',
+                value: p.remaining > 0 ? balanceIqd(p.remaining) : 'مكتمل',
+                valueColor: p.remaining > 0 ? AppTone.danger.onSoft : AppTone.success.onSoft,
+              ),
             rule(),
             BalanceLine(label: 'ديون الفترة', value: balanceIqd(p.debtsCreated)),
             BalanceLine(
@@ -306,13 +315,16 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             if (closed || p.lateProfit > 0)
               BalanceLine(key: const ValueKey('bal-sum-late'), label: 'دخل بعد الإغلاق (ربح)', value: balanceIqd(p.lateProfit), valueColor: AppTone.success.onSoft),
             rule(),
-            BalanceLine(
-              key: const ValueKey('bal-sum-net'),
-              label: p.net >= 0 ? 'صافي ربح الفترة' : 'الصافي (لم يعُد مبلغ الشحن بعد)',
-              value: balanceSigned(p.net, sign: p.net < 0 ? '−' : ''),
-              strong: true,
-              valueColor: p.net >= 0 ? AppTone.success.onSoft : AppTone.danger.onSoft,
-            ),
+            if (p.amountPending)
+              const BalanceLine(key: ValueKey('bal-sum-net'), label: 'الصافي (يُحسب بعد كتابة مبلغ الشحن)', value: '—', strong: true)
+            else
+              BalanceLine(
+                key: const ValueKey('bal-sum-net'),
+                label: p.net >= 0 ? 'صافي ربح الفترة' : 'الصافي (لم يعُد مبلغ الشحن بعد)',
+                value: balanceSigned(p.net, sign: p.net < 0 ? '−' : ''),
+                strong: true,
+                valueColor: p.net >= 0 ? AppTone.success.onSoft : AppTone.danger.onSoft,
+              ),
             if (p.pocketOutstanding > 0)
               Padding(
                 padding: const EdgeInsets.only(top: Sp.xs),
