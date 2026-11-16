@@ -1295,26 +1295,51 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          GridView(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              // ارتفاعٌ ثابت (لا نسبة): البطاقة لا تتضخّم مع عرض العمود في الحاسبة.
-              mainAxisExtent: 64,
-            ),
-            shrinkWrap: true,
-            // بلا حشوة MediaQuery (يرثها GridView داخل القائمة فيُلحق فراغاً تحت البطاقات)
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
+          // ١٦ نوفمبر (المالك بلقطة الشبكة ٢×٣ وكرتٍ وحيدٍ في صفٍّ ثالث: «لو تسويها ٣ في ٢ تنطي الاعداد الكبيره ٢ مساحه والصغيره
+          // ٣»): صفٌّ بالعددين الكبيرين (الكلّ والفعّالون) وصفٌّ بالثلاثة الصغار — صفّان بلا فراغ. الصغار رقمٌ فوق اسمٍ يلتفّ سطرين
+          // إن ضاق (لا قصّ)، والثلاثة بارتفاعٍ واحد (IntrinsicHeight).
+          Row(
             children: [
-              _filterChip(_Filter.all, 'كل المشتركين', LucideIcons.users, counts[_Filter.all] ?? 0, ListTone.brand),
-              _filterChip(_Filter.active, 'الفعّالون', LucideIcons.userCheck, counts[_Filter.active] ?? 0, ListTone.success),
-              _filterChip(_Filter.debtors, 'المدينون', LucideIcons.wallet, counts[_Filter.debtors] ?? 0, ListTone.warning),
-              _filterChip(_Filter.expired, 'منتهي الصلاحية', LucideIcons.clock, counts[_Filter.expired] ?? 0, ListTone.danger),
-              _filterChip(_Filter.expiring, 'قرب الانتهاء (3 أيام)', LucideIcons.triangleAlert, counts[_Filter.expiring] ?? 0,
-                  ListTone.info),
+              Expanded(
+                child: SizedBox(
+                  height: 64,
+                  child: _filterChip(_Filter.all, 'كل المشتركين', LucideIcons.users, counts[_Filter.all] ?? 0, ListTone.brand),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 64,
+                  child: _filterChip(_Filter.active, 'الفعّالون', LucideIcons.userCheck, counts[_Filter.active] ?? 0,
+                      ListTone.success),
+                ),
+              ),
             ],
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _filterChip(_Filter.debtors, 'المدينون', LucideIcons.wallet, counts[_Filter.debtors] ?? 0,
+                      ListTone.warning,
+                      compact: true),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _filterChip(_Filter.expired, 'منتهي الصلاحية', LucideIcons.clock, counts[_Filter.expired] ?? 0,
+                      ListTone.danger,
+                      compact: true),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _filterChip(_Filter.expiring, 'قرب الانتهاء (3 أيام)', LucideIcons.triangleAlert,
+                      counts[_Filter.expiring] ?? 0, ListTone.info,
+                      compact: true),
+                ),
+              ],
+            ),
           ),
           if (_filter == _Filter.debtors && _big && _dfCap != null && !_dfCap!.bigAsync) ...[
             const SizedBox(height: Sp.sm),
@@ -1365,8 +1390,56 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         ),
       );
 
-  Widget _filterChip(_Filter f, String label, IconData icon, int count, ListTone tone) {
+  Widget _filterChip(_Filter f, String label, IconData icon, int count, ListTone tone, {bool compact = false}) {
     final active = _filter == f;
+    final value = Text(
+      count < 0 ? '—' : count.toString(),
+      maxLines: 1,
+      style: AppType.statValue(color: active ? tone.fg : AppColors.textHi).copyWith(fontSize: 16),
+    );
+    if (compact) {
+      // الصغير (ثلثٌ من العرض): الأيقونة والرقم سطرٌ — الرقم يصغر ولا يُقصّ — والاسم تحتهما يلتفّ سطرين إن ضاق.
+      return Material(
+        color: active ? tone.soft : AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          onTap: () => _selectFilter(f),
+          borderRadius: BorderRadius.circular(R.md),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: active ? tone.softBorder : AppColors.border, width: active ? BW.selected : BW.normal),
+              borderRadius: BorderRadius.circular(R.md),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    ListIconBox(icon: icon, tone: tone, size: 24),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: value,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: AppType.micro(color: active ? tone.fg : AppColors.textMid).copyWith(height: 1.25),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Material(
       color: active ? tone.soft : AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -1388,16 +1461,16 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      count < 0 ? '—' : count.toString(),
-                      maxLines: 1,
-                      style: AppType.statValue(color: active ? tone.fg : AppColors.textHi).copyWith(fontSize: 16),
-                    ),
-                    Text(
-                      label,
-                      style: AppType.micro(color: active ? tone.fg : AppColors.textMid),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // الرقم والاسم يصغران قليلاً على أضيق هاتفٍ بخطٍّ مكبّر (320 × 1.2) ولا يُقصّان.
+                    FittedBox(fit: BoxFit.scaleDown, alignment: AlignmentDirectional.centerStart, child: value),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        label,
+                        style: AppType.micro(color: active ? tone.fg : AppColors.textMid),
+                        maxLines: 1,
+                      ),
                     ),
                   ],
                 ),
