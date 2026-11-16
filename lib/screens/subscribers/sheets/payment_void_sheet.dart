@@ -265,7 +265,7 @@ class _PaymentVoidSheetState extends State<_PaymentVoidSheet> {
         SheetRowsGroup(rows: [
           SheetRowData(label: 'المبلغ', value: _iqd(_amount), strong: true),
           SheetRowData(label: 'استلمه', value: _who),
-          // قيم الصفوف تُرسم LTR (للأرقام واليوزرات): التاريخ العربيّ يُعزل فلا ينقلب ترتيبه («1 21:45 · تشرين الثاني»)
+          // قيم الصفوف تُرسم LTR (للأرقام واليوزرات): التاريخ يُعزل RTL كبقيّة الصفوف («21:45 · 2026/11/01»: التاريخ يميناً)
           SheetRowData(label: 'التاريخ', value: iso(_when(p.at))),
         ]),
         const SizedBox(height: Sp.lg),

@@ -187,9 +187,9 @@ void main() {
       expect([d.year, d.month, d.day, d.hour, d.minute], [2026, 10, 10, 9, 30]);
       // منتصف الليل ببغداد = اليوم نفسه (لا يرجع ليوم أمس)
       expect(balanceBaghdad(balanceMsFromBaghdad(2026, 11, 1, 0, 5)).day, 1);
-      // اسم الشهر من الترجمة (غير محمّلة في اختبارٍ بلا واجهة) — يكفي اليوم والوقت بدقيقته
-      expect(balanceDayTime(ms, nowMs: ms), '${balanceDay(ms, nowMs: ms)} · 09:30');
-      expect(balanceDay(ms, nowMs: ms).startsWith('10 '), isTrue);
+      // أرقامٌ لا اسم شهر (المالك ١٦ نوفمبر) — بتوقيت بغداد، والسنة دائماً
+      expect(balanceDay(ms, nowMs: ms), '2026/10/10');
+      expect(balanceDayTime(ms, nowMs: ms), '2026/10/10 · 09:30');
       final signed = balanceSigned(-250000, sign: '−');
       expect(signed.codeUnits.first, 0x2066);
       expect(signed, contains('−250,000'));
@@ -394,7 +394,7 @@ void main() {
       final paid = statuses(t);
       final late_ = paid.where((x) => x.startsWith('كان دين وتسدّد بعد الإغلاق — صار ربح — ')).toList();
       expect(late_, isNotEmpty, reason: paid.join(' | '));
-      expect(late_.every((x) => RegExp(r' — \d{1,2} \S.*$').hasMatch(x)), isTrue, reason: 'التاريخ بآخرها: ${late_.join(' | ')}');
+      expect(late_.every((x) => RegExp(r' — \d{4}/\d{2}/\d{2}$').hasMatch(x)), isTrue, reason: 'التاريخ بآخرها: ${late_.join(' | ')}');
       final oneLine = t.getSize(find.descendant(of: k('bal-moves'), matching: find.byType(ToneChip)).first).height;
       final tallest = statusesWhole(t, 'الفترة المغلقة @320');
       expect(tallest, greaterThan(oneLine * 1.5), reason: 'الحالة الطويلة التفّت على أكثر من سطر');

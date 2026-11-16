@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/ar_date.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 import 'company_route.dart';
@@ -33,6 +34,13 @@ int _i(Object? v) {
 String? _s(Object? v) {
   final t = v?.toString().trim();
   return (t == null || t.isEmpty) ? null : t;
+}
+
+/// فترة راتبٍ من الخادم (`{key, label}`) ⇒ «2026/11» / «أسبوع 2026/11/10» من مفتاحها — لا اسم الشهر الذي يكتبه
+/// الخادم ولا المخزَّن في الكشوف القديمة (المالك ١٦ نوفمبر: أرقامٌ لا أسماء أشهر).
+String? _periodLabelOf(Map p) {
+  final label = iqPayPeriodLabel(_s(p['key']), _s(p['label']));
+  return label.isEmpty ? null : label;
 }
 
 /// أنواع الحركات التي يسجّلها المدير — بترتيب عرضها.
@@ -202,7 +210,7 @@ class LedgerSalary {
       configured: raw['configured'] == true,
       dueCount: _i(raw['due_count']),
       lapsed: _i(raw['lapsed']),
-      nextLabel: next is Map ? _s(next['label']) : null,
+      nextLabel: next is Map ? _periodLabelOf(next) : null,
       nextDueDate: next is Map ? _s(next['due_date']) : null,
       elsewhere: LedgerSalaryElsewhere.fromJson(raw['elsewhere']),
     );
@@ -286,7 +294,7 @@ class LedgerPayslip {
       net: _n(raw['net']),
       fromHand: raw['source'] == 'hand',
       periodLabels: periods is List
-          ? periods.map((p) => p is Map ? _s(p['label'] ?? p['key']) : null).whereType<String>().toList()
+          ? periods.map((p) => p is Map ? _periodLabelOf(p) : null).whereType<String>().toList()
           : const [],
       voidReason: v is Map ? _s(v['reason']) : null,
     );
@@ -423,7 +431,7 @@ class PayslipPeriod {
     if (key == null) return null;
     return PayslipPeriod(
       key: key,
-      label: _s(raw['label']) ?? key,
+      label: _periodLabelOf(raw) ?? key,
       dueDate: _s(raw['due_date']) ?? '',
       due: raw['due'] == true,
       amount: _n(raw['amount']),
