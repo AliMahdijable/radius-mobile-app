@@ -999,6 +999,11 @@ class _SectionSwitchRow extends StatelessWidget {
       hint: 'portal.section_finance_on',
       icon: LucideIcons.receipt,
     ),
+    PortalSection.wifi: (
+      title: 'portal.section_wifi',
+      hint: 'portal.section_wifi_on',
+      icon: LucideIcons.router,
+    ),
   };
 
   static Iterable<PortalSection> get shown => _copy.keys;
