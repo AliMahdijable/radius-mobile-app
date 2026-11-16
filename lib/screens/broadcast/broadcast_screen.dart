@@ -37,7 +37,20 @@ class BroadcastScreen extends StatefulWidget {
   State<BroadcastScreen> createState() => _BroadcastScreenState();
 }
 
-enum _Filter { all, debtors, expired, expiring }
+enum _Filter { all, active, debtors, expired, expiring }
+
+/// جمهور «الفعّالون» (١٦ نوفمبر — المالك: «ضيفلنا بالتبليغات الفعالين»): اشتراكه لم ينتهِ — **قاعدة الخادم نفسها**
+/// (`broadcastAudience.isActive`): الانتهاء بعد الآن بساعة بغداد الجداريّة (تاريخ الساس يُقرأ بها)، وبلا تاريخٍ مقروء الأيّامُ الباقية
+/// ≥ 0. المجهول ليس فعّالاً — لا يُعدّ ولا يُرسَل له (لا «الكلّ» بدله). عدّاد الحساب الكبير من الساس نفسه (`summary.app.active`).
+@visibleForTesting
+bool broadcastActive(Subscriber s, {DateTime? now}) {
+  final b = (now ?? DateTime.now()).toUtc().add(const Duration(hours: 3));
+  final nowWall = DateTime(b.year, b.month, b.day, b.hour, b.minute, b.second);
+  final exp = s.parsedExpiration;
+  if (exp != null) return exp.isAfter(nowWall);
+  final d = s.remainingDays;
+  return d != null && d >= 0;
+}
 
 /// جمهور «قرب الانتهاء» في التبليغات — **قاعدة الخادم والويب نفسها**، لا
 /// [Subscriber.isNearExpiry] (ذاك يلوّن البطاقات: من الآن إلى ما دون أربعة أيّام).
@@ -251,6 +264,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     switch (_filter) {
       case _Filter.all:
         return _withPhone;
+      case _Filter.active:
+        final now = DateTime.now();
+        return _withPhone.where((s) => broadcastActive(s, now: now)).toList();
       case _Filter.debtors:
         return _withPhone.where((s) {
           if (s.hasDebtFlag) return true;
@@ -399,16 +415,19 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       final c = _bigCounts;
       return {
         _Filter.all: c?.all ?? _bigTotal,
+        _Filter.active: c?.active ?? -1,
         _Filter.debtors: c?.debtors ?? -1,
         _Filter.expired: c?.expired ?? -1,
         _Filter.expiring: c?.nearExpiry ?? -1,
       };
     }
+    int active = 0;
     int debtors = 0;
     int expired = 0;
     int expiring = 0;
     final now = DateTime.now();
     for (final s in _withPhone) {
+      if (broadcastActive(s, now: now)) active++;
       final hasDebt = s.hasDebtFlag ||
           (s.debt ?? 0) > 0 ||
           (double.tryParse((s.notes ?? '0').replaceAll(',', '')) ?? 0) < 0;
@@ -418,6 +437,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     }
     return {
       _Filter.all: _withPhone.length,
+      _Filter.active: active,
       _Filter.debtors: debtors,
       _Filter.expired: expired,
       _Filter.expiring: expiring,
@@ -428,6 +448,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     switch (_filter) {
       case _Filter.all:
         return MessageIntent.general;
+      case _Filter.active:
+        return MessageIntent.active;
       case _Filter.debtors:
         return MessageIntent.debtors;
       case _Filter.expired:
@@ -1287,6 +1309,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             physics: const NeverScrollableScrollPhysics(),
             children: [
               _filterChip(_Filter.all, 'كل المشتركين', LucideIcons.users, counts[_Filter.all] ?? 0, ListTone.brand),
+              _filterChip(_Filter.active, 'الفعّالون', LucideIcons.userCheck, counts[_Filter.active] ?? 0, ListTone.success),
               _filterChip(_Filter.debtors, 'المدينون', LucideIcons.wallet, counts[_Filter.debtors] ?? 0, ListTone.warning),
               _filterChip(_Filter.expired, 'منتهي الصلاحية', LucideIcons.clock, counts[_Filter.expired] ?? 0, ListTone.danger),
               _filterChip(_Filter.expiring, 'قرب الانتهاء (3 أيام)', LucideIcons.triangleAlert, counts[_Filter.expiring] ?? 0,
