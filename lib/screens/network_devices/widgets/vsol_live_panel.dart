@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/bdcom_epon.dart';
 import '../../../api/bridge_fdb.dart';
+import '../../../api/hsgq_web.dart';
 import '../../../api/olt_get_tables.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../api/olt_profile.dart';
@@ -259,6 +260,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     try {
       final creds = await NetworkDevicesApi.getCredentials(d.id);
       if (!mounted || gen != _gen) return;
+      // HSGQ ببرمجيّةٍ قديمة: قائمة الـONU من صفحته بحسابها المحفوظ (web_user/web_pass) — [HsgqWeb].
+      HsgqWeb.registerFrom(d.ip, creds);
       // الـcommunity تُحفَظ تحت `community`، ويُقبل `pass` لمن أدخلها
       // في حقل كلمة المرور قبل أن يوجد الحقل المخصّص.
       final community =

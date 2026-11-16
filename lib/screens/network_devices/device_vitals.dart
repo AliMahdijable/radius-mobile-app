@@ -8,6 +8,7 @@ import '../../api/bdcom_epon.dart';
 import '../../api/cisco_api.dart';
 import '../../api/edgeswitch_api.dart';
 import '../../api/hsgq_olt.dart';
+import '../../api/hsgq_web.dart';
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
@@ -680,6 +681,7 @@ class DeviceVitals {
       void Function(ProbeResult partial)? onPartial}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
     if (_isOlt(d)) {
+      HsgqWeb.registerFrom(d.ip, creds); // HSGQ ببرمجيّةٍ قديمة: قائمة الـONU من صفحته
       return _olt(d, creds, withOnuLights: withOnuLights, lightsUntil: lightsUntil, isCancelled: isCancelled);
     }
     switch (d.brand.toLowerCase()) {

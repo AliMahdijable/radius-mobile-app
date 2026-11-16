@@ -34,9 +34,22 @@ class SnmpV2c {
     this.timeout = const Duration(seconds: 4),
   });
 
+  /// خطّافٌ بعد كلّ GET (لا GETBULK ولا walk): يكمّل ما لا يكشفه جهازٌ بعينه من مصدرٍ آخر — اليوم `HsgqWeb.fill`: جدول الـONU
+  /// الغائب من أولت HSGQ ببرمجيّةٍ قديمة يُملأ من صفحته، لعنوانٍ سُجّل له دخولها وحده. `null` = لا شيء (كلّ الأجهزة الأخرى).
+  static Future<List<Varbind>> Function(String host, List<Varbind> vbs)? afterGet;
+
+  /// خطّافٌ قبل الإرسال: جوابٌ جاهز يُغني عن رحلةٍ إلى الجهاز، أو `null` فيُرسل الطلب كما هو. اليوم `HsgqWeb.answer`: بعد أن
+  /// عُرف أنّ جدول الـONU غائبٌ عن أولتٍ بعينه، تُجاب أسئلته من صفحته بلا رحلة SNMP لا جواب لها (‏٣٢ دفعة ≈ ٦ ث عبر VPN).
+  static Future<List<Varbind>?> Function(String host, List<String> oids)? beforeGet;
+
   /// GET request — يجلب قيمة واحدة أو أكثر من scalar OIDs.
   Future<List<Varbind>> get(List<String> oids) async {
     if (oids.isEmpty) return const [];
+    final pre = beforeGet;
+    if (pre != null) {
+      final ready = await pre(host, oids);
+      if (ready != null) return ready;
+    }
     final requestId = _nextRequestId();
     final packet = _buildRequest(
       pduType: _pduGetRequest,
@@ -44,7 +57,9 @@ class SnmpV2c {
       oids: oids,
     );
     final response = await _send(packet);
-    return _parseResponse(response, expectedRequestId: requestId);
+    final vbs = _parseResponse(response, expectedRequestId: requestId);
+    final hook = afterGet;
+    return hook == null ? vbs : hook(host, vbs);
   }
 
   /// GETBULK — لجلب صفوف الجدول (client table). يبدأ من baseOid ويرجع
