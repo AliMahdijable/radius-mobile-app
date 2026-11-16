@@ -1363,9 +1363,14 @@ class MikrotikWireless {
 
 /// وصلة 60 GHz كما يقرؤها `/interface/w60g/monitor =once=` (LHG 60G · wAP 60G · Cube 60G/60Pro · nRAY).
 ///
-/// ⚠️ `signal` هنا **جودةٌ بالمئة (0–100) لا dBm** — والـdBm في `rssi`. وسرعة الربط نصٌّ بوحدته («2.3Gbps» ·
-/// «1540.0Mbps»)، والمسافة «160.9m». الإصدارات تختلف في الاسم: `mcs`/`phy-rate` (7) و`tx-mcs`/`tx-phy-rate` (6).
-/// ما لا يُرجعه الجهاز يبقى null فيُعرض «—» — لا صفر.
+/// ⚠️ `signal` هنا **جودةٌ بالمئة (0–100) لا dBm** — والـdBm في `rssi`. الاسم يختلف بين الإصدارات: `mcs`/`phy-rate`
+/// و`tx-mcs`/`tx-phy-rate`. ما لا يُرجعه الجهاز يبقى null فيُعرض «—» — لا صفر.
+///
+/// 🐛 ١٦ نوفمبر (المالك: «lhg60 سرعة الربط ماكو» + nRAY): **الطرفيّة وحدها تكتب الوحدة** («2.3Gbps» · «1540.0Mbps» ·
+/// «160.9m» — طريق SSH). الـAPI والـREST يُرجعان **رقماً مجرّداً**: مرجع أوامر RouterOS ‏7.26 يصف `tx-phy-rate` و`distance`
+/// بالنوع num كـ`free-memory` و`rx-bits-per-second` (رقمٌ خامٌ تنسّقه الطرفيّة وحدها)، وmktxp يصدّر tx-phy-rate بلا تحويل.
+/// كان المحلّل يشترط الوحدة فيرفض الرقم: «سرعة الربط —» والمسافة غائبة على LHG 60G وnRAY (طريقهما API ‏8728)،
+/// والإشارة والجودة تظهران لأنّها أرقامٌ بلا وحدة أصلاً. ⇒ [rateMbps] و[monitorMeters] يقبلان الشكلين.
 class MikrotikW60gLink {
   final String iface;
   final bool connected;
@@ -1428,7 +1433,7 @@ class MikrotikW60gLink {
       signalPercent: connected && pct != null && pct >= 0 && pct <= 100 ? pct : null,
       mcs: connected ? asInt(m['mcs'] ?? m['tx-mcs']) : null,
       phyRateMbps: connected ? rateMbps(m['phy-rate'] ?? m['tx-phy-rate']) : null,
-      distanceMeters: connected ? meters(m['distance']) : null,
+      distanceMeters: connected ? monitorMeters(m['distance']) : null,
       txSector: connected ? asInt(m['tx-sector']) : null,
       txSectorInfo: connected ? _nonEmpty(m['tx-sector-info']) : null,
       packetErrorRate: connected ? asInt(m['tx-packet-error-rate']) : null,
@@ -1444,22 +1449,55 @@ class MikrotikW60gLink {
   /// «28 · center» — رقم القطاع ثمّ وصفه كما يكتبه الجهاز.
   String? get sectorText => txSector == null ? null : (txSectorInfo == null ? '$txSector' : '$txSector · $txSectorInfo');
 
-  /// «2.3Gbps» ← 2300 · «1540.0Mbps» ← 1540 · «0bps»/فارغ ← null.
+  /// سرعة الربط بالـMbps: «2.3Gbps» ← 2300 · «1540.0Mbps» ← 1540 (الطرفيّة)؛ ورقمٌ مجرّد (API/REST) تُعرف وحدته
+  /// من مقداره: «2310000000» ← 2310 · «2310000» ← 2310 · «2310» ← 2310. «0»/«0bps»/فارغ/غير رقم ← null.
+  ///
+  /// لماذا المقدار يكفي بلا تخمين: سرعات 802.11ad/ay بين 27.5 Mbps ‏(MCS0) ونحو 9 Gbps، فمجالات الوحدات الثلاث لا تتداخل —
+  /// بالـMbps أقلّ من 10 000، وبالـkbps بين 27 500 و9 000 000، وبالـbps من 27 500 000 فما فوق.
   static int? rateMbps(String? raw) {
     if (raw == null) return null;
-    final m = RegExp(r'([\d.]+)\s*([kKmMgG]?)bps').firstMatch(raw);
-    final v = m == null ? null : double.tryParse(m.group(1)!);
-    if (v == null || v <= 0) return null;
-    final mbps = switch (m!.group(2)!.toLowerCase()) {
-      'g' => v * 1000,
-      'm' => v,
-      'k' => v / 1000,
-      _ => v / 1000000,
-    };
-    return mbps < 1 ? null : mbps.round();
+    // قيمةٌ متعدّدة (محطّاتٌ على واجهةٍ واحدة) ⇒ الأولى؛ الوصلة نقطةٌ لنقطة.
+    final s = raw.split(',').first.trim();
+    final double mbps;
+    final m = RegExp(r'([\d.]+)\s*([kKmMgG]?)bps').firstMatch(s);
+    if (m != null) {
+      final v = double.tryParse(m.group(1)!);
+      if (v == null || v <= 0) return null;
+      mbps = switch (m.group(2)!.toLowerCase()) {
+        'g' => v * 1000,
+        'm' => v,
+        'k' => v / 1000,
+        _ => v / 1000000,
+      };
+    } else {
+      // المجرّد وحده — «0=…» أو نصٌّ آخر لا يُقرأ رقماً (لا رقم كاذب).
+      if (!RegExp(r'^\d+(\.\d+)?$').hasMatch(s)) return null;
+      final v = double.parse(s);
+      if (v <= 0) return null;
+      mbps = v >= 10000000 ? v / 1000000 : (v >= 10000 ? v / 1000 : v);
+    }
+    return mbps < 1 || mbps > 100000 ? null : mbps.round();
   }
 
-  /// «160.9m» ← 160.9 · «1.2km» ← 1200.
+  /// مسافة الوصلة بالأمتار كما يُرجعها monitor: «160.9m» · «1.2km» (الطرفيّة)؛ والـAPI/REST رقمٌ مجرّد **بالسنتيمتر** —
+  /// نوعه num (عددٌ صحيح) والطرفيّة تعرضه بمنزلتين («220.88m» = 22088)، ودليل W60G يكتب مسافة SNMP ‏`distance [cm]`
+  /// (وLibreNMS يقسمها على 100000 كيلومتراً). رقمٌ بكسرٍ عشريّ بلا وحدة ⇒ أمتار (السنتيمتر لا كسر له).
+  /// أبعد من 20 كم ⇒ null: لا وصلة 60 GHz بهذا الطول — رقمٌ كاذب لا يُعرض.
+  static double? monitorMeters(String? raw) {
+    if (raw == null) return null;
+    final s = raw.split(',').first.trim();
+    double? m = meters(s);
+    if (m == null) {
+      final bare = RegExp(r'^(\d+)(\.\d+)?$').firstMatch(s);
+      if (bare == null) return null;
+      final v = double.parse(s);
+      if (v <= 0) return null;
+      m = bare.group(2) == null ? v / 100 : v;
+    }
+    return m > 20000 ? null : m;
+  }
+
+  /// «160.9m» ← 160.9 · «1.2km» ← 1200 — بوحدته فقط؛ الرقم المجرّد لا يُقرأ هنا (وحدته معروفة في monitor وحده: [monitorMeters]).
   static double? meters(String? raw) {
     if (raw == null) return null;
     final m = RegExp(r'([\d.]+)\s*(km|m)\b').firstMatch(raw);

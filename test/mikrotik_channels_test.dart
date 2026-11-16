@@ -291,6 +291,38 @@ void main() {
           reason: 'لا راديو 5 GHz ⇒ لا جدول تسجيل');
     });
 
+    test('🚨 ١٦ نوفمبر: REST يُرجع السرعة والمسافة رقمين مجرّدين (num في مرجع 7.26) ⇒ 2310 Mbps و481 م', () async {
+      final raw = <String, Object>{
+        ..._lhgStation,
+        'POST /rest/interface/w60g/monitor': [
+          {
+            'connected': 'true',
+            'frequency': '60480',
+            'remote-address': '00:11:22:33:44:55',
+            'tx-mcs': '8',
+            'tx-phy-rate': '2310000000',
+            'signal': '80',
+            'rssi': '-55',
+            'distance': '48100',
+          },
+        ],
+      };
+      final (server, _) = await _restServer(raw);
+      addTearDown(() => server.close(force: true));
+      final log = <String>[];
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => switch (route) {
+            'rest-http' => RestRouterOsChannel(host: ip, port: server.port, https: false, user: user, pass: pass),
+            _ => _Refused(log, route),
+          };
+      MikrotikApi.portProbe = (ip, port) async => port == 80;
+      final s = await MikrotikApi.fetchStatsFor(ip: '127.0.0.1', protocol: 'api', creds: {'user': 'admin', 'pass': 'pw'});
+      expect(s.via, 'الويب');
+      final l = s.w60gLinks.single;
+      expect(l.phyRateMbps, 2310, reason: 'كان null ⇒ «سرعة الربط —»');
+      expect(l.mcs, 8);
+      expect(l.distanceMeters, 481.0);
+    });
+
     test('النبضة التالية تبدأ بالويب مباشرةً (الطريق محفوظ)', () async {
       final (server, _) = await _restServer(_lhgStation);
       addTearDown(() => server.close(force: true));
