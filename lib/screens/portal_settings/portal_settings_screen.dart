@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/agent_code_tab.dart';
+import 'widgets/services_tab.dart';
 import 'widgets/link_image_preview.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/app_sheet.dart';
@@ -52,7 +53,7 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
   @override
   void initState() {
     super.initState();
-    if (_showCustomize) _tab = TabController(length: 3, vsync: this);
+    if (_showCustomize) _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -82,6 +83,9 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
               ? null
               : TabBar(
                   controller: tab,
+                  // ٤ تبويبات (١٦ نوفمبر: «خدماتنا»): على الهاتف الضيّق تُمرَّر أفقيّاً بأسمائها كاملة بدل قصّها — والأعرض بعرضٍ متساوٍ.
+                  isScrollable: MediaQuery.sizeOf(context).width < 440,
+                  tabAlignment: MediaQuery.sizeOf(context).width < 440 ? TabAlignment.start : TabAlignment.fill,
                   indicatorColor: AppColors.brand,
                   labelColor: AppColors.brand,
                   unselectedLabelColor: AppColors.textMid,
@@ -93,6 +97,7 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
                     Tab(text: 'portal.tab_agent'.tr()),
                     Tab(text: 'portal.tab_info'.tr()),
                     Tab(text: 'portal.tab_packages'.tr()),
+                    Tab(text: 'portal.tab_services'.tr()),
                   ],
                 ),
         ),
@@ -108,6 +113,8 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
                   const _PackagesTab()
                 else
                   const _LockedTab(),
+                // «خدماتنا» (١٦ نوفمبر): تطبيقات الوكيل وصفحاته لمشتركيه (widgets/services_tab.dart)
+                if (_canCustomize) const ServicesTab() else const _LockedTab(),
               ],
             )),
     );
