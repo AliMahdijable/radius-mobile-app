@@ -16,6 +16,10 @@ const _gap = Duration(seconds: 20);
 /// بت/ثانية لفارق بايتاتٍ خلال [_gap].
 int _bps(int bytes) => (bytes * 8 / _gap.inSeconds).round();
 
+/// المعدّل يُحسب بزمن الساعة الفعليّ (ملّي ثانية): تحت حِمل الحزمة الكاملة تتأخّر القراءة الثانية ملّي ثانيةً أو اثنتين فيتزحزح
+/// الرقم ١٠٠٠٠٠٠٠٠ ⇒ ٩٩٩٩٠٠٠١ — المطابقة بسماحيّة ١٪ لا تامّة (المطلوب: رقمٌ لا «يعمل»، وبالمقدار الصحيح).
+Matcher _near(int bps) => closeTo(bps, bps * 0.01);
+
 NetworkDevice _dev(int id, String brand, {String model = ''}) => NetworkDevice(
       id: id,
       adminId: '1',
@@ -87,8 +91,8 @@ void main() {
             ]);
       });
       final f = LinkFlow.of(rb: r);
-      expect(f.toSubBps, _bps(down));
-      expect(f.toMainBps, _bps(upB));
+      expect(f.toSubBps, _near(_bps(down)));
+      expect(f.toMainBps, _near(_bps(upB)));
     });
 
     test('يوبيكويتي Wave/GigaBeam (راديو ٦٠ wlan0 + احتياطيّ ٥ ath0 خامل قبله)', () async {
@@ -101,8 +105,8 @@ void main() {
             ]);
       });
       final f = LinkFlow.of(rb: r);
-      expect(f.toSubBps, _bps(down), reason: 'الراديو الأنشط (الـ٦٠) لا أوّل راديو (الاحتياطيّ الخامل)');
-      expect(f.toMainBps, _bps(upB));
+      expect(f.toSubBps, _near(_bps(down)), reason: 'الراديو الأنشط (الـ٦٠) لا أوّل راديو (الاحتياطيّ الخامل)');
+      expect(f.toMainBps, _near(_bps(upB)));
     });
 
     test('ميموسا (محطّة) — كانت بلا منافذ ولا عدّادات ⇒ «يعمل» دائماً', () async {
@@ -120,8 +124,8 @@ void main() {
             );
       });
       final f = LinkFlow.of(rb: r);
-      expect(f.toSubBps, _bps(down));
-      expect(f.toMainBps, _bps(upB));
+      expect(f.toSubBps, _near(_bps(down)));
+      expect(f.toMainBps, _near(_bps(upB)));
     });
 
     test('ميموسا بأسماء واجهاتٍ لا تقول «لاسلكيّ» ⇒ أنشط منفذ (كلوحته)، لا «يعمل»', () async {
@@ -139,7 +143,9 @@ void main() {
       expect(f.toSubBps, isNotNull);
       expect(f.toMainBps, isNotNull);
       // بلا واجهةٍ لاسلكيّة مسمّاة: الأكبر «ينزل» كما يحسب البرج (اصطلاح [TowerReading])
-      expect({f.toSubBps, f.toMainBps}, {_bps(down), _bps(upB)});
+      final big = [f.toSubBps!, f.toMainBps!]..sort();
+      expect(big[1], _near(_bps(down)));
+      expect(big[0], _near(_bps(upB)));
     });
 
     test('روجي airMetro (جسر) — منافذ IF-MIB بعدّاداتها', () async {
@@ -157,8 +163,8 @@ void main() {
             );
       });
       final f = LinkFlow.of(rb: r);
-      expect(f.toSubBps, _bps(down));
-      expect(f.toMainBps, _bps(upB));
+      expect(f.toSubBps, _near(_bps(down)));
+      expect(f.toMainBps, _near(_bps(upB)));
     });
   });
 }
