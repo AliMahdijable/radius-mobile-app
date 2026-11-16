@@ -42,7 +42,7 @@ String arabicActionLabel(String actionType, [String description = '']) {
       return 'دفعة';
     case 'EXPENSE_ADD':
     case 'ADMIN_EXPENSE':
-      return 'صرفية';
+      return 'مصروف';
     case 'SALE':
       return 'بيع مواد';
     case 'SALE_VOID':
@@ -52,9 +52,9 @@ String arabicActionLabel(String actionType, [String description = '']) {
     case 'EMPLOYEE_MOVE':
       return employeeMoveLabel(description);
     case 'EXPENSE_EDIT':
-      return 'تعديل صرفية';
+      return 'تعديل مصروف';
     case 'EXPENSE_DELETE':
-      return 'حذف صرفية';
+      return 'حذف مصروف';
     case 'ACCOUNT_SETTLE':
       return 'تسوية حساب';
     case 'ACCOUNT_SETTLE_VOID':

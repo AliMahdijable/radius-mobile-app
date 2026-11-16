@@ -114,7 +114,7 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
     final reason = await askLedgerVoidReason(
       context,
       title: 'إلغاء كشف الراتب ${p.number}',
-      body: 'تُحذف صرفيّته من المصاريف وتعود استقطاعاته (السلف والأقساط) على الموظف.',
+      body: 'يُحذف مصروفه من المصاريف وتعود استقطاعاته (السلف والأقساط) على الموظف.',
       confirm: 'إلغاء الكشف',
     );
     if (reason == null) return;
@@ -558,7 +558,7 @@ class _LimitsSheetState extends State<_LimitsSheet> {
         onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _saving ? 'جاري الحفظ...' : 'حفظ',
+        label: _saving ? 'جارٍ الحفظ...' : 'حفظ',
         icon: LucideIcons.save,
         busy: _saving,
         onPressed: _save,
@@ -670,7 +670,7 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
       footer: p == null
           ? null
           : SheetFooterBar(
-              label: _submitting ? 'جاري التسوية...' : 'تأكيد التسوية — تصفير النقد',
+              label: _submitting ? 'جارٍ التسوية...' : 'تأكيد التسوية — تصفير النقد',
               icon: LucideIcons.check,
               busy: _submitting,
               onPressed: _confirm,

@@ -182,7 +182,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
               _noteCard(
                 icon: LucideIcons.plug,
                 tone: AppTone.warning,
-                title: '${FiberText.devices(powerOff.length)} طافية من كهرباء البيت',
+                title: '${FiberText.devices(powerOff.length)} مطفأة من كهرباء البيت',
                 body: 'بعثت إشارة انطفاء${_ponsOf(powerOff)}، ما تحتاج فنّياً.',
               ),
             if (lightLost.isNotEmpty)
@@ -375,7 +375,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
                 child: FilledButton(
                   onPressed: open,
                   style: FilledButton.styleFrom(backgroundColor: AppColors.brand, minimumSize: const Size.fromHeight(44)),
-                  child: Text('شوف العطل', style: AppType.bodyStrong(color: AppColors.onBrand)),
+                  child: Text('انظر العطل', style: AppType.bodyStrong(color: AppColors.onBrand)),
                 ),
               ),
               const SizedBox(width: Sp.sm),
@@ -420,7 +420,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
       final v = _m.ponRates[p.label]?.txBps;
       if (v != null) down = (down ?? 0) + v;
     }
-    return down == null ? null : 'الترافك الآن ↓ ${_mbps(down)}';
+    return down == null ? null : 'حركة البيانات الآن ↓ ${_mbps(down)}';
   }
 
   static String _mbps(double bps) {
@@ -503,7 +503,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        _factLine('الترافك', down == null ? '—' : '↓ ${_mbps(down)}'),
+        _factLine('حركة البيانات', down == null ? '—' : '↓ ${_mbps(down)}'),
       ]),
     );
   }
@@ -541,7 +541,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
       tool(LucideIcons.package, 'الصناديق', '${FiberText.ports(freePorts)} فارغة',
           firstPon == null ? () {} : () => _push(FiberPonScreen(monitor: _m, pon: firstPon))),
       // المالك ٢٨ أكتوبر: «رسم خريطة بمسارات الضوئي ٢d… يوضح سيرفر الترفك والربط».
-      tool(LucideIcons.gitFork, 'مخطّط الشبكة', widget.olts.length > 1 ? 'كلّ الأولتات بخريطةٍ واحدة' : 'السيرفر ⇐ المنافذ ⇐ الصناديق',
+      tool(LucideIcons.gitFork, 'مخطّط الشبكة', widget.olts.length > 1 ? 'كلّ الأولتات بخريطةٍ واحدة' : 'الخادم ⇐ المنافذ ⇐ الصناديق',
           () => _push(FiberMapScreen(olts: widget.olts, initialOltId: widget.olts.length > 1 ? null : _olt.id))),
     ];
     return Padding(

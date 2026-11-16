@@ -58,7 +58,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
   /// اعتماد «الجهاز الثاني» بلا عنوانٍ له: كان يُهمل بصمت والورقة تُغلق كأنّها حفظت (المالك ١٥ نوفمبر: «من اخزن الاعتماد يدوي
   /// مجرد اخرج وادخل يروح الحفظ») — الآن لا حفظ حتى يُكتب عنوانه، والرسالة تدلّ على مكان اعتماد جهاز المشترك نفسه.
   static const secondNeedsAddressText =
-      'الجهاز الثاني يحتاج آيبي أو منفذ حتى يُحفظ يوزره وكلمة سرّه. إن قصدت جهاز المشترك نفسه فاكتبهما فوق في «بيانات الدخول للجهاز».';
+      'الجهاز الثاني يحتاج عنوان IP أو منفذاً حتى يُحفظ يوزره وكلمة مروره. إن قصدت جهاز المشترك نفسه فاكتبهما فوق في «بيانات الدخول للجهاز».';
 
   @override
   void initState() {
@@ -271,7 +271,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                         Divider(height: 1, color: AppColors.divider),
                         _credRow(
                           icon: LucideIcons.lock,
-                          label: 'كلمة السر',
+                          label: 'كلمة المرور',
                           controller: _pass,
                           hint: credHint,
                           obscure: _obscure,
@@ -300,17 +300,17 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                 SheetSection(
                   label: 'الجهاز الثاني — نانو + راوتر (اختياري)',
                   // بلا «⇒»: لا محرف له في خطّ التطبيق (مربّعٌ فارغ في لقطات الاختبار) — نقطتان بدله.
-                  footnote: 'الاتّصال على النانو والراوتر خلفه: اكتب المنفذ المحوّل للراوتر (بورت فورورد بالنانو) وحده · '
-                      'الاتّصال على الراوتر: اكتب آيبي النانو الثابت',
+                  footnote: 'الاتّصال على النانو والراوتر خلفه: اكتب المنفذ المحوّل للراوتر (تحويل المنافذ في النانو) وحده · '
+                      'الاتّصال على الراوتر: اكتب عنوان IP الثابت للنانو',
                   gap: Sp.sm,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _addressRow(_ip2, _port2, hint: 'آيبي المشترك إذا فارغ'),
+                      _addressRow(_ip2, _port2, hint: 'عنوان IP للمشترك إذا كان فارغاً'),
                       if (_secondNeedsAddress) ...[
                         const SizedBox(height: 6),
                         Text(
-                          'اكتب آيبي الجهاز الثاني أو منفذه — بلا عنوانٍ لا يُحفظ يوزره وكلمة سرّه.',
+                          'اكتب عنوان IP للجهاز الثاني أو منفذه — بلا عنوانٍ لا يُحفظ يوزره وكلمة مروره.',
                           key: const ValueKey('second-needs-address'),
                           style: AppType.micro(color: AppColors.error),
                         ),
@@ -334,7 +334,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                             Divider(height: 1, color: AppColors.divider),
                             _credRow(
                               icon: LucideIcons.lock,
-                              label: 'كلمة السر',
+                              label: 'كلمة المرور',
                               controller: _pass2,
                               hint: credHint,
                               obscure: _obscure2,
@@ -383,7 +383,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
 
   /// تلميح حقول اليوزر وكلمة السرّ الفارغة — للجهازين. (كان الأوّل يعرض افتراض المصنّع «telecomadmin / admintelecom» رماديّاً
   /// فيبدو كأنّه محفوظ، والاعتماد يُكتب في خانتَي الجهاز الثاني بدله.)
-  static const credHint = 'من «الاعتمادات» إذا فارغ';
+  static const credHint = 'من «بيانات الدخول» إذا فارغ';
 
   static const loadFailedText = 'تعذّر تحميل إعداد الجهاز الآن';
   static const noPermissionText = 'لا صلاحيّة لإعداد أجهزة المشتركين';
@@ -532,7 +532,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
   if (ip.isNotEmpty) {
     final parts = ip.split('.');
     if (parts.length != 4 || parts.any((p) => p.isEmpty || int.parse(p) > 255)) {
-      return (value: null, error: 'الآيبي غير صحيح (مثل 10.0.0.5)');
+      return (value: null, error: 'عنوان IP غير صحيح (مثل 10.0.0.5)');
     }
   }
   if (port.isNotEmpty) {

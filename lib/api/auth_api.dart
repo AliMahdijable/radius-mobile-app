@@ -249,7 +249,7 @@ class AuthApi {
       if (challenge != null) {
         final msg = (body['message'] as String?)?.trim() ?? '';
         return LoginFailure(
-          msg.isNotEmpty ? msg : 'أدخل كود التحقّق من تطبيق المصادقة.',
+          msg.isNotEmpty ? msg : 'أدخل رمز التحقّق من تطبيق المصادقة.',
           code: '2fa-required',
           twoFactor: challenge,
         );
@@ -317,7 +317,7 @@ class AuthApi {
             ? msg
             : (expired
                 ? 'انتهت صلاحية الجلسة المؤقّتة — أعد تسجيل الدخول'
-                : 'الكود غير صحيح'),
+                : 'الرمز غير صحيح'),
         code: expired ? '2fa-expired' : '2fa-invalid',
       );
     } on DioException catch (e) {
@@ -339,7 +339,7 @@ class AuthApi {
           (body['token'] ?? body['accessToken'] ?? user['token'] ?? '')
               .toString();
       if (token.isEmpty) {
-        return const LoginFailure('لم يصل رمز الجلسة من السيرفر.');
+        return const LoginFailure('لم يصل رمز الجلسة من الخادم.');
       }
 
       // Backend sets user.role='super_admin' AND user.isSuperAdmin=true
@@ -518,13 +518,13 @@ class AuthApi {
       final user = body['user'] as Map<String, dynamic>? ?? const {};
       final token = (body['token'] ?? '').toString();
       if (token.isEmpty) {
-        return const LoginFailure('لم يصل رمز الجلسة من السيرفر.');
+        return const LoginFailure('لم يصل رمز الجلسة من الخادم.');
       }
       // جلسة هذا الباب موظّفٌ دائماً: غير ذلك يعني ردّاً غير متوقّع — ولا نحفظ
       // توكناً بعلامة مديرٍ فيمرّ بمسار تجديد توكن الساس.
       final isEmployee = user['role']?.toString() == 'employee';
       if (!isEmployee) {
-        return const LoginFailure('استجابة غير متوقعة من السيرفر.');
+        return const LoginFailure('استجابة غير متوقعة من الخادم.');
       }
       final empBlock = user['employee'];
       final Map<String, dynamic> empPerms = (empBlock is Map)
@@ -826,7 +826,7 @@ class AuthApi {
       case DioExceptionType.receiveTimeout:
         return 'انتهت مهلة الاتصال. تأكد من الإنترنت.';
       case DioExceptionType.connectionError:
-        return 'تعذّر الاتصال بالسيرفر. تأكد من الإنترنت.';
+        return 'تعذّر الاتصال بالخادم. تأكد من الإنترنت.';
       case DioExceptionType.badResponse:
         final code = e.response?.statusCode;
         // ٥xx يُرمى (validateStatus < 500) لكنّ الخادم يرسل رسالةً عربيّة واضحة
@@ -836,7 +836,7 @@ class AuthApi {
         if (serverMsg != null && serverMsg.isNotEmpty) return serverMsg;
         if (code == 401) return 'اسم المستخدم أو كلمة المرور غير صحيحة.';
         if (code == 429) return 'محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.';
-        return 'استجابة غير متوقعة من السيرفر (HTTP $code).';
+        return 'استجابة غير متوقعة من الخادم (HTTP $code).';
       default:
         // cancel / badCertificate / unknown / transformTimeout / أي جديد
         return 'حدث خطأ في الشبكة. حاول مجدداً.';

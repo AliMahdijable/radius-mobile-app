@@ -60,9 +60,9 @@ class TowerBuilderScreen extends StatefulWidget {
 
 class _TowerBuilderScreenState extends State<TowerBuilderScreen> {
   static const _steps = [
-    'يقرأ موديلات الأجهزة ويعرف شكل كلّ جهاز',
-    'يحدّد الدور من الوايرلس وعدد المتّصلين',
-    'يوزّع المستويات: اللنكات فوق والسكاترات حلقتين',
+    'يقرأ طرز الأجهزة ويعرف شكل كلّ جهاز',
+    'يحدّد الدور من الوضع اللاسلكيّ وعدد المتّصلين',
+    'يوزّع المستويات: اللنكات فوق والسكترات حلقتين',
     'يضع الاتّجاهات المعروفة ويُعلّم الباقي تقريبيّاً',
   ];
 
@@ -369,9 +369,9 @@ class _TowerBuilderScreenState extends State<TowerBuilderScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('كيف يرتّبها؟', style: AppType.bodyStrong(color: AppColors.textHi)),
         const SizedBox(height: 4),
-        row(LucideIcons.shapes, 'الشكل', 'من الموديل: BaseBox سكتر، PowerBeam صحن، SXT لوحة، CCR راوتر'),
-        row(LucideIcons.users, 'الدور', 'من وضع الوايرلس وعدد المتّصلين: مشتركون كثيرون = سكتر، طرفٌ واحد = لنك'),
-        row(LucideIcons.layers, 'المستوى', 'اللنكات في القمّة، والسكاترات على حلقتين متناوبتين، والراوتر والسويجات في الكابينة'),
+        row(LucideIcons.shapes, 'الشكل', 'من الطراز: BaseBox سكتر، PowerBeam صحن، SXT لوحة، CCR راوتر'),
+        row(LucideIcons.users, 'الدور', 'من الوضع اللاسلكيّ وعدد المتّصلين: مشتركون كثيرون = سكتر، طرفٌ واحد = لنك'),
+        row(LucideIcons.layers, 'المستوى', 'اللنكات في القمّة، والسكترات على حلقتين متناوبتين، والراوتر والسويتشات في الكابينة'),
         row(LucideIcons.compass, 'الاتّجاه',
             'من اسم الجهاز إن ذكره (شمال، 120°…)، وإلّا يُوزَّع ويظهر «تقريبيّاً» حتى تثبّته بالبوصلة'),
       ]),

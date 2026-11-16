@@ -242,7 +242,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   _section(
                     key: const ValueKey('creds-tplink'),
                     icon: LucideIcons.radioTower,
-                    title: 'TP-Link — يوزر + باسورد (CPE / راوتر قديم)',
+                    title: 'TP-Link — يوزر + كلمة مرور (CPE / راوتر قديم)',
                     subtitle: 'devices.tplink_default_hint'.tr(),
                     userController: _tplinkUser,
                     passController: _tplinkPass,
@@ -258,7 +258,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   // راوتر TP-Link الحديث (Agile/Archer): كلمة سرٍّ محلّيّة فقط بلا يوزر (المالك ١١ نوفمبر: «النوع الي يدور فقط باسورد»).
                   _passwordSection(
                     key: const ValueKey('creds-tprouter'),
-                    title: 'راوتر — باسورد فقط (TP-Link Archer · Tenda)',
+                    title: 'راوتر — كلمة مرور فقط (TP-Link Archer · Tenda)',
                     subtitle: 'devices.tprouter_default_hint'.tr(),
                   ),
                   const SizedBox(height: Sp.md),
@@ -266,7 +266,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   _section(
                     key: const ValueKey('creds-mikrotik'),
                     icon: LucideIcons.router,
-                    title: 'MikroTik — نانو وراوتر (يوزر + باسورد)',
+                    title: 'MikroTik — نانو وراوتر (يوزر + كلمة مرور)',
                     subtitle: 'devices.mikrotik_default_hint'.tr(),
                     userController: _mikrotikUser,
                     passController: _mikrotikPass,

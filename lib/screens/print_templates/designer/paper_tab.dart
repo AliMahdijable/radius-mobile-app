@@ -204,7 +204,7 @@ class PaperTab extends StatelessWidget {
             DesignerField(label: 'العملة', child: _CurrencyPicker(controller: c)),
             DesignerSwitchRow(
               label: 'أسود فقط (توفير الحبر)',
-              hint: 'لوصل A4 — الكاشير يُطبع بالأسود دائماً',
+              hint: 'لوصل A4 — الوصل الحراريّ يُطبع بالأسود دائماً',
               value: l['mono'] == true,
               onChanged: (v) => c.setLayoutKey('mono', v ? true : null),
             ),

@@ -181,7 +181,7 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
                       key: const ValueKey('national-install-open'),
                       onPressed: () => _openInstall(d),
                       icon: Icon(nationalWriteLocked ? LucideIcons.lock : LucideIcons.wrench, size: 18),
-                      label: Text('تنصيب الجهاز', style: AppType.label(color: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand)),
+                      label: Text('تركيب الجهاز', style: AppType.label(color: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand)),
                       style: FilledButton.styleFrom(
                         backgroundColor: nationalWriteLocked ? AppColors.surfaceDisabled : AppColors.brand,
                         foregroundColor: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand,
@@ -191,12 +191,12 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
                       key: const ValueKey('national-install-done'),
                       onPressed: () => _openInstall(d),
                       icon: const Icon(LucideIcons.wrench, size: 18),
-                      label: const Text('معلومات التنصيب'),
+                      label: const Text('معلومات التركيب'),
                     ),
             ),
             if (d.install == 'open') ...[
               const SizedBox(height: 6),
-              Text('سجّل جهاز المشترك (الاسم والرمز والفات والسيريال وكود التفعيل) فتُغلق المهمّة في البوّابة.',
+              Text('سجّل جهاز المشترك (الاسم والرمز والفات والرقم التسلسليّ ورمز التفعيل) فتُغلق المهمّة في البوّابة.',
                   style: AppType.micro(color: AppColors.textMid)),
             ],
           ],

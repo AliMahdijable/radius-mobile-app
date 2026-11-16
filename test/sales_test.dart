@@ -277,7 +277,7 @@ void main() {
       expect((old.goodsPurchases.sum, old.goodsPurchases.count), (0, 0), reason: 'تسويةٌ قبل القسم ⇒ صفر');
     });
 
-    test('التالف والعطلان: خانة العطلان بقيمتها، وحركاتها بخسارتها وما رجّعه المورّد', () {
+    test('التالف والمعطّل: خانة المعطّل بقيمتها، وحركاتها بخسارتها وما رجّعه المورّد', () {
       final it = SaleItem.fromJson({..._SalesServer.items[0], 'qty_defective': 3, 'defective_value': 60000})!;
       expect((it.hasDefective, it.qtyDefective, it.defectiveValue), (true, 3, 60000));
       expect(it.defectiveValueOf(3), 60000, reason: 'كلّه ⇒ قيمته كلّها حرفاً');
@@ -288,7 +288,7 @@ void main() {
         'defective_after': 1, 'loss': 25833.33, 'voidable': true})!;
       expect((w.defectiveOnly, w.loss, w.defectiveAfter, w.voidable), (true, 25833.33, 1, true));
       final r = StockMove.fromJson(const {'id': 43, 'kind': 'repair', 'qty': 1, 'qty_before': 7, 'qty_after': 8, 'defective_after': 2})!;
-      expect(r.defectiveOnly, isFalse, reason: 'التصليح يغيّر المخزون');
+      expect(r.defectiveOnly, isFalse, reason: 'الإصلاح يغيّر المخزون');
       final s = StockMove.fromJson(const {'id': 46, 'kind': 'supplier_return', 'qty': -1, 'qty_before': 8, 'qty_after': 8,
         'defective_after': 1, 'loss': -4000, 'refund': 40000, 'paid_from': 'box'})!;
       expect((s.refund, s.loss, s.paidFrom, s.defectiveOnly), (40000, -4000, 'box', true));
@@ -403,7 +403,7 @@ void main() {
       expect(k.profitAfterCost, 450000 + 105000 - 60000 - 300000 + 25500);
     });
 
-    test('التالف والعطلان: يُطرح من الصافيين، ويُظهر المواد ولو بلا بيع، ويُجمع لـ«كل الشركات»', () {
+    test('التالف والمعطّل: يُطرح من الصافيين، ويُظهر المواد ولو بلا بيع، ويُجمع لـ«كل الشركات»', () {
       final k = FinanceKPIs.fromJson(const {
         'activate_cash_sum': 450000, 'activate_non_cash_sum': 105000, 'expenses_sum': 60000,
         'sales_loss_sum': 25000, 'sales_loss_count': 2,
@@ -651,7 +651,7 @@ void main() {
       await t.tap(find.text('إلغاء').at(1));
       await settle(t, seconds: 2);
       expect(find.textContaining('سدّد المشترك 20,000 د.ع'), findsOneWidget);
-      expect(find.text('تبقى رصيداً له للاشتراك الجاي'), findsOneWidget);
+      expect(find.text('تبقى رصيداً له للاشتراك القادم'), findsOneWidget);
       expect(find.text('دين 15,000 د.ع'), findsOneWidget);
       await t.tap(find.textContaining('تُرجَع له'));
       await settle(t);
@@ -784,7 +784,7 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('تالف / عطلان: الاختيار إجباريّ، و«تالف» بسببه يُرسل kind=damage مع معاينة الخسارة', (t) async {
+    testWidgets('تالف / معطّل: الاختيار إجباريّ، و«تالف» بسببه يُرسل kind=damage مع معاينة الخسارة', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
@@ -793,14 +793,14 @@ void main() {
       await settle(t, seconds: 1);
       await t.tap(find.byTooltip('شراء / تالف / فرق عدّ').first);
       await settle(t, seconds: 1);
-      await t.tap(find.text('تالف / عطلان'));
+      await t.tap(find.text('تالف / معطّل'));
       await settle(t);
       expect(find.text('شنو صار بيها؟ *'), findsOneWidget);
       final fields = find.descendant(of: find.byType(DesignSheet), matching: find.byType(TextField));
       await t.enterText(fields.at(0), '1');
       await t.enterText(fields.at(1), 'انكسر');
       await settle(t);
-      await t.tap(find.text('اختر: تالف أو عطلان'));
+      await t.tap(find.text('اختر: تالف أو معطّل'));
       await settle(t);
       expect(server.posts.where((p) => p.$1.endsWith('/stock')), isEmpty, reason: 'بلا اختيار لا يُرسل');
       await t.tap(find.text('تالف'));
@@ -813,17 +813,17 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('العطلان: الشارة تفتح الحسم، و«رجّعتها للمورّد» بمبلغٍ يطلب وجهته ثمّ يُرسل refund وrefund_to', (t) async {
+    testWidgets('المعطّل: الشارة تفتح الحسم، و«رجّعتها للمورّد» بمبلغٍ يطلب وجهته ثمّ يُرسل refund وrefund_to', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
       await settle(t, seconds: 2);
       await t.tap(find.text('الموادّ والمخزون'));
       await settle(t, seconds: 1);
-      expect(find.textContaining('عطلان في 1 مادّة'), findsOneWidget);
-      await t.tap(find.text('عطلان 1 قطعة'));
+      expect(find.textContaining('معطّل في 1 مادّة'), findsOneWidget);
+      await t.tap(find.text('معطّل 1 قطعة'));
       await settle(t, seconds: 1);
-      expect(find.text('العطلان — راوتر TP-Link C6'), findsOneWidget);
+      expect(find.text('المعطّل — راوتر TP-Link C6'), findsOneWidget);
       expect(find.text('اختر ما صار بها'), findsOneWidget);
       await t.tap(find.text('رجّعتها للمورّد'));
       await settle(t);
@@ -845,7 +845,7 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('حركات العطلان: الخسارة وما رجّعه المورّد، و«إلغاء الحركة» يشرح ما يرجع ويُرسل لمسار الإلغاء', (t) async {
+    testWidgets('حركات المعطّل: الخسارة وما رجّعه المورّد، و«إلغاء الحركة» يشرح ما يرجع ويُرسل لمسار الإلغاء', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
@@ -857,8 +857,8 @@ void main() {
       expect(find.text('رجّعته للمورّد'), findsOneWidget);
       expect(find.text('خسارة 5,000 د.ع'), findsOneWidget);
       expect(find.textContaining('رجّع المورّد 15,000 د.ع'), findsOneWidget);
-      expect(find.text('عطلان ← 0'), findsOneWidget, reason: 'المخزون لم يتغيّر ⇒ العمود يعرض العطلان');
-      expect(find.text('العطلان ← 2'), findsOneWidget);
+      expect(find.text('معطّل ← 0'), findsOneWidget, reason: 'المخزون لم يتغيّر ⇒ العمود يعرض المعطّل');
+      expect(find.text('المعطّل ← 2'), findsOneWidget);
       await t.tap(find.text('إلغاء الحركة'));
       await settle(t);
       expect(find.textContaining('وتُلغى خسارتها (5,000 د.ع)'), findsOneWidget);

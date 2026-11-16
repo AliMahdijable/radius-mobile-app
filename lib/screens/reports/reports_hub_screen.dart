@@ -152,7 +152,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               icon: LucideIcons.walletCards,
               color: AppColors.success,
               title: 'تقارير الأرصدة',
-              subtitle: 'لكلّ شحنة رصيد: شگد طبّلك، شگد معوز، وشگد ربحك',
+              subtitle: 'لكلّ شحن: المحصَّل والمتبقّي وربحك',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const BalanceReportsScreen()),
               ),

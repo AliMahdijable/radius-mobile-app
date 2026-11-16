@@ -270,7 +270,7 @@ class _DevicesFilterStripState extends State<DevicesFilterStrip> {
       DeviceFilterChip(
         key: const ValueKey('devices-filters'),
         icon: LucideIcons.slidersHorizontal,
-        label: 'فلاتر',
+        label: 'تصفية',
         soft: !f.isEmpty,
         badge: f.count,
         tooltip: 'الحالة والنوع والمناطق',
@@ -284,7 +284,7 @@ class _DevicesFilterStripState extends State<DevicesFilterStrip> {
           label: widget.regionName ?? 'منطقة',
           selected: true,
           removable: true,
-          tooltip: 'إزالة فلتر المنطقة',
+          tooltip: 'إزالة تصفية المنطقة',
           onTap: () => widget.onChanged(f.withRegion(null)),
         ),
       ],
@@ -458,12 +458,12 @@ class _DevicesFilterSheetState extends State<DevicesFilterSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.slidersHorizontal,
-        title: 'الفلاتر',
+        title: 'التصفية',
         subtitle: _f.isEmpty && n == x.total ? 'كلّ الأجهزة · ${x.total}' : 'يعرض $n من ${x.total}',
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: n == 0 ? 'لا نتائج — غيّر الفلاتر' : 'عرض ${arCount(n, one: 'جهاز واحد', two: 'جهازين', few: 'أجهزة', many: 'جهازاً')}',
+        label: n == 0 ? 'لا نتائج — غيّر التصفية' : 'عرض ${arCount(n, one: 'جهاز واحد', two: 'جهازين', few: 'أجهزة', many: 'جهازاً')}',
         icon: LucideIcons.check,
         onPressed: () => Navigator.of(context).pop(),
         leading: _ResetButton(enabled: !_f.isEmpty, onTap: () => _set(DevicesFilter.none)),

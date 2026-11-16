@@ -317,9 +317,9 @@ class ManagersApi {
       final msg = e.response?.data is Map
           ? (e.response?.data as Map)['message']?.toString()
           : null;
-      return (password: null, message: msg ?? 'تعذّر جلب كلمة السر');
+      return (password: null, message: msg ?? 'تعذّر جلب كلمة المرور');
     } catch (_) {
-      return (password: null, message: 'تعذّر جلب كلمة السر');
+      return (password: null, message: 'تعذّر جلب كلمة المرور');
     }
   }
 

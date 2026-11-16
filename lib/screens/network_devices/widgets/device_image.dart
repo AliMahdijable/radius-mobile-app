@@ -205,7 +205,7 @@ class DeviceImage extends StatelessWidget {
     ('مانتبوكس', 'mantbox'),
     ('روكيت', 'rocket'),
     ('روكت', 'rocket'),
-    ('لوكو', 'loco'),
+    ('الشعار', 'loco'),
   ];
 
   static String _latinName(String model) {

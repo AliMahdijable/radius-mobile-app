@@ -100,7 +100,7 @@ class _RevealSheetState extends State<_RevealSheet>
     await Clipboard.setData(ClipboardData(text: widget.password));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('تمّ نسخ كلمة السرّ للحافظة'),
+      content: const Text('تمّ نسخ كلمة المرور للحافظة'),
       backgroundColor: AppColors.brand,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),
@@ -288,7 +288,7 @@ class _RevealSheetState extends State<_RevealSheet>
                       size: 12, color: AppColors.textLow),
                   const SizedBox(width: 5),
                   Text(
-                    'كلمة السرّ مخزَّنة بتشفير AES.',
+                    'كلمة المرور مخزَّنة بتشفير AES.',
                     style: TextStyle(
                       fontSize: 10.5, height: 1.3,
                       color: AppColors.textLow,
@@ -337,7 +337,7 @@ class _PasswordDisplay extends StatelessWidget {
           Row(
             children: [
               Text(
-                'كلمة السرّ',
+                'كلمة المرور',
                 style: TextStyle(
                   fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,

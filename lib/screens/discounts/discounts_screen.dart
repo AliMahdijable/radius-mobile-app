@@ -380,7 +380,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               actions: [
                 ListBarButton(
                   key: const ValueKey('discounts-apply'),
-                  label: _submitting ? 'جاري التطبيق...' : 'خصم',
+                  label: _submitting ? 'جارٍ التطبيق...' : 'خصم',
                   icon: LucideIcons.percent,
                   tone: ListTone.success,
                   busy: _submitting,
@@ -701,7 +701,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 const SizedBox(height: Sp.sm),
                 DeskWideButton(
                   label: _submitting
-                      ? 'جاري التطبيق...'
+                      ? 'جارٍ التطبيق...'
                       : (_amount > 0 && _selected.isNotEmpty
                           ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
                           : 'تطبيق الخصم'),

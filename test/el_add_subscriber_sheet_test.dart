@@ -110,7 +110,7 @@ void main() {
     await t.enterText(find.widgetWithText(TextField, 'ahmed'), 'ali1');
     await t.enterText(find.widgetWithText(TextField, '••••••••'), 'pw123456');
     await t.enterText(
-        find.widgetWithText(TextField, 'باسورد الإيداع'), 'dep-pass');
+        find.widgetWithText(TextField, 'كلمة مرور الإيداع'), 'dep-pass');
     // فحص الاسم مؤجَّل ٥٠٠ms.
     await t.pump(const Duration(milliseconds: 600));
     await t.pumpAndSettle();
@@ -259,7 +259,7 @@ void main() {
   });
 
   group('أثناء الإضافة', () {
-    testWidgets('🚨 السحب للأسفل لا يُغلق الشيت، والنتيجة تصل', (t) async {
+    testWidgets('🚨 السحب للأسفل لا يُغلق النافذة، والنتيجة تصل', (t) async {
       server.gate = Completer<void>();
       server.createReply = (
         503,
@@ -273,7 +273,7 @@ void main() {
       await fill(t);
       await t.tap(find.text(_submitLabel));
       await t.pump();
-      expect(find.text('جاري الإضافة...'), findsOneWidget);
+      expect(find.text('جارٍ الإضافة...'), findsOneWidget);
 
       await t.drag(find.text(_subtitleEl), const Offset(0, 500));
       for (var i = 0; i < 10; i++) {
@@ -292,7 +292,7 @@ void main() {
     });
 
     testWidgets(
-        '🚨 أُزيل الشيت أثناءها: «ربّما أُضيف» على الطبقة العليا (أطول) '
+        '🚨 أُزيل النافذة أثناءها: «ربّما أُضيف» على الطبقة العليا (أطول) '
         'والقائمة تتحدّث', (t) async {
       server.gate = Completer<void>();
       server.createReply = (
@@ -328,7 +328,7 @@ void main() {
       await drainSnacks(t);
     });
 
-    testWidgets('أُزيل الشيت ثمّ نجح وفشل الدفتر: النجاح ثمّ تنبيه الدين',
+    testWidgets('أُزيل النافذة ثمّ نجح وفشل الدفتر: النجاح ثمّ تنبيه الدين',
         (t) async {
       server.gate = Completer<void>();
       server.createReply = (
@@ -359,7 +359,7 @@ void main() {
     });
   });
 
-  group('اختيار الشيت', () {
+  group('اختيار النافذة', () {
     testWidgets('🚨 علم المزوّد العالق لا يفتح شيت ايرث لنك لمدير SAS4',
         (t) async {
       FlutterSecureStorage.setMockInitialValues({'auth.admin_id': '123'});

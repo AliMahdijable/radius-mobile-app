@@ -345,7 +345,7 @@ class VpnDevicePill extends StatelessWidget {
         final up = r.alive;
         final text = up
             ? [
-                'واصل',
+                'يستجيب',
                 if (r.ms != null) '\u2066${r.ms} ms\u2069',
                 if (r.stations != null) '${r.stations} متّصل',
               ].join(' · ')

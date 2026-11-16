@@ -418,14 +418,14 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('«طافية الآن» ٢٣ جهازاً: العدّاد يقول ٢٣، والقائمة ١٠ ثمّ «تحميل المزيد» ١٠ ثمّ الباقي', (t) async {
+    testWidgets('«منقطعة الآن» ٢٣ جهازاً: العدّاد يقول ٢٣، والقائمة ١٠ ثمّ «تحميل المزيد» ١٠ ثمّ الباقي', (t) async {
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _agentStatus(down: [
         for (var i = 1; i <= 23; i++) {'id': i, 'name': 'جهاز رقم $i', 'since_ms': _ago(Duration(minutes: 30 + i))},
       ]));
       server.on('GET', '/api/v2/agent-alerts/log', _agentLogServer(const []));
       await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
       await t.pumpAndSettle();
-      expect(find.text('23 جهازاً طافياً الآن'), findsOneWidget, reason: 'العدد الحقيقيّ لا عدد المعروض');
+      expect(find.text('23 جهازاً منقطعاً الآن'), findsOneWidget, reason: 'العدد الحقيقيّ لا عدد المعروض');
       final more = find.byKey(const ValueKey('aa-more-down'));
       await _reach(t, more);
       expect(find.text('جهاز رقم 10'), findsOneWidget);
@@ -461,7 +461,7 @@ void main() {
   });
 
   /* ═════════════════════ «تنبيهات الأجهزة» (الموبايل) ═════════════════════ */
-  group('تنبيهات الأجهزة على الموبايل', () {
+  group('تنبيهات الأجهزة على الهاتف المحمول', () {
     setUpAll(simSetUpAll);
 
     testWidgets('٢٥ تنبيهاً محفوظاً: ١٠ ثمّ ٢٠ ثمّ الكلّ، والزرّ يختفي', (t) async {

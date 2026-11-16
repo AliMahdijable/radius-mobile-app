@@ -308,7 +308,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       footer: SheetFooterBar(
         label: _done
             ? (_printingReceipt ? 'sheets.done_printing'.tr() : 'common.done'.tr())
-            : (_submitting ? 'جاري التمديد...' : (_disabledReason ?? 'تمديد الآن')),
+            : (_submitting ? 'جارٍ التمديد...' : (_disabledReason ?? 'تمديد الآن')),
         icon: LucideIcons.calendarPlus,
         enabled: _canSubmit,
         busy: _submitting,

@@ -306,10 +306,10 @@ class _NationalDeviceSheetState extends State<NationalDeviceSheet> {
       NationalEditSection(
         first: first,
         icon: LucideIcons.cpu,
-        title: 'السيريال',
+        title: 'الرقم التسلسليّ',
         now: NationalNowValue(d.serial),
         child: d.locked
-            ? _note('البوّابة تمنع تغيير السيريال لهذا الاشتراك الآن (عناصر الشبكة مقفلة).', warn: true)
+            ? _note('البوّابة تمنع تغيير الرقم التسلسليّ لهذا الاشتراك الآن (عناصر الشبكة مقفلة).', warn: true)
             : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 NationalLatinField(
                   controller: _serial,
@@ -317,13 +317,13 @@ class _NationalDeviceSheetState extends State<NationalDeviceSheet> {
                   maxLength: 20,
                   upper: true,
                   enabled: !frozen,
-                  semanticLabel: 'السيريال الجديد',
+                  semanticLabel: 'الرقم التسلسليّ الجديد',
                   error: serial.isNotEmpty && !_serialOk.hasMatch(serial) ? 'حروفٌ وأرقام إنكليزيّة، من ٦ إلى ٢٠' : null,
-                  helper: Text('تأكّد منه: سيريالٌ خطأ يقطع الخدمة عن المشترك.', style: AppType.micro(color: AppColors.textMid)),
+                  helper: Text('تأكّد منه: رقمٌ تسلسليٌّ خطأ يقطع الخدمة عن المشترك.', style: AppType.micro(color: AppColors.textMid)),
                   onChanged: (_) => setState(() => _serialTouched = true),
                 ),
                 const SizedBox(height: Sp.md),
-                _saveButton('serial', 'حفظ السيريال', enabled: serialOk, onPressed: () => _saveDevice('serial', serial, 'تغيير السيريال')),
+                _saveButton('serial', 'حفظ الرقم التسلسليّ', enabled: serialOk, onPressed: () => _saveDevice('serial', serial, 'تغيير الرقم التسلسليّ')),
               ]),
       ),
       NationalEditSection(

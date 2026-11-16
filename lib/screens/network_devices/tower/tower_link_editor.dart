@@ -106,8 +106,8 @@ class _TowerLinkEditorScreenState extends State<TowerLinkEditorScreen> {
       builder: (_) => _DevicePickerSheet(
         title: main ? 'طرف البرج الرئيسي' : 'طرف البرج الفرعي',
         subtitle: _fiber
-            ? (main ? 'السويج الذي يخرج منه الكيبل' : 'السويج الذي يصله الكيبل')
-            : (main ? 'الماستر — منه يخرج الترافيك' : 'السليف — إليه يصل الترافيك'),
+            ? (main ? 'السويتش الذي يخرج منه الكيبل' : 'السويتش الذي يصله الكيبل')
+            : (main ? 'الماستر — منه تخرج حركة البيانات' : 'السليف — إليه تصل حركة البيانات'),
         devices: widget.devices,
         towerName: widget.towerName,
         current: main ? _a : _b,
@@ -220,8 +220,8 @@ class _TowerLinkEditorScreenState extends State<TowerLinkEditorScreen> {
           ],
           Text(
             _fiber
-                ? 'كيبل ضوئي (فايبر) مباشر بين سويجين: اختر السويج بكلّ برج ومنفذ الكيبل فيه — يظهر ما يعبر ذاك المنفذ بالضبط، وسرعته، وضوء الـSFP إن كان الجهاز يقرؤه.'
-                : 'اللنك يربط برجين: طرفه في البرج الرئيسي (الماستر) وطرفه في البرج الفرعي (السليف). الترافيك يُرسم سائراً من الرئيسي للفرعي.',
+                ? 'كيبل ضوئي (فايبر) مباشر بين سويتشين: اختر السويتش بكلّ برج ومنفذ الكيبل فيه — يظهر ما يعبر ذاك المنفذ بالضبط، وسرعته، وضوء الـSFP إن كان الجهاز يقرؤه.'
+                : 'اللنك يربط برجين: طرفه في البرج الرئيسي (الماستر) وطرفه في البرج الفرعي (السليف). حركة البيانات تُرسم سائرةً من الرئيسي للفرعي.',
             style: AppType.body(color: AppColors.textMid),
           ),
           if (suggestions.isNotEmpty) ...[
@@ -273,7 +273,7 @@ class _TowerLinkEditorScreenState extends State<TowerLinkEditorScreen> {
             keyName: 'main',
             step: '1',
             title: 'طرف البرج الرئيسي',
-            hint: _fiber ? 'السويج الذي يخرج منه الكيبل' : 'الماستر — منه يخرج الترافيك',
+            hint: _fiber ? 'السويتش الذي يخرج منه الكيبل' : 'الماستر — منه تخرج حركة البيانات',
             device: _a,
             port: _aPort,
             onTap: () => _pick(main: true),
@@ -284,7 +284,7 @@ class _TowerLinkEditorScreenState extends State<TowerLinkEditorScreen> {
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Icon(LucideIcons.arrowDown, size: 18, color: AppColors.brand),
               const SizedBox(width: 6),
-              Text('الترافيك', style: AppType.muted(color: AppColors.textMid)),
+              Text('حركة البيانات', style: AppType.muted(color: AppColors.textMid)),
               if (_a != null && _b != null) ...[
                 const SizedBox(width: Sp.md),
                 TextButton.icon(
@@ -304,7 +304,7 @@ class _TowerLinkEditorScreenState extends State<TowerLinkEditorScreen> {
             keyName: 'sub',
             step: '2',
             title: 'طرف البرج الفرعي',
-            hint: _fiber ? 'السويج الذي يصله الكيبل' : 'السليف — إليه يصل الترافيك',
+            hint: _fiber ? 'السويتش الذي يصله الكيبل' : 'السليف — إليه تصل حركة البيانات',
             device: _b,
             port: _bPort,
             onTap: () => _pick(main: false),
@@ -680,7 +680,7 @@ class _PortPickerSheetState extends State<_PortPickerSheet> {
     final facts = [
       if (p.rxBps != null || p.txBps != null) '↓ ${TowerText.bps(p.rxBps)} ↑ ${TowerText.bps(p.txBps)}',
       if (p.sfpRx != null) TopoText.lightFact(p.sfpRx),
-      if (!p.up) 'طافي',
+      if (!p.up) 'متوقّف',
     ];
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),

@@ -177,7 +177,7 @@ void main() {
     expect(find.text('صافي الربح بعد كلفة الباقات'), findsNothing);
     expect(find.text('الصافي'), findsOneWidget);
     expect(find.text('1,295,000'), findsOneWidget,
-        reason: 'الصافي القديم: النقد − الصرفيات − إضافة الدين');
+        reason: 'الصافي القديم: النقد − المصاريف − إضافة الدين');
   }
 
   /// لا أثر للكلفة في أيّ نصٍّ مبنيّ — الهيرو ولا السطور.
@@ -292,8 +292,8 @@ void main() {
     expect(find.text('كلفة الباقات'), findsNothing);
     expect(find.text('الصافي'), findsOneWidget);
     expect(
-      find.text('صافي الربح بعد كلفة الباقات لا يُحسب مع فلتر النوع هنا — '
-          'أزل الفلتر لتراه'),
+      find.text('صافي الربح بعد كلفة الباقات لا يُحسب مع تصفية النوع هنا — '
+          'أزل التصفية لتراه'),
       findsOneWidget,
     );
     await showHero(t);

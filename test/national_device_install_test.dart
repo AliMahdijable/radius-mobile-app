@@ -154,10 +154,10 @@ void main() {
       expect((a.ok, a.applied, a.outcome), (true, true, 'applied'));
       expect(NationalDeviceApi.editOf({'success': true}).outcome, 'accepted');
       final c = NationalDeviceApi.editOf(
-          {'success': false, 'code': 'INVALID_CODE', 'message': 'كود التفعيل غير صحيح', 'portal_message': 'Invalid installation code', 'request_ref': 'req-77'});
-      expect((c.ok, c.code, c.text), (false, 'INVALID_CODE', 'كود التفعيل غير صحيح\nInvalid installation code\nreq-77'));
-      final l = NationalDeviceApi.editOf({'success': false, 'code': 'FTTH_FORBIDDEN', 'locked': true, 'title': 'لا صلاحيّة', 'message': 'لا صلاحيّة «تنصيب الجهاز»'});
-      expect((l.ok, l.unconfirmed, l.message), (false, false, 'لا صلاحيّة «تنصيب الجهاز»'));
+          {'success': false, 'code': 'INVALID_CODE', 'message': 'رمز التفعيل غير صحيح', 'portal_message': 'Invalid installation code', 'request_ref': 'req-77'});
+      expect((c.ok, c.code, c.text), (false, 'INVALID_CODE', 'رمز التفعيل غير صحيح\nInvalid installation code\nreq-77'));
+      final l = NationalDeviceApi.editOf({'success': false, 'code': 'FTTH_FORBIDDEN', 'locked': true, 'title': 'لا صلاحيّة', 'message': 'لا صلاحيّة «تركيب الجهاز»'});
+      expect((l.ok, l.unconfirmed, l.message), (false, false, 'لا صلاحيّة «تركيب الجهاز»'));
     });
 
     test('القراءة: pending ⇒ ok(null)، والقفل قفلٌ، والمطفأ فشلٌ برمزه', () {
@@ -192,13 +192,13 @@ void main() {
       await _settle(t);
     }
 
-    testWidgets('صفحةٌ واحدة: الفات والسيريال والماك والرمز والنوع بـ«الحاليّ»، والرمز نقاطٌ يظهر بالعين', (t) async {
+    testWidgets('صفحةٌ واحدة: الفات والرقم التسلسليّ والماك والرمز والنوع بـ«الحاليّ»، والرمز نقاطٌ يظهر بالعين', (t) async {
       server.reply('GET', '/api/v2/ftth/subscriptions/$_sid/network', 200, _net());
       server.reply('GET', '/api/v2/ftth/subscriptions/$_sid/device', 200, _dev());
       await open(t);
       expect(find.text('تعديل معلومات الجهاز'), findsOneWidget);
       expect(find.text('f0885-555'), findsOneWidget);
-      for (final s in ['الفات', 'السيريال', 'الماك', 'الرمز', 'نوع الجهاز']) {
+      for (final s in ['الفات', 'الرقم التسلسليّ', 'الماك', 'الرمز', 'نوع الجهاز']) {
         expect(find.text(s), findsWidgets, reason: s);
       }
       expect(find.text('FBG2251-2 ← FAT8'), findsOneWidget);
@@ -222,17 +222,17 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('حفظ السيريال: PUT {field, value} مرّةً ثمّ تُقرأ المعلومات ثانيةً؛ والسيريال الحاليّ نفسه لا يُرسل', (t) async {
+    testWidgets('حفظ الرقم التسلسليّ: PUT {field, value} مرّةً ثمّ تُقرأ المعلومات ثانيةً؛ والرقم التسلسليّ الحاليّ نفسه لا يُرسل', (t) async {
       server.reply('GET', '/api/v2/ftth/subscriptions/$_sid/network', 200, _net());
       server.reply('GET', '/api/v2/ftth/subscriptions/$_sid/device', 200, _dev());
       server.reply('PUT', '/api/v2/ftth/subscriptions/$_sid/device', 200, {'success': true, 'outcome': 'applied'});
       await open(t);
-      final save = find.text('حفظ السيريال');
+      final save = find.text('حفظ الرقم التسلسليّ');
       await t.ensureVisible(save);
       await t.tap(save);
       await t.pump();
       expect(server.calls('PUT', '/api/v2/ftth/subscriptions/$_sid/device'), isEmpty, reason: 'الحاليّ نفسه');
-      await _type(t, 'السيريال الجديد', 'zteg12345678');
+      await _type(t, 'الرقم التسلسليّ الجديد', 'zteg12345678');
       expect(find.text('ZTEG12345678'), findsOneWidget, reason: 'حروفٌ كبيرة');
       final before = server.calls('GET', '/api/v2/ftth/subscriptions/$_sid/device').length;
       await t.ensureVisible(save);
@@ -269,14 +269,14 @@ void main() {
       server.reply('GET', '/api/v2/ftth/subscriptions/$_sid/device', 200, _dev(hidden: true, locked: true));
       await open(t, fatOn: false);
       expect(find.textContaining('محجوب'), findsOneWidget);
-      expect(find.textContaining('البوّابة تمنع تغيير السيريال'), findsOneWidget);
-      expect(find.text('حفظ السيريال'), findsNothing);
+      expect(find.textContaining('البوّابة تمنع تغيير الرقم التسلسليّ'), findsOneWidget);
+      expect(find.text('حفظ الرقم التسلسليّ'), findsNothing);
       expect(server.calls('GET', '/api/v2/ftth/subscriptions/$_sid/network'), isEmpty, reason: 'الفات غير مفتوح');
       await simDrain(t);
     });
   });
 
-  group('«تنصيب الجهاز»', () {
+  group('«تركيب الجهاز»', () {
     Future<void> openTask(WidgetTester t) async {
       await pumpSim(t, _v,
           home: (_) => simLauncher((c) => showNationalTaskSheet(c, const NationalTask(id: _task, title: 'Connect Customer', status: 'not started'))));
@@ -291,9 +291,9 @@ void main() {
       await _type(t, 'رمز الجهاز', 'Pw12345');
       await _type(t, 'رقم توريد النقطة', '12');
       await _pick(t, 'اختر الفات', 'FAT7');
-      await _type(t, 'سيريال الجهاز', 'ztegc0ffee01');
+      await _type(t, 'الرقم التسلسليّ للجهاز', 'ztegc0ffee01');
       await _pick(t, 'اختر نوع الجهاز', 'zte');
-      await _type(t, 'كود التفعيل', code);
+      await _type(t, 'رمز التفعيل', code);
     }
 
     void routes({Object? postReply}) {
@@ -308,14 +308,14 @@ void main() {
       });
       server.reply('GET', '/api/v2/ftth/tasks/$_task/install/username', 200, {'success': true, 'username': 'fbg-user1', 'valid': true, 'taken': false});
       server.reply('POST', '/api/v2/ftth/tasks/$_task/install', postReply == null ? 200 : 409,
-          postReply ?? {'success': true, 'outcome': 'applied', 'message': 'تمّ التنصيب — المهمّة مكتملة'});
+          postReply ?? {'success': true, 'outcome': 'applied', 'message': 'تمّ التركيب — المهمّة مكتملة'});
     }
 
-    testWidgets('المهمّة المفتوحة: «تنصيب الجهاز» ⇒ النموذج ⇒ تأكيدٌ بملخّص ⇒ POST واحد بجسمٍ بالضبط ⇒ تُقرأ المهمّة ثانيةً', (t) async {
+    testWidgets('المهمّة المفتوحة: «تركيب الجهاز» ⇒ النموذج ⇒ تأكيدٌ بملخّص ⇒ POST واحد بجسمٍ بالضبط ⇒ تُقرأ المهمّة ثانيةً', (t) async {
       routes();
       await openTask(t);
-      expect(find.text('تنصيب الجهاز'), findsOneWidget);
-      await t.tap(find.text('تنصيب الجهاز'));
+      expect(find.text('تركيب الجهاز'), findsOneWidget);
+      await t.tap(find.text('تركيب الجهاز'));
       await _settle(t);
       expect(find.text('رقم توريد النقطة (HTWC)'), findsOneWidget);
       expect(find.text('FBG2251-2'), findsWidgets, reason: 'FDT الوحيد يُختار تلقائيّاً');
@@ -324,7 +324,7 @@ void main() {
       final before = server.calls('GET', '/api/v2/ftth/tasks/$_task').length;
       await t.tap(find.text('تأشير كمكتمل'));
       await t.pumpAndSettle();
-      expect(find.text('تأكيد التنصيب'), findsOneWidget);
+      expect(find.text('تأكيد التركيب'), findsOneWidget);
       expect(find.textContaining('ZTEGC0FFEE01'), findsWidgets);
       expect(server.calls('POST', '/api/v2/ftth/tasks/$_task/install'), isEmpty, reason: 'لا شيء قبل التأكيد');
       await t.tap(find.text('تأكيد وإرسال'));
@@ -339,21 +339,21 @@ void main() {
         'fat_id': _fat7,
         'code': 'AB12CD',
       });
-      expect(find.text('رمز الجهاز'), findsNothing, reason: 'أُغلقت نافذة التنصيب');
+      expect(find.text('رمز الجهاز'), findsNothing, reason: 'أُغلقت نافذة التركيب');
       expect(server.calls('GET', '/api/v2/ftth/tasks/$_task').length, greaterThan(before));
       await simDrain(t);
     });
 
-    testWidgets('كود التفعيل الخطأ: الرسالة تحت حقله ونصّ البوّابة، والنافذة باقية بقيمها', (t) async {
+    testWidgets('رمز التفعيل الخطأ: الرسالة تحت حقله ونصّ البوّابة، والنافذة باقية بقيمها', (t) async {
       routes(postReply: {
         'success': false,
         'code': 'INVALID_CODE',
-        'message': 'كود التفعيل غير صحيح — لم يُسجَّل شيء',
+        'message': 'رمز التفعيل غير صحيح — لم يُسجَّل شيء',
         'portal_message': 'Invalid installation code',
         'request_ref': 'req-77',
       });
       await openTask(t);
-      await t.tap(find.text('تنصيب الجهاز'));
+      await t.tap(find.text('تركيب الجهاز'));
       await _settle(t);
       await fill(t, code: 'BAD1');
       await t.tap(find.text('تأشير كمكتمل'));
@@ -361,7 +361,7 @@ void main() {
       await t.tap(find.text('تأكيد وإرسال'));
       await _settle(t);
       expect(server.calls('POST', '/api/v2/ftth/tasks/$_task/install').length, 1);
-      expect(find.textContaining('كود التفعيل غير صحيح'), findsWidgets);
+      expect(find.textContaining('رمز التفعيل غير صحيح'), findsWidgets);
       expect(find.textContaining('Invalid installation code'), findsWidgets);
       expect(find.text('BAD1'), findsOneWidget, reason: 'القيم باقية للتصحيح');
       await simDrain(t);
@@ -370,13 +370,13 @@ void main() {
     testWidgets('النموذج الناقص لا يُرسل: «تأشير كمكتمل» يبيّن الحقول ولا تأكيد', (t) async {
       routes();
       await openTask(t);
-      await t.tap(find.text('تنصيب الجهاز'));
+      await t.tap(find.text('تركيب الجهاز'));
       await _settle(t);
       await t.tap(find.text('تأشير كمكتمل'));
       await t.pumpAndSettle();
-      expect(find.text('تأكيد التنصيب'), findsNothing);
+      expect(find.text('تأكيد التركيب'), findsNothing);
       expect(find.text('اكتب اسم مستخدم الجهاز'), findsOneWidget);
-      expect(find.text('اكتب كود التفعيل (بلا مسافات)'), findsOneWidget);
+      expect(find.text('اكتب رمز التفعيل (بلا مسافات)'), findsOneWidget);
       expect(server.calls('POST', '/api/v2/ftth/tasks/$_task/install'), isEmpty);
       await simDrain(t);
     });
@@ -386,7 +386,7 @@ void main() {
       server.reply('GET', '/api/v2/ftth/tasks/$_task/install/username', 200,
           {'success': true, 'username': 'taken-1', 'valid': false, 'taken': true, 'message': 'اسم مستخدم الجهاز هذا مستخدمٌ من قبل — اختر غيره'});
       await openTask(t);
-      await t.tap(find.text('تنصيب الجهاز'));
+      await t.tap(find.text('تركيب الجهاز'));
       await _settle(t);
       await _type(t, 'اسم مستخدم الجهاز', 'taken-1');
       await t.pump(const Duration(milliseconds: 800));
@@ -399,19 +399,19 @@ void main() {
       PermissionsService.debugSet(isEmployee: true, permissions: {'subscribers.view': true});
       routes();
       await openTask(t);
-      await t.tap(find.text('تنصيب الجهاز'));
+      await t.tap(find.text('تركيب الجهاز'));
       await _settle(t);
       expect(server.calls('GET', '/api/v2/ftth/tasks/$_task/install'), isEmpty);
       await simDrain(t);
     });
 
-    testWidgets('المكتملة: «معلومات التنصيب» ⇒ ما سُجّل، والرمز نقاط', (t) async {
+    testWidgets('المكتملة: «معلومات التركيب» ⇒ ما سُجّل، والرمز نقاط', (t) async {
       server.reply('GET', '/api/v2/ftth/tasks/$_task', 200, _taskDetail(install: 'done', status: 'completed'));
       server.reply('GET', '/api/v2/ftth/tasks/$_task/install', 200, _install(done: true));
       await openTask(t);
-      await t.tap(find.text('معلومات التنصيب'));
+      await t.tap(find.text('معلومات التركيب'));
       await _settle(t);
-      expect(find.text('المهمّة مكتملة — هذا ما سُجّل بالتنصيب'), findsOneWidget);
+      expect(find.text('المهمّة مكتملة — هذا ما سُجّل بالتركيب'), findsOneWidget);
       expect(find.text('fbg-user1'), findsOneWidget);
       expect(find.text('FBG2251-2 ← FAT7'), findsOneWidget);
       expect(find.text('pw-secret-9'), findsNothing);

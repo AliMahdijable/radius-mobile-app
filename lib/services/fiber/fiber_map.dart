@@ -153,7 +153,7 @@ class FiberMapModel {
     final core = FiberMapNode(
       id: 'core',
       kind: FiberMapKind.core,
-      title: 'السيرفر · الإنترنت',
+      title: 'الخادم · الإنترنت',
       sub: olts.length == 1 ? 'يغذّي الأولت' : 'يغذّي ${olts.length} أولت',
       online: allOnline,
       total: allTotal,

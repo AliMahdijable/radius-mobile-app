@@ -248,7 +248,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
               ],
             ),
             const SizedBox(height: Sp.sm),
-            BalanceLine(label: 'مبلغ الشحنة (السقف)', value: balanceIqd(p.amount), strong: true),
+            BalanceLine(label: 'مبلغ الشحن', value: balanceIqd(p.amount), strong: true),
             // العدد بجانب المبيعات وحدها (كلّ تفعيلات الفترة). النقد والتسديد والديون بلا عدد: أعداد الخادم تشمل ما وقع بعد
             // الإغلاق (صار ربحاً لا «طبّلك») فلا تطابق مبالغها — والأعداد الدقيقة على شرائح الفلاتر تحتها.
             BalanceLine(label: 'مبيعات الفترة (${p.nActivations} تفعيل)', value: balanceIqd(p.sales)),
@@ -261,11 +261,11 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             if (mg != null && mg.withdrawn > 0)
               BalanceLine(key: const ValueKey('bal-sum-mgr-withdrawn'), label: 'سحب رصيد من المدراء', value: balanceSigned(mg.withdrawn, sign: '−'), valueColor: AppTone.danger.onSoft),
             rule(),
-            BalanceLine(key: const ValueKey('bal-sum-collected'), label: 'طبّلك', value: balanceIqd(p.collected), strong: true),
+            BalanceLine(key: const ValueKey('bal-sum-collected'), label: 'المحصَّل', value: balanceIqd(p.collected), strong: true),
             if (p.adjustmentsSum > 0) BalanceLine(label: 'تسويات الرصيد', value: balanceIqd(p.adjustmentsSum)),
             BalanceLine(
               key: const ValueKey('bal-sum-remaining'),
-              label: 'المعوز للسقف',
+              label: 'المتبقّي من مبلغ الشحن',
               value: p.remaining > 0 ? balanceIqd(p.remaining) : 'مكتمل',
               valueColor: p.remaining > 0 ? AppTone.danger.onSoft : AppTone.success.onSoft,
             ),
@@ -286,7 +286,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             rule(),
             BalanceLine(
               key: const ValueKey('bal-sum-net'),
-              label: p.net >= 0 ? 'صافي ربح الفترة' : 'الصافي (لم يرجع مبلغ الشحنة بعد)',
+              label: p.net >= 0 ? 'صافي ربح الفترة' : 'الصافي (لم يعُد مبلغ الشحن بعد)',
               value: balanceSigned(p.net, sign: p.net < 0 ? '−' : ''),
               strong: true,
               valueColor: p.net >= 0 ? AppTone.success.onSoft : AppTone.danger.onSoft,
@@ -444,7 +444,7 @@ class BalanceMoveRow extends StatelessWidget {
         amount = balanceSigned(m.amount, sign: '+');
         amountColor = AppTone.success.onSoft;
         details = [balanceDayTime(m.atMs, nowMs: nowMs), if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
-        status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'دخل «طبّلك»', tone: AppTone.success);
+        status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
       case BalanceMgrMove():
         // شحنٌ نقديّ وتسديد دين: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل: دينٌ بحاله كدين التفعيل.
         tone = switch (m.op) { BalanceMgrOp.loan => AppTone.warning, BalanceMgrOp.withdraw => AppTone.danger, _ => AppTone.success };
@@ -463,9 +463,9 @@ class BalanceMoveRow extends StatelessWidget {
           final n = balanceMgrDebtNote(m, nowMs: nowMs);
           status = n == null ? null : (text: n.text, tone: balanceToneOf(n.tone));
         } else if (m.op == BalanceMgrOp.withdraw) {
-          status = (text: m.afterClose ? 'بعد الإغلاق — نقص من الربح' : 'نقص من «طبّلك»', tone: AppTone.danger);
+          status = (text: m.afterClose ? 'بعد الإغلاق — نقص من الربح' : 'خُصم من «المحصَّل»', tone: AppTone.danger);
         } else {
-          status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'دخل «طبّلك»', tone: AppTone.success);
+          status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
         }
       case BalanceAdjustMove():
         tone = AppTone.brand;

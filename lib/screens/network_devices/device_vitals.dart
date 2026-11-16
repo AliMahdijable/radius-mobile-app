@@ -1651,7 +1651,7 @@ const _edgeSwitchRetry = Duration(minutes: 10);
 class EdgeSwitchUnread implements Exception {
   const EdgeSwitchUnread();
   @override
-  String toString() => 'EdgeSwitch: صفحة السويج ما فتحت';
+  String toString() => 'EdgeSwitch: صفحة السويتش ما فتحت';
 }
 
 /// لقطة REST كلوحته — والمنفذ كلوحته: ٢٢ (منفذ SSH الذي يقترحه نموذج الإضافة لكلّ UBNT) ليس منفذ REST ⇒ ٤٤٣.

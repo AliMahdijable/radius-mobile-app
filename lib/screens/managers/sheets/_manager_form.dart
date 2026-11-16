@@ -189,7 +189,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'جاري الحفظ...' : widget.submitLabel,
+        label: _submitting ? 'جارٍ الحفظ...' : widget.submitLabel,
         icon: LucideIcons.save,
         enabled: _canSubmit,
         busy: _submitting,
@@ -204,8 +204,8 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
           _field(_user, hint: 'manager_xxx'),
           const SizedBox(height: Sp.md),
           _label(widget.requirePassword
-              ? 'كلمة السر *'
-              : 'كلمة السر (اتركها فاضية لعدم التغيير)'),
+              ? 'كلمة المرور *'
+              : 'كلمة المرور (اتركها فارغة لعدم التغيير)'),
           _field(
             _pass,
             hint: '••••••••',

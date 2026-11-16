@@ -538,7 +538,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         const SizedBox(height: 12),
         Text(
           _scanning
-              ? 'جاري الفحص… تظهر النتائج مباشرةً'
+              ? 'جارٍ الفحص… تظهر النتائج مباشرةً'
               : 'اضغط "ابدأ" لفحص الشبكة',
           style: AppType.subtitle(),
         ),

@@ -129,7 +129,7 @@ class SettlementPrint {
         row('+ تفعيلات نقديّة (${s.cashActivations.count})', _money(s.cashActivations.sum)),
         row('+ تسديد ديون (${s.debtPayments.count})', _money(s.debtPayments.sum)),
         if (s.salesCash.count > 0) row('+ بيع مواد (${s.salesCash.count})', _money(s.salesCash.sum)),
-        row('− صرفيات (${s.expenses.count})', _money(s.expenses.sum)),
+        row('− مصاريف (${s.expenses.count})', _money(s.expenses.sum)),
         if (s.goodsPurchases.count > 0)
           s.goodsPurchases.sum >= 0
               ? row('− شراء مواد (${s.goodsPurchases.count})', _money(s.goodsPurchases.sum))

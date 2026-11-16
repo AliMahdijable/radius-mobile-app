@@ -232,7 +232,7 @@ void main() {
         'GET /api/v2/agent-alerts/log': {'success': true, 'data': {'available': true, 'items': <Object>[]}},
       };
 
-  testWidgets('«تنبيهات أجهزتي» من الخادم: الصفّارة تعدّ الطافية الآن وتفتحها، وتنبيه الموبايل المحلّيّ يسكت', (t) async {
+  testWidgets('«تنبيهات أجهزتي» من الخادم: الصفّارة تعدّ المنقطعة الآن وتفتحها، وتنبيه الهاتف المحمول المحلّيّ يسكت', (t) async {
     final since = DateTime.now().subtract(const Duration(minutes: 7)).millisecondsSinceEpoch;
     await open(t, s1bSasOwner, routes: agentAlerts({
       'available': true, 'enabled': true, 'notify_up': true, 'can_use': true, 'can_edit': true, 'devices': 3, 'monitored': 3,
@@ -240,17 +240,17 @@ void main() {
       'network_down': false,
     }));
     expect(server.requests.where((r) => r.path == '/api/v2/agent-alerts/status'), isNotEmpty, reason: 'يُقرأ مع أوّل تحميل');
-    expect(find.text('2'), findsOneWidget, reason: 'العدّاد = الطافية الآن من الخادم');
+    expect(find.text('2'), findsOneWidget, reason: 'العدّاد = المنقطعة الآن من الخادم');
     expect((t.getCenter(find.text('2')) - t.getCenter(siren)).distance, lessThan(40));
-    expect(AgentAlertsApi.shouldFireLocalAlerts(), isFalse, reason: 'الخادم يقول الانطفاء ⇒ لا إشعار موبايلٍ ثانٍ');
+    expect(AgentAlertsApi.shouldFireLocalAlerts(), isFalse, reason: 'الخادم يقول الانطفاء ⇒ لا إشعار هاتف ثانٍ');
     await t.tap(siren);
     await settle(t);
     expect(find.byType(AgentAlertsScreen), findsOneWidget);
-    expect(find.text('جهازان طافيان الآن'), findsOneWidget);
+    expect(find.text('جهازان منقطعان الآن'), findsOneWidget);
     await finish(t);
   });
 
-  testWidgets('«تنبيهات أجهزتي» أطفأها الوكيل ⇒ تفتح شاشتها لكنّ تنبيه الموبايل المحلّيّ يعود', (t) async {
+  testWidgets('«تنبيهات أجهزتي» أطفأها الوكيل ⇒ تفتح شاشتها لكنّ تنبيه الهاتف المحمول المحلّيّ يعود', (t) async {
     await open(t, s1bSasOwner, routes: agentAlerts({
       'available': true, 'enabled': false, 'notify_up': true, 'can_use': true, 'can_edit': true, 'devices': 3, 'monitored': 3,
       'down': <Object>[], 'quiet': <Object>[], 'network_down': false,
@@ -263,7 +263,7 @@ void main() {
     await finish(t);
   });
 
-  testWidgets('غير مفتوحةٍ للحساب ⇒ الصفّارة كما كانت: عدّاد الموبايل وشاشته، والتنبيه المحلّيّ يعمل', (t) async {
+  testWidgets('غير مفتوحةٍ للحساب ⇒ الصفّارة كما كانت: عدّاد الهاتف المحمول وشاشته، والتنبيه المحلّيّ يعمل', (t) async {
     DeviceAlertsService.instance.unreadCount.value = 3;
     await open(t, s1bSasOwner, routes: agentAlerts({'available': false}));
     expect(find.text('3'), findsOneWidget);

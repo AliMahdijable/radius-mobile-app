@@ -100,7 +100,7 @@ void main() {
     }
   }
 
-  Finder pill() => find.text('اشرحلي');
+  Finder pill() => find.text('اشرح لي');
 
   testWidgets('🚨 المساعد مطفأ (الافتراضيّ): لا زرّ، والمدّة ٣ث كما كانت',
       (t) async {
@@ -117,7 +117,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('مفتوح + خطأ الخادم الذي يعرضه الإشعار ⇒ «اشرحلي»، ويبقى ٦ث',
+  testWidgets('مفتوح + خطأ الخادم الذي يعرضه الإشعار ⇒ «اشرح لي»، ويبقى ٦ث',
       (t) async {
     setOn();
     await failAndSnack(t);
@@ -194,7 +194,7 @@ void main() {
   });
 
   testWidgets(
-      'النقر ⇒ نافذة «اشرحلي» بالخطأ كما ظهر، والطلب برمزه وشاشته وعمليّته',
+      'النقر ⇒ نافذة «اشرح لي» بالخطأ كما ظهر، والطلب برمزه وشاشته وعمليّته',
       (t) async {
     setOn();
     await failAndSnack(t);
@@ -213,12 +213,12 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('قارئ الشاشة: «اشرحلي» زرٌّ مسمّى له نقرة', (t) async {
+  testWidgets('قارئ الشاشة: «اشرح لي» زرٌّ مسمّى له نقرة', (t) async {
     final semantics = t.ensureSemantics();
     setOn();
     await failAndSnack(t);
     final node = t.getSemantics(
-        find.bySemanticsLabel('اشرحلي هذا الخطأ — المساعد الذكي'));
+        find.bySemanticsLabel('اشرح لي هذا الخطأ — المساعد الذكي'));
     final data = node.getSemanticsData();
     expect(data.hasAction(SemanticsAction.tap), isTrue);
     expect(data.flagsCollection.isButton, isTrue);
@@ -307,7 +307,7 @@ void main() {
       }
     }
 
-    testWidgets('مفتوح + رفض الخادم ⇒ «اشرحلي» يفتح المساعد بالخطأ نفسه',
+    testWidgets('مفتوح + رفض الخادم ⇒ «اشرح لي» يفتح المساعد بالخطأ نفسه',
         (t) async {
       setOn();
       await screenSnack(t);

@@ -454,7 +454,7 @@ _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
     case 'ADMIN_EXPENSE':
       // ADMIN_EXPENSE من backend /api/reports/finance (صف صناعي).
       // EXPENSE_ADD من ExpensesApi في Activity Log. نفس المعنى، نفس التصميم.
-      return _ActionMeta('صرفية', LucideIcons.receipt, AppColors.error,
+      return _ActionMeta('مصروف', LucideIcons.receipt, AppColors.error,
           debit: true);
     // قسم «المبيعات»: بيع موادٍّ نقداً (داخل) وإلغاؤه (إرجاع المبلغ — خارج).
     case 'SALE':
@@ -480,9 +480,9 @@ _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
       }
       return _ActionMeta(label, LucideIcons.handCoins, AppColors.error, debit: true);
     case 'EXPENSE_EDIT':
-      return _ActionMeta('تعديل صرفية', LucideIcons.receipt, AppColors.error);
+      return _ActionMeta('تعديل مصروف', LucideIcons.receipt, AppColors.error);
     case 'EXPENSE_DELETE':
-      return _ActionMeta('حذف صرفية', LucideIcons.receipt, AppColors.error);
+      return _ActionMeta('حذف مصروف', LucideIcons.receipt, AppColors.error);
     // 2026-10-02: «تسوية الحساب» وتدقيق عرض بيانات دخول الأجهزة.
     case 'ACCOUNT_SETTLE':
       return _ActionMeta(

@@ -97,7 +97,7 @@ class MergedFinanceApi {
       case 'activations':
         return 'تعذّرت قراءة تفعيلاتها';
       case 'expenses':
-        return 'تعذّرت قراءة صرفياتها';
+        return 'تعذّرت قراءة مصاريفها';
       case 'other':
         return 'تعذّرت قراءة جزءٍ من أرقامها';
     }

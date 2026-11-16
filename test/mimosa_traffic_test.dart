@@ -92,8 +92,8 @@ void main() {
     test('🚨 التسمية من مفردات اللوحات لا مخترَعة', () {
       // بلاغ ٢٠٢٦-٠٩-٠٢: «التزم بمسمّيات بقيّة الأجهزة، شنو المرور
       // الفعليّ؟». شاشتان تعرضان الشيء نفسه يجب أن تُسمّياه سواءً.
-      expect(panel.contains("Text('سير الترفك'"), isTrue);
-      expect(mt.contains('سير الترفك'), isTrue,
+      expect(panel.contains("Text('حركة البيانات'"), isTrue);
+      expect(mt.contains('حركة البيانات'), isTrue,
           reason: 'المفردة مأخوذة من ميكروتك لا مخترَعة');
       // ⚠️ نفحص النصوص المعروضة وحدها — سطراً سطراً مع تخطّي
       // التعليقات، فالتعليق التاريخيّ يشرح العطل ولا يراه المستخدم.
@@ -141,11 +141,11 @@ void main() {
       expect(panel.contains("'الأداء (PHY 5s)'"), isFalse);
     });
 
-    test('سير الترفك يسبق السعة', () {
+    test('حركة البيانات يسبق السعة', () {
       final iT = panel.indexOf('_trafficGraph(),');
       final iR = panel.indexOf('_ratesCard(s),');
       expect(iT, greaterThan(0));
-      expect(iT, lessThan(iR), reason: 'السعة سقفٌ ثابت — الترفك هو المتغيّر');
+      expect(iT, lessThan(iR), reason: 'السعة سقفٌ ثابت — حركة البيانات هو المتغيّر');
     });
   });
 

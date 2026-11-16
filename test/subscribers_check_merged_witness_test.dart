@@ -90,7 +90,7 @@ void main() {
     final viaVpn = check((_) => false);
     expect(cats(viaVpn), {
       'e.dead': dead,
-      'e.ping': 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه',
+      'e.ping': 'جهازه ما ردّ — يردّ، لم تُقرأ مقاييسه',
       'e.cpe': 'سليم',
       'e.after': 'سليم',
       's.dead': dead,

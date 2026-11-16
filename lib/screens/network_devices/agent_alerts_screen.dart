@@ -175,12 +175,12 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     if (!st.available) {
       return [
         _center(LucideIcons.bellOff, 'تنبيهات الأجهزة من الخادم غير مفعّلة لحسابك بعد',
-            'تنبيهات موبايلك (وقسم الأجهزة مفتوح) تبقى كما هي'),
+            'تنبيهات هاتفك (وقسم الأجهزة مفتوح) تبقى كما هي'),
         const SizedBox(height: Sp.md),
         OutlinedButton.icon(
           onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceAlertsScreen())),
           icon: const Icon(LucideIcons.siren, size: 18),
-          label: const Text('تنبيهات موبايلك'),
+          label: const Text('تنبيهات هاتفك'),
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
         ),
       ];
@@ -209,14 +209,14 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       _stateCard(st),
       if (st.down.isNotEmpty) ...[
         const SizedBox(height: Sp.lg),
-        _section('طافية الآن'),
+        _section('منقطعة الآن'),
         for (final d in _downMore.take(st.down)) _deviceRow(d, quiet: false),
         if (_downMore.hasMore(st.down)) _revealMore('aa-more-down', _downMore),
       ],
       // لم يقسها أحدٌ منذ مدّة: ليست «الآن» — تُقال بوقت آخر فحصها، وتُحسم أوّل ما يُفتح قسم الأجهزة على شبكته
       if (st.downStale.isNotEmpty) ...[
         const SizedBox(height: Sp.lg),
-        _section('كانت طافية عند آخر فحص'),
+        _section('كانت منقطعة عند آخر فحص'),
         Padding(
           padding: const EdgeInsets.only(bottom: Sp.xs),
           child: Text('لم تُفحص بعدها — افتح قسم الأجهزة وأنت على شبكتك لتُعرف حالها الآن',
@@ -227,7 +227,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       ],
       if (st.quiet.isNotEmpty) ...[
         const SizedBox(height: Sp.lg),
-        _section('تطفي وتشتغل — مسكوتٌ عنها ساعة'),
+        _section('تنقطع وتعود — تنبيهاتها مكتومة ساعة'),
         for (final d in _quietMore.take(st.quiet)) _deviceRow(d, quiet: true),
         if (_quietMore.hasMore(st.quiet)) _revealMore('aa-more-quiet', _quietMore),
       ],
@@ -246,7 +246,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
           padding: const EdgeInsets.symmetric(vertical: Sp.md),
           child: _log.failed
               ? Text('تعذّر تحميل السجلّ — اسحب للأسفل لإعادة المحاولة', style: AppType.muted(color: AppColors.error))
-              : Text('لا شيء بعد — يظهر هنا كلّ ما طفى أو رجع', style: AppType.muted(color: AppColors.textMid)),
+              : Text('لا شيء بعد — يظهر هنا كلّ ما انقطع أو عاد', style: AppType.muted(color: AppColors.textMid)),
         )
       else ...[
         for (final e in _log.items) _eventRow(e),
@@ -269,21 +269,21 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       head = 'شبكتك لا تستجيب';
     } else if (st.down.isNotEmpty) {
       head = switch (st.down.length) {
-        1 => 'جهازٌ واحد طافٍ الآن',
-        2 => 'جهازان طافيان الآن',
-        final n when n <= 10 => '$n أجهزة طافية الآن',
-        final n => '$n جهازاً طافياً الآن',
+        1 => 'جهازٌ واحد منقطع الآن',
+        2 => 'جهازان منقطعان الآن',
+        final n when n <= 10 => '$n أجهزة منقطعة الآن',
+        final n => '$n جهازاً منقطعاً الآن',
       };
     } else if (st.monitored == 0) {
       head = 'لم تُرَ أجهزتك بعد — افتح قسم الأجهزة وأنت على شبكتك';
     } else if (st.downStale.isNotEmpty) {
       // لا «كلّ أجهزتك تعمل» وبعضها لم يُعرف حاله منذ آخر فحص
-      head = 'لا شيء طافٍ الآن ممّا فُحص — ${countDevices(st.downStale.length)} لم ${st.downStale.length == 1 ? 'يُفحص' : 'تُفحص'} منذ مدّة';
+      head = 'لا شيء منقطع الآن ممّا فُحص — ${countDevices(st.downStale.length)} لم ${st.downStale.length == 1 ? 'يُفحص' : 'تُفحص'} منذ مدّة';
     } else {
       head = 'كلّ أجهزتك تعمل';
     }
     final seen = <String>[
-      if (st.lastAppMs != null) 'من موبايلك ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(st.lastAppMs!))}',
+      if (st.lastAppMs != null) 'من هاتفك ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(st.lastAppMs!))}',
       if (st.lastVpnMs != null) 'من الخادم ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(st.lastVpnMs!))}',
     ];
     return _box(
@@ -304,7 +304,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
               [
                 if (st.monitored > 0) '${countDevices(st.monitored)} تحت المراقبة',
                 if (seen.isNotEmpty) 'آخر فحص ${seen.join(' · ')}',
-              ].join(' · ').ifEmpty('يُراقَب كلّ جهازٍ رُئي يعمل من موبايلك أو من الخادم'),
+              ].join(' · ').ifEmpty('يُراقَب كلّ جهازٍ رُئي يعمل من هاتفك أو من الخادم'),
               style: AppType.micro(color: AppColors.textMid),
             ),
           ]),
@@ -319,7 +319,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         : stale
             ? (d.checkedMs != null
                 ? 'آخر فحص ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(d.checkedMs!))}'
-                : (d.sinceMs != null ? 'طفى ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(d.sinceMs!))}' : null))
+                : (d.sinceMs != null ? 'انقطع ${timeAgoAr(DateTime.fromMillisecondsSinceEpoch(d.sinceMs!))}' : null))
             : (d.sinceMs != null ? 'منذ ${_dur(DateTime.now().millisecondsSinceEpoch - d.sinceMs!)}' : null);
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.xs),
@@ -368,7 +368,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     return _box(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         row(
-          title: 'نبّهني حين يطفى جهاز',
+          title: 'نبّهني حين ينقطع جهاز',
           sub: 'يصلك حتى بساعات الهدوء — إشعارٌ واحد للبرج أو للشبكة كلّها لا لكلّ جهاز',
           value: st.enabled,
           key: 'enabled',
@@ -423,16 +423,16 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
           key: 'aa-how-head',
           icon: LucideIcons.info,
           title: 'كيف تُراقَب أجهزتك',
-          sub: r != null && r.on ? 'من موبايلك على شبكتك، والخادم عبر VPN وأنت بعيد' : 'من موبايلك وأنت على شبكتك',
+          sub: r != null && r.on ? 'من هاتفك على شبكتك، والخادم عبر VPN وأنت بعيد' : 'من هاتفك وأنت على شبكتك',
           open: _howOpen,
           onTap: () => setState(() => _howOpen = !_howOpen),
         ),
         if (_howOpen) ...[
           const SizedBox(height: Sp.xs),
-          _line(LucideIcons.smartphone, 'من موبايلك وأنت على شبكتك وقسم الأجهزة مفتوح (كلّ 20 ثانية)'),
+          _line(LucideIcons.smartphone, 'من هاتفك وأنت على شبكتك وقسم الأجهزة مفتوح (كلّ 20 ثانية)'),
           _line(
             r != null && r.on ? LucideIcons.shieldCheck : LucideIcons.cloudOff,
-            r?.text ?? 'الفحص عن بُعد غير مفتوح لحسابك بعد — تُراقَب من موبايلك وأنت على شبكتك',
+            r?.text ?? 'الفحص عن بُعد غير مفتوح لحسابك بعد — تُراقَب من هاتفك وأنت على شبكتك',
             color: r != null && r.on ? AppColors.success : null,
           ),
         ],
@@ -450,7 +450,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
           ),
         if (_howOpen) ...[
           const SizedBox(height: Sp.xs),
-          Text('«طفى» بعد دقيقتين من عدم الاستجابة، و«رجع» حين يستجيب مرّتين — والجهاز الذي لم يُرَ يعمل قطّ لا يُنبَّه عنه',
+          Text('«انقطع» بعد دقيقتين من عدم الاستجابة، و«عاد» حين يستجيب مرّتين — والجهاز الذي لم يُرَ يعمل قطّ لا يُنبَّه عنه',
               style: AppType.micro(color: AppColors.textMid)),
         ],
       ]),

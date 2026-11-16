@@ -179,9 +179,9 @@ void main() {
     expect(find.text('30,000 د.ع'), findsOneWidget, reason: 'بعد الخصم');
     expect(find.text('35,000'), findsOneWidget, reason: 'الأصليّ مشطوباً');
     expect(find.text('كلفة الباقة المختارة'), findsOneWidget);
-    expect(footerEnabled(t, 'تجديد الآن'), isFalse, reason: 'بلا باسورد إيداع');
+    expect(footerEnabled(t, 'تجديد الآن'), isFalse, reason: 'بلا كلمة مرور إيداع');
     await simCheck(t, v, _activate, 'deposit_default');
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     expect(footerEnabled(t, 'تجديد الآن'), isTrue);
     await reveal(t, find.text('طريقة الدفع لايرث لنك'));
@@ -193,7 +193,7 @@ void main() {
     await tapText(t, 'كارت');
     expect(field('رقم الكارت'), findsOneWidget);
     expect(field('Pin'), findsOneWidget);
-    expect(field('باسورد الإيداع'), findsNothing);
+    expect(field('كلمة مرور الإيداع'), findsNothing);
     await t.enterText(field('رقم الكارت'), '4400112233');
     await t.enterText(field('Pin'), '9081');
     await t.pumpAndSettle();
@@ -246,7 +246,7 @@ void main() {
   simCase(_activate, 'submit_success', (t, v) async {
     server.reply('POST', _activatePath, 200, {'success': true});
     await openActivate(t, v);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     final before = SubscriberEvents.dataChanged.value;
     await t.tap(find.text('تجديد الآن'));
@@ -273,7 +273,7 @@ void main() {
       'debt_write': {'ok': false, 'message': msg},
     });
     await openActivate(t, v);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     await t.tap(find.text('تجديد الآن'));
     await t.pumpAndSettle();
@@ -289,7 +289,7 @@ void main() {
   simCase(_activate, 'submit_timeout', (t, v) async {
     server.on('POST', _activatePath, simTimeout);
     await openActivate(t, v);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     final before = SubscriberEvents.dataChanged.value;
     await t.tap(find.text('تجديد الآن'));
@@ -323,7 +323,7 @@ void main() {
           : const SimReply(200, {'success': true});
     });
     await openActivate(t, v);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     await t.tap(find.text('تجديد الآن'));
     await t.pumpAndSettle();

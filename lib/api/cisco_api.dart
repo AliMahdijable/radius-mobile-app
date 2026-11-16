@@ -212,7 +212,7 @@ class CiscoApi {
         throw CiscoException(
             'تمّ الدخول إلى $host لكن لم تُقرأ أيّ مخرجات.\n'
             'قد يكون المستخدم بلا صلاحيّة تنفيذ أوامر show، '
-            'أو المحثّ غير معتاد.');
+            'أو موجِّه الأوامر غير معتاد.');
       }
 
       if (kDebugMode) {
@@ -910,7 +910,7 @@ class _SshTransport implements _Transport {
           'من إعدادات الجهاز — لا نبدّله تلقائيّاً.';
     }
     if (s.contains('auth') || s.contains('Auth')) {
-      return 'رُفض اسم المستخدم أو كلمة السرّ على $host.';
+      return 'رُفض اسم المستخدم أو كلمة المرور على $host.';
     }
     if (s.contains('algorithm') || s.contains('kex')) {
       return 'تعذّر الاتّفاق على خوارزميّات SSH مع $host.';
@@ -1128,7 +1128,7 @@ class _CiscoCli {
             onData: cli._onData,
             onClosed: cli._onClosed);
         final hit =
-            await cli._expect([_rePrompt], timeout, what: 'محثّ الدخول');
+            await cli._expect([_rePrompt], timeout, what: 'موجِّه الدخول');
         cli._adoptPrompt(hit.text);
       }
       await cli._disablePaging(timeout);
@@ -1191,12 +1191,12 @@ class _CiscoCli {
     //
     // ⚠️ الفهارس هنا تخصّ كلّ قائمةٍ على حدة — لا تُقارَن عبر نداءين.
     final hit = await _expect([_reUser, _rePass, _rePrompt], timeout,
-        what: 'محثّ الدخول');
+        what: 'موجِّه الدخول');
 
     if (hit.index == 0) {
       _io.write(latin1.encode('$user${_io.eol}'));
       final after = await _expect([_rePass, _rePrompt, _reAuthFail], timeout,
-          what: 'طلب كلمة السرّ');
+          what: 'طلب كلمة المرور');
       if (after.index == 1) return _adoptPrompt(after.text); // بلا كلمة سرّ
       if (after.index == 2) throw _rejected();
       return _sendPassword(pass, timeout);
@@ -1217,7 +1217,7 @@ class _CiscoCli {
   }
 
   CiscoException _rejected() => CiscoException(
-      'رُفض الدخول إلى $host — تحقّق من اسم المستخدم وكلمة السرّ.');
+      'رُفض الدخول إلى $host — تحقّق من اسم المستخدم وكلمة المرور.');
 
   /// يلتقط المحثّ الفعليّ («cisco-alsudany#») ليصير علامة نهاية كلّ
   /// أمر. المطابقة العامّة `[#>]$` وحدها تُخطئ مع أيّ سطرٍ ينتهي بها.
@@ -1314,7 +1314,7 @@ class _CiscoCli {
   Future<void> reload({required Duration timeout}) async {
     if (!privileged) {
       throw CiscoException(
-          'الحساب على $host بمستوى user exec (المحثّ «>»), و`reload` '
+          'الحساب على $host بمستوى user exec (موجِّه الأوامر «>»), و`reload` '
           'تحتاج مستوى امتياز. استعمل حساباً بمستوى ١٥.');
     }
 
@@ -1341,7 +1341,7 @@ class _CiscoCli {
           case 3:
             // عاد المحثّ سالماً — الجهاز لم يُعِد التشغيل.
             throw CiscoException(
-                'لم يُنفَّذ reload على $host — عاد المحثّ دون إعادة تشغيل.');
+                'لم يُنفَّذ reload على $host — عاد موجِّه الأوامر دون إعادة تشغيل.');
         }
       } on _SessionClosed {
         return; // ← ماتت الجلسة: الجهاز يُعيد التشغيل الآن

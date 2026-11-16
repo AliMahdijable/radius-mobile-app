@@ -78,7 +78,7 @@ void main() {
     expect(find.descendant(of: cableRow, matching: find.text('61%')), findsOneWidget);
     expect(find.descendant(of: cableRow, matching: find.text('مفصول')), findsOneWidget);
     expect(find.descendant(of: cableRow, matching: find.text('-58 dBm')), findsOneWidget);
-    expect(find.text('الكيبل مفصول أو 10 ميكا'), findsOneWidget);
+    expect(find.text('الكيبل مفصول أو 10 ميغا'), findsOneWidget);
     expect(find.text('إشارة ضعيفة'), findsOneWidget);
     expect(find.text('CCQ منخفض'), findsOneWidget);
 
@@ -232,7 +232,7 @@ void main() {
       await t.tap(find.byKey(const ValueKey('subs-check-seg-noReply')));
       await settle(t, seconds: 1);
       expect(
-          find.descendant(of: find.byKey(const ValueKey('subs-check-miss-|ping.u')), matching: find.text('يردّ، ما انقرت مقاييسه')),
+          find.descendant(of: find.byKey(const ValueKey('subs-check-miss-|ping.u')), matching: find.text('يردّ، لم تُقرأ مقاييسه')),
           findsOneWidget);
       expect(
           find.descendant(
@@ -477,7 +477,7 @@ void main() {
       await t.tap(find.byKey(const ValueKey('subs-check-copy')));
       await settle(t, seconds: 3);
       final lines = copied!.split('\n');
-      expect(lines[0], 'الفحص العامّ للمشتركين — من موبايلك على الشبكة');
+      expect(lines[0], 'الفحص العامّ للمشتركين — من هاتفك على الشبكة');
       expect(lines[1], 'انتهى الفحص — 113 مشترك · منذ دقيقتين');
       expect(lines[2], 'بمشكلة 4 · سليم 54 · جهازه ما ردّ 12 · غير متّصل الآن 43');
       expect(copied, contains('جهازه ما ردّ (12):\n• تجريبي 58 (demo058) — ما ردّ من شبكتك'));

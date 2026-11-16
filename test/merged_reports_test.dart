@@ -279,7 +279,7 @@ void main() {
     await down(t);
   });
 
-  testWidgets('سجلّ النشاط: الحركات من كلّ شركةٍ بنطاقها، والصرفيات لا تُخلط (ولا تُطلب) ويقول السطر ذلك', (t) async {
+  testWidgets('سجلّ النشاط: الحركات من كلّ شركةٍ بنطاقها، والمصاريف لا تُخلط (ولا تُطلب) ويقول السطر ذلك', (t) async {
     await up();
     await t.runAsync(() => MergedMode.enter());
     await pumpVisual(t, const VisualDevice('', Size(390, 2400), 1), home: (_) => const ActivityLogReportScreen());
@@ -290,7 +290,7 @@ void main() {
       'GET /api/activities $_kN ids=nabd:5',
     });
     expect(srv.asked.where((a) => a.contains('/api/admin/expenses')), isEmpty);
-    expect(find.textContaining('الصرفيات لا تُخلط هنا'), findsOneWidget);
+    expect(find.textContaining('المصاريف لا تُخلط هنا'), findsOneWidget);
     expect(find.textContaining('دخول المدير'), findsOneWidget, reason: 'السجلّ كلّه لا التفعيلات وحدها');
     await down(t);
   });

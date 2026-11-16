@@ -339,7 +339,7 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
       alive: r.alive,
       ms: r.ms,
       detail: st?.detail,
-      unreadReason: r.alive && st == null ? 'يردّ عبر الـVPN — معلوماته ما انقرت عن بُعد' : null,
+      unreadReason: r.alive && st == null ? 'يردّ عبر الـVPN — معلوماته لم تُقرأ عن بُعد' : null,
       limits: limits,
       prev: prev,
       viaVpn: true,

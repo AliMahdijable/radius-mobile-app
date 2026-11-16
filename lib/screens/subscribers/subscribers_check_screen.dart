@@ -121,7 +121,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
 
   /// (النوع، اسم الشريحة، عنوان المجموعة، الأيقونة)
   static const _kinds = [
-    (ConnectionProblemKind.cable, 'الكيبل', 'الكيبل مفصول أو 10 ميكا', LucideIcons.cable),
+    (ConnectionProblemKind.cable, 'الكيبل', 'الكيبل مفصول أو 10 ميغا', LucideIcons.cable),
     (ConnectionProblemKind.signal, 'الإشارة', 'إشارة ضعيفة', LucideIcons.signal),
     (ConnectionProblemKind.ccq, 'CCQ', 'CCQ منخفض', LucideIcons.activity),
     (ConnectionProblemKind.fiberRx, 'ضوء الفايبر', 'ضوء الفايبر ضعيف', LucideIcons.sun),
@@ -262,7 +262,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   /// تُقدَّم طازجة (المراجعة F5؛ في 179 «عبر VPN · منذ ١٥ دقيقة» دائماً). الشاشة والتقرير المنسوخ بالسطر نفسه.
   String _sourceOf(SubsCheckProgress p) {
     if (_merged) return mergedWord('كل الشركات — كلّ شركةٍ بطريقها', 'كل الصفحات — كلّ صفحةٍ بطريقها');
-    if (!widget.viaVpn) return 'من موبايلك على الشبكة';
+    if (!widget.viaVpn) return 'من هاتفك على الشبكة';
     final at = VpnNow.readingsAt;
     if (at == null || p.state == SubsRunState.finished) return 'عبر VPN';
     return 'عبر VPN · ${_readingsAge(at)}';
@@ -1118,7 +1118,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     if (r.read == 0 && (_seg == SubsCheckCat.problems || _seg == SubsCheckCat.healthy)) {
       if (_busy) {
         return _notice(LucideIcons.radar,
-            widget.viaVpn ? 'يفحص الخادم المشتركين عبر الـVPN…' : 'يُقرأ المشتركون الآن من موبايلك…');
+            widget.viaVpn ? 'يفحص الخادم المشتركين عبر الـVPN…' : 'يُقرأ المشتركون الآن من هاتفك…');
       }
       if (_awaits(r, p)) {
         return _notice(LucideIcons.info,
@@ -1142,7 +1142,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       SubsCheckCat.problems =>
         _notice(LucideIcons.circleCheck, 'لا مشاكل ✓ — كلّ المقروئين ضمن حدود «تنبيه المشترك»', good: true),
       SubsCheckCat.healthy => _notice(LucideIcons.triangleAlert, 'لا أحد سليم — كلّ المقروئين بمشكلة'),
-      SubsCheckCat.atSubscriber => _notice(LucideIcons.circleCheck, 'لا راوتر مطفي ✓', good: true),
+      SubsCheckCat.atSubscriber => _notice(LucideIcons.circleCheck, 'لا يوجد راوتر مطفأ ✓', good: true),
       SubsCheckCat.noReply =>
         _busy ? _notice(LucideIcons.radar, 'لا أحد حتى الآن — الفحص يكمل') : _noReplyEmpty(r),
       SubsCheckCat.offline => _offlineEmpty(r),

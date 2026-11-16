@@ -97,7 +97,7 @@ void main() {
     }
   }
 
-  testWidgets('تقريرٌ لكلّ جهاز: الطافي أوّلاً، والسكتر بمشتركيه المشكلة، والسويج بمنفذه — والأعداد فلاتر', (t) async {
+  testWidgets('تقريرٌ لكلّ جهاز: الطافي أوّلاً، والسكتر بمشتركيه المشكلة، والسويتش بمنفذه — والأعداد تصفية', (t) async {
     await pumpSim(t, const SimVariant(390, dark: false), settle: false,
         home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
     await settle(t);
@@ -120,7 +120,7 @@ void main() {
     await settle(t);
     await see(t, find.text('ali.home'));
     // السويج: المنفذ ذو الملاحظة ظاهر
-    await see(t, find.text('يشتغل 10Mbps — كيبل أو كونكتر'));
+    await see(t, find.text('يعمل 10Mbps — كيبل أو موصل'));
     // فلتر «طافي»
     await see(t, find.byKey(const ValueKey('check-count-down')));
     await t.tap(find.byKey(const ValueKey('check-count-down')));

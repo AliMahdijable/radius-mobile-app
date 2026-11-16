@@ -171,7 +171,7 @@ void main() {
       final waiting = o.periods[1];
       final closed = o.periods[2];
       expect(balanceBanner(running, 3000)!.kind, BalanceBannerKind.empty);
-      expect(balanceBanner(running, 3000)!.text, 'رصيدك خلص والمبلغ ما مكتمل — معوز 250,000 د.ع');
+      expect(balanceBanner(running, 3000)!.text, 'نفد رصيدك ولم يكتمل المبلغ — المتبقّي 250,000 د.ع');
       expect(balanceBanner(running, 20000)!.kind, BalanceBannerKind.empty, reason: 'واحدٌ بالمئة من 2,000,000');
       expect(balanceBanner(running, 20001), isNull);
       expect(balanceBanner(running, null), isNull);
@@ -201,13 +201,13 @@ void main() {
     testWidgets('لا شحنات: شرحٌ وزرّ، ثمّ تسجيل أوّل شحنة — الطلب بالمبلغ ووقتٍ بدقيقته ومرجعٍ فريد، واللوحة من ردّ الكتابة', (t) async {
       use(BalanceServer());
       await open(t);
-      expect(find.text('سجّل أوّل شحنة رصيد'), findsOneWidget);
+      expect(find.text('سجّل أوّل شحن للرصيد'), findsOneWidget);
       expect(k('bal-new'), findsNothing, reason: 'الزرّ العائم بعد أوّل شحنة');
       await tap(t, k('bal-first'));
-      expect(find.text('اكتب مبلغ الشحنة'), findsOneWidget);
+      expect(find.text('اكتب مبلغ الشحن'), findsOneWidget);
       await t.enterText(field('bal-topup-amount'), '2000000');
       await settle(t, frames: 4);
-      expect(find.text('تسجيل الشحنة — 2,000,000 د.ع'), findsOneWidget);
+      expect(find.text('تسجيل الشحن — 2,000,000 د.ع'), findsOneWidget);
       await t.tap(k('bal-topup-save'));
       await settle(t);
       final w = server.lastWrite('POST', RegExp(r'/periods$'))!;
@@ -233,7 +233,7 @@ void main() {
       expect(inKey('bal-stat-remaining', '250,000 د.ع'), findsOneWidget);
       expect(inKey('bal-stat-debts', '600,000 د.ع'), findsOneWidget);
       expect(inKey('bal-stat-profit', '0 د.ع'), findsOneWidget);
-      expect(inKey('bal-stat-profit', 'يبدي بعد ما يرجع مبلغ الشحنة'), findsOneWidget);
+      expect(inKey('bal-stat-profit', 'يبدأ بعد أن يعود مبلغ الشحن'), findsOneWidget);
       expect(t.widget<Text>(k('bal-percent')).data, '88%');
       // الشريط يُرى: ارتفاعه ١٠ وجزؤه الأخضر ٨٧٫٥٪ من عرضه (كان بلا ارتفاع فلا يظهر)
       final bar = t.getSize(find.byType(BalanceProgress).first);
@@ -242,7 +242,7 @@ void main() {
       expect(green.height, 10);
       expect((green.width / bar.width - 0.875).abs() < 0.01, isTrue, reason: '${green.width} / ${bar.width}');
       expect(t.widget<ToneChip>(k('bal-state')).label, 'جارية');
-      expect(inKey('bal-banner', 'رصيدك خلص والمبلغ ما مكتمل — معوز 250,000 د.ع'), findsOneWidget);
+      expect(inKey('bal-banner', 'نفد رصيدك ولم يكتمل المبلغ — المتبقّي 250,000 د.ع'), findsOneWidget);
       expect(inKey('bal-live', '3,000 د.ع'), findsOneWidget);
       expect(inKey('bal-income', '400,000 د.ع'), findsOneWidget);
       expect(k('bal-close-1'), findsNothing);
@@ -270,7 +270,7 @@ void main() {
       expect(inKey('bal-adjust-remaining', '250,000 د.ع'), findsOneWidget);
       expect(find.text('تسجيل التسوية — 250,000 د.ع'), findsOneWidget);
       expect(k('bal-adjust-income'), findsOneWidget);
-      await t.tap(find.descendant(of: k('bal-adjust-source'), matching: find.text('من جيبي')));
+      await t.tap(find.descendant(of: k('bal-adjust-source'), matching: find.text('من مالي الخاصّ')));
       await settle(t, frames: 4);
       expect(k('bal-adjust-income'), findsNothing);
       await t.tap(k('bal-adjust-save'));
@@ -279,7 +279,7 @@ void main() {
       expect([a.body['amount'], a.body['source'], a.body.containsKey('note')], [250000, 'pocket', false]);
       expect(inKey('bal-stat-remaining', 'مكتمل'), findsOneWidget);
       expect(inKey('bal-stat-remaining', 'منها تسوية 250,000'), findsOneWidget);
-      expect(inKey('bal-banner', 'اكتمل مبلغ الشحنة — تگدر تغلق الفترة'), findsOneWidget);
+      expect(inKey('bal-banner', 'اكتمل مبلغ الشحن — يمكنك إغلاق الفترة'), findsOneWidget);
       expect(inKey('bal-stat-profit', 'دفعت 250,000 بالتسوية وبعدها ما رجعت'), findsOneWidget);
       expect(t.widget<Text>(k('bal-percent')).data, '100%');
       expect(k('bal-unadjust-100'), findsOneWidget);
@@ -308,7 +308,7 @@ void main() {
       await tap(t, k('bal-adjust-1'));
       await t.enterText(field('bal-adjust-amount'), '300000');
       await settle(t, frames: 4);
-      expect(find.text('المبلغ أكبر من المعوز (250,000 د.ع)'), findsOneWidget);
+      expect(find.text('المبلغ أكبر من المتبقّي (250,000 د.ع)'), findsOneWidget);
       await t.enterText(field('bal-adjust-amount'), '100000');
       await t.tap(find.descendant(of: k('bal-adjust-source'), matching: find.text('غير ذلك')));
       await settle(t, frames: 4);
@@ -345,7 +345,7 @@ void main() {
       await tap(t, k('bal-detail-1'));
       expect(inKey('bal-sum-collected', '1,750,000 د.ع'), findsOneWidget);
       expect(inKey('bal-sum-remaining', '250,000 د.ع'), findsOneWidget);
-      expect(find.text('الصافي (لم يرجع مبلغ الشحنة بعد)'), findsOneWidget);
+      expect(find.text('الصافي (لم يعُد مبلغ الشحن بعد)'), findsOneWidget);
       expect(inKey('bal-sum-net', balanceSigned(-250000, sign: '−')), findsOneWidget);
       expect(rows(), findsNWidgets(10));
       expect(find.text('عرض المزيد (10 من 47)'), findsOneWidget);
@@ -368,7 +368,7 @@ void main() {
       final open_ = statuses(t);
       expect(open_.isNotEmpty && open_.every((x) => RegExp(r'^دين باقي [\d,]+$|^تسدّد منه [\d,]+ · باقي [\d,]+$').hasMatch(x)), isTrue, reason: open_.join(' | '));
       await tap(t, k('bal-filter-payments'));
-      expect(statuses(t).toSet(), {'دخل «طبّلك»'});
+      expect(statuses(t).toSet(), {'أُضيف إلى «المحصَّل»'});
       // البحث بعد التوقّف عن الكتابة
       await tap(t, k('bal-filter-all'));
       await t.enterText(field('bal-search'), 'USER7');
@@ -511,7 +511,7 @@ void main() {
       await t.tap(find.text('حذف').last);
       await settle(t);
       expect(server.lastWrite('DELETE', RegExp(r'/periods/1$')), isNotNull);
-      expect(find.text('سجّل أوّل شحنة رصيد'), findsOneWidget);
+      expect(find.text('سجّل أوّل شحن للرصيد'), findsOneWidget);
       await done(t);
     });
 

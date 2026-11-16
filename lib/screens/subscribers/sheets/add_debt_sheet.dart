@@ -203,7 +203,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'جاري الإضافة...' : 'إضافة دين',
+        label: _submitting ? 'جارٍ الإضافة...' : 'إضافة دين',
         icon: LucideIcons.plus,
         color: AppColors.warningFill,
         enabled: _canSubmit,

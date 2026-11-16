@@ -59,7 +59,7 @@ const dashSectionLabels = <String, ({String title, String sub})>{
   'wallet': (title: 'الرصيد والمدينون', sub: 'كارتا المال أعلى الصفحة'),
   'revenue': (title: 'الإيرادات', sub: 'يومي · أسبوعي · شهري'),
   'activities': (title: 'آخر النشاطات', sub: 'سجل العمليّات الأخيرة'),
-  'wa_banner': (title: 'حالة واتساب', sub: 'الحبّة أعلى الرئيسيّة تحت اسم المدير'),
+  'wa_banner': (title: 'حالة واتساب', sub: 'الشارة أعلى الرئيسيّة تحت اسم المدير'),
   'packages': (title: 'توزيع الباقات', sub: 'الفعّالون والتفعيلات وأكثر الباقات'),
 };
 

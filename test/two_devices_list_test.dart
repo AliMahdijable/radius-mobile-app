@@ -132,7 +132,7 @@ void main() {
     routerUp = false;
     await t.runAsync(wave);
     await card(t, 'twodev');
-    expect(find.descendant(of: find.byType(RouterChip), matching: find.text('مطفي')), findsOneWidget);
+    expect(find.descendant(of: find.byType(RouterChip), matching: find.text('مطفأ')), findsOneWidget);
 
     nanoUp = false;
     routerCalls = 0;

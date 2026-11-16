@@ -193,7 +193,7 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'جاري الإضافة...' : 'إضافة رصيد',
+        label: _submitting ? 'جارٍ الإضافة...' : 'إضافة رصيد',
         icon: LucideIcons.plus,
         color: AppColors.successFill,
         enabled: _canSubmit,

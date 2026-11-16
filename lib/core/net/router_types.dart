@@ -28,12 +28,12 @@ enum RouterFail {
 }
 
 String routerFailText(RouterFail f) => switch (f) {
-      RouterFail.rejected => 'الراوتر رفض كلمة السرّ — صحّحها من «الاعتمادات» أو إعداد المشترك',
-      RouterFail.busy => 'صفحة الراوتر مفتوحة بمكانٍ ثاني — سكّرها وأعد المحاولة',
-      RouterFail.locked => 'الراوتر قافل الدخول مؤقّتاً من كثرة المحاولات',
+      RouterFail.rejected => 'الراوتر رفض كلمة المرور — صحّحها من «بيانات الدخول» أو إعداد المشترك',
+      RouterFail.busy => 'صفحة الراوتر مفتوحة بمكانٍ ثاني — أغلِقها وأعد المحاولة',
+      RouterFail.locked => 'الراوتر أقفل الدخول مؤقّتاً من كثرة المحاولات',
       RouterFail.unreachable => 'الراوتر ما يجاوب',
       RouterFail.failed => 'الراوتر ما قبل الأمر',
-      RouterFail.noPsk => 'الواي فاي بلا كلمة سرٍّ شخصيّة (مفتوح أو Enterprise)',
+      RouterFail.noPsk => 'الواي فاي بلا كلمة مرور شخصيّة (مفتوح أو Enterprise)',
       RouterFail.unsupported => 'هذا النوع من الراوترات ما يدعمها بعد',
     };
 
@@ -111,8 +111,8 @@ abstract class RouterLive {
 
 /// كلمة سرّ واي فاي مقبولة (WPA2/WPA3 الشخصيّ): ٨–٦٣ حرفاً من ASCII المطبوع — null = صالحة، وإلّا السبب.
 String? wifiPasswordProblem(String p) {
-  if (p.length < 8) return 'كلمة السرّ ٨ أحرف على الأقل';
-  if (p.length > 63) return 'كلمة السرّ ٦٣ حرفاً على الأكثر';
+  if (p.length < 8) return 'كلمة المرور ٨ أحرف على الأقل';
+  if (p.length > 63) return 'كلمة المرور ٦٣ حرفاً على الأكثر';
   for (final c in p.codeUnits) {
     if (c < 0x20 || c > 0x7e) return 'أحرفٌ إنكليزيّة وأرقام ورموز فقط (لا عربي ولا إيموجي)';
   }

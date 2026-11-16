@@ -128,7 +128,7 @@ void main() {
       expect(r.subs.map((s) => s.name), ['omar', 'zaid', 'ali', 'sami']);
       expect(r.subsWeak, 1);
       expect(r.subsLowCcq, 1);
-      expect(texts(r), contains('إشارة ضعيفة: 1 · CCQ واطي: 1 — من 4 مشترك'));
+      expect(texts(r), contains('إشارة ضعيفة: 1 · CCQ منخفض: 1 — من 4 مشترك'));
       expect(r.subs.last.ccq, isNull);
       final txt = r.toText();
       expect(txt, contains('omar: rx -78 dBm · CCQ 88٪'));
@@ -154,11 +154,11 @@ void main() {
       expect(fresh.findings.single.level, CheckLevel.info);
     });
 
-    test('عبر الـVPN بلا جدولٍ مقروء لا يُقال «ما عليه أحد» — يُقال إنّ قائمتهم ما انقرت', () {
+    test('عبر الـVPN بلا جدولٍ مقروء لا يُقال «ما عليه أحد» — يُقال إنّ قائمتهم لم تُقرأ', () {
       final r = DevicesCheck.evaluate(
           d: dev(5, type: 'sector', brand: 'ubnt'), alive: true, detail: detail(glance: const DeviceGlance(isAp: true)), viaVpn: true);
       expect(r.subsKnown, isFalse);
-      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(r), ['قائمة مشتركيه لم تُقرأ']);
       expect(r.state, CheckState.unread, reason: '«سليم» حكمٌ على مشتركيه أيضاً — وهم لم يُقرؤوا');
     });
 
@@ -173,7 +173,7 @@ void main() {
       );
       expect(r.subsKnown, isFalse);
       expect(texts(r).where((t) => t.contains('ما عليه أحد')), isEmpty);
-      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(r), ['قائمة مشتركيه لم تُقرأ']);
       expect(r.state, CheckState.unread, reason: 'لا «سليم» لسكترٍ مشتركوه مجهولون');
       expect(r.cpu, 9, reason: 'ما قُرئ من الجهاز نفسه يُعرض');
       expect(r.memo!.peers, 5, reason: 'المجهول لا يمسح العدد السابق');
@@ -187,11 +187,11 @@ void main() {
       final r = DevicesCheck.evaluate(
           d: dev(6, type: 'link', brand: 'ubnt'), alive: true, detail: detail(glance: const DeviceGlance(isAp: false, signal: -82, ccq: 45)));
       expect(r.role, CheckRole.link);
-      expect(texts(r), containsAll(['إشارة الوصلة -82 dBm — ضعيفة', 'CCQ الوصلة 45٪ — واطي']));
+      expect(texts(r), containsAll(['إشارة الوصلة -82 dBm — ضعيفة', 'CCQ الوصلة 45٪ — منخفض']));
     });
   });
 
-  group('السويج — المتغيّرات الحيويّة للمنافذ', () {
+  group('السويتش — المتغيّرات الحيويّة للمنافذ', () {
     final sw = dev(7, type: 'switch');
     const uptime = DeviceGlance(uptimeSec: 86400 * 2);
 
@@ -215,7 +215,7 @@ void main() {
       expect(r.portsUp, 6);
       final by = {for (final p in r.ports) p.name: p};
       expect(by['ether1']!.flagged, isFalse);
-      expect(by['ether2']!.notes, ['يشتغل 10Mbps — كيبل أو كونكتر']);
+      expect(by['ether2']!.notes, ['يعمل 10Mbps — كيبل أو موصل']);
       expect(by['ether3']!.notes, ['half-duplex — كيبل أو إعداد']);
       expect(by['sfp1']!.notes, ['ضوء الـSFP -27.4 dBm — ضعيف']);
       expect(by['sfp1']!.level, CheckLevel.warn);
@@ -244,9 +244,9 @@ void main() {
         ]),
       );
       final by = {for (final p in r.ports) p.name: p};
-      expect(by['ether1']!.notes, ['طفى من الفحص السابق']);
+      expect(by['ether1']!.notes, ['توقّف منذ آخر فحص']);
       expect(by['ether2']!.notes,
-          ['نزل من 1G إلى 100M — كيبل أو كونكتر', 'انقطع 3 مرّة من الفحص السابق', 'أخطاء +35 من الفحص السابق — كيبل تالف أو تشويش']);
+          ['نزل من 1G إلى 100M — كيبل أو موصل', 'انقطع 3 مرّة من الفحص السابق', 'أخطاء +35 من الفحص السابق — كيبل تالف أو تشويش']);
       expect(by['ether3']!.flagged, isFalse, reason: '100M كان كذلك، وانقطاعٌ واحد و١٠ أخطاء تحت الحدّ');
       expect(r.memo!.ports['ether2']!.linkDowns, 6);
       expect(r.memo!.ports['ether1']!.up, isFalse);
@@ -277,7 +277,7 @@ void main() {
         ]),
       );
       final by = {for (final p in down.ports) p.name: p};
-      expect(by['sfp1']!.notes, ['طفى من الفحص السابق']);
+      expect(by['sfp1']!.notes, ['توقّف منذ آخر فحص']);
       expect(down.portsTotal, 2);
 
       // شغّالٌ بوحدة ⇒ منفذٌ عاديّ بضوئه
@@ -303,7 +303,7 @@ void main() {
       );
       final by = {for (final p in r.ports) p.name: p};
       expect(by['ether1']!.notes, [
-        'انقطع 9 مرّة خلال 2 يوم — كيبل مرخي أو كهرباء الطرف الثاني',
+        'انقطع 9 مرّة خلال 2 يوم — كيبل مرتخٍ أو كهرباء الطرف الثاني',
         'أخطاء 900 — كيبل تالف أو تشويش',
       ]);
       expect(by['ether2']!.flagged, isFalse);
@@ -326,7 +326,7 @@ void main() {
       expect(r.memo!.ports['ether1']!.up, isTrue);
     });
 
-    test('مايكروتك: مروحةٌ عاطلة خطأ، وواقفةٌ مع حرارةٍ عالية ملاحظة، والمزوّد الثاني المفصول معلومة', () {
+    test('مايكروتك: مروحةٌ متوقّفة خطأ، ومتوقّفة مع حرارةٍ عالية ملاحظة، والمزوّد الثاني المفصول معلومة', () {
       const stats = MikrotikStats(
         cpuLoad: 5, memUsedPercent: 30, memTotalBytes: 1, memFreeBytes: 1, uptime: '2d', version: '7', boardName: 'CRS',
         architectureName: 'arm', cpuCount: 1, cpuFrequencyMhz: 800, temperature: 70,
@@ -335,7 +335,7 @@ void main() {
         interfaces: [], pppActiveCount: 0, wirelessInterfaces: [], wirelessClients: [], w60gLinks: [], via: 'api',
       );
       final r = DevicesCheck.evaluate(d: sw, alive: true, raw: stats, detail: detail(glance: const DeviceGlance(temp: 70)));
-      expect(texts(r), containsAll(['المروحة fan2 عاطلة', 'المروحة fan1 واقفة والحرارة 70°', 'مزوّد الكهرباء psu2 لا يعمل — إن كان موصولاً فافحصه']));
+      expect(texts(r), containsAll(['المروحة fan2 متوقّفة', 'المروحة fan1 متوقّفة والحرارة 70°', 'مزوّد الكهرباء psu2 لا يعمل — إن كان موصولاً فافحصه']));
       expect(r.findings.firstWhere((f) => f.text.contains('psu2')).level, CheckLevel.info);
     });
   });
@@ -352,7 +352,7 @@ void main() {
       ])),
     );
     expect(r.role, CheckRole.olt);
-    expect(texts(r), ['منفذ PON طافي: PON2']);
+    expect(texts(r), ['منفذ PON متوقّف: PON2']);
     expect(r.vitals.firstWhere((v) => v.k == 'ONU').v, '79/101');
   });
 
@@ -476,8 +476,8 @@ void main() {
     expect(DevicesCheck.sorted([ok, unread, warn, down]).map((r) => r.state),
         [CheckState.down, CheckState.warn, CheckState.unread, CheckState.ok]);
     final txt = DevicesCheck.reportText([ok, down, unread, warn], viaVpn: true);
-    expect(txt.split('\n').first, 'الفحص الشامل — 4 جهاز (عبر الـVPN): طافي 1 · ملاحظات 1 · لم يُقرأ 1 · سليم 1');
-    expect(txt, contains('ب 2 (راوتر) — طافي'));
+    expect(txt.split('\n').first, 'الفحص الشامل — 4 جهاز (عبر الـVPN): منقطع 1 · ملاحظات 1 · لم يُقرأ 1 · سليم 1');
+    expect(txt, contains('ب 2 (راوتر) — منقطع'));
   });
 
   test('اللقطة تُحفظ وتُقرأ', () {
@@ -523,7 +523,7 @@ void main() {
     test('رفض الدخول الحقيقيّ وحده يقول «اسم المستخدم والرمز» — ميكروتك، يوبيكويتي، سسكو', () {
       expect(why(MikrotikException('invalid user name or password (6)', code: 'auth')), login);
       expect(why(UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)')), login);
-      expect(why(CiscoException('رُفض الدخول إلى 10.0.0.1 — تحقّق من اسم المستخدم وكلمة السرّ.')), login);
+      expect(why(CiscoException('رُفض الدخول إلى 10.0.0.1 — تحقّق من اسم المستخدم وكلمة المرور.')), login);
       expect(why(MikrotikException('not enough permissions (9)')), 'يردّ، لكن مستخدمه بلا صلاحيّة قراءة — راجع صلاحيّاته على الجهاز');
     });
 
@@ -555,7 +555,7 @@ void main() {
     });
 
     test('ما لا يُعرف سببه لا يُنسب لاسم المستخدم أبداً', () {
-      expect(why(StateError('x')), 'يردّ، لكن ما انقرت معلوماته');
+      expect(why(StateError('x')), 'يردّ، لكن لم تُقرأ معلوماته');
       expect(why(StateError('x'), serviceOk: false), service);
       for (final e in [
         TimeoutException(null),
@@ -779,7 +779,7 @@ void main() {
       final r = run.reports[4]!;
       expect(r.cpu, 9);
       expect(r.portsTotal, 1);
-      expect(texts(r), contains('قائمة مشتركيه ما انقرت'), reason: 'لا «ما عليه أحد» من طبقةٍ بلا جدول');
+      expect(texts(r), contains('قائمة مشتركيه لم تُقرأ'), reason: 'لا «ما عليه أحد» من طبقةٍ بلا جدول');
       expect(texts(r).any((t) => t.startsWith('قراءةٌ جزئيّة — بطيء — لم تكتمل قراءته خلال')), isTrue);
       expect(r.state, CheckState.unread);
       run.dispose();
@@ -831,7 +831,7 @@ void main() {
           reason: 'العمر بالسطر نفسه (المراجعة)');
       expect(texts(r).where((t) => t.contains('طفى')), isEmpty, reason: 'لا مقارنة منافذ من قراءةٍ سابقة');
       expect(r.stateLabel, 'سليم · قبل لحظات', reason: 'الحال بعمرها — لا تُقدَّم طازجة');
-      expect(r.toText(), startsWith('جهاز 9 (سويج) — سليم · قبل لحظات'), reason: 'النسخ يحمل عمرها');
+      expect(r.toText(), startsWith('جهاز 9 (سويتش) — سليم · قبل لحظات'), reason: 'النسخ يحمل عمرها');
       expect((await DevicesCheckMemoStore.load())[9]!.ports['ether1']!.up, isTrue, reason: 'اللقطة لا تُكتب من قراءةٍ سابقة');
       run.dispose();
     });
@@ -936,7 +936,7 @@ void main() {
           staleAt: now.subtract(const Duration(minutes: 2)),
           now: now);
       expect(texts(r).where((t) => t.contains('ما عليه أحد')), isEmpty);
-      expect(texts(r), contains('قائمة مشتركيه ما انقرت'));
+      expect(texts(r), contains('قائمة مشتركيه لم تُقرأ'));
     });
   });
 
@@ -1065,7 +1065,7 @@ void main() {
       expect(warm.state, CheckState.warn);
     });
 
-    test('الدور من آخر قراءةٍ قُرئ لاسلكيّها: سكترٌ ⇒ «قائمة مشتركيه ما انقرت»، ووصلةٌ ⇒ «إشارة الوصلة ما انقرت»', () {
+    test('الدور من آخر قراءةٍ قُرئ لاسلكيّها: سكترٌ ⇒ «قائمة مشتركيه لم تُقرأ»، ووصلةٌ ⇒ «إشارة الوصلة لم تُقرأ»', () {
       final full = DeviceVitals.mikrotikResult(
           dev(1),
           tier1(clientsRead: true, wireless: const [
@@ -1080,7 +1080,7 @@ void main() {
       final part = DeviceVitals.mikrotikResult(dev(1), tier1(), null, detailed: true);
       final next = DevicesCheck.evaluate(d: dev(1), alive: true, detail: part.detail, raw: part.raw, limits: lim, prev: memo);
       expect(next.role, CheckRole.sector);
-      expect(texts(next), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(next), ['قائمة مشتركيه لم تُقرأ']);
       expect(next.state, CheckState.unread);
       expect(next.memo!.role, CheckRole.sector, reason: 'الجهل لا يمحو الدور');
       // لقطةٌ قديمة بلا دور لكن فيها مشتركون ⇒ سكتر
@@ -1090,7 +1090,7 @@ void main() {
       // الوصلة (نوعها link) بلا إشارة
       final link = DevicesCheck.evaluate(d: dev(2, type: 'link'), alive: true, detail: part.detail, raw: part.raw, limits: lim);
       expect(link.role, CheckRole.link);
-      expect(texts(link), ['إشارة الوصلة ما انقرت']);
+      expect(texts(link), ['إشارة الوصلة لم تُقرأ']);
       expect(link.state, CheckState.unread);
     });
 

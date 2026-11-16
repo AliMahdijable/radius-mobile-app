@@ -146,7 +146,7 @@ void main() {
       expect(exp.daysLine, 'منتهي منذ 3 أيام');
       final dis = SubscriberVoiceCheck(_sub('c', enabled: false, online: false));
       await dis.run();
-      expect(dis.headline, 'مطفي (معطّل)');
+      expect(dis.headline, 'موقوف (معطّل)');
       expect(probed, 0, reason: 'لا يُقرأ جهاز من ليس متّصلاً وفعّالاً');
     });
 
@@ -221,7 +221,7 @@ void main() {
       await p.run();
       expect(runs, 1);
       expect(p.row, isNull);
-      expect(p.deviceLine, 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه');
+      expect(p.deviceLine, 'جهازه ما ردّ — يردّ، لم تُقرأ مقاييسه');
     });
 
     test('لا طريق ⇒ «لم يُفحص» بسببه (كان «بلا إدارة»)', () async {
@@ -509,7 +509,7 @@ void main() {
       // يردّ بلا مقاييس من القراءة نفسها ⇒ بعمرها كذلك
       final p = SubscriberVoiceCheck(_sub('ping.u', company: b.key), company: b);
       await p.run();
-      expect(p.spoken, endsWith('جهازه ما ردّ — يردّ، ما انقرت مقاييسه · عبر VPN الشركة · منذ 12 دقيقة'));
+      expect(p.spoken, endsWith('جهازه ما ردّ — يردّ، لم تُقرأ مقاييسه · عبر VPN الشركة · منذ 12 دقيقة'));
       // وفحص الهاتف الطازج بلا عمر
       SubscriberVoiceCheck.debugLocalAllowed = () => true;
       SubscriberVoiceCheck.debugProbe =
@@ -637,7 +637,7 @@ void main() {
       await m.run();
       await p.run();
       expect(runs, 0, reason: 'آخر قراءةٍ تكفي — لا فحص جديد');
-      expect([m.deviceLine, p.deviceLine], ['الإشارة، CCQ والكيبل سليمة', 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه']);
+      expect([m.deviceLine, p.deviceLine], ['الإشارة، CCQ والكيبل سليمة', 'جهازه ما ردّ — يردّ، لم تُقرأ مقاييسه']);
       // دور ايرث لنك يكتمل: الاثنان «لا يستجيب» ⇒ الجوابان يتحدّثان وحدهما كصفّيهما
       final before = told;
       VpnNow.debugApplyCompany(

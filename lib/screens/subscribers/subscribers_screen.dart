@@ -566,11 +566,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (!viaVpn && !net && vpn && _vpnLinked) viaVpn = true;
     if (viaVpn && !vpn) {
       return showNoPermission(context,
-          message: net ? 'الفحص العامّ عبر VPN غير مفعّل لك — يشتغل وأنت على الشبكة' : 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
+          message: net ? 'الفحص العامّ عبر VPN غير مفعّل لك — يعمل وأنت على الشبكة' : 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
     }
     if (!viaVpn && !net) {
       return showNoPermission(context,
-          message: vpn ? 'الفحص العامّ على الشبكة غير مفعّل لك — يشتغل عبر VPN، اربطه أوّلاً' : 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
+          message: vpn ? 'الفحص العامّ على الشبكة غير مفعّل لك — يعمل عبر VPN، اربطه أوّلاً' : 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
     }
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => SubscribersCheckScreen(
@@ -3953,7 +3953,7 @@ class _EmptyState extends StatelessWidget {
             Icon(LucideIcons.serverOff, size: 40, color: AppColors.warning),
             const SizedBox(height: Sp.sm),
             Text(
-              'تعذّر جلب المشتركين من سيرفر الشركة',
+              'تعذّر جلب المشتركين من خادم الشركة',
               textAlign: TextAlign.center,
               style: AppType.label(color: AppColors.textBody)
                   .copyWith(fontSize: 14, fontWeight: FontWeight.w700),

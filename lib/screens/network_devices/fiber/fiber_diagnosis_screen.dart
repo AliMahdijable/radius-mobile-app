@@ -234,22 +234,22 @@ class _FiberDiagnosisScreenState extends State<FiberDiagnosisScreen> {
       case FiberVerdictKind.router:
         if (hasPhone) {
           actions.add(('أرسل له خطوات إعادة التشغيل', LucideIcons.messageCircle, () => wa(
-              'مشتركنا العزيز، الخطّ عندك سليم. رجاءً طفّي الراوتر دقيقة وشغّله، وإذا ما رجع النت تأكّد من سلك الراوتر وابلغنا.')));
+              'مشتركنا العزيز، الخطّ عندك سليم. رجاءً أطفئ الراوتر دقيقة ثمّ شغّله، وإذا ما رجع النت تأكّد من سلك الراوتر وابلغنا.')));
         }
         actions.add(('افتح وضع الفنّي', LucideIcons.wrench, tech));
       case FiberVerdictKind.fiberHome:
       case FiberVerdictKind.onuDown:
         actions.add(('وضع الفنّي', LucideIcons.wrench, tech));
-        if (hasPhone) actions.add(('طمّن المشترك', LucideIcons.messageCircle, () => wa('مشتركنا العزيز، شفنا الخلل بخطّك والفنّي راح يتواصل وياك قريباً.')));
+        if (hasPhone) actions.add(('طمئِن المشترك', LucideIcons.messageCircle, () => wa('مشتركنا العزيز، شفنا الخلل بخطّك والفنّي راح يتواصل وياك قريباً.')));
       case FiberVerdictKind.power:
-        if (hasPhone) actions.add(('طمّنه بالواتساب', LucideIcons.messageCircle, () => wa('مشتركنا العزيز، جهاز الإنترنت عندك طافي لانقطاع الكهرباء. يرجع النت وحده لمّا ترجع الكهرباء.')));
+        if (hasPhone) actions.add(('طمئِنه بالواتساب', LucideIcons.messageCircle, () => wa('مشتركنا العزيز، جهاز الإنترنت عندك مطفأ لانقطاع الكهرباء. يرجع النت وحده لمّا ترجع الكهرباء.')));
       case FiberVerdictKind.outage:
         final e = _m.outages.where((x) => onu != null && x.onuKeys.contains(onu.key)).firstOrNull;
         if (e != null) {
           actions.add(('افتح العطل', LucideIcons.scissors,
               () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FiberOutageScreen(monitor: _m, scopeKey: e.scopeKey)))));
         }
-        if (hasPhone) actions.add(('طمّن المشترك', LucideIcons.messageCircle, () => wa('مشتركنا العزيز، صار عطل بخطّ الألياف بمنطقتكم والفنّي يشتغل عليه.')));
+        if (hasPhone) actions.add(('طمئِن المشترك', LucideIcons.messageCircle, () => wa('مشتركنا العزيز، صار عطل بخطّ الألياف بمنطقتكم والفنّي يعمل عليه.')));
       case FiberVerdictKind.subscription:
         if (sub != null) {
           actions.add(('افتح صفحة المشترك', LucideIcons.userRound,
@@ -456,10 +456,10 @@ class _FiberDiagnosisScreenState extends State<FiberDiagnosisScreen> {
     final text = others.isEmpty
         ? 'ما في أجهزة ثانية مسندة لهذا الصندوق.'
         : (!me.online && up == others.length
-            ? '${FiberText.devices(up)} من ${others.length} شغّالة وجهازه وحده منقطع، يعني المشكلة عنده مو بالصندوق.'
+            ? '${FiberText.devices(up)} من ${others.length} تعمل وجهازه وحده منقطع، يعني المشكلة عنده مو بالصندوق.'
             : (!me.online && up == 0
                 ? 'كلّ أجهزة الصندوق منقطعة، يعني الخلل بالصندوق أو قبله.'
-                : (me.online && up == others.length ? 'كلّ أجهزة الصندوق شغّالة، فالشبكة لحدّ بيته سليمة.' : '$up من ${others.length} من جيرانه شغّالة.')));
+                : (me.online && up == others.length ? 'كلّ أجهزة الصندوق تعمل، فالشبكة لحدّ بيته سليمة.' : '$up من ${others.length} من جيرانه تعمل.')));
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
       child: FiberCard(

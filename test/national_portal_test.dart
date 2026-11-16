@@ -105,7 +105,7 @@ void main() {
     expect(nationalPeriodRange('', now: now), (from: null, to: null));
   });
 
-  testWidgets('التذاكر: الصفوف بحالاتها، والبحث يرسل q، و«الفلاتر» ترسل الحالة', (t) async {
+  testWidgets('التذاكر: الصفوف بحالاتها، والبحث يرسل q، و«التصفية» ترسل الحالة', (t) async {
     server.reply('GET', '/api/v2/ftth/tickets', 200, {
       'success': true,
       'data': [_ticket(1, 'New'), _ticket(2, 'Closed')],
@@ -124,7 +124,7 @@ void main() {
     await t.pumpAndSettle();
     expect(server.calls('GET', '/api/v2/ftth/tickets').last.queryParameters['q'], 'مريم');
 
-    await t.tap(find.text('الفلاتر'));
+    await t.tap(find.text('التصفية'));
     await t.pumpAndSettle();
     await t.tap(find.text('جديدة').last);
     await t.pumpAndSettle();
@@ -132,8 +132,8 @@ void main() {
     await t.pumpAndSettle();
     final q = server.calls('GET', '/api/v2/ftth/tickets').last.queryParameters;
     expect(q['status'], 's-new');
-    expect(q['q'], 'مريم', reason: 'البحث يبقى مع الفلتر');
-    expect(find.text('1'), findsWidgets, reason: 'عدد الفلاتر المفعّلة على الزرّ');
+    expect(q['q'], 'مريم', reason: 'البحث يبقى مع التصفية');
+    expect(find.text('1'), findsWidgets, reason: 'عدد التصفية المفعّلة على الزرّ');
     await simDrain(t);
   });
 

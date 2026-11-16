@@ -119,7 +119,7 @@ class FiberText {
     required FiberLayout layout,
     FiberPonTree? tree,
   }) {
-    if (kind == FiberEventKind.power) return 'الأجهزة طفت لانقطاع الكهرباء — ما يحتاج فنّياً';
+    if (kind == FiberEventKind.power) return 'الأجهزة انطفأت لانقطاع الكهرباء — ما يحتاج فنّياً';
     switch (scope) {
       case FiberEventScope.box:
         final path = tree?.pathTo(boxId ?? 0) ?? const [];

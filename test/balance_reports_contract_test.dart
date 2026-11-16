@@ -409,7 +409,7 @@ void main() {
         expect(inKey('bal-stat-debts', 'منها على المدراء 30,000'), findsOneWidget);
         expect(k('bal-transfers'), findsNothing);
         expect(inKey('bal-outside', '70,000 د.ع'), findsOneWidget);
-        expect(find.descendant(of: k('bal-outside'), matching: find.textContaining('تسديد ديون مدراء فرعيّين أقدم من أوّل شحنة')), findsOneWidget);
+        expect(find.descendant(of: k('bal-outside'), matching: find.textContaining('تسديد ديون مدراء فرعيّين أقدم من أوّل شحن')), findsOneWidget);
         expect(find.descendant(of: k('bal-period-2'), matching: find.text('170,000')), findsOneWidget);
         expect(find.descendant(of: k('bal-period-1'), matching: find.text('240,000')), findsOneWidget);
         await end(t);
@@ -458,10 +458,10 @@ void main() {
         final statuses = t.widgetList<BalanceMoveStatus>(k('bal-move-status')).map((c) => c.text).toList();
         expect(statuses.length, 5);
         expect(statuses[0], 'بعد الإغلاق — صار ربح');
-        expect(statuses[1], 'نقص من «طبّلك»');
-        expect(statuses[2], 'دخل «طبّلك»');
+        expect(statuses[1], 'خُصم من «المحصَّل»');
+        expect(statuses[2], 'أُضيف إلى «المحصَّل»');
         expect(statuses[3], startsWith('كان دين وتسدّد بعد الإغلاق — صار ربح — '));
-        expect(statuses[4], 'دخل «طبّلك»');
+        expect(statuses[4], 'أُضيف إلى «المحصَّل»');
         expect(find.text(balanceSigned(10000, sign: '−')), findsWidgets, reason: 'السحب بإشارته');
         expect(find.text(balanceSigned(50000, sign: '+')), findsWidgets, reason: 'الشحن النقديّ بإشارته');
         expect(find.text('شحن مدير آجل'), findsOneWidget);

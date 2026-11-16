@@ -409,7 +409,7 @@ class SubscribersCheck {
   /// سبب من لم يُقرأ بكلمات الوكيل — بجانب اسمه في الشاشة، وفي التقرير المنسوخ، وفي جواب الأمر الصوتيّ.
   static String missText(SubsMissing m, {bool running = false}) => switch (m.why) {
         SubsMissWhy.dead => 'لا يستجيب',
-        SubsMissWhy.unmeasured => m.note ?? 'يردّ، ما انقرت مقاييسه',
+        SubsMissWhy.unmeasured => m.note ?? 'يردّ، لم تُقرأ مقاييسه',
         SubsMissWhy.noReply => m.note ?? 'ما ردّ من شبكتك',
         SubsMissWhy.noMetrics => 'جهازه بلا مقاييس',
         SubsMissWhy.unchecked => m.note ?? (running ? 'بانتظار الفحص' : 'لم يصله الفحص'),
@@ -636,7 +636,7 @@ class SubscribersCheck {
   }
 
   /// «مشترك بجهازين» (١٤ نوفمبر — مقترحٌ قبله المالك: «النانو هو جهاز المشترك والحكم منه؛ الراوتر معلومة»): سطر «عند المشترك».
-  static const routerOffNote = 'راوتر المشترك مطفي';
+  static const routerOffNote = 'راوتر المشترك مطفأ';
 
   /// اسم كيبل النانو حين للمشترك جهازٌ ثانٍ — رقم الإيثر باسم جهازه («كيبل النانو» لا «منفذ الراوتر»).
   static const nanoCableWord = 'كيبل النانو';
@@ -858,7 +858,7 @@ class SubscribersCheck {
   static String unmeasuredLabel(VpnSubReading r) => switch (r.err) {
         'login_failed' => 'يردّ، ما انفتح برمزه المحفوظ',
         'no_web' => 'يردّ، واجهة إدارته ما تفتح',
-        _ => 'يردّ، ما انقرت مقاييسه',
+        _ => 'يردّ، لم تُقرأ مقاييسه',
       };
 
   /// قراءة الخادم ⇒ المشاكل بحدود المدير — كـ[ConnectionAlerts.detect] حرفاً (الصفر ليس قراءة).

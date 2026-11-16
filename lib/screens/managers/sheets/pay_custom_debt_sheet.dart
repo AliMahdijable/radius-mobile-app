@@ -196,7 +196,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         ),
         footer: SheetFooterBar(
           label: _submitting
-              ? 'جاري التسديد...'
+              ? 'جارٍ التسديد...'
               : (_amount > 0 ? 'تسديد ${formatIQD(_amount)}' : 'تسديد'),
           icon: LucideIcons.check,
           color: AppColors.brandAccent,

@@ -156,7 +156,7 @@ class ElDepositPassword {
       return (
         ok: ok,
         message: body['message']?.toString() ??
-            (ok ? null : 'تعذّر حفظ الباسورد'),
+            (ok ? null : 'تعذّر حفظ كلمة المرور'),
       );
     } on DioException catch (e) {
       _log(e);
@@ -164,11 +164,11 @@ class ElDepositPassword {
       return (
         ok: false,
         message: (b is Map ? b['message']?.toString() : null) ??
-            'تعذّر حفظ الباسورد — تحقّق من الاتصال',
+            'تعذّر حفظ كلمة المرور — تحقّق من الاتصال',
       );
     } catch (e) {
       _log(e);
-      return (ok: false, message: 'تعذّر حفظ الباسورد');
+      return (ok: false, message: 'تعذّر حفظ كلمة المرور');
     }
   }
 
@@ -187,7 +187,7 @@ class ElDepositPassword {
       return (
         ok: ok,
         message: body['message']?.toString() ??
-            (ok ? null : 'تعذّر مسح الباسورد'),
+            (ok ? null : 'تعذّر مسح كلمة المرور'),
       );
     } on DioException catch (e) {
       _log(e);
@@ -195,11 +195,11 @@ class ElDepositPassword {
       return (
         ok: false,
         message: (b is Map ? b['message']?.toString() : null) ??
-            'تعذّر مسح الباسورد — تحقّق من الاتصال',
+            'تعذّر مسح كلمة المرور — تحقّق من الاتصال',
       );
     } catch (e) {
       _log(e);
-      return (ok: false, message: 'تعذّر مسح الباسورد');
+      return (ok: false, message: 'تعذّر مسح كلمة المرور');
     }
   }
 

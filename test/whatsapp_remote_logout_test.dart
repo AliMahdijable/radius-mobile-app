@@ -97,7 +97,7 @@ void main() {
       return server;
     }
 
-    testWidgets('انفصل بعد ٧ ثوانٍ من الربط ⇒ تنبيه «لا تعيد الربط هسه» بدل «اربط من جديد»', (t) async {
+    testWidgets('انفصل بعد ٧ ثوانٍ من الربط ⇒ تنبيه «لا تُعِد الربط الآن» بدل «اربط من جديد»', (t) async {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final server = await openScreen(t, {
         'success': true,
@@ -109,7 +109,7 @@ void main() {
       });
       expect(find.text('واتساب فصل الربط من جهته'), findsOneWidget);
       expect(find.textContaining('انفصل بعد 7 ثانية من الربط'), findsOneWidget);
-      expect(find.textContaining('لا تعيد الربط هسه'), findsOneWidget);
+      expect(find.textContaining('لا تُعِد الربط الآن'), findsOneWidget);
       expect(find.text('جلسة واتساب تحتاج إعادة ربط'), findsNothing);
       await shoot(t, s1bSasOwner, 'wa_remote_logout_fast', phone, server.inner as VisualServer);
     });

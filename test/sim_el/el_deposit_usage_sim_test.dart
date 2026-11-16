@@ -120,7 +120,7 @@ void main() {
   }
 
   Finder field(String hint) => find.widgetWithText(TextField, hint);
-  const savedText = 'باسورد الإيداع محفوظ — لا حاجة لإدخاله';
+  const savedText = 'كلمة مرور الإيداع محفوظة — لا حاجة لإدخالها';
 
   // ═══════════════════════════ التفعيل ═══════════════════════════
 
@@ -130,7 +130,7 @@ void main() {
     await openActivate(t, v);
     expect(find.text(savedText), findsOneWidget);
     expect(find.text('تغيير'), findsOneWidget);
-    expect(field('باسورد الإيداع'), findsNothing);
+    expect(field('كلمة مرور الإيداع'), findsNothing);
     expect(footerEnabled(t, 'تجديد الآن'), isTrue, reason: 'المحفوظ يكفي');
     await reveal(t, find.text(savedText));
     await simCheck(t, v, _deposit, 'activate_saved');
@@ -150,7 +150,7 @@ void main() {
     await openActivate(t, v);
     expect(find.text('احفظه فلا يُطلب مرّة أخرى'), findsOneWidget);
     expect(footerEnabled(t, 'تجديد الآن'), isFalse);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     expect(footerEnabled(t, 'تجديد الآن'), isTrue);
     await reveal(t, find.text('احفظه فلا يُطلب مرّة أخرى'));
@@ -171,7 +171,7 @@ void main() {
     await reveal(t, find.text('تغيير'));
     await t.tap(find.text('تغيير'));
     await t.pumpAndSettle();
-    expect(field('باسورد الإيداع'), findsOneWidget);
+    expect(field('كلمة مرور الإيداع'), findsOneWidget);
     expect(find.text('احفظ الجديد بدل المحفوظ'), findsOneWidget);
     expect(find.text('استعمال المحفوظ'), findsOneWidget);
     expect(footerEnabled(t, 'تجديد الآن'), isFalse, reason: 'تغييرٌ بلا نصّ');
@@ -184,7 +184,7 @@ void main() {
 
   simCase(_deposit, 'activate_saved_rejected', (t, v) async {
     status(saved: true);
-    const msg = 'باسورد الإيداع المحفوظ لم يعد صحيحاً — أدخله من جديد';
+    const msg = 'كلمة مرور الإيداع المحفوظ لم يعد صحيحاً — أدخله من جديد';
     server.reply('POST', _activatePath, 400, {
       'success': false,
       'code': 'DEPOSIT_PASSWORD',
@@ -198,9 +198,9 @@ void main() {
     expect(find.text(msg), findsOneWidget);
     await t.pumpAndSettle();
     expect(find.text(savedText), findsNothing, reason: 'مُسح بالخادم');
-    expect(field('باسورد الإيداع'), findsOneWidget, reason: 'يعود للإدخال');
+    expect(field('كلمة مرور الإيداع'), findsOneWidget, reason: 'يعود للإدخال');
     expect(footerEnabled(t, 'تجديد الآن'), isFalse);
-    await reveal(t, field('باسورد الإيداع'));
+    await reveal(t, field('كلمة مرور الإيداع'));
     await simCheck(t, v, _deposit, 'activate_saved_rejected');
     await simDrain(t);
   });
@@ -220,7 +220,7 @@ void main() {
     expect(find.text('احفظه فلا يُطلب مرّة أخرى'), findsNothing);
     expect(find.text('يستطيع صاحب الحساب حفظه من الإعدادات فلا يُطلب منك.'),
         findsOneWidget);
-    await reveal(t, field('باسورد الإيداع'));
+    await reveal(t, field('كلمة مرور الإيداع'));
     await simCheck(t, v, _deposit, 'activate_employee_not_saved');
   });
 
@@ -228,7 +228,7 @@ void main() {
 
   simCase(_deposit, 'settings_sheet_not_saved', (t, v) async {
     status(saved: false);
-    server.reply('PUT', _statusPath, 200, {'success': true, 'message': 'حُفظ باسورد الإيداع'});
+    server.reply('PUT', _statusPath, 200, {'success': true, 'message': 'حُفظت كلمة مرور الإيداع'});
     await pumpSim(t, v, home: (_) => simLauncher(showElDepositPasswordSheet));
     await simOpen(t);
     expect(find.text('غير محفوظ — يُطلب في كلّ عمليّة رصيد'), findsOneWidget);

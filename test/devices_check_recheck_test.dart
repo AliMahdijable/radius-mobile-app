@@ -177,7 +177,7 @@ void main() {
     NetworkDevicesApi.invalidateCredentialsCache();
   });
 
-  group('١ جدول منافذ لم يُقرأ ⇒ «المنافذ ما انقرت» لا «سويج · سليم»', () {
+  group('١ جدول منافذ لم يُقرأ ⇒ «المنافذ لم تُقرأ» لا «سويتش · سليم»', () {
     test('🚨 SwOS: مسح أسماء المنافذ انتهت مهلته (٥٠٤ الممرّ) ⇒ «لم يُقرأ» بلا منافذ، واللقطة بمنافذها؛ والمقروء كاملاً «سليم» 5/8',
         () async {
       final d = dev(9, type: 'switch', protocol: 'snmp');
@@ -186,7 +186,7 @@ void main() {
       final lost = await MikrotikSnmp.fetch(host: '10.0.0.9', community: 'public');
       final r = judge(d, DeviceVitals.mikrotikResult(d, lost, null, detailed: true), prev: prev);
       expect(r.state, CheckState.unread);
-      expect(texts(r), contains('المنافذ ما انقرت'));
+      expect(texts(r), contains('المنافذ لم تُقرأ'));
       expect(r.portsTotal, isNull);
       expect(r.memo!.ports.keys, prev.ports.keys, reason: 'اللقطة بمنافذها — «طفى» التالية تبقى ممكنة');
       // SwOS لا لاسلكيّ له أصلاً — جدولٌ ضائع لا يجعله «راديو مجهولاً»
@@ -195,7 +195,7 @@ void main() {
       // وأوّل فحصٍ له (بلا لقطة): القارئ نفسه يقول إنّ الجدول لم يُقرأ
       final first = judge(d, DeviceVitals.mikrotikResult(d, lost, null, detailed: true));
       expect(first.state, CheckState.unread);
-      expect(texts(first), ['المنافذ ما انقرت']);
+      expect(texts(first), ['المنافذ لم تُقرأ']);
 
       MikrotikSnmp.snmpFor = (h, p, c, t) => _Lossy(_ifTable('CSS610-8G-2S+ SwOS v2.13'));
       final ok = await MikrotikSnmp.fetch(host: '10.0.0.9', community: 'public');
@@ -218,7 +218,7 @@ void main() {
       expect(MikrotikSnmp.singleColumnFor('10.0.0.8', 161), isTrue, reason: 'الثاني المتتالي يحفظه');
     });
 
-    test('🚨 سسكو: أمرا المنافذ لم يعيدا شيئاً بعد الهويّة ⇒ «المنافذ ما انقرت» و«لم يُقرأ»، لا «سويج · سليم» بلا منافذ', () async {
+    test('🚨 سسكو: أمرا المنافذ لم يعيدا شيئاً بعد الهويّة ⇒ «المنافذ لم تُقرأ» و«لم يُقرأ»، لا «سويتش · سليم» بلا منافذ', () async {
       final server = await _ciscoTelnet();
       addTearDown(server.close);
       final d = dev(31, type: 'switch', brand: 'cisco', protocol: 'telnet', ip: '127.0.0.1', apiPort: server.port);
@@ -227,12 +227,12 @@ void main() {
       expect(p.detail.model, 'WS-C2960-24TT-L', reason: 'الهويّة قُرئت');
       final r = judge(d, p);
       expect(r.state, CheckState.unread);
-      expect(texts(r), contains('المنافذ ما انقرت'));
+      expect(texts(r), contains('المنافذ لم تُقرأ'));
     });
   });
 
   group('٢ سكتر يوبيكويتي: قائمة محطّاته لم تُقرأ ⇒ لا «ما عليه أحد الآن»', () {
-    test('🚨 wstalist فشل والعدّاد يقول 6 ⇒ «قائمة مشتركيه ما انقرت» و«لم يُقرأ»، واللقطة تبقى 5', () async {
+    test('🚨 wstalist فشل والعدّاد يقول 6 ⇒ «قائمة مشتركيه لم تُقرأ» و«لم يُقرأ»، واللقطة تبقى 5', () async {
       UbntApi.debugFetch = () async => UbntStats.fromMcaStatus(const {
             'deviceName': 'Rocket M5',
             'wlanMode': 'master',
@@ -247,7 +247,7 @@ void main() {
       expect(p.detail.glance.peersKnown, isFalse);
       final r = judge(d, p, prev: const CheckMemo(peers: 5));
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(r), ['قائمة مشتركيه لم تُقرأ']);
       expect(r.memo!.peers, 5, reason: 'لا صفرٌ يُخفي السقوط التالي');
     });
 
@@ -367,7 +367,7 @@ void main() {
       final d = dev(44, type: 'link');
       final r = judge(d, DeviceVitals.mikrotikResult(d, await lhg('station-bridge'), null, detailed: true));
       expect(r.state, CheckState.unread);
-      expect(texts(r), contains('إشارة الوصلة ما انقرت'));
+      expect(texts(r), contains('إشارة الوصلة لم تُقرأ'));
       // طرفها المرسل مسجّلٌ «سكتر»: الوصلة لم تُقرأ ⇒ لا «ما عليه أحد الآن» بحالٍ «سليم»
       final ap = dev(47, type: 'sector');
       final r2 = judge(ap, DeviceVitals.mikrotikResult(ap, await lhg('ap-bridge'), null, detailed: true),
@@ -381,7 +381,7 @@ void main() {
       final r = DevicesCheck.evaluate(
           d: link, alive: true, detail: const DeviceDetail(glance: DeviceGlance(isAp: false, cpu: 4, uptimeSec: 864000)));
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['إشارة الوصلة ما انقرت']);
+      expect(texts(r), ['إشارة الوصلة لم تُقرأ']);
       final wired = DevicesCheck.evaluate(
           d: dev(46, type: 'link'),
           alive: true,
@@ -391,7 +391,7 @@ void main() {
   });
 
   group('٣ب روجي: جدول الجسر انتهت مهلته', () {
-    test('جسر روجي مسجّلٌ «راوتر» وجدول جسره لم يُقرأ ⇒ «وضعه اللاسلكيّ ومشتركوه ما انقرأوا» لا «راوتر · سليم»؛ والسويج بمنافذه', () async {
+    test('جسر روجي مسجّلٌ «راوتر» وجدول جسره لم يُقرأ ⇒ «وضعه اللاسلكيّ ومشتركوه ما انقرأوا» لا «راوتر · سليم»؛ والسويتش بمنافذه', () async {
       RuijieApi.debugFetch = () async => const RuijieStats(sysName: 'EST310', cpuPercent: 4, memPercent: 30, linkRead: false);
       final d = dev(48, brand: 'ruijie', protocol: 'snmp');
       NetworkDevicesApi.debugSeedCredentials(48, {'community': 'public'}, DateTime.now());
@@ -490,10 +490,10 @@ void main() {
       expect(r.bucket, isNot(CheckBucket.ok));
     });
 
-    test('🚨 سكتر والخادم ما قرأ جدول التسجيل (peers فارغة بلا reg_ok) ⇒ «قائمة مشتركيه ما انقرت» لا «ما عليه أحد الآن»', () {
+    test('🚨 سكتر والخادم ما قرأ جدول التسجيل (peers فارغة بلا reg_ok) ⇒ «قائمة مشتركيه لم تُقرأ» لا «ما عليه أحد الآن»', () {
       final r = remote(dev(62, type: 'sector'), ros(ap: true), prev: const CheckMemo(peers: 7));
       expect(r.state, CheckState.unread);
-      expect(texts(r), contains('قائمة مشتركيه ما انقرت'));
+      expect(texts(r), contains('قائمة مشتركيه لم تُقرأ'));
       expect(r.memo!.peers, 7);
       // والخادم يقول إنّه قرأه فارغاً ⇒ «ما عليه أحد الآن — كانوا 7»
       final read = remote(dev(62, type: 'sector'), {...ros(ap: true), 'reg_ok': true}, prev: const CheckMemo(peers: 7));
@@ -509,7 +509,7 @@ void main() {
       expect(ccr.state, CheckState.ok);
     });
 
-    test('محطّة airOS إشارتها 0 ⇒ «الوصلة مقطوعة» لا «0 dBm»؛ وجلسة الخادم بلا منفذٍ واحد ⇒ «المنافذ ما انقرت»', () {
+    test('محطّة airOS إشارتها 0 ⇒ «الوصلة مقطوعة» لا «0 dBm»؛ وجلسة الخادم بلا منفذٍ واحد ⇒ «المنافذ لم تُقرأ»', () {
       final sta = remote(dev(65, type: 'link', brand: 'ubnt'),
           {'kind': 'airos', 'cpu': 5, 'up': 864000, 'ap': false, 'mode': 'sta-ptp', 'sig': 0, 'peers': null});
       expect(sta.signal, isNull);
@@ -517,11 +517,11 @@ void main() {
       final cut = remote(dev(66, type: 'switch'), {...ros(ap: null, ports: 0), 'pl': const []},
           prev: const CheckMemo(ports: {'ether1': PortMemo(up: true, mbps: 1000)}));
       expect(cut.state, CheckState.unread);
-      expect(texts(cut), contains('المنافذ ما انقرت'));
+      expect(texts(cut), contains('المنافذ لم تُقرأ'));
       // وبلا لقطةٍ سابقة: عدّ الخادم صفرٌ بلا منفذ ⇒ الجلسة انقطعت، لا «سليم»
       final first = remote(dev(67, type: 'switch'), {...ros(ap: null, ports: 0), 'pl': const []});
       expect(first.state, CheckState.unread);
-      expect(texts(first), ['المنافذ ما انقرت']);
+      expect(texts(first), ['المنافذ لم تُقرأ']);
     });
   });
 

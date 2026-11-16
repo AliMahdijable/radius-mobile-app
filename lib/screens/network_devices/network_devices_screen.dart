@@ -1158,7 +1158,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     ];
     if (olts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('شبكة الألياف تشتغل على أولت VSOL أو BDCOM — أضفه من «إضافة جهاز» بالـSNMP أوّلاً'),
+        content: Text('شبكة الألياف تعمل على أولت VSOL أو BDCOM — أضفه من «إضافة جهاز» بالـSNMP أوّلاً'),
         behavior: SnackBarBehavior.floating,
       ));
       return;
@@ -1679,13 +1679,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (viaVpn && !PermissionsService.deepCheckVpn) {
       return showNoPermission(context,
           message: PermissionsService.deepCheckNet
-              ? 'الفحص الشامل عبر VPN غير مفعّل لك — يشتغل وأنت على الشبكة'
+              ? 'الفحص الشامل عبر VPN غير مفعّل لك — يعمل وأنت على الشبكة'
               : 'الفحص الشامل غير مفعّل لك — اطلبه من مديرك');
     }
     if (!viaVpn && !PermissionsService.deepCheckNet) {
       return showNoPermission(context,
           message: PermissionsService.deepCheckVpn
-              ? 'الفحص الشامل على الشبكة غير مفعّل لك — يشتغل عبر VPN، اربطه أوّلاً'
+              ? 'الفحص الشامل على الشبكة غير مفعّل لك — يعمل عبر VPN، اربطه أوّلاً'
               : 'الفحص الشامل غير مفعّل لك — اطلبه من مديرك');
     }
     if (_merged) return _openMergedCheck(viaVpn);
@@ -2958,7 +2958,7 @@ class _EmptyDevices extends StatelessWidget {
                   color: AppColors.brand),
             ),
             const SizedBox(height: Sp.lg),
-            Text(hasActiveFilter ? 'لا نتائج بهذا الفلتر' : 'لا توجد أجهزة',
+            Text(hasActiveFilter ? 'لا نتائج بهذه التصفية' : 'لا توجد أجهزة',
                 style: TextStyle(
                     fontSize: 16, height: 1.3,
                     fontWeight: FontWeight.w700,
@@ -2966,7 +2966,7 @@ class _EmptyDevices extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               hasActiveFilter
-                  ? 'قد تكون كل الأجهزة مخفيّة — امسح الفلتر لرؤيتها'
+                  ? 'قد تكون كل الأجهزة مخفيّة — امسح التصفية لرؤيتها'
                   : 'أضف أول جهاز شبكة من زرّ + أعلى الصفحة',
               style: AppType.body(color: AppColors.textMid),
               textAlign: TextAlign.center,
@@ -2976,7 +2976,7 @@ class _EmptyDevices extends StatelessWidget {
               TextButton.icon(
                 onPressed: onClearFilter,
                 icon: Icon(LucideIcons.x, size: 14, color: AppColors.brand),
-                label: Text('مسح الفلتر',
+                label: Text('مسح التصفية',
                     style: TextStyle(color: AppColors.brand)),
               ),
             ],

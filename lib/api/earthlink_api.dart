@@ -922,10 +922,10 @@ class EarthlinkApi {
       return (ok: body['success'] == true, message: _str(body['message']));
     } on DioException catch (e) {
       _log('el account-password POST/$idx', e);
-      return (ok: false, message: _message(e, 'تعذّر تغيير كلمة سرّ الحساب'));
+      return (ok: false, message: _message(e, 'تعذّر تغيير كلمة مرور الحساب'));
     } catch (e) {
       _log('el account-password POST/$idx', e);
-      return (ok: false, message: 'تعذّر تغيير كلمة سرّ الحساب');
+      return (ok: false, message: 'تعذّر تغيير كلمة مرور الحساب');
     }
   }
 

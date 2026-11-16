@@ -463,7 +463,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _saving ? 'جاري الحفظ...' : 'حفظ',
+        label: _saving ? 'جارٍ الحفظ...' : 'حفظ',
         icon: LucideIcons.save,
         color: AppColors.brandAccent,
         busy: _saving,

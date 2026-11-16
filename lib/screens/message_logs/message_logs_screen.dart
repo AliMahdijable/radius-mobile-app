@@ -445,7 +445,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
               Text('لا توجد رسائل مطابقة',
                   style: AppType.subtitle(color: AppColors.textMid)),
               const SizedBox(height: 4),
-              Text('جرّب تغيير الفلاتر أو إزالة البحث',
+              Text('جرّب تغيير التصفية أو إزالة البحث',
                   style: AppType.muted().copyWith(fontSize: 11.5)),
             ],
           ),

@@ -926,7 +926,7 @@ class _EmployeeMoveSheetState extends State<EmployeeMoveSheet> {
       ),
       footer: SheetFooterBar(
         key: const ValueKey('emp-move-save'),
-        label: _busy ? 'جاري التسجيل...' : (problem ?? 'تسجيل ${_kind.label} — ${_iqd(a)}'),
+        label: _busy ? 'جارٍ التسجيل...' : (problem ?? 'تسجيل ${_kind.label} — ${_iqd(a)}'),
         icon: LucideIcons.check,
         busy: _busy,
         enabled: problem == null,
@@ -1318,7 +1318,7 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
           : SheetFooterBar(
               key: const ValueKey('emp-payslip-pay'),
               label: _busy
-                  ? 'جاري الصرف...'
+                  ? 'جارٍ الصرف...'
                   : pv.canPay
                       ? 'صرف — يستلم ${_iqd(pv.net)}'
                       : 'لا شيء يُصرف الآن',

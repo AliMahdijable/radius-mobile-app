@@ -382,7 +382,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           );
           break;
         default:
-          throw Exception('البراند ${_d.brand} غير مدعوم للـreboot');
+          throw Exception('الشركة المصنّعة ${_d.brand} غير مدعومة لإعادة التشغيل');
       }
 
       if (!mounted) return;

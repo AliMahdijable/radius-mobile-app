@@ -27,7 +27,7 @@ const _screen = 'el_add';
 
 const _subtitle = 'إضافة مشترك على ايرث لنك';
 const _submit = 'إضافة المشترك';
-const _submitting = 'جاري الإضافة...';
+const _submitting = 'جارٍ الإضافة...';
 const _locked = 'راجع قائمة المشتركين أوّلاً';
 const _okSnack = 'تمت إضافة المشترك';
 const _unclearDefault =
@@ -151,7 +151,7 @@ void main() {
   /// رصيد أونلاين كاملاً: الأساسيّات + باسورد الإيداع + Economy (الدين افتراضيّ).
   Future<void> fillDeposit(WidgetTester t) async {
     await fillBasics(t);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await t.pumpAndSettle();
     await pickPackage(t, 'Economy');
     expect(find.text(_submit), findsOneWidget);
@@ -200,7 +200,7 @@ void main() {
     expect(find.text('كارت'), findsOneWidget);
     expect(find.text('تجريبي'), findsNothing,
         reason: 'التجريبيّ مسموحٌ لكن بلا حصّة (test_count 0) ⇒ مخفيّ');
-    expect(find.text('باسورد الإيداع *'), findsOneWidget);
+    expect(find.text('كلمة مرور الإيداع *'), findsOneWidget);
     expect(footerEnabled(t, _submit), isFalse);
     // لاحقة الشركة اختياريّة ومطفأة (المالك ٣٠ أكتوبر): لا تُفرض بالحقل — تظهر بخيار «إلحاق … بالاسم» وحده.
     expect(find.text(_suffix), findsNothing);
@@ -250,7 +250,7 @@ void main() {
     expect(find.text('يُنشأ المشترك باشتراكٍ تجريبيّ لمدّة ٢٤ ساعة — بقي لك 3'),
         findsOneWidget);
     expect(find.text('طريقة الدفع'), findsNothing, reason: 'التجريبيّ بلا دفع');
-    expect(find.text('باسورد الإيداع *'), findsNothing);
+    expect(find.text('كلمة مرور الإيداع *'), findsNothing);
     await fillBasics(t);
     await pickPackage(t, 'Standard');
     await simCheck(t, v, _screen, 'test_method');
@@ -306,7 +306,7 @@ void main() {
     });
     await open(t, v);
     await fillBasics(t);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await pickPackage(t, 'Economy');
     expect(find.text('✗ مستخدم — اختر اسماً آخر'), findsOneWidget);
     expect(footerEnabled(t, _submit), isFalse, reason: 'اسمٌ مستخدم يمنع');
@@ -338,7 +338,7 @@ void main() {
         {'success': false, 'message': 'Internal Server Error'});
     await open(t, v);
     await fillBasics(t);
-    await t.enterText(field('باسورد الإيداع'), 'dep-pass');
+    await t.enterText(field('كلمة مرور الإيداع'), 'dep-pass');
     await pickPackage(t, 'Economy');
     expect(find.text('تعذّر الفحص — سيتحقّق الخادم عند الإضافة'), findsOneWidget);
     expect(footerEnabled(t, _submit), isTrue, reason: 'التعذّر لا يمنع');

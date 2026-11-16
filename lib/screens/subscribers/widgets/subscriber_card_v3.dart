@@ -1082,7 +1082,7 @@ class SubscriberNetworkMetrics extends StatelessWidget {
       final t = r.temp;
       if (t != null) items.add(_metric(Icons.device_thermostat_rounded, '${t.round()}°C', t < 70 ? AppColors.success : AppColors.warning));
     } else if (r.src == 'ping') {
-      items.add(_metric(Icons.check_circle_outline_rounded, r.ms != null ? 'واصل · ${r.ms} ms' : 'واصل', AppColors.success));
+      items.add(_metric(Icons.check_circle_outline_rounded, r.ms != null ? 'يستجيب · ${r.ms} ms' : 'يستجيب', AppColors.success));
     } else if (r.dead) {
       items.add(_metric(Icons.portable_wifi_off_rounded, 'لا يستجيب', AppColors.error));
     }
@@ -1420,7 +1420,7 @@ class _UsageRowState extends State<_UsageRow> {
 TextStyle _routerChipStyle(Color c) => AppType.muted(color: c).copyWith(fontSize: 11, fontWeight: FontWeight.w600, height: 1.0);
 
 List<String> _routerChipParts(({int? clients, String? port, bool off}) r) =>
-    r.off ? const ['مطفي'] : [if (r.clients != null) '${r.clients}', if (r.port != null) r.port!];
+    r.off ? const ['مطفأ'] : [if (r.clients != null) '${r.clients}', if (r.port != null) r.port!];
 
 /// عرض الشريحة كما تُرسم (بنمط السياق) — لقرار «سطرٌ واحد أم سطران» في صفّ الانتهاء.
 double routerChipWidth(BuildContext context, ({int? clients, String? port, bool off}) r) {
@@ -1442,7 +1442,7 @@ class RouterChip extends StatelessWidget {
     final c = r.off ? AppColors.textHint : AppColors.textMid;
     final parts = _routerChipParts(r);
     return Semantics(
-      label: r.off ? 'راوتر المشترك مطفي' : 'راوتر المشترك: ${parts.join(' · ')}',
+      label: r.off ? 'راوتر المشترك مطفأ' : 'راوتر المشترك: ${parts.join(' · ')}',
       child: Container(
         key: const ValueKey('router-chip'),
         height: 16,

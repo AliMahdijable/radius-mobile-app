@@ -666,7 +666,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 strokeWidth: 2, color: AppColors.brand),
           ),
           const SizedBox(width: 10),
-          Text('جاري قراءة الـOLT…',
+          Text('جارٍ قراءة الـOLT…',
               style: AppType.body(color: AppColors.textMid)),
         ]),
       );
@@ -1604,7 +1604,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
               ? 'أجهزة خلف الـONU: هذا الجهاز لا يكشف جدولها'
               : o.learnedMacsReadAt == null
                   ? (loading
-                      ? 'جاري قراءة أجهزة خلف الـONU…'
+                      ? 'جارٍ قراءة أجهزة خلف الـONU…'
                       : 'أجهزة خلف الـONU لم تُقرأ بعد')
                   : (!o.learnedMacsComplete
                       ? 'تعذّرت قراءة جدول الأجهزة كاملاً'

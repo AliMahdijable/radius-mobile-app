@@ -920,9 +920,9 @@ class _QuickAddSheet extends StatelessWidget {
               onTap: () async {
                 final open = await pickOpenCompanyFor(
                   rootContext,
-                  action: 'صرفية جديدة',
-                  reason: 'الصرفيّة لها من صرفياتها',
-                  otherHint: 'تُضاف من صرفياتها — تُفتح هنا',
+                  action: 'مصروف جديد',
+                  reason: 'يُضاف المصروف من مصاريف شركته',
+                  otherHint: 'يُضاف من مصاريفها — تُفتح هنا',
                   onOther: (c) async {
                     MergedMode.focus.value = c.key;
                     await Navigator.of(rootContext).push(MaterialPageRoute<void>(builder: (_) => ExpensesScreen.mergedPage()));

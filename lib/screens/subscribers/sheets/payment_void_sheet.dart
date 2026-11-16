@@ -217,7 +217,7 @@ class _PaymentVoidSheetState extends State<_PaymentVoidSheet> {
       ),
       footer: _showForm
           ? SheetFooterBar(
-              label: _busy ? 'جاري الإلغاء...' : 'تأكيد الإلغاء',
+              label: _busy ? 'جارٍ الإلغاء...' : 'تأكيد الإلغاء',
               icon: LucideIcons.undo2,
               color: AppColors.errorFill,
               enabled: _effective != null,
@@ -344,7 +344,7 @@ class _PaymentVoidSheetState extends State<_PaymentVoidSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _note(
-          'الساس لم يؤكّد إرجاع الدين. افتح المشترك وشوف دينه: إذا زاد ${_iqd(_amount)} فالدين رجع، وإذا بقي كما هو فما رجع.',
+          'الساس لم يؤكّد إرجاع الدين. افتح المشترك وانظر إلى دينه: إذا زاد ${_iqd(_amount)} فالدين رجع، وإذا بقي كما هو فما رجع.',
           AppTone.warning,
           LucideIcons.triangleAlert,
         ),

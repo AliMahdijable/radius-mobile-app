@@ -75,14 +75,14 @@ void main() {
     expect(r[62]!.state, isNot(CheckState.ok));
     expect(r[62]!.state, CheckState.unread);
     // ١٠ نوفمبر (قرار المالك): قائمته قُرئت (reg_ok) ووضعه وحده مجهول ⇒ بلا «ومشتركوه»، و«لم يُقرأ» ما لم يقل الخادم إنّ راديوه يعمل
-    expect(texts(r[62]!), contains('وضعه اللاسلكيّ ما انقرأ'));
+    expect(texts(r[62]!), contains('وضعه اللاسلكيّ لم يُقرأ'));
     expect(r[63]!.state, CheckState.ok);
   });
 
-  test('سكتر جدوله لم يُجب (reg_ok: false) ⇒ «قائمة مشتركيه ما انقرت» و«لم يُقرأ»', () {
+  test('سكتر جدوله لم يُجب (reg_ok: false) ⇒ «قائمة مشتركيه لم تُقرأ» و«لم يُقرأ»', () {
     final r = judge(raw)[64]!;
     expect(r.state, CheckState.unread);
-    expect(texts(r), contains('قائمة مشتركيه ما انقرت'));
+    expect(texts(r), contains('قائمة مشتركيه لم تُقرأ'));
   });
 
   test('الأولت: lw/lr ⇒ «قُرئ 1 من 4 — الباقي لم يقرأه الخادم» و«بلا قراءة ضوء: 1»، وبعمره من v_at_ms لا «حتى 30 د»', () {
@@ -106,7 +106,7 @@ void main() {
     }
     final r = judge(old, prev: {61: const CheckMemo(peers: 7)});
     expect(r[61]!.state, CheckState.unread);
-    expect(texts(r[61]!), contains('قائمة مشتركيه ما انقرت'));
+    expect(texts(r[61]!), contains('قائمة مشتركيه لم تُقرأ'));
     expect(r[62]!.state, CheckState.ok);
     expect(r[70]!.bucket, CheckBucket.stale);
   });

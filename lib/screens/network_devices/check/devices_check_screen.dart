@@ -200,8 +200,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                   rs.first.state != CheckState.down) ...[
                 const SizedBox(height: Sp.sm),
                 Text(
-                  'عبر الـVPN وصلنا الجهاز ويردّ، بس معلوماته الحيّة ما انقرت — للمايكروتك تحتاج خدمة API مفعّلة بالراوتر، ولليوبيكويتي '
-                  'يوزر وباسورد الويب الصحيحين (من «الصفحة الكاملة» ⇐ التعديل).',
+                  'عبر الـVPN وصلنا الجهاز ويردّ، بس معلوماته الحيّة لم تُقرأ — للمايكروتك تحتاج خدمة API مفعّلة بالراوتر، ولليوبيكويتي '
+                  'يوزر وكلمة مرور الويب الصحيحين (من «الصفحة الكاملة» ⇐ التعديل).',
                   key: const ValueKey('check-no-vitals'),
                   style: AppType.muted(color: AppColors.textMid),
                 ),
@@ -263,7 +263,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                     ? 'كل الشركات — كلّ شركةٍ بطريقها'
                     : vpn
                         ? (widget.single ? 'عبر الـVPN — الخادم يقرؤه وأنت بعيد' : 'عبر الـVPN — الخادم يفحصها وأنت بعيد')
-                        : 'من شبكتك — الجهاز نفسه، ومشتركو السكترات، ومنافذ السويجات',
+                        : 'من شبكتك — الجهاز نفسه، ومشتركو السكترات، ومنافذ السويتشات',
                 style: AppType.micro(color: AppColors.textMid),
               ),
             ]),
@@ -701,7 +701,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     final open = _open.contains(key);
     final flagged = r.ports.where((p) => p.flagged).toList();
     final shown = open ? r.ports : flagged.take(4).toList();
-    final head = 'المنافذ ${r.portsUp ?? 0}/${r.portsTotal ?? r.ports.length} شغّالة'
+    final head = 'المنافذ ${r.portsUp ?? 0}/${r.portsTotal ?? r.ports.length} تعمل'
         '${flagged.isEmpty ? '' : ' — ${flagged.length} فيها ملاحظات'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.cable, head),
@@ -729,7 +729,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
             child: Text(p.name, style: AppType.label(color: AppColors.textHi)),
           ),
           const Spacer(),
-          Text(p.up ? (p.speed ?? 'شغّال') : 'طافي', style: AppType.micro(color: AppColors.textMid)),
+          Text(p.up ? (p.speed ?? 'يعمل') : 'متوقّف', style: AppType.micro(color: AppColors.textMid)),
         ]),
         for (final n in p.notes)
           Padding(

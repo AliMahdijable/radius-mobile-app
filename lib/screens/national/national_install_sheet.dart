@@ -207,7 +207,7 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
       'fat': (_fatId != null && fats.any((f) => f.id == _fatId)) ? null : 'اختر الفات',
       'serial': _serialOk.hasMatch(serial) ? null : 'حروفٌ وأرقام إنكليزيّة، من ٦ إلى ٢٠',
       'vendor': (_vendorId != null && i.vendors.any((v) => v.id == _vendorId)) ? null : 'اختر نوع الجهاز',
-      'code': _codeOk.hasMatch(_code.text.trim()) ? null : 'اكتب كود التفعيل (بلا مسافات)',
+      'code': _codeOk.hasMatch(_code.text.trim()) ? null : 'اكتب رمز التفعيل (بلا مسافات)',
     };
   }
 
@@ -233,11 +233,11 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
     final vendor = i.vendors.firstWhere((x) => x.id == _vendorId);
     final go = await showConfirmSheet(
       context,
-      title: 'تأكيد التنصيب',
+      title: 'تأكيد التركيب',
       message: [
         'يُرسل مرّةً واحدة ويغلق المهمّة في البوّابة:',
         'اسم مستخدم الجهاز: ${_user.text.trim()}',
-        'السيريال: ${_serial.text.trim()}',
+        'الرقم التسلسليّ: ${_serial.text.trim()}',
         'نوع الجهاز: ${vendor.name}',
         'FDT ← الفات: ${fdt.name} ← ${fat.name}',
         'رقم توريد النقطة (HTWC): ${_point.text.trim()}',
@@ -265,16 +265,16 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
-      showSheetSnack(context, r.message ?? (r.applied ? 'تمّ التنصيب — المهمّة مكتملة' : 'قبلت البوّابة التنصيب'));
+      showSheetSnack(context, r.message ?? (r.applied ? 'تمّ التركيب — المهمّة مكتملة' : 'قبلت البوّابة التركيب'));
       Navigator.of(context).pop(true);
       return;
     }
     if (r.unconfirmed) {
-      setState(() => _unconfirmed = r.message ?? 'لم يتأكّد التنصيب — لا تُعده الآن؛ افتح المهمّة بعد دقيقة وتحقّق من حالتها');
+      setState(() => _unconfirmed = r.message ?? 'لم يتأكّد التركيب — لا تُعده الآن؛ افتح المهمّة بعد دقيقة وتحقّق من حالتها');
       return;
     }
     if (r.code == 'ALREADY_DONE' || r.code == 'REPEATED') {
-      showSheetSnack(context, r.message ?? 'سُجّل تنصيب هذه المهمّة للتوّ', duration: const Duration(seconds: 8));
+      showSheetSnack(context, r.message ?? 'سُجّل تركيب هذه المهمّة للتوّ', duration: const Duration(seconds: 8));
       Navigator.of(context).pop(true);
       return;
     }
@@ -293,7 +293,7 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
     if (dirty) {
       final go = await showConfirmSheet(
         context,
-        title: 'إغلاق بلا تنصيب؟',
+        title: 'إغلاق بلا تركيب؟',
         message: 'ما كتبته يُمسح ولا يُرسل شيء.',
         confirmLabel: 'إغلاق',
         cancelLabel: 'البقاء',
@@ -317,7 +317,7 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
   Widget _doneView(NationalInstallInfo i) {
     final s = i.saved;
     if (s == null) {
-      return Text(i.completed ? 'المهمّة مكتملة — تعذّرت قراءة ما سُجّل بها الآن.' : 'المهمّة ملغاة — لا تنصيب فيها.', style: AppType.muted());
+      return Text(i.completed ? 'المهمّة مكتملة — تعذّرت قراءة ما سُجّل بها الآن.' : 'المهمّة ملغاة — لا تركيب فيها.', style: AppType.muted());
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Container(
@@ -326,13 +326,13 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
         child: Row(children: [
           Icon(LucideIcons.circleCheck, size: 18, color: AppColors.success),
           const SizedBox(width: Sp.sm),
-          Expanded(child: Text('المهمّة مكتملة — هذا ما سُجّل بالتنصيب', style: AppType.label(color: AppColors.success))),
+          Expanded(child: Text('المهمّة مكتملة — هذا ما سُجّل بالتركيب', style: AppType.label(color: AppColors.success))),
         ]),
       ),
       const SizedBox(height: Sp.md),
       NationalInfoGroup(children: [
         NationalInfoRow(icon: LucideIcons.user, label: 'اسم مستخدم الجهاز', value: s.username ?? '—', ltr: true),
-        NationalInfoRow(icon: LucideIcons.cpu, label: 'السيريال', value: s.serial ?? '—', ltr: true),
+        NationalInfoRow(icon: LucideIcons.cpu, label: 'الرقم التسلسليّ', value: s.serial ?? '—', ltr: true),
         NationalInfoRow(icon: LucideIcons.cable, label: 'نوع الجهاز', value: s.vendor?.name ?? '—', ltr: true),
         NationalInfoRow(
           icon: LucideIcons.network,
@@ -446,14 +446,14 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
           onPicked: (f) => setState(() => _fatId = f.id),
         ),
       const SizedBox(height: Sp.lg),
-      _label('سيريال الجهاز (ONT)'),
+      _label('الرقم التسلسليّ للجهاز (ONT)'),
       NationalLatinField(
         controller: _serial,
         hint: 'ZTEGC0FFEE01',
         maxLength: 20,
         upper: true,
         enabled: !frozen,
-        semanticLabel: 'سيريال الجهاز',
+        semanticLabel: 'الرقم التسلسليّ للجهاز',
         error: _errOf(errs, 'serial'),
         onChanged: (_) => _edited('serial'),
       ),
@@ -469,14 +469,14 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
         onPicked: (v) => setState(() => _vendorId = v.id),
       ),
       const SizedBox(height: Sp.lg),
-      _label('كود التفعيل'),
+      _label('رمز التفعيل'),
       NationalLatinField(
         controller: _code,
         maxLength: 40,
         enabled: !frozen,
-        semanticLabel: 'كود التفعيل',
+        semanticLabel: 'رمز التفعيل',
         error: _errOf(errs, 'code'),
-        helper: Text('كود التفعيل الخاصّ بطلب هذا المشترك', style: AppType.micro(color: AppColors.textMid)),
+        helper: Text('رمز التفعيل الخاصّ بطلب هذا المشترك', style: AppType.micro(color: AppColors.textMid)),
         onChanged: (_) => _edited('code'),
       ),
       if (_unconfirmed != null) ...[
@@ -514,7 +514,7 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
       child: DesignSheet(
         header: SheetHeaderBar(
           icon: LucideIcons.wrench,
-          title: done ? 'معلومات التنصيب' : 'تنصيب الجهاز',
+          title: done ? 'معلومات التركيب' : 'تركيب الجهاز',
           subtitle: '«اعداد مشترك» — يُسجَّل في بوّابة المشروع الوطني',
           onClose: _close,
         ),

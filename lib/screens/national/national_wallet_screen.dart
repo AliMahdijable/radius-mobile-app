@@ -312,7 +312,7 @@ class _NationalWalletScreenState extends State<NationalWalletScreen> {
         NationalStateBox.empty(
           text: _q.isEmpty && _active == 0 && _group.isEmpty
               ? 'لا توجد حركات في هذه الفترة — جرّب فترةً أطول'
-              : 'لا حركات تطابق البحث أو الفلاتر في هذه الفترة',
+              : 'لا حركات تطابق البحث أو التصفية في هذه الفترة',
           icon: LucideIcons.receipt,
         ),
       ];

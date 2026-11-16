@@ -210,7 +210,7 @@ class _FiberOutageScreenState extends State<FiberOutageScreen> {
       case FiberEventKind.cut:
         reasons.add('الأولت يقول «فقدان ضوء»${fiber > 0 && fiber < keys.length ? ' لـ$fiber منها' : ''}، ولو كانت كهرباء لبعثت الأجهزة إشارة انطفاء');
       case FiberEventKind.power:
-        reasons.add('بعثت إشارة انطفاء (Dying Gasp)${pwr > 0 && pwr < keys.length ? ' $pwr منها' : ''} — الأجهزة طفت، والليف سليم');
+        reasons.add('بعثت إشارة انطفاء (Dying Gasp)${pwr > 0 && pwr < keys.length ? ' $pwr منها' : ''} — الأجهزة انطفأت، والليف سليم');
       case FiberEventKind.mixed:
         reasons.add('$fiber «فقدان ضوء» و$pwr انطفاء كهرباء — قد يكون الاثنين معاً');
       case FiberEventKind.unknown:
@@ -224,7 +224,7 @@ class _FiberOutageScreenState extends State<FiberOutageScreen> {
       if (upSiblings.isNotEmpty) {
         final names = upSiblings.take(3).map((s) => s.name).join(' و');
         reasons.add('${upSiblings.length == 1 ? names : names} على نفس ${parentId == null ? 'المنفذ' : 'الموزّع'} '
-            '${upSiblings.length == 1 ? 'شغّال' : 'شغّالة'}، ف${parentId == null ? 'المنفذ' : 'الموزّع والمنفذ'} سليم');
+            '${upSiblings.length == 1 ? 'يعمل' : 'تعمل'}، ف${parentId == null ? 'المنفذ' : 'الموزّع والمنفذ'} سليم');
       }
     } else if (scope == FiberEventScope.pon) {
       reasons.add('كلّ أجهزة ${fiberPonDisplay(tree.pon)} مفصولة — الخلل قبل أوّل موزّع');
@@ -338,7 +338,7 @@ class _FiberOutageScreenState extends State<FiberOutageScreen> {
       nodes.add((name: 'الأولت', sub: 'يجيب', ok: true, icon: LucideIcons.server));
       nodes.add((name: fiberPonDisplay(pon), sub: 'كلّه مفصول', ok: false, icon: LucideIcons.x));
     } else {
-      nodes.add((name: fiberPonDisplay(pon), sub: 'شغّال', ok: true, icon: LucideIcons.check));
+      nodes.add((name: fiberPonDisplay(pon), sub: 'يعمل', ok: true, icon: LucideIcons.check));
       final path = boxId == null ? const <FiberBox>[] : tree.pathTo(boxId);
       for (var i = 0; i < path.length; i++) {
         final b = path[i];
@@ -346,7 +346,7 @@ class _FiberOutageScreenState extends State<FiberOutageScreen> {
         final under = tree.onusUnder(b.id);
         nodes.add((
           name: b.name,
-          sub: last ? '${under.where((o) => o.online).length}/${under.length} متّصل' : (b.location ?? 'شغّال'),
+          sub: last ? '${under.where((o) => o.online).length}/${under.length} متّصل' : (b.location ?? 'يعمل'),
           ok: !last,
           icon: last ? LucideIcons.x : LucideIcons.check,
         ));
@@ -357,7 +357,7 @@ class _FiberOutageScreenState extends State<FiberOutageScreen> {
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
       child: FiberCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('وين القطع؟', style: AppType.cardTitleBold(color: AppColors.textHi)),
+          Text('أين القطع؟', style: AppType.cardTitleBold(color: AppColors.textHi)),
           const SizedBox(height: Sp.md),
           Semantics(
             label: 'المسار: ${nodes.map((n) => '${n.name} ${n.ok ? 'سليم' : 'مقطوع'}').join('، ثمّ ')}',

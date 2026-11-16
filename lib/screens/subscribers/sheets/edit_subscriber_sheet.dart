@@ -988,7 +988,7 @@ class _EditSheetState extends State<_EditSheet> {
       ),
       footer: SheetFooterBar(
         label: _saving
-            ? 'جاري الحفظ...'
+            ? 'جارٍ الحفظ...'
             : (_hasChanges ? 'حفظ التغييرات' : 'لا توجد تغييرات'),
         icon: LucideIcons.save,
         enabled: !_saving && _hasChanges,
@@ -1031,7 +1031,7 @@ class _EditSheetState extends State<_EditSheet> {
           // ايرث لنك: نميّزها «كلمة سرّ الخدمة» لأنّ تحتها كلمة سرّ الحساب.
           // SAS4: تبقى «كلمة السر» حرفيّاً.
           _FieldLabel(
-              label: _isEarthlink ? 'el.service_password'.tr() : 'كلمة السر'),
+              label: _isEarthlink ? 'el.service_password'.tr() : 'كلمة المرور'),
           _Field(
             controller: _password,
             hint: '••••••••',

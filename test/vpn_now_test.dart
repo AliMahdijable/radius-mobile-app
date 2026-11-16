@@ -69,7 +69,7 @@ Map<String, dynamic> _subsDone(String _) => {
 
 Map<String, dynamic> _devDone(String _) => {
       'ok': true,
-      'message': 'فُحصت أجهزتك ✓ — 1 من 2 واصل',
+      'message': 'فُحصت أجهزتك ✓ — 1 من 2 يستجيب',
       'detail': '«سكتر الجنوب» لا يستجيب',
       'devices': [
         {'id': 11, 'name': 'سكتر الشمال', 'alive': true, 'ms': 41, 'stations': 38},
@@ -160,11 +160,11 @@ void main() {
     await VpnNow.subscribers.run();
     expect(VpnNow.subscribers.phase, VpnBarPhase.failed);
     expect(VpnNow.subscribers.line, '«تنبيه المشترك» غير مفعّل لحسابك بعد');
-    routeResult = const PipeRoute.failed('ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر والباسورد', reason: 'tunnel_failed');
+    routeResult = const PipeRoute.failed('ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر وكلمة المرور', reason: 'tunnel_failed');
     await VpnNow.devices.run();
     expect(VpnNow.devices.phase, VpnBarPhase.failed);
     expect(VpnNow.devices.reason, 'tunnel_failed');
-    expect(VpnNow.devices.line, 'ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر والباسورد');
+    expect(VpnNow.devices.line, 'ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر وكلمة المرور');
     VpnNow.debugApply(VpnNowKind.devices, VpnNowResult.fromJson(_devDone('devices')));
     expect(VpnNow.deviceFor(11), isNotNull);
     VpnNow.reset();
@@ -361,7 +361,7 @@ void main() {
     VpnNow.exitMode(auto: true);
     await t.pump();
     expect(find.text('رجعت لشبكتك'), findsOneWidget);
-    expect(find.text('الفحص صار مباشر من موبايلك'), findsOneWidget);
+    expect(find.text('الفحص صار مباشر من هاتفك'), findsOneWidget);
     await t.pump(const Duration(seconds: 9));
     expect(find.text('رجعت لشبكتك'), findsNothing);
     VpnNow.reset();

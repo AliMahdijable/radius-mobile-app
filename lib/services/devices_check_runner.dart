@@ -564,7 +564,7 @@ class DevicesCheckRunner extends ChangeNotifier {
 
   /// سويتش EdgeSwitch: REST لم يتمّ (رُفض الدخول أو صفحته لا تجيب — لا يقول أيّهما) — كلوحته: الدخول والمنفذ. «السويج»
   /// كاسم دوره بالصفّ والتقرير المنسوخ والجواب الصوتيّ ([DevicesCheck.roleLabel]) — كلمةٌ واحدة للجهاز نفسه (المراجعة).
-  static const _edgeSwitchRest = 'يردّ، لكن صفحة السويج ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ';
+  static const _edgeSwitchRest = 'يردّ، لكن صفحة السويتش ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ';
 
   /// آخر قراءةٍ تنفع مع هذا السبب؟ لا مع ما يُصلَح بالإعداد (رفض الدخول، الصلاحيّة، النقص) — يُقال وحده بلا أرقامٍ قديمة تغطّيه.
   @visibleForTesting
@@ -637,7 +637,7 @@ class DevicesCheckRunner extends ChangeNotifier {
     }
     // ٨) مهلةٌ من داخل القارئ: بطيءٌ ما دامت خدمته أجابت البنك
     if (inTime) return serviceOk == false ? _service : 'بطيء — ما كمّل جوابه بالوقت';
-    return serviceOk == false ? _service : 'يردّ، لكن ما انقرت معلوماته';
+    return serviceOk == false ? _service : 'يردّ، لكن لم تُقرأ معلوماته';
   }
 }
 

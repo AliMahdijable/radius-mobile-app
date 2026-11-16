@@ -169,7 +169,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           _title('التنبيهات'),
           _switch(
             title: 'نبّهني بالعطل',
-            sub: 'قطع ليف أو صندوق طافي كلّه — يوصل لكلّ أجهزة الحساب.',
+            sub: 'قطع ليف أو صندوق منقطع كلّه — يوصل لكلّ أجهزة الحساب.',
             value: _notifyOutages,
             onChanged: (v) => setState(() => _notifyOutages = v),
           ),

@@ -90,7 +90,7 @@ void main() {
       await pumpSim(t, _v, home: (_) => const ConnVpnScreen());
       await t.pumpAndSettle();
       expect(find.textContaining('متاحٌ ربطك عبر سوبرنت الثالث (VPN-ALL)'), findsOneWidget);
-      expect(find.text('الفحص الآن من موبايلك وأنت على شبكتك فقط'), findsOneWidget, reason: 'بلا «الاتصال العكسي» لا فحص من الخادم');
+      expect(find.text('الفحص الآن من هاتفك وأنت على شبكتك فقط'), findsOneWidget, reason: 'بلا «الاتصال العكسي» لا فحص من الخادم');
       expect(find.textContaining('@m'), findsOneWidget);
       expect(find.text('ارفع ملفّك بيوزرك (اختياريّ)'), findsOneWidget);
       expect(find.textContaining('آخر جولة'), findsOneWidget);
@@ -120,7 +120,7 @@ void main() {
       expect(find.textContaining('main100'), findsOneWidget);
       expect(find.textContaining('يمرّ من VPN صفحتك الرئيسيّة بلا ملفٍّ هنا'), findsOneWidget);
       expect(find.textContaining('متاحٌ ربطك عبر'), findsNothing, reason: 'ليست ربطاً تلقائيّاً بيوزرها');
-      expect(find.text('الفحص الآن من موبايلك وأنت على شبكتك فقط'), findsNothing);
+      expect(find.text('الفحص الآن من هاتفك وأنت على شبكتك فقط'), findsNothing);
       expect(find.byType(Switch), findsNothing, reason: 'الفحص التلقائيّ يتبع الرئيسيّة — لا مفتاح هنا');
       expect(find.text('ارفع ملفّ VPN لهذه الصفحة (اختياريّ)'), findsOneWidget);
       await t.tap(find.text('فحص الاتصال'));
@@ -155,7 +155,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.textContaining('شركتك (ايرث لنك) متاحة'), findsOneWidget);
       expect(find.textContaining('ارفع ملفّ'), findsNothing);
-      expect(find.text('الفحص الآن من موبايلك وأنت على شبكتك فقط'), findsOneWidget);
+      expect(find.text('الفحص الآن من هاتفك وأنت على شبكتك فقط'), findsOneWidget);
       server.reply('GET', '/api/v2/conn-vpn/status', 200, _status(company: {'label': 'ايرث لنك', 'healthy': true}, reverse: true));
       await t.tap(find.byType(Switch));
       await t.pumpAndSettle();

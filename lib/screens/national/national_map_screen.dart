@@ -586,7 +586,7 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
         child: Padding(
           padding: const EdgeInsets.all(Sp.xl),
           child: Text(
-            _geoErr ?? 'لا مواقع للزونات والفاتات بعد — استوردها من الموقع (ملف KML من كوكل ايرث) فتظهر هنا.',
+            _geoErr ?? 'لا مواقع للزونات والفاتات بعد — استوردها من الموقع (ملف KML من جوجل إيرث) فتظهر هنا.',
             textAlign: TextAlign.center,
             style: AppType.muted(),
           ),
