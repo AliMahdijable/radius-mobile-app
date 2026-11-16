@@ -1,3 +1,5 @@
+import 'dart:ui' as ui show TextDirection;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -147,9 +149,11 @@ class _BalancePointsCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                // بإشارته (المالك ١٦ نوفمبر «صلّحها»): رصيدٌ سالب في الساس (مديرٌ بالآجل، أدمن رئيسيّ) كان يُعرض رصيداً موجوداً.
                 _HeroAmount(
                   amount: wallet!.balance.round(),
                   color: _accent,
+                  signed: true,
                 ),
                 const SizedBox(height: 7),
                 Row(
@@ -425,9 +429,12 @@ class _ShellCard extends StatelessWidget {
 /// Hero IQD amount — large weight + the accent color, with the 'IQD'
 /// suffix in a smaller, muted gray.
 class _HeroAmount extends StatelessWidget {
-  const _HeroAmount({required this.amount, required this.color});
+  const _HeroAmount({required this.amount, required this.color, this.signed = false});
   final int amount;
   final Color color;
+
+  /// الرقم بإشارته وبلون الخطأ حين يكون سالباً (الرصيد). الديون مجاميعُ موجبة فتبقى كما هي.
+  final bool signed;
 
   @override
   Widget build(BuildContext context) {
@@ -440,8 +447,11 @@ class _HeroAmount extends StatelessWidget {
         textBaseline: TextBaseline.alphabetic,
         children: [
           Text(
-            formatIQD(amount),
-            style: AppType.title(color: color).copyWith(
+            signed ? formatIQDSigned(amount) : formatIQD(amount),
+            // رقمٌ بإشارته يُرسم LTR — وإلّا قفز الناقص يمين الرقم في السطر العربيّ. (لا محارف عزل هنا: تُطيل السطر في
+            // بطاقةٍ ارتفاعها محسوب.)
+            textDirection: signed ? ui.TextDirection.ltr : null,
+            style: AppType.title(color: signed && amount < 0 ? AppColors.error : color).copyWith(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               height: 1.1,
