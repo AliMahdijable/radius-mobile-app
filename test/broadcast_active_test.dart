@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/big_subscribers_api.dart';
@@ -71,6 +72,28 @@ Map<String, Object?> _row(String u, {String? expiration, Object? remaining, Stri
     };
 
 const _p390 = VisualDevice('', Size(390, 1600), 3);
+
+/// ١١٠ مشتركاً كلقطة المالك: ٨٦ فعّالاً (٣ منهم قرب الانتهاء)، ٢٤ منتهياً، و٤٨ مديناً.
+List<Map<String, Object?>> _ownerLikeRows() {
+  String fmt(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:00:00';
+  final b = DateTime.now().toUtc().add(const Duration(hours: 3));
+  final wall = DateTime(b.year, b.month, b.day, b.hour);
+  return [
+    for (var i = 0; i < 110; i++)
+      {
+        ..._row('u$i@x',
+            expiration: fmt(i < 3
+                ? wall.add(const Duration(hours: 30))
+                : i < 86
+                    ? wall.add(const Duration(days: 20))
+                    : wall.subtract(const Duration(days: 10))),
+            phone: '0770${(1000000 + i).toString()}'),
+        if (i % 2 == 0 && i < 96) 'notes': '-5000',
+      },
+  ];
+}
+
 
 void main() {
   group('القاعدة (نقيّة) — كخادمها', () {
@@ -144,6 +167,59 @@ void main() {
       await t.pump(const Duration(seconds: 1));
       await visualTearDown();
       BigSubscribersApi.reset();
+    });
+
+    testWidgets('🚨 ٢ ثمّ ٣ (١٦ نوفمبر — «تنطي الاعداد الكبيره ٢ مساحه والصغيره ٣»): صفّان بلا فراغ، الثلاثة بارتفاعٍ واحد، ولا قصّ '
+        'على 320/360/390/480 × الخطّ 1.0/1.2، فاتحاً وداكناً', (t) async {
+      Rect rectOf(String label) => t.getRect(find.ancestor(of: find.text(label), matching: find.byType(InkWell)).first);
+      final shrunk = <String>[], heights = <String>[];
+      addTearDown(() {
+        debugPrint('ارتفاعات: ${heights.join(' | ')}');
+        debugPrint('صغُر: ${shrunk.isEmpty ? 'لا شيء' : shrunk.join(' | ')}');
+      });
+      for (final w in [320.0, 360.0, 390.0, 480.0]) {
+        for (final scale in [1.0, 1.2]) {
+          for (final dark in [false, true]) {
+            final tag = '$w×$scale${dark ? ' داكن' : ''}';
+            final inner = await visualSetUp(s1bSasOwner);
+            ApiClient.dio.httpClientAdapter = _Server(inner, _ownerLikeRows());
+            BigSubscribersApi.reset();
+            SubscribersApi.clearAllCaches();
+            t.platformDispatcher.textScaleFactorTestValue = scale;
+            await pumpVisual(t, VisualDevice('', Size(w, 1600), 3, dark: dark), home: (_) => const BroadcastScreen());
+            await settle(t, seconds: 2);
+            expect(t.takeException(), isNull, reason: 'فيضان $tag');
+            final all = rectOf('كل المشتركين'), act = rectOf('الفعّالون');
+            final deb = rectOf('المدينون'), exp = rectOf('منتهي الصلاحية'), soon = rectOf('قرب الانتهاء (3 أيام)');
+            expect((all.top - act.top).abs(), lessThan(0.5), reason: 'الكبيران صفٌّ واحد $tag');
+            for (final r in [exp, soon]) {
+              expect((r.top - deb.top).abs(), lessThan(0.5), reason: 'الصغار صفٌّ واحد $tag');
+              expect((r.height - deb.height).abs(), lessThan(0.5), reason: 'الصغار بارتفاعٍ واحد $tag');
+            }
+            expect(deb.top, greaterThan(all.bottom), reason: 'الصغار تحت الكبيرين $tag');
+            expect(all.width, greaterThan(deb.width * 1.3), reason: 'الكبير نصفٌ والصغير ثلث $tag');
+            // لا اسمٌ مقصوص ولا رقم: كلّ نصٍّ في البطاقات الخمس يتّسع لأسطره، وما يصغر (FittedBox) لا يصغر أكثر من 15٪
+            for (final label in ['كل المشتركين', 'الفعّالون', 'المدينون', 'منتهي الصلاحية', 'قرب الانتهاء (3 أيام)', '110', '86', '48', '24', '3']) {
+              final p = t.renderObject<RenderParagraph>(find.text(label));
+              expect(p.didExceedMaxLines, isFalse, reason: '«$label» مقصوص $tag');
+              final box = find.ancestor(of: find.text(label), matching: find.byType(FittedBox));
+              if (box.evaluate().isNotEmpty) {
+                final k = t.getSize(box.first).width / p.size.width;
+                expect(k, greaterThanOrEqualTo(0.85), reason: '«$label» صغُر إلى ${(k * 100).round()}٪ $tag');
+                if (k < 0.999) shrunk.add('$tag «$label» ${(k * 100).round()}٪');
+              }
+            }
+            heights.add('$tag: كبير ${all.height.toStringAsFixed(0)} · صغير ${deb.height.toStringAsFixed(0)}');
+            expect(find.text('110'), findsOneWidget, reason: tag);
+            expect(find.text('86'), findsOneWidget, reason: tag);
+            await t.pumpWidget(const SizedBox());
+            await t.pump(const Duration(seconds: 1));
+            t.platformDispatcher.clearTextScaleFactorTestValue();
+            await visualTearDown();
+            BigSubscribersApi.reset();
+          }
+        }
+      }
     });
   });
 }
