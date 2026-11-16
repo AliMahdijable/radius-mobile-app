@@ -511,6 +511,51 @@ void main() {
       }
     });
 
+    // المالك ١٦ نوفمبر (صورة شجرته): «وضع الترابط حسّن تصميمه، صاير بالعرض» — برج 6 (فرعُ برج 5 الطرفيّ) كان في وسط الشاشة
+    // بوصلةٍ مائلةٍ طويلة. الآن الفرع يتدلّى من برجه: 6 و7 تحت 5، والرئيسيّ فوق منتصف أبنائه.
+    testWidgets('شجرة المالك: برج 1 ⇐ 2·3·4·5 ، و5 ⇐ 6 ⇐ 7 — الفرع تحت برجه بكلّ عرض هاتف', (t) async {
+      final regions = [for (var i = 1; i <= 7; i++) _r(i, 'برج $i', null)];
+      final devices = [
+        for (var i = 2; i <= 5; i++) _d(100 + i, 'ماستر $i', 1, type: 'link'),
+        for (var i = 2; i <= 7; i++) _d(200 + i, 'سليف $i', i, type: 'link'),
+        _d(506, 'ماستر 6', 5, type: 'link'),
+        _d(607, 'ماستر 7', 6, type: 'link'),
+      ];
+      final links = [for (var i = 2; i <= 5; i++) _l(i, 100 + i, 200 + i), _l(6, 506, 206), _l(7, 607, 207)];
+      final readings = {
+        for (var i = 2; i <= 5; i++) 100 + i: _rd(mode: 'ap', tx: 20000000 + i * 1000000, rx: 2000000, signal: -55, ccq: 95),
+        for (var i = 2; i <= 7; i++) 200 + i: _rd(mode: 'sta', rx: 20000000 + i * 1000000, tx: 2000000, signal: -56, ccq: 94),
+        506: _rd(mode: 'ap', tx: 9000000, rx: 500000, signal: -58, ccq: 92),
+        607: _rd(mode: 'ap', tx: 7100000, rx: 472000, signal: -60, ccq: 90),
+      };
+      for (final d in [p360, p390, p430, p320]) {
+        await boot(t, regions: regions, devices: devices, links: links, readings: readings);
+        await openHub(t, tall(d, 1100));
+        Rect node(int id) => t.getRect(find.byKey(ValueKey('topo-node-$id')));
+        final w = d.size.width;
+        // عرض الرسم = الشاشة ناقص هامشَي البطاقة (كـ`_content`)
+        if (TopoLayout.perRow(w - 34) < 4) {
+          // ٣٢٠ و٣٦٠: الصفّ يسع ثلاثةً لا أربعة ⇒ الترتيب بالصفوف كما كان (لفٌّ وممرّات) — يكفي أنّ كلّ شيءٍ داخل الشاشة
+          for (var i = 1; i <= 7; i++) {
+            expect(node(i).left >= 0 && node(i).right <= w, isTrue, reason: '${d.tag}: برج $i داخل الشاشة');
+          }
+          await close(t);
+          continue;
+        }
+        expect((node(6).center.dx - node(5).center.dx).abs() < 1, isTrue, reason: '${d.tag}: برج 6 تحت برج 5 لا في الوسط');
+        expect((node(7).center.dx - node(5).center.dx).abs() < 1, isTrue, reason: '${d.tag}: برج 7 تحت برج 6');
+        expect(node(6).top > node(5).bottom && node(7).top > node(6).bottom, isTrue);
+        final kids = [for (var i = 2; i <= 5; i++) node(i).center.dx]..sort();
+        expect((node(1).center.dx - (kids.first + kids.last) / 2).abs() < 1, isTrue, reason: '${d.tag}: الرئيسيّ فوق منتصف أبنائه');
+        // حبّة 5 ⇐ 6 فوق برج 6 مباشرةً — الوصلة عموديّة
+        final pill = t.getRect(find.byKey(const ValueKey('topo-pill-5-6')));
+        expect((pill.center.dx - node(6).center.dx).abs() < 1, isTrue);
+        expect(pill.left >= 0 && pill.right <= w, isTrue);
+        await snap(t, 'tidy7', tall(d, 1100));
+        await close(t);
+      }
+    });
+
     testWidgets('لقطات الصفحة كاملةً — فاتح وداكن ولوح', (t) async {
       for (final d in [tall(p390), tall(p390dark), tall(p360), tall(tablet, 1180)]) {
         await boot(t);

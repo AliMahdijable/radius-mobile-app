@@ -319,6 +319,89 @@ void main() {
     });
   });
 
+  // المالك ١٦ نوفمبر (صورة «الترابط»): «حسّن تصميمه صاير بالعرض» — برج 6 (فرعُ برج 5 الطرفيّ) كان في وسط الشاشة بوصلةٍ مائلةٍ
+  // طويلة، لأنّ كلّ صفٍّ يتوزّع على العرض وحده. الآن شجرةٌ مرتّبة: الفرع يتدلّى من برجه.
+  group('الشجرة المرتّبة: الفرع تحت برجه', () {
+    // شجرة الصورة: برج 1 ⇐ 2·3·4·5 ، و5 ⇐ 6 ⇐ 7
+    final seven = [for (var i = 1; i <= 7; i++) TopoTower(id: i, name: 'برج $i', devices: 2)];
+    final towerOf = {
+      for (var i = 2; i <= 5; i++) 10 + i: 1, // ماسترات برج 1
+      for (var i = 2; i <= 7; i++) 100 + i: i, // سليف كلّ برج
+      56: 5, 67: 6, // ماستر 5 ⇐ 6 ، وماستر 6 ⇐ 7
+    };
+    final links = [
+      for (var i = 2; i <= 5; i++) link(i, 10 + i, 100 + i),
+      link(6, 56, 106),
+      link(7, 67, 107),
+    ];
+    TowerTopology tree(double w) => TowerTopology.build(
+          towers: seven,
+          towerOfDevice: towerOf,
+          links: links,
+          maxPerRow: TopoLayout.perRow(w),
+          wrapPerRow: TopoLayout.perGrid(w),
+        );
+
+    for (final w in [356.0, 386.0, 426.0, 640.0]) {
+      for (final rtl in [false, true]) {
+        test('عرض $w ${rtl ? 'RTL' : 'LTR'}: السلسلة 5 ⇐ 6 ⇐ 7 عموديّة تحت برج 5، والرئيسيّ فوق منتصف أبنائه، بلا لفٍّ ولا تراكب', () {
+          final t = tree(w);
+          final l = TopoLayout.compute(t, w, rtl: rtl);
+          expect(l.slot, isNull, reason: 'أربع أوراقٍ تسعها الشاشة — لا ممرّات');
+          expect(l.centers[6]!.dx, closeTo(l.centers[5]!.dx, 0.01), reason: 'برج 6 تحت برج 5 لا في الوسط');
+          expect(l.centers[7]!.dx, closeTo(l.centers[5]!.dx, 0.01));
+          expect(l.centers[1]!.dx, closeTo((l.centers[2]!.dx + l.centers[5]!.dx) / 2, 0.01));
+          // المستويات من الأعلى: 1 ثمّ 2..5 ثمّ 6 ثمّ 7، ووصلات الشجرة كلّها لصفٍّ تالٍ (مباشرة)
+          expect([for (final id in [1, 2, 5, 6, 7]) l.rowOf[id]], [0, 1, 1, 2, 3]);
+          for (final e in t.edges) {
+            expect(l.routeOf(e, pillRoom: 26).viaChannel, isFalse);
+          }
+          final rects = [for (final id in l.centers.keys) l.rectOf(id)];
+          for (var i = 0; i < rects.length; i++) {
+            expect(rects[i].left >= 0 && rects[i].right <= w, isTrue, reason: '${rects[i]}');
+            for (var j = i + 1; j < rects.length; j++) {
+              expect(rects[i].overlaps(rects[j]), isFalse, reason: '${rects[i]} × ${rects[j]}');
+            }
+          }
+          // الحبّتان المتجاورتان بأقصى عرضهما لا تتراكبان
+          final xs = [for (var i = 2; i <= 5; i++) l.centers[i]!.dx]..sort();
+          expect(l.pillMaxFor(2) <= xs[1] - xs[0], isTrue);
+          final first = rtl ? xs.last : xs.first;
+          expect(l.centers[2]!.dx, closeTo(first, 0.01), reason: 'الأوّل ${rtl ? 'يميناً' : 'يساراً'}');
+          expect(l.size.height, closeTo(l.rectOf(7).bottom + TopoLayout.pad, 0.01));
+        });
+      }
+    }
+
+    test('موزّعٌ بثلاثة فروع وأخوه ورقة: الموزّع فوق منتصف فروعه، والرئيسيّ فوق منتصف الاثنين', () {
+      final t = TowerTopology.build(
+        towers: [for (var i = 1; i <= 6; i++) TopoTower(id: i, name: 'ب$i')],
+        towerOfDevice: {12: 1, 13: 1, 22: 2, 102: 2, 103: 3, 24: 2, 25: 2, 26: 2, 104: 4, 105: 5, 106: 6},
+        // 1 ⇐ 2 · 3 ، و2 ⇐ 4 · 5 · 6
+        links: [link(1, 12, 102), link(2, 13, 103), link(3, 24, 104), link(4, 25, 105), link(5, 26, 106)],
+        maxPerRow: TopoLayout.perRow(356),
+      );
+      final l = TopoLayout.compute(t, 356);
+      expect(l.slot, isNull);
+      expect(l.centers[2]!.dx, closeTo((l.centers[4]!.dx + l.centers[6]!.dx) / 2, 0.01));
+      expect(l.centers[5]!.dx, closeTo(l.centers[2]!.dx, 0.01), reason: 'الأوسط من ثلاثةٍ تحت أبيه');
+      expect(l.centers[1]!.dx, closeTo((l.centers[2]!.dx + l.centers[3]!.dx) / 2, 0.01));
+      expect(l.centers[3]!.dx > l.centers[6]!.dx, isTrue, reason: 'الورقة الأخت بعد فروع الموزّع');
+    });
+
+    test('أوراقٌ أكثر ممّا تسعه الشاشة ⇒ الترتيب بالصفوف كما كان (لفٌّ وممرّات)', () {
+      final t = TowerTopology.build(
+        towers: [const TopoTower(id: 1, name: 'الرئيسي'), for (var i = 2; i <= 7; i++) TopoTower(id: i, name: 'فرعي $i')],
+        towerOfDevice: {for (var i = 2; i <= 7; i++) 10 + i: 1, for (var i = 2; i <= 7; i++) 100 + i: i},
+        links: [for (var i = 2; i <= 7; i++) link(i, 10 + i, 100 + i)],
+        maxPerRow: TopoLayout.perRow(356),
+        wrapPerRow: TopoLayout.perGrid(356),
+      );
+      final l = TopoLayout.compute(t, 356);
+      expect(l.slot, isNotNull, reason: 'ستّة فروعٍ على ٣٦٠ تُلفّ — شبكة وممرّات');
+    });
+  });
+
   group('سير الترافيك وحال الوصلة', () {
     test('ما ينزل للفرعيّ = ما يستقبله طرف الفرعيّ على الهواء (وما يرسله طرف الرئيسيّ إن لم يُقرأ الفرعيّ)', () {
       final both = LinkFlow.of(

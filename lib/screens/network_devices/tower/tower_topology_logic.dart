@@ -439,7 +439,120 @@ class TopoLayout {
   static int perGrid(double width) => math.max(2, ((width - 2 * pad) / (nodeW + channel)).floor());
 
   /// [rtl]: الأوّل يميناً (ترتيب القراءة بالعربيّ).
-  static TopoLayout compute(TowerTopology t, double width, {bool rtl = false}) {
+  ///
+  /// **شجرةٌ مرتّبة أوّلاً** ([_tidy]) حين تسع أوراقُها الشاشة؛ وإلّا الصفوف الموزّعة على العرض مع اللفّ والممرّات.
+  static TopoLayout compute(TowerTopology t, double width, {bool rtl = false}) =>
+      _tidy(t, width, rtl: rtl) ?? _rowsLayout(t, width, rtl: rtl);
+
+  /// الشجرة المرتّبة (المالك ١٦ نوفمبر: «وضع الترابط حسّن تصميمه، صاير بالعرض»): كان كلّ صفٍّ يتوزّع على العرض وحده، فبرجٌ
+  /// فرعيٌّ لموزّعٍ في الطرف يقف في وسط الشاشة وتعبر إليه وصلةٌ مائلةٌ طويلة. الآن كلّ ورقةٍ عمودٌ، والبرج فوق منتصف أبنائه،
+  /// والسلسلة (موزّعٌ بفرعيٍّ واحد) عموديّةٌ تحت أبيها — فالفرع يتدلّى من برجه.
+  ///
+  /// null ⇒ لا تسعها الشاشة (أوراقٌ أكثر من [perRow]) أو لا وصلات: الترتيب بالصفوف ([_rowsLayout]) كما كان.
+  static TopoLayout? _tidy(TowerTopology t, double width, {bool rtl = false}) {
+    if (t.rows.isEmpty) return null;
+    final order = <int, int>{};
+    final levelOf = <int, int>{};
+    final roots = <int>[];
+    for (final n in t.nodes) {
+      order[n.tower.id] = order.length;
+      levelOf[n.tower.id] = n.level;
+      if (n.root) roots.add(n.tower.id);
+    }
+    final children = <int, List<int>>{};
+    for (final e in t.edges) {
+      if (!e.tree || !order.containsKey(e.from) || !order.containsKey(e.to)) continue;
+      (children[e.from] ??= []).add(e.to);
+    }
+    for (final c in children.values) {
+      c.sort((a, b) => order[a]! - order[b]!);
+    }
+    final leaves = <int, int>{};
+    int leavesOf(int id) {
+      final known = leaves[id];
+      if (known != null) return known;
+      final sum = (children[id] ?? const <int>[]).fold<int>(0, (s, c) => s + leavesOf(c));
+      return leaves[id] = sum < 1 ? 1 : sum;
+    }
+    final total = roots.fold<int>(0, (s, r) => s + leavesOf(r));
+    // كلّ برجٍ مربوط داخل الشجرة (لا برجٌ بلا أبٍ ولا رأس) — وإلّا الصفوف
+    var counted = 0;
+    void count(int id) {
+      counted++;
+      for (final c in children[id] ?? const <int>[]) {
+        count(c);
+      }
+    }
+    for (final r in roots) {
+      count(r);
+    }
+    if (counted != order.length || total > perRow(width)) return null;
+
+    final usable = width - 2 * pad;
+    final slot = usable / total;
+    final xs = <int, double>{};
+    // يملأ أعمدة [first..] بالأوراق تحت [id] ويضع [id] فوق منتصف أبنائه
+    double placeX(int id, int first) {
+      final kids = children[id] ?? const <int>[];
+      if (kids.isEmpty) return xs[id] = pad + slot * (first + 0.5);
+      var at = first;
+      final kx = <double>[];
+      for (final c in kids) {
+        kx.add(placeX(c, at));
+        at += leavesOf(c);
+      }
+      return xs[id] = (kx.first + kx.last) / 2;
+    }
+
+    var at = 0;
+    for (final r in roots) {
+      placeX(r, at);
+      at += leavesOf(r);
+    }
+
+    final maxLevel = levelOf.values.fold<int>(0, math.max);
+    final rowTops = <double>[for (var lv = 0; lv <= maxLevel; lv++) pad + lv * (nodeH + rowGap)];
+    final centers = <int, Offset>{};
+    final rowOf = <int, int>{};
+    final pillRoom = <int, double>{};
+    for (final e in xs.entries) {
+      final lv = levelOf[e.key]!;
+      final x = e.value;
+      centers[e.key] = Offset(rtl ? width - x : x, rowTops[lv] + nodeH / 2);
+      rowOf[e.key] = lv;
+      // جارا الصفّ لا يقتربان أقلّ من عمود — والحبّة لا تتجاوزه
+      pillRoom[e.key] = math.min(pillWidest, slot - 4);
+    }
+    var y = rowTops.last + nodeH / 2 + nodeH + rowGap;
+    var lastGap = rowGap;
+    double? looseTop;
+    if (t.loose.isNotEmpty) {
+      final per = perRow(width);
+      looseTop = y - nodeH / 2 - looseTitle;
+      for (var i = 0; i < t.loose.length; i += per) {
+        final ids = [for (final x in t.loose.sublist(i, math.min(t.loose.length, i + per))) x.id];
+        for (var k = 0; k < ids.length; k++) {
+          final x = pad + usable * (k + 0.5) / ids.length;
+          centers[ids[k]] = Offset(rtl ? width - x : x, y);
+          pillRoom[ids[k]] = math.min(pillWidest, usable / ids.length - 4);
+        }
+        y += nodeH + (lastGap = looseGap);
+      }
+    }
+    final height = y - lastGap - nodeH / 2 + pad;
+    return TopoLayout(
+      centers: centers,
+      size: Size(width, height),
+      nodeSize: const Size(nodeW, nodeH),
+      looseTop: looseTop,
+      rowOf: rowOf,
+      rowTops: rowTops,
+      pillRoom: pillRoom,
+      rtl: rtl,
+    );
+  }
+
+  static TopoLayout _rowsLayout(TowerTopology t, double width, {bool rtl = false}) {
     final centers = <int, Offset>{};
     final usable = width - 2 * pad;
     final rowOf = <int, int>{};
