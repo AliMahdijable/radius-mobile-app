@@ -16,6 +16,14 @@ const _v = SimVariant(390, dark: false);
 const _idx = '900007';
 const _path = '/api/v2/subscribers/$_idx/private-note';
 
+/// الانتهاء بعد ١٩ يوماً **من الآن** لا تاريخاً ثابتاً: كان '2026-11-20 14:30:00'، فمنذ ١٦ نوفمبر 14:30 صار المشترك «ينتهي خلال
+/// أربعة أيّام» وتغيّر طول الصفحة فنزل صفّ «إضافة ملاحظة» ستّ بكسلات تحت شاشة الاختبار (780) — وسقط الاختباران عند كلّ من يشغّلهما.
+String _expiry() {
+  final d = DateTime.now().add(const Duration(days: 19));
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)} 14:30:00';
+}
+
 Subscriber _sub() => Subscriber.fromJson({
       'idx': _idx,
       'username': 'user7',
@@ -23,7 +31,7 @@ Subscriber _sub() => Subscriber.fromJson({
       'lastname': 'حسن',
       'phone': '07701234567',
       'profile_name': '10M',
-      'expiration': '2026-11-20 14:30:00',
+      'expiration': _expiry(),
       'remaining_days': 19,
       'enabled': 1,
       'notes': '0',
