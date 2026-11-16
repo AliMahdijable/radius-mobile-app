@@ -8,9 +8,12 @@ import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../models/merged_company.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/merged_section.dart';
 import 'balance_period_screen.dart';
 
 /// «تقارير الأرصدة» (١٥ نوفمبر — المالك: «في قسم التقارير نفتح قسم خاص… تقارير الأرصدة» + «اهتم بالتصميم وعرض التفاصيل بوضع
@@ -32,7 +35,17 @@ AppTone balanceStateTone(BalanceState s) => switch (s) {
     };
 
 /// لوحة القسم بين الشاشتين (القائمة وتفاصيل الفترة): ما يكتبه أحدهما يراه الآخر فوراً.
+///
+/// «كل الشركات» (١٦ نوفمبر — المالك: «اي ضيفها بالتطبيق»): [companyKey] شركة الشريط لحظة فتح القسم (null = المفتوحة) — كلّ قراءةٍ
+/// وكتابةٍ في الشاشتين وشيتاتهما بها صراحةً، و[canWrite] بما يقوله الخادم لها (`routed_writes`) — حتى يصل الجواب لا زرّ كتابة.
 class BalanceReportsController extends ChangeNotifier {
+  BalanceReportsController({this.companyKey}) : canWrite = companyKey == null;
+
+  final String? companyKey;
+
+  /// أزرار الكتابة (شحن، تعديل، حذف، تسوية، إغلاق): المفتوحة دائماً؛ غيرها بجواب الخادم.
+  bool canWrite;
+
   BalanceOverview? data;
   String? error;
   bool loading = true;
@@ -47,14 +60,21 @@ class BalanceReportsController extends ChangeNotifier {
   BalancePeriod? get current => (data?.periods.isNotEmpty ?? false) ? data!.periods.first : null;
 
   Future<void> load() async {
-    final r = await BalanceReportsApi.overview();
+    final key = companyKey;
+    final meF = key == null ? null : BalanceReportsApi.me(companyKey: key);
+    final r = await BalanceReportsApi.overview(companyKey: key);
+    if (meF != null) {
+      final me = await meF;
+      if (_disposed) return;
+      canWrite = me?.routedWrites == true;
+    }
     if (_disposed) return;
     loading = false;
     if (r.ok) {
       apply(r.data!);
       // الرصيد يُسأل حين تكون الفترة جاريةً وحدها (لنقول «رصيدك خلص» بعلم)
       if (current?.state == BalanceState.running) {
-        final b = await BalanceReportsApi.liveBalance();
+        final b = await BalanceReportsApi.liveBalance(companyKey: key);
         if (_disposed) return;
         live = b;
         notifyListeners();
@@ -83,16 +103,33 @@ class BalanceReportsController extends ChangeNotifier {
 class BalanceReportsScreen extends StatefulWidget {
   const BalanceReportsScreen({super.key});
 
+  static const title = 'تقارير الأرصدة';
+
+  /// «كل الشركات»: تقارير الشركة المختارة في الشريط بمكانها — قراءتها وكتابتها موجَّهة لها صراحةً (الخادم c41c8de:
+  /// balance-reports-* · balance-period-* · balance-adjustment-*؛ الكتابة خلف balance_routed). المشروع الوطنيّ وفايبر اكس من صفحتهما.
+  static Widget mergedPage() => MergedSection(
+        prefixes: const ['/api/v2/balance-reports'],
+        lockTitle: title,
+        serves: (c) => c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit,
+        servesNote: 'تقارير الأرصدة لهذه الشركة من صفحتها — افتحها وحدها من «شركاتي».',
+        child: const BalanceReportsScreen(),
+      );
+
   @override
   State<BalanceReportsScreen> createState() => _BalanceReportsScreenState();
 }
 
 class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
-  final _c = BalanceReportsController();
+  late final BalanceReportsController _c;
+  bool _started = false;
 
+  /// شركة القسم تُقرأ مرّةً لحظة فتحه — القسم يُبنى من جديد لكلّ شركةٍ يختارها الشريط ([MergedSection]).
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _c = BalanceReportsController(companyKey: MergedSection.routeKeyOf(context));
     _c.load();
   }
 
@@ -103,7 +140,7 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
   }
 
   Future<void> _new() async {
-    final o = await showBalanceTopupSheet(context);
+    final o = await showBalanceTopupSheet(context, companyKey: _c.companyKey);
     if (o != null) _c.apply(o);
   }
 
@@ -119,12 +156,12 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
       listenable: _c,
       builder: (context, _) {
         final data = _c.data;
-        final on = data?.featureEnabled ?? false;
+        final on = (data?.featureEnabled ?? false) && _c.canWrite;
         return Scaffold(
           backgroundColor: AppColors.bg,
           appBar: AppBar(
             backgroundColor: AppColors.bg,
-            title: Text('تقارير الأرصدة', style: AppType.title(color: AppColors.textHi)),
+            title: Text(BalanceReportsScreen.title, style: AppType.title(color: AppColors.textHi)),
             actions: [
               if (on && desktop)
                 Padding(
@@ -143,7 +180,7 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
                   label: const Text('شحن جديد'),
                 )
               : null,
-          body: SafeArea(child: _body(data)),
+          body: MergedSectionBody(child: SafeArea(child: _body(data))),
         );
       },
     );
@@ -175,10 +212,12 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         icon: LucideIcons.walletCards,
         tone: AppTone.brand,
         title: 'سجّل أوّل شحن للرصيد',
-        body: 'اكتب تاريخ الشحن ومبلغه، ويحسب النظام من سجلّاته كم حصّلت منه وكم بقي حتى يعود مبلغه — حتى لو كان تاريخه قديماً.',
-        action: 'شحن جديد',
+        body: _c.canWrite
+            ? 'اكتب تاريخ الشحن ومبلغه، ويحسب النظام من سجلّاته كم حصّلت منه وكم بقي حتى يعود مبلغه — حتى لو كان تاريخه قديماً.'
+            : 'للعرض هنا — تسجيل الشحن لهذه الشركة من صفحتها.',
+        action: _c.canWrite ? 'شحن جديد' : null,
         actionKey: const ValueKey('bal-first'),
-        onAction: _new,
+        onAction: _c.canWrite ? _new : null,
       );
     }
     final periods = data.periods;
@@ -192,6 +231,11 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 96),
         children: [
           Text('لكلّ شحن رصيد: ما حصّلته منه، والمتبقّي حتى يعود مبلغه، وربحك', style: AppType.muted(color: AppColors.textMid)),
+          if (!_c.canWrite) ...[
+            const SizedBox(height: Sp.x6),
+            Text('للعرض هنا — تسجيل الشحن والتسوية والإغلاق لهذه الشركة من صفحتها.',
+                key: const ValueKey('bal-routed-readonly'), style: AppType.micro(color: AppTone.warning.onSoft)),
+          ],
           const SizedBox(height: Sp.md),
           BalancePeriodHero(period: periods.first, live: _c.live, controller: _c, onDetail: () => _detail(periods.first)),
           if (periods.length > 1) ...[
@@ -575,7 +619,7 @@ class BalanceAdjustmentsList extends StatelessWidget {
                       child: Text(balanceIqd(a.amount), maxLines: 1, style: AppType.bodyBold(color: AppColors.textHi).copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                     ),
                   ),
-                  if (!period.isClosed)
+                  if (!period.isClosed && controller.canWrite)
                     IconButton(
                       key: ValueKey('bal-unadjust-${a.id}'),
                       tooltip: 'حذف التسوية',
@@ -605,12 +649,15 @@ class BalanceActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = period;
+    final w = controller.canWrite;
+    // للعرض وحده بلا «التفاصيل» ⇒ لا شيء (لا عمودٌ فارغ يأخذ مكاناً)
+    if (!w && onDetail == null) return const SizedBox.shrink();
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.button));
     final primary = FilledButton.styleFrom(backgroundColor: AppColors.brand, minimumSize: const Size.fromHeight(50), shape: shape);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (p.canClose)
+        if (w && p.canClose)
           FilledButton.icon(
             key: ValueKey('bal-close-${p.id}'),
             onPressed: () => confirmBalanceClose(context, controller, p),
@@ -618,11 +665,11 @@ class BalanceActions extends StatelessWidget {
             label: const Text('إغلاق الفترة'),
             style: primary,
           ),
-        if (!p.isClosed && p.remaining > 0)
+        if (w && !p.isClosed && p.remaining > 0)
           FilledButton.icon(
             key: ValueKey('bal-adjust-${p.id}'),
             onPressed: () async {
-              final o = await showBalanceAdjustSheet(context, p);
+              final o = await showBalanceAdjustSheet(context, p, companyKey: controller.companyKey);
               if (o != null) controller.apply(o);
             },
             icon: const Icon(LucideIcons.scale, size: 18),
@@ -630,7 +677,7 @@ class BalanceActions extends StatelessWidget {
             style: primary,
           ),
         if (onDetail != null) ...[
-          if (!p.isClosed) const SizedBox(height: Sp.sm),
+          if (w && !p.isClosed) const SizedBox(height: Sp.sm),
           OutlinedButton.icon(
             key: ValueKey('bal-detail-${p.id}'),
             onPressed: onDetail,
@@ -639,7 +686,7 @@ class BalanceActions extends StatelessWidget {
             style: OutlinedButton.styleFrom(foregroundColor: AppColors.textHi, minimumSize: const Size.fromHeight(50), shape: shape, side: BorderSide(color: AppColors.borderStrong)),
           ),
         ],
-        if (p.isClosed) ...[
+        if (w && p.isClosed) ...[
           const SizedBox(height: Sp.xs),
           TextButton.icon(
             key: ValueKey('bal-reopen-${p.id}'),
@@ -694,14 +741,14 @@ class BalancePeriodHero extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!p.isClosed) ...[
+              if (!p.isClosed && controller.canWrite) ...[
                 IconButton(
                   key: ValueKey('bal-edit-${p.id}'),
                   tooltip: 'تعديل الشحن',
                   visualDensity: VisualDensity.compact,
                   icon: Icon(LucideIcons.pencil, size: 17, color: AppColors.textMid),
                   onPressed: () async {
-                    final o = await showBalanceTopupSheet(context, period: p);
+                    final o = await showBalanceTopupSheet(context, period: p, companyKey: controller.companyKey);
                     if (o != null) controller.apply(o);
                   },
                 ),
@@ -878,7 +925,7 @@ class _PeriodCard extends StatelessWidget {
               ),
             ),
           ),
-          if (p.state == BalanceState.waiting)
+          if (p.state == BalanceState.waiting && controller.canWrite)
             Padding(
               padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.lg),
               child: BalanceActions(period: p, controller: controller),
@@ -913,7 +960,7 @@ Future<void> confirmBalanceClose(BuildContext context, BalanceReportsController 
     icon: LucideIcons.circleCheck,
   );
   if (ok != true || !context.mounted) return;
-  await _runWrite(context, c, () => BalanceReportsApi.closePeriod(p.id), 'أُغلقت الفترة');
+  await _runWrite(context, c, () => BalanceReportsApi.closePeriod(p.id, companyKey: c.companyKey), 'أُغلقت الفترة');
 }
 
 Future<void> confirmBalanceReopen(BuildContext context, BalanceReportsController c, BalancePeriod p) async {
@@ -926,7 +973,7 @@ Future<void> confirmBalanceReopen(BuildContext context, BalanceReportsController
     icon: LucideIcons.undo2,
   );
   if (ok != true || !context.mounted) return;
-  await _runWrite(context, c, () => BalanceReportsApi.reopenPeriod(p.id), 'رجعت الفترة مفتوحة');
+  await _runWrite(context, c, () => BalanceReportsApi.reopenPeriod(p.id, companyKey: c.companyKey), 'رجعت الفترة مفتوحة');
 }
 
 Future<void> confirmBalanceDelete(BuildContext context, BalanceReportsController c, BalancePeriod p, {VoidCallback? after}) async {
@@ -940,7 +987,7 @@ Future<void> confirmBalanceDelete(BuildContext context, BalanceReportsController
     tone: AppTone.danger,
   );
   if (ok != true || !context.mounted) return;
-  await _runWrite(context, c, () => BalanceReportsApi.deletePeriod(p.id), 'حُذف الشحن', after: after);
+  await _runWrite(context, c, () => BalanceReportsApi.deletePeriod(p.id, companyKey: c.companyKey), 'حُذف الشحن', after: after);
 }
 
 Future<void> confirmBalanceUnadjust(BuildContext context, BalanceReportsController c, BalancePeriod p, BalanceAdjustment a) async {
@@ -954,26 +1001,29 @@ Future<void> confirmBalanceUnadjust(BuildContext context, BalanceReportsControll
     tone: AppTone.danger,
   );
   if (ok != true || !context.mounted) return;
-  await _runWrite(context, c, () => BalanceReportsApi.removeAdjustment(p.id, a.id), 'حُذفت التسوية');
+  await _runWrite(context, c, () => BalanceReportsApi.removeAdjustment(p.id, a.id, companyKey: c.companyKey), 'حُذفت التسوية');
 }
 
 // ─────────────────────────── شحنة جديدة / تعديلها ───────────────────────────
 
 /// ورقة «شحنة رصيد جديدة» (أو تعديل [period]). تُرجع اللوحة كما صارت عند الخادم، أو null إن تراجع.
-Future<BalanceOverview?> showBalanceTopupSheet(BuildContext context, {BalancePeriod? period}) {
+Future<BalanceOverview?> showBalanceTopupSheet(BuildContext context, {BalancePeriod? period, required String? companyKey}) {
   return showAppSheet<BalanceOverview>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => BalanceTopupSheet(period: period),
+    builder: (_) => BalanceTopupSheet(period: period, companyKey: companyKey),
   );
 }
 
 class BalanceTopupSheet extends StatefulWidget {
-  const BalanceTopupSheet({super.key, this.period, this.nowMs});
+  const BalanceTopupSheet({super.key, this.period, this.nowMs, this.companyKey});
   final BalancePeriod? period;
+
+  /// «كل الشركات»: شركة القسم لحظة فتح الشيت (null = المفتوحة) — الحفظ لها صراحةً، والرأس يسمّيها.
+  final String? companyKey;
 
   /// للاختبار: «الآن» ثابت.
   final int? nowMs;
@@ -1041,8 +1091,9 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
     final ms = _ms;
     setState(() => _busy = true);
     final r = p == null
-        ? await BalanceReportsApi.createPeriod(amount: amount, startedAtMs: ms, note: _noteCtrl.text, clientRef: _ref)
-        : await BalanceReportsApi.updatePeriod(p.id, amount: amount, startedAtMs: ms == p.startedAtMs ? null : ms, note: _noteCtrl.text);
+        ? await BalanceReportsApi.createPeriod(amount: amount, startedAtMs: ms, note: _noteCtrl.text, clientRef: _ref, companyKey: widget.companyKey)
+        : await BalanceReportsApi.updatePeriod(p.id,
+            amount: amount, startedAtMs: ms == p.startedAtMs ? null : ms, note: _noteCtrl.text, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {
@@ -1063,8 +1114,11 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.walletCards,
         title: edit ? 'تعديل الشحن' : 'شحن رصيد جديد',
-        subtitle: 'المبلغ الذي دفعته للشركة — وهو ما يجب أن يعود إليك',
-        subtitleMaxLines: 2,
+        // «كل الشركات»: الشركة أوّل الرأس (لا تُقصّ بعد وصفٍ طويل) — خارجها الوصف كما كان
+        subtitle: MergedMode.rowCompanyName(widget.companyKey) == null
+            ? 'المبلغ الذي دفعته للشركة — وهو ما يجب أن يعود إليك'
+            : 'في «${MergedMode.rowCompanyName(widget.companyKey)}» — المبلغ الذي دفعته للشركة، وهو ما يجب أن يعود إليك',
+        subtitleMaxLines: 3,
         onClose: _busy ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
@@ -1144,20 +1198,23 @@ class _PickBox extends StatelessWidget {
 // ─────────────────────────── تسوية الرصيد ───────────────────────────
 
 /// ورقة «تسوية الرصيد» على [period]. تُرجع اللوحة كما صارت عند الخادم، أو null إن تراجع.
-Future<BalanceOverview?> showBalanceAdjustSheet(BuildContext context, BalancePeriod period) {
+Future<BalanceOverview?> showBalanceAdjustSheet(BuildContext context, BalancePeriod period, {required String? companyKey}) {
   return showAppSheet<BalanceOverview>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => BalanceAdjustSheet(period: period),
+    builder: (_) => BalanceAdjustSheet(period: period, companyKey: companyKey),
   );
 }
 
 class BalanceAdjustSheet extends StatefulWidget {
-  const BalanceAdjustSheet({super.key, required this.period});
+  const BalanceAdjustSheet({super.key, required this.period, this.companyKey});
   final BalancePeriod period;
+
+  /// «كل الشركات»: شركة القسم لحظة فتح الشيت (null = المفتوحة) — التسوية لها صراحةً، والرأس يسمّيها.
+  final String? companyKey;
 
   @override
   State<BalanceAdjustSheet> createState() => _BalanceAdjustSheetState();
@@ -1204,7 +1261,8 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
     if (_problem != null || _busy) return;
     final amount = _amount;
     setState(() => _busy = true);
-    final r = await BalanceReportsApi.addAdjustment(widget.period.id, amount: amount, source: _source, note: _noteCtrl.text, clientRef: _ref);
+    final r = await BalanceReportsApi.addAdjustment(widget.period.id,
+        amount: amount, source: _source, note: _noteCtrl.text, clientRef: _ref, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {
@@ -1225,7 +1283,8 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.scale,
         title: 'تسوية الرصيد',
-        subtitle: balancePeriodTitle(p),
+        subtitle: MergedOps.withCompany(balancePeriodTitle(p), widget.companyKey),
+        subtitleMaxLines: 2,
         onClose: _busy ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(

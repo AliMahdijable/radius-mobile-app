@@ -17,7 +17,9 @@ import 'employee_limits_api.dart' show LimitsResult;
 /// الخادم (server/balanceReports.js) يحسب كلّ رقم — التطبيق يعرض ويرسل فقط:
 /// - لمدير الصفحة وحده (الموظّف يُرفض MANAGER_ONLY)، وخلف مفتاحها (`/me` ⇒ feature_enabled).
 /// - كلّ كتابةٍ تردّ اللوحة محدَّثةً في `data` — فلا يُعرض رقمٌ قديم ولا تُطلب قراءةٌ ثانية.
-/// - كلّ نداءٍ للشركة **المفتوحة** صراحةً ([CompanyRoute.explicit]): هذه المسارات لا تُوجَّه في «كل الشركات».
+/// - كلّ نداءٍ بشركته **صراحةً** من مستدعيه ([CompanyRoute.explicit] — null = المفتوحة): «كل الشركات» (١٦ نوفمبر — المالك:
+///   «اي ضيفها بالتطبيق») يعرض شركة الشريط بمكانها، فالقسم يمرّر مفتاحها لكلّ قراءةٍ وكتابة؛ والكتابة الموجَّهة بما يقوله الخادم
+///   لها (`routed_writes` في ردّ `/me` ⇐ balance_routed).
 typedef BalanceResult<T> = LimitsResult<T>;
 
 double _n(Object? v) {
@@ -581,10 +583,13 @@ class BalancePeriodPage {
 }
 
 class BalanceMe {
-  const BalanceMe({required this.featureEnabled, required this.canManage, required this.isEmployee});
+  const BalanceMe({required this.featureEnabled, required this.canManage, required this.isEmployee, this.routedWrites});
   final bool featureEnabled;
   final bool canManage;
   final bool isEmployee;
+
+  /// «كل الشركات» وحده: هل تُقبل كتابات هذه الشركة من هنا — null في الوضع العاديّ (الخادم لا يرسله).
+  final bool? routedWrites;
 }
 
 // ─────────────────────────── نصوصٌ وأوقات (نقيّة) ───────────────────────────
@@ -687,7 +692,7 @@ class BalanceReportsState {
   /// يسأل الخادم ويحفظ جوابه؛ تعذُّر السؤال يُبقي المعروف (لا يختفي الكرت بعثرة شبكة).
   static Future<BalanceMe?> refresh() async {
     final epoch = _epoch;
-    final me = await BalanceReportsApi.me();
+    final me = await BalanceReportsApi.me(companyKey: null);
     if (epoch != _epoch) return last;
     if (me != null) last = me;
     return last;
@@ -704,8 +709,8 @@ class BalanceReportsApi {
   static const firstShown = 10;
   static const showStep = 20;
 
-  /// للشركة المفتوحة صراحةً — لا تأخذ وجهة قسمٍ موجَّه.
-  static Options get _open => CompanyRoute.explicit(null);
+  /// وجهةٌ صريحة: [companyKey] (شركة الشريط في «كل الشركات») أو null = المفتوحة — لا تأخذ وجهة قسمٍ ضمنيّاً.
+  static Options _to(String? companyKey) => CompanyRoute.explicit(companyKey);
 
   static final Random _rnd = Random();
 
@@ -732,13 +737,19 @@ class BalanceReportsApi {
       BalanceResult<T>(message: body['message']?.toString() ?? fallback, code: body['code']?.toString());
 
   /// هل القسم مفتوحٌ لهذه الصفحة، ومن أنا فيها؟ null = تعذّر السؤال (يُعامل مطفأً — لا كرت ولا أخطاء).
-  static Future<BalanceMe?> me() async {
+  static Future<BalanceMe?> me({required String? companyKey}) async {
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>('$_base/me', options: _open);
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('$_base/me', options: _to(companyKey));
       final body = r.data ?? const {};
       final data = body['data'];
       if (body['success'] != true || data is! Map) return null;
-      return BalanceMe(featureEnabled: data['feature_enabled'] == true, canManage: data['can_manage'] == true, isEmployee: data['is_employee'] == true);
+      final rw = data['routed_writes'];
+      return BalanceMe(
+        featureEnabled: data['feature_enabled'] == true,
+        canManage: data['can_manage'] == true,
+        isEmployee: data['is_employee'] == true,
+        routedWrites: rw is bool ? rw : null,
+      );
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 balance-reports me: $e');
       return null;
@@ -751,10 +762,10 @@ class BalanceReportsApi {
     return BalanceResult(data: o);
   }
 
-  static Future<BalanceResult<BalanceOverview>> overview() async {
+  static Future<BalanceResult<BalanceOverview>> overview({required String? companyKey}) async {
     const fb = 'تعذّر تحميل تقارير الأرصدة';
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>(_base, options: _open);
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(_base, options: _to(companyKey));
       return _overviewOf(r.data ?? const {}, fb);
     } catch (e) {
       return _fail(e, fb);
@@ -762,13 +773,14 @@ class BalanceReportsApi {
   }
 
   /// صفحةٌ من حركات الفترة بعد أوّل [offset] حركة (الأحدث أوّلاً)، بفلترها وبحثها.
-  static Future<BalanceResult<BalancePeriodPage>> period(int id, {BalanceFilter filter = BalanceFilter.all, String q = '', int offset = 0}) async {
+  static Future<BalanceResult<BalancePeriodPage>> period(int id,
+      {BalanceFilter filter = BalanceFilter.all, String q = '', int offset = 0, required String? companyKey}) async {
     const fb = 'تعذّر تحميل الحركات';
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '$_base/periods/$id',
         queryParameters: {'filter': filter.wire, 'offset': offset, 'limit': pageSize, if (q.isNotEmpty) 'q': q},
-        options: _open,
+        options: _to(companyKey),
       );
       final body = r.data ?? const {};
       final page = BalancePeriodPage.fromJson(body['data']);
@@ -788,24 +800,30 @@ class BalanceReportsApi {
     }
   }
 
-  static Future<BalanceResult<BalanceOverview>> createPeriod({required int amount, required int startedAtMs, String? note, required String clientRef}) => _write(
+  static Future<BalanceResult<BalanceOverview>> createPeriod(
+          {required int amount, required int startedAtMs, String? note, required String clientRef, required String? companyKey}) =>
+      _write(
         () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods',
-            options: _open, data: {'amount': amount, 'started_at_ms': startedAtMs, 'note': (note ?? '').trim(), 'client_ref': clientRef}),
+            options: _to(companyKey), data: {'amount': amount, 'started_at_ms': startedAtMs, 'note': (note ?? '').trim(), 'client_ref': clientRef}),
         'تعذّر تسجيل الشحن',
       );
 
   /// [startedAtMs] يُرسل حين تغيّر وحده (وقتٌ لم يتغيّر لا يُعاد فحصه).
-  static Future<BalanceResult<BalanceOverview>> updatePeriod(int id, {required int amount, int? startedAtMs, required String note}) => _write(
+  static Future<BalanceResult<BalanceOverview>> updatePeriod(int id,
+          {required int amount, int? startedAtMs, required String note, required String? companyKey}) =>
+      _write(
         () => ApiClient.dio.put<Map<String, dynamic>>('$_base/periods/$id',
-            options: _open, data: {'amount': amount, if (startedAtMs != null) 'started_at_ms': startedAtMs, 'note': note.trim()}),
+            options: _to(companyKey), data: {'amount': amount, if (startedAtMs != null) 'started_at_ms': startedAtMs, 'note': note.trim()}),
         'تعذّر حفظ التعديل',
       );
 
-  static Future<BalanceResult<BalanceOverview>> deletePeriod(int id) =>
-      _write(() => ApiClient.dio.delete<Map<String, dynamic>>('$_base/periods/$id', options: _open), 'تعذّر حذف الشحن');
+  static Future<BalanceResult<BalanceOverview>> deletePeriod(int id, {required String? companyKey}) =>
+      _write(() => ApiClient.dio.delete<Map<String, dynamic>>('$_base/periods/$id', options: _to(companyKey)), 'تعذّر حذف الشحن');
 
-  static Future<BalanceResult<BalanceOverview>> addAdjustment(int id, {required int amount, required BalanceSource source, String? note, required String clientRef}) => _write(
-        () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/adjustments', options: _open, data: {
+  static Future<BalanceResult<BalanceOverview>> addAdjustment(int id,
+          {required int amount, required BalanceSource source, String? note, required String clientRef, required String? companyKey}) =>
+      _write(
+        () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/adjustments', options: _to(companyKey), data: {
           'amount': amount,
           'source': source.wire,
           if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
@@ -814,19 +832,19 @@ class BalanceReportsApi {
         'تعذّر تسجيل التسوية',
       );
 
-  static Future<BalanceResult<BalanceOverview>> removeAdjustment(int id, int adjustmentId) =>
-      _write(() => ApiClient.dio.delete<Map<String, dynamic>>('$_base/periods/$id/adjustments/$adjustmentId', options: _open), 'تعذّر حذف التسوية');
+  static Future<BalanceResult<BalanceOverview>> removeAdjustment(int id, int adjustmentId, {required String? companyKey}) => _write(
+      () => ApiClient.dio.delete<Map<String, dynamic>>('$_base/periods/$id/adjustments/$adjustmentId', options: _to(companyKey)), 'تعذّر حذف التسوية');
 
-  static Future<BalanceResult<BalanceOverview>> closePeriod(int id) =>
-      _write(() => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/close', options: _open, data: const {}), 'تعذّر إغلاق الفترة');
+  static Future<BalanceResult<BalanceOverview>> closePeriod(int id, {required String? companyKey}) => _write(
+      () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/close', options: _to(companyKey), data: const {}), 'تعذّر إغلاق الفترة');
 
-  static Future<BalanceResult<BalanceOverview>> reopenPeriod(int id) =>
-      _write(() => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/reopen', options: _open, data: const {}), 'تعذّر إلغاء الإغلاق');
+  static Future<BalanceResult<BalanceOverview>> reopenPeriod(int id, {required String? companyKey}) => _write(
+      () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/reopen', options: _to(companyKey), data: const {}), 'تعذّر إلغاء الإغلاق');
 
   /// رصيد الوكيل الآن عند شركته (ما تعرضه الرئيسيّة) — null: مخفيّ أو تعذّرت قراءته (لا يُقرأ صفراً).
-  static Future<double?> liveBalance() async {
+  static Future<double?> liveBalance({required String? companyKey}) async {
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/admin-widgets', options: _open);
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/admin-widgets', options: _to(companyKey));
       final body = r.data ?? const {};
       if (body['success'] != true || body['balanceHidden'] == true || body['balance_unavailable'] == true) return null;
       final b = body['balance'];

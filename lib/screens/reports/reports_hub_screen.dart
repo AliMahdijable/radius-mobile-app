@@ -90,6 +90,12 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           (c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit) &&
           (MergedMode.pagePerm(c.key, 'deleted_debts.view') ?? true));
 
+  /// «تقارير الأرصدة» في «كل الشركات» (١٦ نوفمبر — المالك: «اي ضيفها بالتطبيق»): الكرت حين في الحساب شركةٌ يخدمها القسم (ساس،
+  /// ايرث لنك، المُضافة) — والقسم يعرض شركة الشريط بمكانه ([BalanceReportsScreen.mergedPage]) ويسأل الخادم عنها.
+  bool get _mergedBal =>
+      MergedMode.active.value &&
+      MergedMode.usable.any((c) => c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit);
+
   Future<void> _loadDeletedDebts() async {
     final p = await DeletedDebtsHubSummary.fetch(previous: _deletedDebts);
     if (mounted) setState(() => _deletedDebts = p);
@@ -142,19 +148,21 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
           // ويظلّ يبحث عن الفرق. (حُذفت من هنا بطلب صاحب المشروع.)
           // «كل الشركات» (٨ نوفمبر): ديون مدراء كلّ شركات الساس — تظهر ولو كانت المفتوحة بلا مدراء فرعيّين بنوعها (ايرث لنك/المُضافة)
-          // «تقارير الأرصدة»: الكرت حين تُفتح الميزة للحساب؛ لمدير الصفحة وحده — الموظّف يراه مقفلاً بنصّه. مساراتها للشركة
-          // المفتوحة وحدها فلا يظهر في «كل الشركات».
-          if (_balance?.featureEnabled == true && !MergedMode.active.value)
+          // «تقارير الأرصدة»: الكرت حين تُفتح الميزة للحساب؛ لمدير الصفحة وحده — الموظّف يراه مقفلاً بنصّه. وفي «كل الشركات»
+          // (١٦ نوفمبر): لشركة الشريط بمكانها بغلاف قسمها.
+          if ((_balance?.featureEnabled == true && !MergedMode.active.value) || _mergedBal)
             _ReportCard(
               key: const ValueKey('report-balances'),
-              locked: _balance!.isEmployee,
+              locked: !MergedMode.active.value && (_balance?.isEmployee ?? false),
               lockedMessage: 'هذا القسم لمدير الصفحة وحده',
               icon: LucideIcons.walletCards,
               color: AppColors.success,
+              merged: true,
               title: 'تقارير الأرصدة',
               subtitle: 'لكلّ شحن: المحصَّل والمتبقّي وربحك',
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BalanceReportsScreen()),
+                MaterialPageRoute(
+                    builder: (_) => MergedMode.active.value ? BalanceReportsScreen.mergedPage() : const BalanceReportsScreen()),
               ),
             ),
           if (permShown(const ['reports.manager_debts']) &&

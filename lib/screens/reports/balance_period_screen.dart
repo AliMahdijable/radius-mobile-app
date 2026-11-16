@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/balance_reports_api.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -94,7 +95,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
     var counts = _counts;
     String? error;
     while (true) {
-      final r = await BalanceReportsApi.period(widget.periodId, filter: _filter, q: _q, offset: acc.length);
+      final r = await BalanceReportsApi.period(widget.periodId, filter: _filter, q: _q, offset: acc.length, companyKey: widget.controller.companyKey);
       if (!mounted || gen != _gen) return;
       if (!r.ok) {
         error = r.message ?? 'تعذّر تحميل الحركات';
@@ -166,6 +167,23 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
     if (_items.length < next && _items.length < _total) _fill(fromStart: false);
   }
 
+  PreferredSizeWidget? _companyLine() {
+    final key = widget.controller.companyKey;
+    final co = key == null ? null : MergedMode.rowCompanyName(key);
+    if (co == null) return null;
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(26),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: Sp.lg, end: Sp.lg, bottom: Sp.x6),
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text('«$co»${widget.controller.canWrite ? '' : ' · للعرض هنا'}',
+              key: const ValueKey('bal-detail-company'), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -176,6 +194,8 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.bg,
         title: Text(p == null ? 'تفاصيل الفترة' : balancePeriodTitle(p), style: AppType.title(color: AppColors.textHi)),
+        // «كل الشركات»: اسم شركة الفترة تحت العنوان (الشاشة مدفوعةٌ فوق القسم بلا شريطه)
+        bottom: _companyLine(),
       ),
       body: p == null
           ? const SizedBox.shrink()
@@ -189,8 +209,10 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
                     const SizedBox(height: Sp.md),
                     BalanceAdjustmentsList(period: p, controller: c),
                   ],
-                  const SizedBox(height: Sp.md),
-                  BalanceActions(period: p, controller: c),
+                  if (c.canWrite) ...[
+                    const SizedBox(height: Sp.md),
+                    BalanceActions(period: p, controller: c),
+                  ],
                   const SizedBox(height: Sp.lg),
                   SingleChildScrollView(
                     key: const ValueKey('bal-filters'),
