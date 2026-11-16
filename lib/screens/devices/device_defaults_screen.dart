@@ -38,9 +38,13 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   final _tplinkPass = TextEditingController();
   // راوتر TP-Link الحديث «Agile» (Archer…): كلمة سرٍّ فقط بلا يوزر.
   final _tprouterPass = TextEditingController();
+  // ميكروتك عند المشترك (نانو وراوتر، ١٦ نوفمبر): يوزر + باسورد.
+  final _mikrotikUser = TextEditingController();
+  final _mikrotikPass = TextEditingController();
   final List<_ExtraField> _ontExtra = [];
   final List<_ExtraField> _ubntExtra = [];
   final List<_ExtraField> _tplinkExtra = [];
+  final List<_ExtraField> _mikrotikExtra = [];
   final List<TextEditingController> _tprouterExtra = [];
   bool _loading = true;
   bool _saving = false;
@@ -48,6 +52,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   bool _ubntObscure = true;
   bool _tplinkObscure = true;
   bool _tprouterObscure = true;
+  bool _mikrotikObscure = true;
 
   @override
   void initState() {
@@ -64,7 +69,9 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     _tplinkUser.dispose();
     _tplinkPass.dispose();
     _tprouterPass.dispose();
-    for (final f in [..._ontExtra, ..._ubntExtra, ..._tplinkExtra]) {
+    _mikrotikUser.dispose();
+    _mikrotikPass.dispose();
+    for (final f in [..._ontExtra, ..._ubntExtra, ..._tplinkExtra, ..._mikrotikExtra]) {
       f.user.dispose();
       f.pass.dispose();
     }
@@ -90,9 +97,12 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
       _tplinkUser.text = d.tplinkUsername ?? '';
       _tplinkPass.text = d.tplinkPassword ?? '';
       _tprouterPass.text = d.tprouterPassword ?? '';
+      _mikrotikUser.text = d.mikrotikUsername ?? '';
+      _mikrotikPass.text = d.mikrotikPassword ?? '';
       _ontExtra.addAll(d.ontExtra.map(_field));
       _ubntExtra.addAll(d.ubntExtra.map(_field));
       _tplinkExtra.addAll(d.tplinkExtra.map(_field));
+      _mikrotikExtra.addAll(d.mikrotikExtra.map(_field));
       _tprouterExtra.addAll(d.tprouterExtra.map((p) => TextEditingController(text: p)));
       _loading = false;
     });
@@ -149,6 +159,10 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
           for (final c in _tprouterExtra)
             if (c.text.isNotEmpty) c.text,
         ],
+        mikrotikUsername: _mikrotikUser.text.trim().isEmpty ? null : _mikrotikUser.text.trim(),
+        // كلمة السرّ كما هي (لا تُقصّ — فراغٌ في طرفها جزءٌ منها)
+        mikrotikPassword: _mikrotikPass.text.isEmpty ? null : _mikrotikPass.text,
+        mikrotikExtra: _credsOf(_mikrotikExtra),
       ),
     );
     if (!mounted) return;
@@ -246,6 +260,22 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     key: const ValueKey('creds-tprouter'),
                     title: 'راوتر — باسورد فقط (TP-Link Archer · Tenda)',
                     subtitle: 'devices.tprouter_default_hint'.tr(),
+                  ),
+                  const SizedBox(height: Sp.md),
+                  // ميكروتك عند المشترك (١٦ نوفمبر — المالك: «نانوات نوع مايكروتك… ونضيفلها اعتمادات… وكذلك راوترات مايكروتك»).
+                  _section(
+                    key: const ValueKey('creds-mikrotik'),
+                    icon: LucideIcons.router,
+                    title: 'MikroTik — نانو وراوتر (يوزر + باسورد)',
+                    subtitle: 'devices.mikrotik_default_hint'.tr(),
+                    userController: _mikrotikUser,
+                    passController: _mikrotikPass,
+                    obscure: _mikrotikObscure,
+                    onToggle: () => setState(() => _mikrotikObscure = !_mikrotikObscure),
+                    extras: _mikrotikExtra,
+                    onAdd: () => _addExtra(_mikrotikExtra),
+                    onRemove: (i) => _removeExtra(_mikrotikExtra, i),
+                    extraHint: 'devices.mikrotik_extra_hint'.tr(),
                   ),
                   const SizedBox(height: Sp.lg),
                   SizedBox(

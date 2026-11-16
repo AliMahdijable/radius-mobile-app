@@ -15,6 +15,9 @@ import 'support/app_fonts.dart';
 
 /// ⑦ (٢٩ أكتوبر — المالك: «نضيف ٣ اختيارات بقسم اعتمادات الأجهزة»): شاشة الاعتمادات أمام خادمٍ وهميّ — الإضافيّ
 /// المحفوظ يظهر، الإضافة بحدّ اثنين لكلّ نوع، الحذف يعيد الترقيم، والحفظ يرسل القائمتين كما يفهمهما الخادم. القيم وهميّة.
+/// قائمة الصفحة العموديّة (لا مُمرَّر حقول النصّ الأفقيّ).
+final _pageScroll = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+
 void main() {
   late _Server server;
 
@@ -73,6 +76,12 @@ void main() {
     return popped;
   }
 
+  /// زرّ الحفظ آخر القائمة — قد يكون خارج ما بُني منها (خمسة أقسام منذ ميكروتك): تمريرٌ حتى يظهر.
+  Future<void> toSave(WidgetTester t) async {
+    await t.scrollUntilVisible(find.text('حفظ الاعتمادات'), 300, scrollable: _pageScroll);
+    await t.pumpAndSettle();
+  }
+
   testWidgets('المحفوظ يظهر، والإضافة بحدّ اثنين، والحذف يعيد الترقيم، والحفظ يرسل القائمتين', (t) async {
     server.defaults = {
       'ontUsername': 'adm-ont',
@@ -84,12 +93,12 @@ void main() {
     final popped = await open(t);
     expect(find.text('اعتماد 2'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'x-1'), findsOneWidget);
-    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(4), reason: 'ONT فيه واحد من اثنين، وUBNT وTP-Link وراوتر Agile فارغة');
+    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(5), reason: 'ONT فيه واحد من اثنين، وUBNT وTP-Link وراوتر Agile وMikroTik فارغة');
 
     await t.tap(find.text('إضافة اعتماد آخر').first);
     await t.pumpAndSettle();
     expect(find.text('اعتماد 3'), findsOneWidget);
-    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(3), reason: 'ثلاثةٌ لـONT ⇒ لا زرّ إضافة له (تبقى أزرار UBNT وTP-Link وراوتر Agile)');
+    expect(find.text('إضافة اعتماد آخر'), findsNWidgets(4), reason: 'ثلاثةٌ لـONT ⇒ لا زرّ إضافة له (تبقى أزرار UBNT وTP-Link وراوتر Agile وMikroTik)');
 
     // الخانة الجديدة: آخر حقلَي يوزر/باسورد في قسم ONT (قبل قسم UBNT).
     final fields = find.byType(TextField);
@@ -103,7 +112,7 @@ void main() {
     expect(find.widgetWithText(TextField, 'x-2'), findsOneWidget, reason: 'الباقي صار «اعتماد 2»');
     expect(find.widgetWithText(TextField, 'x-1'), findsNothing);
 
-    await t.ensureVisible(find.text('حفظ الاعتمادات'));
+    await toSave(t);
     await t.tap(find.text('حفظ الاعتمادات'));
     await t.pumpAndSettle();
     expect(server.saved, hasLength(1));
@@ -115,6 +124,8 @@ void main() {
     expect(body['ubntExtra'], isEmpty);
     expect(body['tplinkExtra'], isEmpty, reason: 'قائمة TP-Link تُرسل دائماً ولو فارغة');
     expect(body['tplinkUsername'], isNull);
+    expect(body['mikrotikExtra'], isEmpty, reason: 'قائمة MikroTik تُرسل دائماً ولو فارغة');
+    expect(body['mikrotikUsername'], isNull);
     expect(popped, [true]);
     await t.pump(const Duration(seconds: 4)); // حفظ كاش الفحص المؤجَّل بعد مسحه (اعتماداتٌ جديدة)
   });
@@ -124,7 +135,7 @@ void main() {
     await t.tap(find.text('إضافة اعتماد آخر').at(1)); // قسم UBNT
     await t.pumpAndSettle();
     expect(find.text('اعتماد 2'), findsOneWidget);
-    await t.ensureVisible(find.text('حفظ الاعتمادات'));
+    await toSave(t);
     await t.tap(find.text('حفظ الاعتمادات'));
     await t.pumpAndSettle();
     expect(server.saved.single['ubntExtra'], isEmpty);
@@ -159,7 +170,7 @@ void main() {
     await t.enterText(withExtra.at(3), 'tp-x-p');
     expect(t.takeException(), isNull);
 
-    await t.ensureVisible(find.text('حفظ الاعتمادات'));
+    await toSave(t);
     await t.tap(find.text('حفظ الاعتمادات'));
     await t.pumpAndSettle();
     final body = server.saved.single;
@@ -190,12 +201,49 @@ void main() {
     await t.enterText(fields.at(0), 'r-new');
     await t.enterText(fields.at(1), 'r-extra');
 
-    await t.ensureVisible(find.text('حفظ الاعتمادات'));
+    await toSave(t);
     await t.tap(find.text('حفظ الاعتمادات'));
     await t.pumpAndSettle();
     final body = server.saved.single;
     expect(body['tprouterPassword'], 'r-new');
     expect(body['tprouterExtra'], ['r-extra']);
+    await t.pump(const Duration(seconds: 4));
+  });
+
+  // ١٦ نوفمبر — المالك: «اكو مشتركين عدهم نانوات نوع مايكروتك… لازم نضمنها ونضيفلها اعتمادات… وكذلك راوترات مايكروتك».
+  testWidgets('قسم MikroTik: المحفوظ يظهر، والجديد وإضافيّه يُرسلان، والأقسام الأخرى لا تُمسّ', (t) async {
+    server.defaults = {
+      'tplinkUsername': 'tp-keep',
+      'tplinkPassword': 'tp-keep-p',
+      'mikrotikUsername': 'mt-old',
+      'mikrotikPassword': 'mt-old-p',
+    };
+    await open(t);
+    final section = find.byKey(const ValueKey('creds-mikrotik'));
+    await t.scrollUntilVisible(section, 300, scrollable: _pageScroll);
+    await t.pumpAndSettle();
+    expect(find.descendant(of: section, matching: find.text('MikroTik — نانو وراوتر (يوزر + باسورد)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'mt-old')), findsOneWidget);
+    final fields = find.descendant(of: section, matching: find.byType(TextField));
+    await t.enterText(fields.at(0), ' admin ');
+    await t.enterText(fields.at(1), 'p w');
+    await t.tap(find.descendant(of: section, matching: find.text('إضافة اعتماد آخر')));
+    await t.pumpAndSettle();
+    final withExtra = find.descendant(of: section, matching: find.byType(TextField));
+    expect(withExtra, findsNWidgets(4));
+    await t.enterText(withExtra.at(2), 'noc');
+    await t.enterText(withExtra.at(3), 'noc-p');
+    expect(t.takeException(), isNull);
+
+    await toSave(t);
+    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.pumpAndSettle();
+    final body = server.saved.single;
+    expect([body['mikrotikUsername'], body['mikrotikPassword']], ['admin', 'p w'], reason: 'اليوزر يُقصّ وكلمة السرّ كما هي');
+    expect(body['mikrotikExtra'], [
+      {'username': 'noc', 'password': 'noc-p'},
+    ]);
+    expect([body['tplinkUsername'], body['tplinkPassword']], ['tp-keep', 'tp-keep-p'], reason: 'قسم TP-Link كما كان');
     await t.pump(const Duration(seconds: 4));
   });
 }

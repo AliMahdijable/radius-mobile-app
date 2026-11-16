@@ -273,8 +273,15 @@ class UbiquitiStatus {
   /// راوتر TP-Link بواجهة «$.act» القديمة بلا تعمية وكوكي خام (TL-WR840N v6 · TL-WR845N، ١٥ نوفمبر) — يوزر وباسورد، قراءةٌ وحدها.
   bool get isTpCgiPlain => vendor == 'tp845';
 
+  /// جهاز ميكروتك عند المشترك (١٦ نوفمبر): `mikrotik` نانو لاسلكيّ بوضع station (SXT · LHG · LDF…)، و`mtrouter` راوتر منزليّ
+  /// (hAP · hEX…) — يُقرأ بالـAPI ([MikrotikCpeService]). لا SSH يوبيكويتي ولا إقلاعه عليه أبداً.
+  bool get isMikrotik => vendor == 'mikrotik' || vendor == 'mtrouter';
+
+  /// راوتر ميكروتك منزليّ عند المشترك.
+  bool get isMtRouter => vendor == 'mtrouter';
+
   /// جهاز المشترك راوترٌ منزليّ (لا راديو) — ما يُعرض له يختلف: المتّصلون ومدّة الاتصال لا الإشارة والمنافذ.
-  bool get isRouter => isTpClassic || isTpAgile || isTenda || isTpCgi || isTpMer || isTpCgiPlain;
+  bool get isRouter => isTpClassic || isTpAgile || isTenda || isTpCgi || isTpMer || isTpCgiPlain || isMtRouter;
 
   /// سرعة ربط منفذ الإنترنت (WAN) بالميغابت كما يقولها الراوتر («100») — null حين لا يصدّرها (TP-Link الكلاسيكيّ وAgile).
   final int? wanLinkMbps;
