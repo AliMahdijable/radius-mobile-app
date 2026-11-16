@@ -733,7 +733,8 @@ class LinkFlow {
     if (aDown || bDown) return LinkFlow(state: LinkState.down, mainDown: aDown, subDown: bDown);
     if (ra == null && rb == null) return const LinkFlow();
     // ما يرسله طرف الرئيسيّ على الهواء = ما يستقبله طرف الفرعيّ؛ الفرعيّ أوّلاً (مستقبِلٌ لوصلةٍ واحدة، وطرف الرئيسيّ قد يخدم
-    // غيره). بلا واجهةٍ لاسلكيّة مقروءة (airFiber/ميموزا): «التنزيل» كما يحسبه البرج = الاتّجاه الأكبر.
+    // غيره). بلا واجهةٍ لاسلكيّة مقروءة (ميموزا بأسماءٍ لا تقول «لاسلكيّ»): «التنزيل» كما يحسبه البرج = الاتّجاه الأكبر.
+    // (airFiber X: «راديوه» هنا هو منفذ بياناته معكوساً — [TowerReading.fromProbe].)
     final toSub = rb?.radioRxBps ?? ra?.radioTxBps ?? rb?.downBps ?? ra?.downBps;
     final toMain = rb?.radioTxBps ?? ra?.radioRxBps ?? rb?.upBps ?? ra?.upBps;
     final signal = _worst(ra?.signal, rb?.signal);

@@ -1066,6 +1066,16 @@ class UbntStats {
   /// الوصلة مقطوعة كما قرأها الجهاز نفسه: محطّةٌ إشارتها 0 بلا طرفٍ ولا سرعة، أو airFiber حال وصلته ليست operational.
   final bool linkDown;
 
+  /// قراءةٌ بمفاتيح `af*` (airFiber X: AF-2X/3X/4X/5X… · والكلاسيكيّ AF-24/5/11). مسار بياناته في العتاد ولا يمرّ بنواة
+  /// لينكس: واجهة `air0` في ifconfig تعدّ ترفك **الإدارة** وحده (AF-4X حقيقيّ ٢٧ أكتوبر: 50 ميغابايت مقابل 10 تيرابايت على
+  /// منفذ البيانات `lan*`، وهو أوّل [interfaces] باسم `eth0`). فما يعبر الهواء يُؤخذ من منفذ البيانات لا منها
+  /// ([TowerReading.fromProbe]).
+  final bool airFiberX;
+
+  /// اسم منفذ بيانات airFiber X في [interfaces] حين قُرئ عدّاداه (`lanRxBytes`/`lanTxBytes`) — null: الجهاز لم يقلهما، فلا
+  /// مصدر ترفك له (و`eth0` عندها منفذ الإدارة المطفأ بعدّادَيه الصفريَّين — صفرٌ لا يُعرض رقماً).
+  final String? afDataPort;
+
   const UbntStats({
     this.apiVersion = 5,
     required this.host,
@@ -1081,6 +1091,8 @@ class UbntStats {
     this.extras = const [],
     this.stationsRead = true,
     this.linkDown = false,
+    this.airFiberX = false,
+    this.afDataPort,
   });
 
   /// مفتاحٌ داخليّ في خريطة mca-dump المسطّحة: الجهاز أعاد قائمة محطّاته (ولو فارغة).
@@ -1551,7 +1563,9 @@ class UbntStats {
       ));
     }
     var ports = ifs;
+    String? afDataPort;
     if (afx && (m['lanRxBytes'] != null || m['lanTxBytes'] != null)) {
+      afDataPort = 'eth0';
       final speedMatch = RegExp(r'(\d+)').firstMatch(m['lanSpeed'] ?? '');
       final old = ifs.where((i) => i.ifname == 'eth0').firstOrNull;
       ports = [
@@ -1596,6 +1610,8 @@ class UbntStats {
       extras: extras,
       stationsRead: listed,
       linkDown: down,
+      airFiberX: afx,
+      afDataPort: afDataPort,
       latitude: double.tryParse(m['latitude'] ?? ''),
       longitude: double.tryParse(m['longitude'] ?? ''),
       memTotalKb: _n(m['memTotal']) > 0 ? _n(m['memTotal']) : null,

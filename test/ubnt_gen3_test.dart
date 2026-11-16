@@ -56,6 +56,9 @@ void main() {
       expect(s.interfaces.first.ifname, 'eth0', reason: 'السلكيّ أوّلاً — منه سير الترفك');
       expect(s.interfaces.where((i) => i.ifname == 'air0'), hasLength(1));
       expect(s.lanSpeed, '1000Mbps-Full');
+      // «الترابط» يأخذ ما يعبر الهواء من هذا المنفذ لا من air0 (عدّاداها هنا 50 و69 ميغابايت مقابل 10 تيرابايت عليه)
+      expect(s.airFiberX, isTrue);
+      expect(s.afDataPort, 'eth0');
     });
 
     test('الطرف الآخر من remoteIp، والحقائق الإضافيّة', () {
@@ -72,6 +75,16 @@ void main() {
       expect(ex['نمط الإرسال'], 'نصف مزدوج');
     });
 
+    test('airFiber X لم يقل عدّادَي منفذ بياناته ⇒ لا منفذ بيانات (لا يُحسب eth0 الإداريّ المطفأ مصدراً)', () {
+      final m = parseMca(af4xMcaStatus)
+        ..remove('lanRxBytes')
+        ..remove('lanTxBytes');
+      final bare = UbntStats.fromMcaStatus(m, interfaces: [ifconfigEth0, air0]);
+      expect(bare.airFiberX, isTrue);
+      expect(bare.afDataPort, isNull);
+      expect(bare.interfaces.firstWhere((i) => i.ifname == 'eth0').rxBytes, 0);
+    });
+
     test('جهاز airMAX عاديّ لا يتأثّر (لا af* ⇒ لا تبديل منفذ ولا حقائق)', () {
       final plain = UbntStats.fromMcaStatus(
         {'deviceName': 'ns', 'platform': 'NanoStation M5', 'wlanEssid': 'x', 'wlanFrequency': '5180', 'lanRxBytes': '99'},
@@ -80,6 +93,8 @@ void main() {
       expect(plain.wireless!.frequency, 5180);
       expect(plain.interfaces.first.rxBytes, 0, reason: 'لا نلمس eth0 إلّا لـairFiber X');
       expect(plain.extras, isEmpty);
+      expect(plain.airFiberX, isFalse);
+      expect(plain.afDataPort, isNull);
     });
   });
 
