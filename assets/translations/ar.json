@@ -367,6 +367,8 @@
     "section_usage_on": "التحميل والرفع لكل يوم وكل شهر",
     "section_finance": "الحركات الماليّة",
     "section_finance_on": "التفعيل والتمديد والدين والتسديد، بالتاريخ والمبلغ",
+    "section_wifi": "كلمة الواي فاي",
+    "section_wifi_on": "يشوفون كلمة واي فاي راوترهم ويغيّرونها من «فحص شبكتي»",
     "section_off_hint": "مخفي عن مشتركيك",
     "section_shown": "يظهر",
     "section_hidden": "مخفي",

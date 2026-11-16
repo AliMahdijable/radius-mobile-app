@@ -367,6 +367,8 @@
     "section_usage_on": "Download and upload for each day and month",
     "section_finance": "Financial transactions",
     "section_finance_on": "Activations, extensions, debts and payments, with date and amount",
+    "section_wifi": "Wi-Fi password",
+    "section_wifi_on": "They can see and change their router Wi-Fi password from \"Network check\"",
     "section_off_hint": "Hidden from your subscribers",
     "section_shown": "Shown",
     "section_hidden": "Hidden",

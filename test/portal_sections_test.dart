@@ -733,4 +733,103 @@ void main() {
       expect(sentSections().single, {'finance': false});
     });
   });
+
+  group('كلمة الواي فاي (١٦ نوفمبر — مطفأةٌ افتراضاً)', () {
+    const wifi = 'كلمة الواي فاي';
+    const wifiHint = 'يشوفون كلمة واي فاي راوترهم ويغيّرونها من «فحص شبكتي»';
+    const withWifi = {'connection': true, 'usage': true, 'device': false, 'finance': true, 'wifi': false};
+
+    test('العقد: غائبٌ = لا يعرفه الخادم (null، مطفأةٌ عند المشترك) · true وحده يفتحها · toJson بما يعرفه', () {
+      const d = PortalSections();
+      expect(d.wifi, isNull);
+      expect(d.knows(PortalSection.wifi), isFalse);
+      expect(d.of(PortalSection.wifi), isFalse, reason: 'الافتراض: مطفأة');
+      expect(PortalSections.fromJson(const {'finance': true}).wifi, isNull);
+      expect(PortalSections.fromJson(const {'wifi': false}).wifi, isFalse);
+      expect(PortalSections.fromJson(const {'wifi': true}).wifi, isTrue);
+      expect(PortalSections.fromJson(const {'wifi': 'x'}).wifi, isFalse, reason: 'حاضرٌ غير مفهوم ⇒ افتراضه (مطفأة)');
+      expect(d.toJson().containsKey('wifi'), isFalse);
+      final w = PortalSections.fromJson(withWifi);
+      expect(w.knows(PortalSection.wifi), isTrue);
+      expect(w.toJson(), withWifi);
+      final on = w.withValue(PortalSection.wifi, true);
+      expect(on.wifi, isTrue);
+      expect(on.finance, isTrue);
+      expect(on == w, isFalse);
+      expect(d.withValue(PortalSection.usage, false).wifi, isNull, reason: 'نقرةٌ على غيرها لا تجعلها معروفة');
+      expect(PortalSections.fromJson(const {'usage': false}, fallback: on).wifi, isTrue, reason: 'ردٌّ جزئيّ لا يقلبها');
+      expect(PortalAccess.fromJson(const {'sections': withWifi}).sections?.wifi, isFalse);
+    });
+
+    test('🚨 الحفظ: {sections:{wifi}} وحده، والمحفوظ من ردّ الخادم', () async {
+      server.reply('PUT', _settings, 200, {
+        'success': true,
+        'sections': {...withWifi, 'wifi': true},
+      });
+      final r = await PortalSettingsApi.setPortalSections(PortalSection.wifi, true,
+          current: PortalSections.fromJson(withWifi));
+      expect(server.bodies('PUT', _settings).single, {
+        'sections': {'wifi': true},
+      });
+      expect(r.ok, isTrue);
+      expect(r.sections?.wifi, isTrue);
+      expect(r.sections?.finance, isTrue);
+    });
+
+    testWidgets('🚨 المالك: رابع المفاتيح بعد «الحركات الماليّة» مطفأً من الخادم، والنقرة تفتحها بمفتاحها وحده', (t) async {
+      settings(sections: withWifi);
+      final stored = mergingServer(Map<String, bool>.from(withWifi));
+      await open(t);
+      expect(find.byType(Switch), findsNWidgets(5), reason: 'البوّابة + الأقسام الأربعة');
+      expect(valueOf(t, wifi), isFalse);
+      expect(find.descendant(of: tile(wifi), matching: find.text(_hiddenHint)), findsOneWidget);
+      expect(find.byIcon(LucideIcons.router), findsNothing, reason: 'المخفيّ بعينٍ مغمضة رماديّة كبقيّة الأقسام');
+      double y(String s) => t.getTopLeft(find.text(s)).dy;
+      expect(y('الحركات الماليّة'), lessThan(y(wifi)));
+      expect(y(wifi), lessThan(y('آخر دخول المشتركين')));
+
+      await t.tap(switchOf(wifi));
+      await t.pumpAndSettle();
+      expect(sentSections(), [
+        {'wifi': true},
+      ]);
+      expect(stored['wifi'], isTrue);
+      expect(valueOf(t, wifi), isTrue);
+      expect(find.text(wifiHint), findsOneWidget);
+      expect(find.byIcon(LucideIcons.router), findsOneWidget, reason: 'أيقونة القسم وهو ظاهر');
+      expect(valueOf(t, 'الحركات الماليّة'), isTrue);
+
+      await t.tap(switchOf(wifi));
+      await t.pumpAndSettle();
+      expect(sentSections().last, {'wifi': false});
+      expect(valueOf(t, wifi), isFalse);
+    });
+
+    testWidgets('🚨 خادمٌ لا يرسلها (قبل الهجرة 101): لا مفتاح لها — والبقيّة كما كانت', (t) async {
+      settings(sections: const {'connection': true, 'usage': true, 'device': false, 'finance': true});
+      mergingServer(const {'connection': true, 'usage': true, 'device': false, 'finance': true});
+      await open(t);
+      expect(find.text(wifi), findsNothing);
+      expect(find.byType(Switch), findsNWidgets(4));
+      await t.tap(switchOf(_usage));
+      await t.pumpAndSettle();
+      expect(find.text(wifi), findsNothing, reason: 'نقرةٌ على غيرها لا تُظهرها');
+      expect(server.bodies('PUT', _settings).every((b) => !(b['sections'] as Map).containsKey('wifi')), isTrue);
+    });
+
+    testWidgets('🚨 موظّفٌ بلا settings.edit: بمكانها مقفلة بحالتها — والنقر لا يحفظ', (t) async {
+      PermissionsService.debugSet(isEmployee: true);
+      settings(sections: {...withWifi, 'wifi': true});
+      await open(t);
+      expect(find.text(wifi), findsOneWidget);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.descendant(of: tile(wifi), matching: find.text('يظهر')), findsOneWidget);
+      expect(find.descendant(of: tile(wifi), matching: find.byType(PermLockIcon)), findsOneWidget);
+      await t.tap(find.text(wifi));
+      await t.pump();
+      expect(find.text(_askManager), findsOneWidget);
+      expect(server.calls('PUT', _settings), isEmpty);
+      await simDrain(t);
+    });
+  });
 }

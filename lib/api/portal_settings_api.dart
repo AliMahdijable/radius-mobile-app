@@ -181,7 +181,13 @@ enum PortalSection {
   /// «الحركات الماليّة» («سجل الحركات»: التفعيل والتمديد والدين والتسديد) —
   /// ظاهرةٌ افتراضاً؛ أُضيفت بعد البقيّة (المالك ٩ نوفمبر)، فمفتاحها يُرسم حين
   /// يرسلها الخادم وحده ([PortalSections.knows]). أخفاها ⇒ الخادم يرفض السجلّ.
-  finance('finance');
+  finance('finance'),
+
+  /// «كلمة الواي فاي» (١٦ نوفمبر — المالك: «اربط بالوكيل يكدر يفعلها او يطفيها
+  /// وخليها الافتراضي طافي»): عرض كلمة واي فاي راوتر البيت وتغييرها من «فحص
+  /// شبكتي» بتطبيق المشترك — **مطفأةٌ افتراضاً**، ومفتاحها يُرسم حين يرسلها
+  /// الخادم وحده (الهجرة 101).
+  wifi('wifi');
 
   const PortalSection(this.key);
 
@@ -190,7 +196,8 @@ enum PortalSection {
 }
 
 /// ما يظهر لمشتركي الوكيل في تطبيقهم. الافتراض (لا صفّ، أو مفتاحٌ ناقص):
-/// «حالة الاتصال» و«الاستهلاك» و«الحركات الماليّة» ظاهرة، والجهاز مطفأ.
+/// «حالة الاتصال» و«الاستهلاك» و«الحركات الماليّة» ظاهرة، والجهاز و«كلمة
+/// الواي فاي» مطفآن.
 @immutable
 class PortalSections {
   const PortalSections({
@@ -198,6 +205,7 @@ class PortalSections {
     this.usage = true,
     this.device = false,
     this.finance,
+    this.wifi,
   });
 
   final bool connection;
@@ -208,14 +216,23 @@ class PortalSections {
   /// لا مفتاح لها في الشاشة (حفظها يُرفض)، وهي عند المشترك ظاهرةٌ كما كانت.
   final bool? finance;
 
+  /// «كلمة الواي فاي» — `null` = خادمٌ لا يرسلها (أقدم، أو قبل الهجرة 101):
+  /// لا مفتاح لها في الشاشة، وهي عند المشترك مطفأة.
+  final bool? wifi;
+
   /// يعرف الخادم هذا القسم؟ (لا يُرسم مفتاحٌ لا يُحفظ.)
-  bool knows(PortalSection s) => s != PortalSection.finance || finance != null;
+  bool knows(PortalSection s) => switch (s) {
+        PortalSection.finance => finance != null,
+        PortalSection.wifi => wifi != null,
+        _ => true,
+      };
 
   bool of(PortalSection s) => switch (s) {
         PortalSection.connection => connection,
         PortalSection.usage => usage,
         PortalSection.device => device,
         PortalSection.finance => finance ?? true,
+        PortalSection.wifi => wifi ?? false,
       };
 
   PortalSections withValue(PortalSection s, bool value) => PortalSections(
@@ -223,6 +240,7 @@ class PortalSections {
         usage: s == PortalSection.usage ? value : usage,
         device: s == PortalSection.device ? value : device,
         finance: s == PortalSection.finance ? value : finance,
+        wifi: s == PortalSection.wifi ? value : wifi,
       );
 
   /// مفتاحٌ غائبٌ أو غير مفهوم يأخذ قيمته من [fallback]: الافتراض عند
@@ -239,6 +257,9 @@ class PortalSections {
         finance: j.containsKey(PortalSection.finance.key)
             ? _flag(j[PortalSection.finance.key], fallback.finance ?? true)
             : fallback.finance,
+        wifi: j.containsKey(PortalSection.wifi.key)
+            ? _flag(j[PortalSection.wifi.key], fallback.wifi ?? false)
+            : fallback.wifi,
       );
 
   Map<String, bool> toJson() => {
@@ -252,10 +273,11 @@ class PortalSections {
       other.connection == connection &&
       other.usage == usage &&
       other.device == device &&
-      other.finance == finance;
+      other.finance == finance &&
+      other.wifi == wifi;
 
   @override
-  int get hashCode => Object.hash(connection, usage, device, finance);
+  int get hashCode => Object.hash(connection, usage, device, finance, wifi);
 
   @override
   String toString() => 'PortalSections(${toJson()})';
