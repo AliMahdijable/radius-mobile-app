@@ -15,7 +15,7 @@ import '../../../theme/typography.dart';
 import '../../../widgets/merged_section.dart';
 
 /// «خدماتنا» (١٦ نوفمبر ٢٠٢٦): تطبيقات الوكيل وصفحاته لمشتركيه — اسمٌ ورابطٌ وصورةٌ يضغطها التطبيق، يراها المشترك في «وكيلي»
-/// بتطبيق MyServices ويفتح الرابط بنقرة. الصفّ كلّه يفتح التعديل (والحذف داخله بتأكيد)، وسهما الترتيب بجانبه، وبطاقة «كما يشوفها
+/// بتطبيق MyServices ويفتح الرابط بنقرة. الصفّ كلّه يفتح التعديل (والحذف داخله بتأكيد)، وسهما الترتيب بجانبه، وبطاقة «كما يراها
 /// مشتركوك» تحت القائمة. التبويب بـ`settings.edit` (مقفلٌ بمكانه بدونه — portal_settings_screen).
 
 // ─────────────── ضغط الصورة ───────────────
@@ -276,7 +276,7 @@ class _Header extends StatelessWidget {
               Text('خدماتنا', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 15)),
               const SizedBox(height: 2),
               Text(
-                'تطبيقاتك وصفحاتك — يشوفها مشتركوك في «وكيلي» بتطبيق MyServices ويفتحونها بنقرة',
+                'تطبيقاتك وصفحاتك — يراها مشتركوك في «وكيلي» بتطبيق MyServices ويفتحونها بنقرة',
                 style: AppType.subtitle(color: AppColors.textMid).copyWith(fontSize: 12),
               ),
             ]),
@@ -448,7 +448,7 @@ class _Preview extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
-          child: Text('كما يشوفها مشتركوك', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 14)),
+          child: Text('كما يراها مشتركوك', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 14)),
         ),
         const SizedBox(height: Sp.md),
         LayoutBuilder(builder: (context, c) {

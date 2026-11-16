@@ -108,7 +108,7 @@ void main() {
   });
 
   group('المالك', () {
-    testWidgets('التبويب الرابع «خدماتنا»: القائمة بالترتيب والاسم والمضيف كاملان، وبطاقة «كما يشوفها مشتركوك»', (t) async {
+    testWidgets('التبويب الرابع «خدماتنا»: القائمة بالترتيب والاسم والمضيف كاملان، وبطاقة «كما يراها مشتركوك»', (t) async {
       server.reply('GET', _list, 200, {
         'success': true,
         'available': true,
@@ -121,7 +121,7 @@ void main() {
       await openServices(t);
       expect(find.text('تطبيق الأفلام'), findsNWidgets(2), reason: 'القائمة + المعاينة');
       expect(find.text('play.google.com'), findsOneWidget);
-      expect(find.text('كما يشوفها مشتركوك'), findsOneWidget);
+      expect(find.text('كما يراها مشتركوك'), findsOneWidget);
       expect(find.textContaining('2/12'), findsOneWidget);
       expect(t.takeException(), isNull);
       await simDrain(t);
