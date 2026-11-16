@@ -99,7 +99,14 @@ class DesktopOverview extends StatelessWidget {
           accent: AppColors.warning,
           soft: AppColors.warningSoftBg,
           label: 'dashboard.balance'.tr(),
-          value: balanceLocked ? null : wallet == null && walletLines == null ? '…' : formatIQD((wallet?.balance ?? 0).round()),
+          // بإشارته (١٦ نوفمبر): رصيدٌ سالب في الساس كان يُعرض رصيداً موجوداً — [formatIQD] يُسقط الناقص
+          value: balanceLocked
+              ? null
+              : wallet == null && walletLines == null
+                  ? '…'
+                  : formatIQDSigned((wallet?.balance ?? 0).round()),
+          valueColor: !balanceLocked && (wallet?.balance ?? 0) < 0 ? AppColors.error : null,
+          valueLtr: true,
           unit: currency,
           locked: balanceLocked,
           caption: balanceLocked || wallet == null || walletLines != null
@@ -193,7 +200,15 @@ class _KpiCard extends StatelessWidget {
     this.onTap,
     this.body,
     this.footer,
+    this.valueColor,
+    this.valueLtr = false,
   });
+
+  /// لون الرقم حين يحمل معنىً (رصيدٌ بالسالب ⇒ لون الخطأ) — null ⇒ لونه المعتاد.
+  final Color? valueColor;
+
+  /// الرقم يُرسم LTR (رقمٌ بإشارته: الناقص يسار الرقم لا يمينه).
+  final bool valueLtr;
 
   /// مكان الرقم والسطر تحته («كل الشركات»: أرصدة الشركات) — null ⇒ الرقم كما كان.
   final Widget? body;
@@ -301,7 +316,8 @@ class _KpiCard extends StatelessWidget {
                       child: Text(
                         locked ? '—' : value ?? '…',
                         maxLines: 1,
-                        style: AppType.statValue(color: locked ? LockedStyle.title : AppColors.textHi).copyWith(
+                        textDirection: valueLtr ? TextDirection.ltr : null,
+                        style: AppType.statValue(color: locked ? LockedStyle.title : valueColor ?? AppColors.textHi).copyWith(
                           fontSize: 30,
                           fontWeight: FontWeight.w700,
                           fontFeatures: const [FontFeature.tabularFigures()],
