@@ -13,6 +13,9 @@ enum MessageIntent {
   debtors,
   expired,
   expiring,
+
+  /// «الفعّالون» (١٦ نوفمبر): من لم ينتهِ اشتراكه — الخادم يرشّح بقاعدته (`broadcastAudience.isActive`، db484d5).
+  active,
 }
 
 extension MessageIntentX on MessageIntent {
@@ -26,6 +29,8 @@ extension MessageIntentX on MessageIntent {
         return 'expired';
       case MessageIntent.expiring:
         return 'expiring';
+      case MessageIntent.active:
+        return 'active';
     }
   }
 
