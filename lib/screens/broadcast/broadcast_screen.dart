@@ -1149,22 +1149,39 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              for (int i = 0; i < options.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(
-                  child: _channelChoice(
-                    label: options[i].label,
-                    icon: options[i].icon,
-                    color: options[i].color,
-                    selected: _forceChannel == options[i].value,
-                    onTap: () =>
-                        setState(() => _forceChannel = options[i].value),
-                  ),
+          // ١٦ نوفمبر (المالك: «صلحها هم»): بالهاتف الضيّق (320–360) وبالخطّ المكبّر كان «واتساب فقط» و«تلغرام فقط» يُقصّان
+          // («واتسا…»). إن لم يتّسع أطول اسمٍ بجانب أيقونته صارت الأزرار الثلاثة أيقونةً فوق اسمها (كأدوات أعلى الشاشة) والاسم
+          // بعرض الزرّ كلّه؛ وما يتّسع يبقى سطراً واحداً كما كان (هاتف المالك بعرض 480 لم يتغيّر).
+          LayoutBuilder(
+            builder: (context, c) {
+              const gap = 6.0;
+              final cell = (c.maxWidth - gap * (options.length - 1)) / options.length;
+              final widest = options.fold<double>(0, (m, o) {
+                final w = _channelLabelWidth(context, o.label);
+                return w > m ? w : m;
+              });
+              final stacked = widest > cell - _chanPad * 2 - _chanIcon - _chanIconGap;
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < options.length; i++) ...[
+                      if (i > 0) const SizedBox(width: gap),
+                      Expanded(
+                        child: _channelChoice(
+                          label: options[i].label,
+                          icon: options[i].icon,
+                          color: options[i].color,
+                          selected: _forceChannel == options[i].value,
+                          stacked: stacked,
+                          onTap: () => setState(() => _forceChannel = options[i].value),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ],
+              );
+            },
           ),
           const SizedBox(height: 6),
           Text(
@@ -1176,19 +1193,41 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     );
   }
 
+  static const double _chanPad = 6, _chanIcon = 14, _chanIconGap = 4;
+
+  /// عرض اسم زرّ القناة بسطرٍ واحد بخطّه ومقياس خطّ الهاتف — كما يرسمه `Text` — ليُختار الشكل قبل الرسم.
+  static double _channelLabelWidth(BuildContext context, String label) {
+    final tp = TextPainter(
+      text: TextSpan(text: label, style: DefaultTextStyle.of(context).style.merge(AppType.labelBold())),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final w = tp.width;
+    tp.dispose();
+    return w;
+  }
+
   Widget _channelChoice({
     required String label,
     required IconData icon,
     required Color color,
     required bool selected,
     required VoidCallback onTap,
+    bool stacked = false,
   }) {
+    final fg = selected ? color : AppColors.textMid;
+    // الاسم لا يُقصّ: يصغر قليلاً إن نقص عن عرضه كسراً من البكسل (الشكل يُختار بالقياس أعلاه).
+    final text = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(label, style: AppType.labelBold(color: fg), maxLines: 1),
+    );
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(R.sm),
       child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        constraints: const BoxConstraints(minHeight: 40),
+        padding: EdgeInsets.symmetric(horizontal: _chanPad, vertical: stacked ? 7 : 0),
         decoration: BoxDecoration(
           color:
               selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
@@ -1198,21 +1237,24 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             width: selected ? 1 : 0.5,
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 14, color: selected ? color : AppColors.textMid),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                label,
-                style: AppType.labelBold(color: selected ? color : AppColors.textMid),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        child: stacked
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: _chanIcon, color: fg),
+                  const SizedBox(height: 3),
+                  text,
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: _chanIcon, color: fg),
+                  const SizedBox(width: _chanIconGap),
+                  Flexible(child: text),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1411,9 +1453,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
               border: Border.all(color: active ? tone.softBorder : AppColors.border, width: active ? BW.selected : BW.normal),
               borderRadius: BorderRadius.circular(R.md),
             ),
+            // من الأعلى: أرقام الثلاثة على سطرٍ واحد وإن التفّ اسم أحدها سطرين.
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Row(
                   children: [

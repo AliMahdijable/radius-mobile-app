@@ -169,16 +169,20 @@ void main() {
       BigSubscribersApi.reset();
     });
 
-    testWidgets('🚨 ٢ ثمّ ٣ (١٦ نوفمبر — «تنطي الاعداد الكبيره ٢ مساحه والصغيره ٣»): صفّان بلا فراغ، الثلاثة بارتفاعٍ واحد، ولا قصّ '
-        'على 320/360/390/480 × الخطّ 1.0/1.2، فاتحاً وداكناً', (t) async {
-      Rect rectOf(String label) => t.getRect(find.ancestor(of: find.text(label), matching: find.byType(InkWell)).first);
-      final shrunk = <String>[], heights = <String>[];
+    testWidgets('🚨 ٢ ثمّ ٣ (١٦ نوفمبر — «تنطي الاعداد الكبيره ٢ مساحه والصغيره ٣») + أزرار «قناة الإرسال» («صلحها هم»): '
+        'لا نصّ مقصوص في الشاشة كلّها على 320–480 × الخطّ 1.0/1.1/1.2، فاتحاً وداكناً', (t) async {
+      Finder cardOf(String label) => find.ancestor(of: find.text(label), matching: find.byType(InkWell)).first;
+      Rect rectOf(String label) => t.getRect(cardOf(label));
+      final shrunk = <String>{}, heights = <String>[], modes = <String>[];
       addTearDown(() {
         debugPrint('ارتفاعات: ${heights.join(' | ')}');
+        debugPrint('أزرار القناة: ${modes.join(' | ')}');
         debugPrint('صغُر: ${shrunk.isEmpty ? 'لا شيء' : shrunk.join(' | ')}');
       });
-      for (final w in [320.0, 360.0, 390.0, 480.0]) {
-        for (final scale in [1.0, 1.2]) {
+      const filterLabels = ['كل المشتركين', 'الفعّالون', 'المدينون', 'منتهي الصلاحية', 'قرب الانتهاء (3 أيام)'];
+      const chanLabels = ['تلقائي', 'واتساب فقط', 'تلغرام فقط'];
+      for (final w in [320.0, 340.0, 360.0, 375.0, 390.0, 412.0, 430.0, 480.0]) {
+        for (final scale in [1.0, 1.1, 1.2]) {
           for (final dark in [false, true]) {
             final tag = '$w×$scale${dark ? ' داكن' : ''}';
             final inner = await visualSetUp(s1bSasOwner);
@@ -186,9 +190,18 @@ void main() {
             BigSubscribersApi.reset();
             SubscribersApi.clearAllCaches();
             t.platformDispatcher.textScaleFactorTestValue = scale;
-            await pumpVisual(t, VisualDevice('', Size(w, 1600), 3, dark: dark), home: (_) => const BroadcastScreen());
+            await pumpVisual(t, VisualDevice('', Size(w, 3200), 3, dark: dark), home: (_) => const BroadcastScreen());
             await settle(t, seconds: 2);
             expect(t.takeException(), isNull, reason: 'فيضان $tag');
+
+            // ① لا نصّ مقصوص في الشاشة كلّها (كان: «واتساب فقط» و«تلغرام فقط» على 320–360)
+            final cut = <String>{
+              for (final p in t.allRenderObjects.whereType<RenderParagraph>())
+                if (p.didExceedMaxLines) p.text.toPlainText(),
+            };
+            expect(cut, isEmpty, reason: 'نصٌّ مقصوص $tag');
+
+            // ② «لمن ترسل؟»: الكبيران صفٌّ، والصغار الثلاثة صفٌّ تحتهما بارتفاعٍ واحد
             final all = rectOf('كل المشتركين'), act = rectOf('الفعّالون');
             final deb = rectOf('المدينون'), exp = rectOf('منتهي الصلاحية'), soon = rectOf('قرب الانتهاء (3 أيام)');
             expect((all.top - act.top).abs(), lessThan(0.5), reason: 'الكبيران صفٌّ واحد $tag');
@@ -197,21 +210,44 @@ void main() {
               expect((r.height - deb.height).abs(), lessThan(0.5), reason: 'الصغار بارتفاعٍ واحد $tag');
             }
             expect(deb.top, greaterThan(all.bottom), reason: 'الصغار تحت الكبيرين $tag');
-            expect(all.width, greaterThan(deb.width * 1.3), reason: 'الكبير نصفٌ والصغير ثلث $tag');
-            // لا اسمٌ مقصوص ولا رقم: كلّ نصٍّ في البطاقات الخمس يتّسع لأسطره، وما يصغر (FittedBox) لا يصغر أكثر من 15٪
-            for (final label in ['كل المشتركين', 'الفعّالون', 'المدينون', 'منتهي الصلاحية', 'قرب الانتهاء (3 أيام)', '110', '86', '48', '24', '3']) {
-              final p = t.renderObject<RenderParagraph>(find.text(label));
-              expect(p.didExceedMaxLines, isFalse, reason: '«$label» مقصوص $tag');
-              final box = find.ancestor(of: find.text(label), matching: find.byType(FittedBox));
-              if (box.evaluate().isNotEmpty) {
-                final k = t.getSize(box.first).width / p.size.width;
-                expect(k, greaterThanOrEqualTo(0.85), reason: '«$label» صغُر إلى ${(k * 100).round()}٪ $tag');
-                if (k < 0.999) shrunk.add('$tag «$label» ${(k * 100).round()}٪');
-              }
+            final numTop = t.getRect(find.text('48')).top;
+            for (final n in ['24', '3']) {
+              expect((t.getRect(find.text(n)).top - numTop).abs(), lessThan(0.5),
+                  reason: 'أرقام الصغار على سطرٍ واحد وإن التفّ اسم أحدها $tag');
             }
-            heights.add('$tag: كبير ${all.height.toStringAsFixed(0)} · صغير ${deb.height.toStringAsFixed(0)}');
+            expect(all.width, greaterThan(deb.width * 1.3), reason: 'الكبير نصفٌ والصغير ثلث $tag');
             expect(find.text('110'), findsOneWidget, reason: tag);
             expect(find.text('86'), findsOneWidget, reason: tag);
+
+            // ③ أزرار القناة: الثلاثة بارتفاعٍ واحد وعلى سطرٍ واحد؛ سطرٌ (أيقونة بجانب الاسم) أو أيقونةٌ فوق الاسم — للثلاثة معاً
+            final chanRects = [for (final l in chanLabels) rectOf(l)];
+            final stackedEach = [
+              for (final l in chanLabels)
+                t.getRect(find.descendant(of: cardOf(l), matching: find.byType(Icon)).first).bottom <=
+                    t.getRect(find.text(l)).top + 1,
+            ];
+            for (final r in chanRects.skip(1)) {
+              expect((r.top - chanRects.first.top).abs(), lessThan(0.5), reason: 'أزرار القناة صفٌّ واحد $tag');
+              expect((r.height - chanRects.first.height).abs(), lessThan(0.5), reason: 'أزرار القناة بارتفاعٍ واحد $tag');
+            }
+            expect(stackedEach.toSet(), hasLength(1), reason: 'شكلٌ واحد للأزرار الثلاثة $tag');
+            final stacked = stackedEach.first;
+            if (w == 480) expect(stacked, isFalse, reason: 'هاتف المالك (480): كما كان — أيقونة بجانب الاسم $tag');
+            if (w == 320 && scale == 1.2) expect(stacked, isTrue, reason: 'أضيق هاتف بخطٍّ مكبّر: أيقونةٌ فوق الاسم $tag');
+            if (!dark) modes.add('$w×$scale ${stacked ? 'فوق' : 'بجانب'} ${chanRects.first.height.toStringAsFixed(0)}');
+
+            // ④ ما يصغر (FittedBox) لا يصغر كثيراً: البطاقات ≤ 15٪، أسماء القناة ≤ 3٪
+            for (final label in [...filterLabels, ...chanLabels, '110', '86', '48', '24', '3']) {
+              final p = t.renderObject<RenderParagraph>(find.text(label));
+              final box = find.ancestor(of: find.text(label), matching: find.byType(FittedBox));
+              if (box.evaluate().isEmpty) continue;
+              final k = t.getSize(box.first).width / p.size.width;
+              final floor = chanLabels.contains(label) ? 0.97 : 0.85;
+              expect(k, greaterThanOrEqualTo(floor), reason: '«$label» صغُر إلى ${(k * 100).round()}٪ $tag');
+              if (k < 0.999) shrunk.add('${w.toInt()}×$scale «$label» ${(k * 100).round()}٪');
+            }
+            if (!dark) heights.add('$w×$scale: كبير ${all.height.toStringAsFixed(0)} · صغير ${deb.height.toStringAsFixed(0)}');
+
             await t.pumpWidget(const SizedBox());
             await t.pump(const Duration(seconds: 1));
             t.platformDispatcher.clearTextScaleFactorTestValue();
