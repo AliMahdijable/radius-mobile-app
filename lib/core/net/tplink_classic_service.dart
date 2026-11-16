@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
 import 'router_types.dart';
+import 'tplink_agile_service.dart' show AgileCrypto;
 
 /// راوتر TP-Link المنزليّ القديم (واجهة `userRpm` — TL-WR741ND v4 بفيرموير 3.16.6، قِيس حيّاً ١١ نوفمبر على راوتر مشترك):
 ///
@@ -30,6 +31,11 @@ import 'router_types.dart';
 /// التوكن في المسار (`/<16 حرفاً>/userRpm/Index.htm`)، والصفحات نفسها تحت `/<TOKEN>/userRpm/…` بالكوكي، والخروج
 /// `/<TOKEN>/userRpm/LogoutRpm.htm` **دائماً** (مديرٌ واحد: جلسةٌ تبقى تحجب صاحب الراوتر). المصفوفات نفسها، لكنّ `statistList`
 /// نصوصٌ بفواصل الآلاف («4,266,809,196») و`hostList` خمسة حقولٍ للمحطّة (`wlanHostPara[4]`).
+///
+/// **الفيرموير المعمّى (TL-WR940N أحدث — مشتركٌ بالإدارة عن بعد :8080، ١٦ نوفمبر؛ قُرئ من سكربت الجهاز نفسه):** صفحة الدخول ما
+/// زالت تحمل `httpAutErrorArray` (فكانت تُعامَل كالكوكي-MD5 فلا يدخل أبداً — «تعذّرت قراءته» مهما صحّت كلمة السرّ)، لكنّ سكربتها
+/// `getRsa.json` ⇒ `login.json`: AES-128-CBC + توقيع RSA PKCS#1 v1.5 (`encryptData`)، ثمّ `Authorization=<seq>` والصفحات تحت
+/// `/<sessionId>/userRpm/…`، وبياناتها نصوصٌ معمّاة بمفتاح AES الجلسة نفسه (`parse` ⇒ `dataDecrypt`). اسم الدخول ثابتٌ «admin».
 
 /// تعرّفٌ ناجح: الراوتر يقول اسمه في realm المصادقة.
 class TpClassicHello {
@@ -104,6 +110,33 @@ class TpClassicParse {
     if (code == null) return null;
     return (code: code, md5: _int(a, 1) == 1);
   }
+
+  /// صفحة دخول الفيرموير المعمّى: سكربتها يطلب `getRsa.json` ثمّ يرسل `login.json` (لا `LoginRpm.htm?Save=Save`).
+  static bool isRsaLogin(String html) => html.contains('getRsa.json') && html.contains('login.json');
+
+  /// صفحةٌ من الفيرموير المعمّى ومفتاح جلستها ⇒ الصفحة ومعها ما فكّه المفتاح من نصوصها المقتبَسة (`var x=new Array(…);`) — فتقرؤها
+  /// قارئات المصفوفات نفسها. نصٌّ لا يفكّه المفتاح يُترك كما هو؛ بلا شيءٍ يُفكّ ⇒ الصفحة كما هي.
+  static String expandEncrypted(String body, String key, String iv) {
+    final out = <String>[];
+    for (final m in RegExp(r'''["']([A-Za-z0-9+/]{24,}={0,2})["']''').allMatches(body)) {
+      final b64 = m.group(1)!;
+      if (b64.length % 4 != 0) continue;
+      try {
+        final raw = base64.decode(b64);
+        if (raw.isEmpty || raw.length % 16 != 0) continue;
+        final txt = AgileCrypto.aesDecrypt(b64, key, iv);
+        if (!txt.contains('=')) continue;
+        out.add(_withVar(txt));
+      } catch (_) {
+        // ليس معمّى بمفتاحنا
+      }
+    }
+    return out.isEmpty ? body : '$body\n<script>\n${out.join('\n')}\n</script>';
+  }
+
+  /// `x=new Array(…)` بلا `var` (يقبلها `parseString` في الجهاز) ⇒ بـ`var` كما تتوقّعه [array].
+  static String _withVar(String t) => t.replaceAllMapped(
+      RegExp(r'(^|;)\s*(?!var\s)([A-Za-z_]\w*)\s*=\s*new\s+Array', multiLine: true), (m) => '${m[1]}var ${m[2]}=new Array');
 
   /// التوكن من ردّ الدخول (`…/<TOKEN>/userRpm/Index.htm`) — ستّة عشر حرفاً كبيراً؛ غيابه ⇒ null.
   static String? loginToken(String html) => RegExp(r'/([A-Z]{16})/userRpm/Index\.htm').firstMatch(html)?.group(1);
@@ -351,6 +384,8 @@ class TplinkClassicService {
     _issues.clear();
     _rejected.clear();
     _cookieHosts.clear();
+    _rsaHosts.clear();
+    _rsaKeys.clear();
   }
 
   static bool _wasRejected(String host, String auth) => _rejected[host]?.contains(auth) ?? false;
@@ -380,7 +415,33 @@ class TplinkClassicService {
       lastSetCookieNames = (res.headers[HttpHeaders.setCookieHeader] ?? const <String>[]).map((c) => c.split('=').first).join(',');
       final bytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b)).timeout(timeout ?? _read);
       // الصفحات iso-8859-1 لكنّ الـSSID/الأسماء قد تكون UTF-8 ⇒ UTF-8 متسامح (ما يخصّنا كلّه ASCII أو UTF-8 سليم).
-      return (status: res.statusCode, headers: res.headers, body: utf8.decode(bytes, allowMalformed: true));
+      var body = utf8.decode(bytes, allowMalformed: true);
+      // الفيرموير المعمّى: بيانات الصفحة نصوصٌ بمفتاح الجلسة ⇒ تُفكّ هنا فتقرؤها القارئات كما هي
+      final k = _rsaKeys[host];
+      if (k != null && path.contains('/userRpm/')) body = TpClassicParse.expandEncrypted(body, k.key, k.iv);
+      return (status: res.statusCode, headers: res.headers, body: body);
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// POST واحد بنصٍّ JSON (دخول الفيرموير المعمّى) ⇒ (الحالة، النصّ). شبكةٌ/مهلة ⇒ null. لا إعادة أبداً.
+  static Future<({int status, String body})?> _post(String host, String path, String body) async {
+    final base = baseFor(host);
+    final client = HttpClient()..connectionTimeout = _connect;
+    try {
+      final req = await client.postUrl(Uri.parse('$base$path')).timeout(_connect);
+      req.followRedirects = false;
+      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json; charset=UTF-8');
+      req.headers.set(HttpHeaders.refererHeader, '$base/');
+      final bytes = utf8.encode(body);
+      req.contentLength = bytes.length;
+      req.add(bytes);
+      final res = await req.close().timeout(_read);
+      final out = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b)).timeout(_read);
+      return (status: res.statusCode, body: utf8.decode(out, allowMalformed: true));
     } catch (_) {
       return null;
     } finally {
@@ -390,6 +451,12 @@ class TplinkClassicService {
 
   /// الفيرموير الأحدث لكلّ عنوان (عُرف بالتعرّف أو بقراءة): MD5 كلمة السرّ؟ — النبضة الحيّة تدخل بالكوكي بلا طلب الحالة أوّلاً.
   static final _cookieHosts = <String, bool>{};
+
+  /// عناوين الفيرموير المعمّى (دخولٌ RSA+AES — [TpClassicParse.isRsaLogin]).
+  static final _rsaHosts = <String>{};
+
+  /// مفتاح AES جلسةٍ جارية لكلّ عنوان (داخل [_serial]): صفحات userRpm تُفكّ به في [_get]. يُمحى بالخروج.
+  static final _rsaKeys = <String, ({String key, String iv})>{};
 
   /// جلسات الفيرموير الأحدث لكلّ عنوانٍ واحدةً بعد واحدة داخل التطبيق: مديرٌ واحد على الراوتر، وكلّ عمليّة (نبضة الكرت، الفحص،
   /// الواي فاي، إعادة التشغيل) تدخل وتخرج — خروج إحداها وسط الأخرى يُسقطها (حيّاً ١٢ نوفمبر على WR940N: «كلمة سرّ الواي فاي»
@@ -439,6 +506,11 @@ class TplinkClassicService {
       if (realm.isNotEmpty && !realm.toUpperCase().contains('TP-LINK')) return null;
       if (realm.isEmpty && !r.body.contains('/userRpm/LoginRpm.htm')) return null;
       _cookieHosts[h0] = st.md5;
+      if (TpClassicParse.isRsaLogin(r.body)) {
+        _rsaHosts.add(h0);
+      } else {
+        _rsaHosts.remove(h0);
+      }
       return TpClassicHello(realm: realm, model: TpClassicParse.modelFromRealm(realm), cookieAuth: true, md5: st.md5);
     }
     return null;
@@ -498,6 +570,7 @@ class TplinkClassicService {
     bool checkFront = true,
   }) async {
     var md5 = _cookieHosts[h] ?? true;
+    var rsa = _rsaHosts.contains(h);
     if (checkFront) {
       final front = await _get(h, '/');
       if (front == null) {
@@ -519,7 +592,14 @@ class TplinkClassicService {
       }
       md5 = st.md5;
       _cookieHosts[h] = md5;
+      rsa = TpClassicParse.isRsaLogin(front.body);
+      if (rsa) {
+        _rsaHosts.add(h);
+      } else {
+        _rsaHosts.remove(h);
+      }
     }
+    if (rsa) return _withRsaOnce<T>(h, pass, fn);
     final cookie = cookieAuth(user, pass, md5: md5);
     if (_wasRejected(h, cookie)) {
       _note(h, TpClassicIssue.rejected, 'remembered');
@@ -569,6 +649,100 @@ class TplinkClassicService {
       return await fn(tok, cookie, ref);
     } finally {
       await _get(h, '/$tok/userRpm/LogoutRpm.htm', cookie: cookie, referer: ref, timeout: const Duration(seconds: 4));
+    }
+  }
+
+  /// دخول الفيرموير المعمّى كصفحة الجهاز نفسها (`encryptData` + `PCSubWin`): `getRsa.json` ⇒ {rsa:{nn,mm}, seq}؛ AES-128-CBC (مفتاح/IV
+  /// ١٦ رقماً) لـ`{"name":"admin","password":…}`؛ توقيع RSA PKCS#1 v1.5 لـ`key=…&iv=…&h=md5("admin"+pass)&s=seq+len(data)` بكتل ٥٣؛
+  /// `POST login.json` بنصّ `JSONDATA: {"sign":…,"data":…}\n` ⇒ {valid, sessionId}. null ⇒ لم تُعطَ جلسة ([fail] حين السبب معروف هنا).
+  static Future<({String sid, String cookie, String key, String iv})?> _rsaLogin(
+      String h, String pass, void Function(TpClassicIssue issue, String trace) fail) async {
+    final rr = await _get(h, '/login/getRsa.json');
+    if (rr == null) {
+      fail(TpClassicIssue.unreachable, 'rsa key no-reply');
+      return null;
+    }
+    String? nn, mm;
+    int? seq;
+    try {
+      final j = jsonDecode(rr.body);
+      if (j is Map && j['rsa'] is Map) {
+        nn = '${(j['rsa'] as Map)['nn'] ?? ''}';
+        mm = '${(j['rsa'] as Map)['mm'] ?? ''}';
+        seq = int.tryParse('${j['seq']}');
+      }
+    } catch (_) {
+      // ليس JSON
+    }
+    if (nn == null || mm == null || seq == null || !RegExp(r'^[0-9a-fA-F]{64,1024}$').hasMatch(nn) || !RegExp(r'^[0-9a-fA-F]{1,8}$').hasMatch(mm)) {
+      fail(TpClassicIssue.readFailed, 'rsa key format');
+      return null;
+    }
+    const user = 'admin'; // ثابتٌ في صفحة الجهاز (PCSubWin ⇒ encrypt("admin", password))
+    final key = AgileCrypto.digits(16);
+    final iv = AgileCrypto.digits(16);
+    final data = AgileCrypto.aesEncrypt(jsonEncode({'name': user, 'password': pass}), key, iv);
+    final hash = AgileCrypto.md5Hex('$user$pass');
+    final sign = AgileCrypto.rsaEncrypt('key=$key&iv=$iv&h=$hash&s=${seq + data.length}', nn, mm);
+    final r = await _post(h, '/login/login.json', 'JSONDATA: ${jsonEncode({'sign': sign, 'data': data})}\n');
+    if (r == null) {
+      fail(TpClassicIssue.unreachable, 'rsa login no-reply');
+      return null;
+    }
+    Map? ret;
+    try {
+      final j = jsonDecode(r.body);
+      if (j is Map) ret = j;
+    } catch (_) {
+      // ليس JSON
+    }
+    final sid = '${ret?['sessionId'] ?? ''}';
+    if (ret?['valid'] == true) {
+      if (RegExp(r'^[A-Za-z0-9_-]{4,128}$').hasMatch(sid)) return (sid: sid, cookie: 'Authorization=${jsEscape('$seq')}', key: key, iv: iv);
+      // دخل لكنّ رقم الجلسة بشكلٍ لم نقسه — لا يُعدّ رفضاً (كلمة السرّ صحيحة)، والجهاز يُنهي جلسته بمهلتها
+      fail(TpClassicIssue.readFailed, 'rsa session id format');
+    }
+    return null;
+  }
+
+  /// جلسة الفيرموير المعمّى: دخولٌ واحد ⇒ [fn] بصفحاتٍ تُفكّ بمفتاحها ([_get]) ⇒ **الخروج دائماً** (مديرٌ واحد). كلمة سرٍّ رفضها
+  /// تُحفظ مرفوضةً (بصمتها لا هي) فلا تُرسل ثانيةً حتى [forget]؛ ورفضٌ/قفلٌ/مديرٌ آخر بحال صفحة الدخول بعده.
+  static Future<T?> _withRsaOnce<T>(String h, String pass, Future<T?> Function(String tok, String cookie, String ref) fn) async {
+    final mark = 'rsa:${crypto.md5.convert(utf8.encode(pass))}';
+    if (_wasRejected(h, mark)) {
+      _note(h, TpClassicIssue.rejected, 'remembered');
+      return null;
+    }
+    var failed = false;
+    final s = await _rsaLogin(h, pass, (issue, trace) {
+      failed = true;
+      _note(h, issue, trace);
+    });
+    if (s == null) {
+      if (failed) return null;
+      final f = await _get(h, '/');
+      switch (f == null ? null : TpClassicParse.loginState(f.body)?.code) {
+        case 2:
+          _reject(h, mark);
+          _note(h, TpClassicIssue.rejected, 'rsa login rejected');
+        case 1:
+          _note(h, TpClassicIssue.locked, 'locked');
+        case 0:
+          _note(h, TpClassicIssue.busy, 'another admin is logged in');
+        default:
+          // valid:false بلا حالٍ تفسّره: كالرفض تُحفظ — لا نطرقه ثانيةً تلقائيّاً (عشر محاولاتٍ تقفله ساعتين) حتى «حفظ وفحص»
+          _reject(h, mark);
+          _note(h, TpClassicIssue.rejected, 'rsa login refused');
+      }
+      return null;
+    }
+    _rsaKeys[h] = (key: s.key, iv: s.iv);
+    final ref = '${baseFor(h)}/${s.sid}/userRpm/MenuRpm.htm';
+    try {
+      return await fn(s.sid, s.cookie, ref);
+    } finally {
+      await _get(h, '/${s.sid}/userRpm/LogoutRpm.htm', cookie: s.cookie, referer: ref, timeout: const Duration(seconds: 4));
+      _rsaKeys.remove(h);
     }
   }
 
@@ -784,6 +958,8 @@ class TplinkClassicService {
 
   static Future<RouterResult<List<RouterWifi>>> _setWifiOnce(String host, String user, String pass, String newPass) async {
     final h = host.trim();
+    // الفيرموير المعمّى يرسل نماذجه معمّاةً (submitForm ⇒ dataEncrypt) — حفظٌ لم يُقَس ⇒ لا إرسال
+    if (_rsaHosts.contains(h)) return const RouterResult.fail(RouterFail.unsupported, 'encrypted firmware');
     final got = await _inSession<RouterResult<List<RouterWifi>>>(h, user, pass, (get) async {
       final page = await get('WlanSecurityRpm.htm');
       trace?.add('page http=${page?.status} len=${page?.body.length} setCookie=${lastSetCookieNames ?? '-'}');
@@ -830,6 +1006,7 @@ class TplinkClassicService {
 
   static Future<RouterResult<RouterReboot>> _rebootOnce(String host, String user, String pass) async {
     final h = host.trim();
+    if (_rsaHosts.contains(h)) return const RouterResult.fail(RouterFail.unsupported, 'encrypted firmware');
     final got = await _inSession<RouterResult<RouterReboot>>(h, user, pass, (get) async {
       final r = await get('SysRebootRpm.htm', query: 'Reboot=Reboot', refPage: 'SysRebootRpm.htm');
       if (r == null) return const RouterResult.ok(RouterReboot(confirmed: false));
