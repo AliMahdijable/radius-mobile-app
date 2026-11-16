@@ -736,7 +736,7 @@ void main() {
 
   group('كلمة الواي فاي (١٦ نوفمبر — مطفأةٌ افتراضاً)', () {
     const wifi = 'كلمة الواي فاي';
-    const wifiHint = 'يشوفون كلمة واي فاي راوترهم ويغيّرونها من «فحص شبكتي»';
+    const wifiHint = 'يرون كلمة واي فاي راوترهم ويغيّرونها من «فحص شبكتي»';
     const withWifi = {'connection': true, 'usage': true, 'device': false, 'finance': true, 'wifi': false};
 
     test('العقد: غائبٌ = لا يعرفه الخادم (null، مطفأةٌ عند المشترك) · true وحده يفتحها · toJson بما يعرفه', () {
