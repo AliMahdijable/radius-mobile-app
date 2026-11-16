@@ -154,7 +154,7 @@ void main() {
       final r = judge(d, p);
       expect(r.signal, isNull);
       expect(r.state, CheckState.unread);
-      expect(texts(r), contains('إشارة الوصلة ما انقرت'));
+      expect(texts(r), contains('إشارة الوصلة لم تُقرأ'));
       final ok = await readVia(SnmpWirePipe(FakeSnmpAgent(_ruijie(bridge: _bridgeRow(signal: -61)))), d);
       expect(ok.detail.glance.signal, -61);
       expect(ok.detail.glance.snr, 34);
@@ -167,17 +167,17 @@ void main() {
     final olt = dev(60, type: 'other', brand: 'vsol', protocol: 'snmp', model: 'V1600D8');
     const ge1 = VsolUplink(index: 1, name: 'GE1', up: true, speedMbps: 1000, rxBytes: 0, txBytes: 0);
 
-    test('🚨 منافذ الصعود وحدها ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» بلا «ONU 0/0»؛ وبلا شيءٍ (الهويّة وحدها) كذلك',
+    test('🚨 منافذ الصعود وحدها ⇒ «منافذ PON لم تُقرأ» و«لم يُقرأ» بلا «ONU 0/0»؛ وبلا شيءٍ (الهويّة وحدها) كذلك',
         () {
       const up = VsolOltStats(sysName: 'OLT', uptime: Duration(days: 9), uplinks: [ge1]);
       final r = judge(olt, oltProbeResult(up));
       expect(r.role, CheckRole.olt);
       expect(r.state, CheckState.unread);
-      expect(texts(r), contains('منافذ PON ما انقرت'));
+      expect(texts(r), contains('منافذ PON لم تُقرأ'));
       expect(r.vitals.where((v) => v.k == 'ONU'), isEmpty, reason: 'لا «0/0» عن أولتٍ لم تُقرأ بنيته');
       final bare = judge(olt, oltProbeResult(const VsolOltStats(sysName: 'OLT', uptime: Duration(days: 9))));
       expect(bare.state, CheckState.unread);
-      expect(texts(bare), contains('منافذ PON ما انقرت'));
+      expect(texts(bare), contains('منافذ PON لم تُقرأ'));
     });
 
     test('ملخّص الخادم (منافذه من مشتركيه، وقراءته تمّت عنده) يُحكم به كما كان — بعدده بلا قائمة منافذه، أو ببنيته',
@@ -185,7 +185,7 @@ void main() {
       DeviceCheckReport remote(Map<String, dynamic> v) =>
           DevicesCheck.evaluate(d: olt, alive: true, detail: DeviceVitals.fromVpn(v).detail);
       final none = remote({'kind': 'olt', 'total': 0, 'online': 0, 'pons': []});
-      expect(texts(none), isNot(contains('منافذ PON ما انقرت')), reason: 'سطر قراءتنا لا يُنسب لقراءة الخادم');
+      expect(texts(none), isNot(contains('منافذ PON لم تُقرأ')), reason: 'سطر قراءتنا لا يُنسب لقراءة الخادم');
       final counted = remote({'kind': 'olt', 'total': 120, 'online': 100, 'pons': []});
       expect(counted.state, CheckState.ok, reason: 'عدد المشتركين مقروء — لا «لم يُقرأ» كاذب');
       expect(counted.vitals.firstWhere((v) => v.k == 'ONU').v, '100/120');
@@ -198,8 +198,8 @@ void main() {
         ],
       });
       expect(full.state, CheckState.ok);
-      expect(texts(full), isNot(contains('منافذ PON ما انقرت')));
-      expect(texts(counted), isNot(contains('منافذ PON ما انقرت')));
+      expect(texts(full), isNot(contains('منافذ PON لم تُقرأ')));
+      expect(texts(counted), isNot(contains('منافذ PON لم تُقرأ')));
     });
   });
 
@@ -367,16 +367,16 @@ void main() {
       expect(ssh, 1);
     });
 
-    test('🚨 EdgeSwitch وصفحته لم تفتح ⇒ سببٌ صادق («صفحة السويج ما فتحت»)، لا «مستخدمه بلا صلاحيّة قراءة»', () async {
+    test('🚨 EdgeSwitch وصفحته لم تفتح ⇒ سببٌ صادق («صفحة السويتش ما فتحت»)، لا «مستخدمه بلا صلاحيّة قراءة»', () async {
       final d = dev(83, type: 'switch', brand: 'ubnt', protocol: 'ssh', model: 'ES-8-150W');
       final r = await check(d, viaSsh: sshOnSwitch, viaRest: () => null);
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['يردّ، لكن صفحة السويج ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ']);
+      expect(texts(r), ['يردّ، لكن صفحة السويتش ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ']);
       // R2-2: كلمةٌ واحدة للجهاز — اسم دوره بالصفّ والجواب الصوتيّ (roleLabel) وسببه وتقريره المنسوخ
-      expect(r.roleLabel, 'سويج');
-      expect(r.toText(), startsWith('${d.name} (سويج) — لم يُقرأ'));
-      expect(r.toText(), contains('• يردّ، لكن صفحة السويج ما فتحت'));
-      expect(r.toText(), isNot(contains('سويتش')), reason: 'لا «السويتش» بجانب «(سويج)» في الكتلة نفسها');
+      expect(r.roleLabel, 'سويتش');
+      expect(r.toText(), startsWith('${d.name} (سويتش) — لم يُقرأ'));
+      expect(r.toText(), contains('• يردّ، لكن صفحة السويتش ما فتحت'));
+      expect(r.toText(), isNot(contains('سويج')), reason: 'لا «السويج» بجانب «(سويتش)» في الكتلة نفسها');
     });
 
     test('راديو airOS: قراءته الناجحة لا تلمس REST؛ وفشله بسببه هو (REST ليس EdgeSwitch) — مرّةً لكلّ جهاز', () async {
@@ -433,12 +433,12 @@ void main() {
     Future<UbntStats> airOs() async => UbntStats.fromMcaStatus(const {'deviceName': 'Rocket', 'wlanMode': 'master',
           'wlanEssid': 'E', 'wlanConnections': '0', 'cpuload': '5', 'uptime': '864000'});
 
-    test('🚨 R2-1 سويجٌ بلا طراز وسكترٌ خلف الـIP العامّ نفسه (توجيه منافذ): بعد أن يُتذكّر السويج يُقرأ السكتر بـSSH',
+    test('🚨 R2-1 سويتش بلا طراز وسكترٌ خلف الـIP العامّ نفسه (توجيه منافذ): بعد أن يُتذكّر السويتش يُقرأ السكتر بـSSH',
         () async {
       final sw = ubnt(90, type: 'switch', ip: '5.6.7.8', apiPort: 8443);
       final sector = ubnt(91, type: 'sector', ip: '5.6.7.8', apiPort: 2201);
       expect((await check(sw, viaSsh: sshOnSwitch, viaRest: snapshot)).state, isNot(CheckState.unread));
-      expect([isEdgeSwitch(sw), ssh, rest], [true, 0, 1], reason: 'السويج نفسه يُتذكّر');
+      expect([isEdgeSwitch(sw), ssh, rest], [true, 0, 1], reason: 'السويتش نفسه يُتذكّر');
       expect(isEdgeSwitch(sector), isFalse, reason: 'جارُه على الـIP نفسه ليس سويجاً');
       // REST على منفذ السكتر لا يجيب — لو سُئل لقيل «صفحة السويج ما فتحت» كذباً وجلسته تقرؤه
       final r = await check(sector, viaSsh: airOs, viaRest: () => null);
@@ -458,7 +458,7 @@ void main() {
       expect([r.state == CheckState.unread, r.role, ssh, rest], [false, CheckRole.sector, 1, 1]);
     });
 
-    test('🚨 R2-1 راديو airOS فاشلٌ خلف الـIP نفسه لا يحجب REST عن سويجٍ بلا طراز ١٠ دقائق (بسبب الراديو القديم)',
+    test('🚨 R2-1 راديو airOS فاشلٌ خلف الـIP نفسه لا يحجب REST عن سويتش بلا طراز ١٠ دقائق (بسبب الراديو القديم)',
         () async {
       final radio = ubnt(94, type: 'sector', ip: '5.6.7.9', apiPort: 2202);
       Future<UbntStats> refused() async => throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
@@ -469,10 +469,10 @@ void main() {
       final r = await check(sw, viaSsh: sshOnSwitch, viaRest: snapshot);
       expect(r.state, isNot(CheckState.unread));
       expect(r.vitals.firstWhere((x) => x.k == 'المنافذ').v, '3/4');
-      expect(rest, 2, reason: 'السويج سُئل REST وقُرئ');
+      expect(rest, 2, reason: 'السويتش سُئل REST وقُرئ');
     });
 
-    test('🚨 R2-1 سويجٌ بلا طراز ومنفذ صفحته خطأ: تعديل المنفذ يُجرَّب فوراً — لا ١٠ دقائق على السبب القديم', () async {
+    test('🚨 R2-1 سويتش بلا طراز ومنفذ صفحته خطأ: تعديل المنفذ يُجرَّب فوراً — لا ١٠ دقائق على السبب القديم', () async {
       final wrong = ubnt(96, type: 'switch', ip: '10.9.9.9', apiPort: 22);
       expect((await check(wrong, viaSsh: sshOnSwitch, viaRest: () => null)).state, CheckState.unread);
       expect(rest, 1);
@@ -483,7 +483,7 @@ void main() {
     });
 
     // ── R3-1: ذاكرة الفشل ببصمة بيانات الدخول — رمزٌ صُحّح يُجرَّب فوراً، والرمز نفسه لا يُسأل كلّ نبضة ──
-    test('🚨 R3-1 سويجٌ بلا طراز ورمزه خطأ ثمّ صُحّح: يُقرأ بـREST فوراً — لا «مستخدمه بلا صلاحيّة قراءة» ١٠ دقائق',
+    test('🚨 R3-1 سويتش بلا طراز ورمزه خطأ ثمّ صُحّح: يُقرأ بـREST فوراً — لا «مستخدمه بلا صلاحيّة قراءة» ١٠ دقائق',
         () async {
       Future<UbntStats> refused() async => throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
       final d = ubnt(97, type: 'switch', ip: '10.9.9.7');

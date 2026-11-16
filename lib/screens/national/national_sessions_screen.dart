@@ -301,7 +301,7 @@ class _SessionSheet extends StatelessWidget {
           ]),
           if (!online) ...[
             const SizedBox(height: Sp.sm),
-            Text('البوّابة لا تعطي الآيبي ولا المدّة لغير المتّصل', style: AppType.micro(color: AppColors.textMid)),
+            Text('البوّابة لا تعطي عنوان IP ولا المدّة لغير المتّصل', style: AppType.micro(color: AppColors.textMid)),
           ],
         ],
       ),

@@ -52,7 +52,7 @@ void main() {
 
   // ١٤ نوفمبر (HS8546V2): عدّادات الـONU لا ترى تحميل المشترك ⇒ سطرٌ واحد بالسبب بدل المربّع — المالك رأى المربّع فارغاً بالكرت
   // واختار «سطر صغير بدل المربّع»: لا أرقام ولا شرطات ولا مفتاح رسم ولا «إعادة محاولة».
-  testWidgets('«الترافيك: الجهاز ما يعدّ التحميل»: سطرٌ صغير بدل المربّع، بعرض الهاتف وخطٍّ مكبَّر، فاتح وغامق', (t) async {
+  testWidgets('«حركة البيانات: الجهاز ما يعدّ التحميل»: سطرٌ صغير بدل المربّع، بعرض الهاتف وخطٍّ مكبَّر، فاتح وغامق', (t) async {
     t.view.physicalSize = const Size(1440, 900);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
@@ -80,11 +80,11 @@ void main() {
         ));
         await t.pump();
         expect(t.takeException(), isNull);
-        expect(find.text('الترافيك: الجهاز ما يعدّ التحميل'), findsOneWidget);
+        expect(find.text('حركة البيانات: الجهاز ما يعدّ التحميل'), findsOneWidget);
         expect(find.text('—'), findsNothing, reason: 'لا شرطات مكان أرقامٍ لن تأتي');
         expect(find.text('تحميل'), findsNothing, reason: 'لا مفتاح رسمٍ بلا رسم');
         expect(find.textContaining('ذروة التحميل'), findsNothing);
-        expect(find.text('تعذّرت قراءة الترافيك'), findsNothing);
+        expect(find.text('تعذّرت قراءة حركة البيانات'), findsNothing);
         expect(find.text('بانتظار إعادة المحاولة'), findsNothing, reason: 'لا محاولة تُنتظر — الجهاز لا يعطي الرقم');
         final box = t.getSize(find.byType(SubscriberTrafficChart));
         expect(box.height, lessThan(64), reason: 'سطرٌ لا مربّع (المربّع ~١٨٠) — الكرت يصغر');
@@ -154,7 +154,7 @@ void main() {
         expect(find.text('بانتظار القراءة'), findsOneWidget);
         expect(find.text('يظهر الرسم عند وصول القراءات'), findsOneWidget);
         await pump(248, null, null, unavailable: true);
-        expect(find.text('تعذّرت قراءة الترافيك'), findsOneWidget);
+        expect(find.text('تعذّرت قراءة حركة البيانات'), findsOneWidget);
         expect(find.text('بانتظار إعادة المحاولة'), findsOneWidget);
         history.add(start, 0, 0);
         await pump(248, 0, 0);

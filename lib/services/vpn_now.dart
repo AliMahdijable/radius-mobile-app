@@ -531,7 +531,7 @@ class VpnNow {
     // ممرّ التطبيق (٧ نوفمبر): اتّصالاته وغرفة نفقه الباقية (ملفّه/قالب شركته) تُغلق الآن لا بعد خمولها
     if (VpnPipe.used) VpnPipe.release();
     if (auto) {
-      notice.value = 'رجعت لشبكتك — الفحص صار مباشر من موبايلك';
+      notice.value = 'رجعت لشبكتك — الفحص صار مباشر من هاتفك';
       _noticeTimer?.cancel();
       _noticeTimer = Timer(const Duration(seconds: 8), () {
         if (!mode.value) notice.value = null;

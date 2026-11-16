@@ -637,7 +637,7 @@ class TowerText {
         TowerShape.panel => 'لوحة مسطّحة',
         TowerShape.omni => 'أومني',
         TowerShape.router => 'راوتر',
-        TowerShape.sw => 'سويج',
+        TowerShape.sw => 'سويتش',
         TowerShape.olt => 'أولت',
         TowerShape.other => 'جهاز آخر',
       };

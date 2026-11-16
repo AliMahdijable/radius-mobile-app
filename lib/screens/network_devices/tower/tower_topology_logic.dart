@@ -257,7 +257,7 @@ class TopoText {
       LinkState.ok => 'يعمل',
       LinkState.fair || LinkState.weak => f.light != null && f.light! < LinkFlow.fairLight
           ? (f.light! < LinkFlow.weakLight ? 'ضوء ضعيف جدّاً' : 'ضوء ضعيف')
-          : (f.halfDuplex ? 'half-duplex' : 'سرعة واطية'),
+          : (f.halfDuplex ? 'half-duplex' : 'سرعة منخفضة'),
       LinkState.down => 'واقع',
       LinkState.unknown => switch (f.portIssue) {
           FiberPortIssue.unset => 'بلا منفذ',

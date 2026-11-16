@@ -14,7 +14,7 @@ const _screen = 'el_employee';
 
 const _addLabel = 'إضافة مشترك';
 const _addHint =
-    'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي';
+    'بالرصيد (بكلمة مرور الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي';
 
 /// كتالوج الخادم: مفاتيح ايرث لنك ومعها ما لا يخصّها (مدراء، إعدادات، واتساب
 /// عامّ) — يجب ألّا يظهر هذا الأخير في محرّر ايرث لنك. والأجهزة (`devices.*`)
@@ -46,7 +46,7 @@ final _catalog = PermissionsCatalog.fromJson({
     'reports.financial': {'label': 'التقارير الماليّة', 'category': 'reports'},
     'reports.activations': {'label': 'تقرير التفعيلات', 'category': 'reports'},
     'reports.daily_activations': {'label': 'تفعيلات اليوم', 'category': 'reports'},
-    'reports.expenses': {'label': 'الصرفيات', 'category': 'reports'},
+    'reports.expenses': {'label': 'المصاريف', 'category': 'reports'},
     'reports.account_statement': {'label': 'كشف الحساب', 'category': 'reports'},
     'reports.sessions': {'label': 'الجلسات', 'category': 'reports'},
     'reports.activity_log': {'label': 'سجلّ النشاط', 'category': 'reports'},

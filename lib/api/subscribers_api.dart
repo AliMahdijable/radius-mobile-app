@@ -709,7 +709,7 @@ class SubscribersApi {
   @visibleForTesting
   static String listErrorText(Object? body, {bool timedOut = false}) {
     if (timedOut) {
-      return 'سيرفر الشركة بطيء ولم يُكمل القائمة خلال ٣٠ ثانية — نعيد المحاولة تلقائيّاً';
+      return 'خادم الشركة بطيء ولم يُكمل القائمة خلال ٣٠ ثانية — نعيد المحاولة تلقائيّاً';
     }
     if (body is Map) {
       final m = body['message'];
@@ -1890,7 +1890,7 @@ class SubscribersApi {
           ok: false,
           linkUrl: null,
           expiresAt: null,
-          message: 'استجابة غير متوقّعة من السيرفر',
+          message: 'استجابة غير متوقّعة من الخادم',
         );
       }
       final m = Map<String, dynamic>.from(data);

@@ -107,7 +107,7 @@ void main() {
       await _shot(t, '01_example', d);
       await tap(t, k('bal-adjust-1'));
       await _shot(t, '02_adjust_sheet', d);
-      await t.tap(find.descendant(of: k('bal-adjust-source'), matching: find.text('من جيبي')));
+      await t.tap(find.descendant(of: k('bal-adjust-source'), matching: find.text('من مالي الخاصّ')));
       await t.pump();
       await t.tap(k('bal-adjust-save'));
       await settle(t, seconds: 5);

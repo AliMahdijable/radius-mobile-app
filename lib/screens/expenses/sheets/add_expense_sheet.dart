@@ -122,7 +122,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     showSheetSnack(context,
-        result.ok ? 'تم تسجيل الصرفية' : (result.message ?? 'تعذّر التسجيل'),
+        result.ok ? 'تم تسجيل المصروف' : (result.message ?? 'تعذّر التسجيل'),
         isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
@@ -136,16 +136,16 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.receipt,
-        title: 'صرفيّة جديدة',
+        title: 'مصروف جديد',
         subtitle: _companyLine(widget.companyName),
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
         label: _submitting
-            ? 'جاري التسجيل...'
+            ? 'جارٍ التسجيل...'
             : (_amount > 0
                 ? 'تسجيل ${formatIQD(_amount)} د.ع'
-                : 'تسجيل الصرفية'),
+                : 'تسجيل المصروف'),
         icon: LucideIcons.receipt,
         enabled: !_submitting && _amount > 0,
         busy: _submitting,
@@ -184,7 +184,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                         initialDate: _date,
                         firstDate: DateTime(_date.year - 1, 1, 1),
                         lastDate: DateTime.now(),
-                        helpText: 'اختر تاريخ الصرفية',
+                        helpText: 'اختر تاريخ المصروف',
                         cancelText: 'إلغاء',
                         confirmText: 'تأكيد',
                       );
@@ -225,7 +225,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
             maxLines: 2,
             style: AppType.input(color: AppColors.textHi),
             decoration: InputDecoration(
-              hintText: 'وصف الصرفية…',
+              hintText: 'وصف المصروف…',
               hintStyle: AppType.input(color: AppColors.textLow),
               prefixIcon: Padding(
                 padding: const EdgeInsets.only(left: 8, right: 4, bottom: 16),

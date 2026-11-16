@@ -105,7 +105,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'جاري التعديل...' : 'حفظ التعديل',
+        label: _submitting ? 'جارٍ التعديل...' : 'حفظ التعديل',
         icon: LucideIcons.save,
         enabled: !_submitting && _amount >= 0,
         busy: _submitting,

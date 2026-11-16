@@ -292,7 +292,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               const SizedBox(width: 10),
               Expanded(
                   child: _dropdown(
-                      'البراند *',
+                      'الشركة المصنّعة *',
                       _brand,
                       NetworkDeviceLabels.brands.entries.toList(),
                       _onBrandChanged)),
@@ -304,7 +304,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             if (_brand == 'ubnt')
               _ubntModelPicker()
             else
-              _textField(_modelCtrl, 'الموديل',
+              _textField(_modelCtrl, 'الطراز',
                   hint: 'مثلاً: RB4011، PBE-5AC، A5c', icon: LucideIcons.info),
             const SizedBox(height: 10),
             _textField(_locationCtrl, 'الموقع (اختياري)',
@@ -624,9 +624,9 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         DropdownButtonFormField<String?>(
           initialValue: matchedKey,
           isExpanded: true,
-          decoration: _inputDecoration('موديل UBNT'),
+          decoration: _inputDecoration('طراز UBNT'),
           hint: current.isEmpty
-              ? const Text('اختر الموديل')
+              ? const Text('اختر الطراز')
               : Text('مخصّص: $current', overflow: TextOverflow.ellipsis),
           items: [
             for (final p in presets)
@@ -643,7 +643,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         ),
         // حقل نصّي حرّ للـmodels غير المدرجة
         const SizedBox(height: 8),
-        _textField(_modelCtrl, 'أو اكتب الموديل يدوياً',
+        _textField(_modelCtrl, 'أو اكتب الطراز يدوياً',
             hint: 'مثلاً: PBE-5AC-500، NBE-5AC-Gen2', icon: LucideIcons.info),
       ],
     );

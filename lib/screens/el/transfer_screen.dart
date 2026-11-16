@@ -166,7 +166,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
 
   Future<void> _loadStatement({bool quiet = false}) async {
     if (!_stDeposit.ready) {
-      _snack('أدخل كلمة سرّ الإيداع أوّلاً', error: true);
+      _snack('أدخل كلمة مرور الإيداع أوّلاً', error: true);
       return;
     }
     if (!quiet) {
@@ -352,7 +352,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
         const SizedBox(height: Sp.sm),
         _targetField(),
         const SizedBox(height: Sp.md),
-        _label('كلمة سرّ الإيداع'),
+        _label('كلمة مرور الإيداع'),
         const SizedBox(height: Sp.sm),
         ElDepositPasswordField(
           controller: _txDeposit,
@@ -426,7 +426,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
       icon: LucideIcons.receiptText,
       title: 'كشف الحساب',
       children: [
-        _label('كلمة سرّ الإيداع'),
+        _label('كلمة مرور الإيداع'),
         const SizedBox(height: Sp.sm),
         ElDepositPasswordField(
           controller: _stDeposit,

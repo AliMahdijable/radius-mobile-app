@@ -306,7 +306,7 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
     final rec = o == null ? null : layout.recordFor(_m.oltId, o.key, o.ident);
     final box = rec?.boxId == null ? null : layout.boxes[rec!.boxId];
     final sub = o == null
-        ? 'اختر الجهاز اللي تشتغل عليه'
+        ? 'اختر الجهاز اللي تعمل عليه'
         : {fiberOnuTitle(layout, _m.oltId, o), o.display, if (box != null) box.name}.join(' · ');
     final wide = fiberWide(context);
     final live = o != null && _online != false && _fails < 3;
@@ -501,7 +501,7 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
             Text('ضوءٌ حيّ لجهازٍ واحد', style: AppType.cardTitleBold(color: AppColors.textHi)),
             const SizedBox(height: Sp.xs),
             Text(
-              'اختر جهاز المشترك اللي تشتغل عليه، أو دوس «التقط بالفصل» وافصل ليفه — ونقرأ ضوءه كلّ ثانيتين وأنت عند الصندوق: قبل التنظيف وبعده، وصفّارة تسرع كلّما قوي.',
+              'اختر جهاز المشترك اللي تعمل عليه، أو دوس «التقط بالفصل» وافصل ليفه — ونقرأ ضوءه كلّ ثانيتين وأنت عند الصندوق: قبل التنظيف وبعده، وصفّارة تسرع كلّما قوي.',
               textAlign: TextAlign.center,
               style: AppType.body(color: AppColors.textMid),
             ),
@@ -732,11 +732,11 @@ class _FiberTechScreenState extends State<FiberTechScreen> with SingleTickerProv
                     const SizedBox(width: Sp.md),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('صفّارة حسب الضوء · ${_beep ? 'شغّالة' : 'مطفأة'}', style: AppType.rowValue(color: AppColors.textHi)),
+                        Text('صفّارة حسب الضوء · ${_beep ? 'تعمل' : 'مطفأة'}', style: AppType.rowValue(color: AppColors.textHi)),
                         Text(
                             _beep && _now == null
-                                ? 'شغّالة — تنتظر قراءة ضوء الجهاز وتصفّر أوّل ما يوصل'
-                                : 'تسرع كلّما قوي الضوء، تشتغل وعينك على الوصلة',
+                                ? 'تعمل — تنتظر قراءة ضوء الجهاز وتصفّر أوّل ما يوصل'
+                                : 'تسرع كلّما قوي الضوء، تعمل وعينك على الوصلة',
                             style: AppType.muted(color: AppColors.textMid)),
                       ]),
                     ),
@@ -836,7 +836,7 @@ class _CatchSheetState extends State<_CatchSheet> {
           Text('افصل ليف الجهاز اللي قدّامك (أو كهرباءه)', style: AppType.cardTitleBold(color: AppColors.textHi)),
           const SizedBox(height: Sp.xs),
           Text(
-            'أوّل جهازٍ ينفصل نختاره وحدنا، وضوءه قبل الفصل يصير «قبل». بعدها نظّف الوصلة ورجّعها وشوف الفرق.',
+            'أوّل جهازٍ ينفصل نختاره وحدنا، وضوءه قبل الفصل يصير «قبل». بعدها نظّف الوصلة ورجّعها وانظر الفرق.',
             style: AppType.body(color: AppColors.textMid),
           ),
           const SizedBox(height: Sp.lg),

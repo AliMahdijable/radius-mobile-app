@@ -254,7 +254,7 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
                 strokeWidth: 2, color: AppColors.brand),
           ),
           const SizedBox(width: 10),
-          Text('جاري الاتصال بـCisco…',
+          Text('جارٍ الاتصال بـCisco…',
               style: AppType.body(color: AppColors.textMid)),
         ]),
       );
@@ -852,7 +852,7 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
           const SizedBox(width: 6),
           // مرنٌ لأنّ النصّ غير المرن يُقاس بلا حدٍّ أعلى فيفيض الصفّ.
           Flexible(
-            child: Text('إجمالي المنافذ (سير الترفك)',
+            child: Text('إجمالي المنافذ (حركة البيانات)',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppType.pillBold(color: AppColors.textHi)),

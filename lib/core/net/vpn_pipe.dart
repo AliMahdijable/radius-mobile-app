@@ -585,7 +585,7 @@ class _HttpPipeTransport implements VpnPipeTransport {
     final text = why == 'cert'
         ? 'خادم الـVPN رفض شهادة ملفّك — ارفع الملفّ الجديد من صفحة VPN'
         : why == 'auth'
-            ? 'خادم الـVPN رفض اليوزر أو الباسورد — صحّحهما من صفحة VPN'
+            ? 'خادم الـVPN رفض اليوزر أو كلمة المرور — صحّحهما من صفحة VPN'
             : (msg.isEmpty ? 'الـVPN ما اتّصل الآن — حاول بعد قليل' : msg);
     return PipeRoute.failed(text, reason: reason);
   }

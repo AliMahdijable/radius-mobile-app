@@ -335,7 +335,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: AppColors.brand)),
             const SizedBox(width: 10),
-            Text('جاري الاتصال بـMikrotik…',
+            Text('جارٍ الاتصال بـMikrotik…',
                 style: AppType.body(color: AppColors.textMid)),
           ]),
         ]),
@@ -1125,7 +1125,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             child: desk
                 ? Text.rich(
                     TextSpan(children: [
-                      TextSpan(text: 'سير الترفك', style: AppType.cardTitleBold(color: AppColors.textHi)),
+                      TextSpan(text: 'حركة البيانات', style: AppType.cardTitleBold(color: AppColors.textHi)),
                       TextSpan(
                           text: '   أعلى واجهةٍ في كلّ لحظة · آخر ${arMinutes(windowMin)}',
                           style: AppType.muted(color: AppColors.textLow)),
@@ -1133,7 +1133,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   )
-                : Text('سير الترفك',
+                : Text('حركة البيانات',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.pillBold(color: AppColors.textHi)),
@@ -1341,7 +1341,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 icon: LucideIcons.network,
                 title: 'الواجهات',
                 count: bridges.length + ethers.length,
-                hint: bridges.isEmpty ? null : 'البريدجات أوّلاً — الأعلى ترافيكاً'),
+                hint: bridges.isEmpty ? null : 'البريدجات أوّلاً — الأعلى حركةً'),
             content: RepaintBoundary(child: _deskIfaceTable([...bridges, ...ethers], s)),
           );
     final wifi = !s.hasWireless
@@ -1349,7 +1349,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         : ExpandableSection(
             key: PageStorageKey('mikrotik-${widget.device.id}-wifi'),
             initiallyExpanded: true,
-            header: DeskSectionHeader(icon: LucideIcons.wifi, title: 'الوايرلس', count: s.wirelessInterfaces.length),
+            header: DeskSectionHeader(icon: LucideIcons.wifi, title: 'اللاسلكيّ', count: s.wirelessInterfaces.length),
             content: Column(children: [
               for (final (k, w) in s.wirelessInterfaces.indexed) ...[
                 if (k > 0) const SizedBox(height: Sp.sm),

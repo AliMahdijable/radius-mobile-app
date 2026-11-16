@@ -90,7 +90,7 @@ class _RecServer implements HttpClientAdapter {
       if (o.path.endsWith('/pause') || o.path.endsWith('/resume') || m == 'PUT' || m == 'DELETE') {
         return _json(200, {'success': true, 'pending': const []});
       }
-      return _json(409, {'success': false, 'code': 'RECURRING_OFF', 'message': '«الصرفيات الثابتة» غير مفعّلة لحسابك بعد'});
+      return _json(409, {'success': false, 'code': 'RECURRING_OFF', 'message': '«المصاريف الثابتة» غير مفعّلة لحسابك بعد'});
     }
     return inner.fetch(o, requestStream, cancelFuture);
   }
@@ -170,7 +170,7 @@ void main() {
       await pumpVisual(t, phoneTall, home: (_) => const ExpensesScreen());
       await settle(t, seconds: 2);
       expect(t.takeException(), isNull);
-      expect(find.text('الصرفيات الثابتة'), findsOneWidget);
+      expect(find.text('المصاريف الثابتة'), findsOneWidget);
       expect(find.text('بانتظار تأكيدك (1)'), findsOneWidget);
       expect(find.text('موقوفة'), findsOneWidget);
       expect(find.textContaining('كلّ ٣ أشهر · يوم 15 · حتى تمّوز 2027'), findsOneWidget);
@@ -182,7 +182,7 @@ void main() {
       await t.tap(find.text('أضفها'));
       await settle(t, seconds: 1);
       expect(find.textContaining('تُكتب بتاريخ استحقاقها 31 تشرين الأوّل 2026'), findsOneWidget);
-      await t.tap(find.textContaining('أضفها صرفيّة'));
+      await t.tap(find.textContaining('أضفها مصروفاً'));
       await settle(t, seconds: 4);
       final post = server.posts.lastWhere((p) => p.$2.endsWith('/confirm'));
       expect((post.$2, post.$3['amount']), ('/api/v2/expenses/recurring/runs/12/confirm', 75000));
@@ -204,7 +204,7 @@ void main() {
       await t.tap(find.text('اختر: تلقائيّاً أو بتأكيد'));
       await settle(t);
       expect(server.posts.where((p) => p.$2 == '/api/v2/expenses/recurring'), isEmpty, reason: 'بلا طريقة لا يُرسل');
-      expect(find.textContaining('أوّل صرفيّة: 1 تشرين الأوّل 2026'), findsOneWidget);
+      expect(find.textContaining('أوّل مصروف: 1 تشرين الأوّل 2026'), findsOneWidget);
       await t.ensureVisible(find.text('تلقائيّاً يوم الاستحقاق'));
       await t.tap(find.text('تلقائيّاً يوم الاستحقاق'));
       await settle(t);
@@ -225,7 +225,7 @@ void main() {
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phone, home: (_) => const ExpensesScreen());
       await settle(t, seconds: 2);
-      expect(find.text('الصرفيات الثابتة'), findsNothing);
+      expect(find.text('المصاريف الثابتة'), findsNothing);
       expect(find.text('قرطاسية'), findsOneWidget);
       expect(t.takeException(), isNull);
     });

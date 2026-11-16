@@ -298,7 +298,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       footer: SheetFooterBar(
         label: _done
             ? (_printingReceipt ? 'sheets.done_printing'.tr() : 'common.done'.tr())
-            : (_submitting ? 'جاري التسديد...' : 'تسديد الآن'),
+            : (_submitting ? 'جارٍ التسديد...' : 'تسديد الآن'),
         icon: LucideIcons.banknote,
         color: AppColors.brandAccent,
         enabled: _canSubmit,

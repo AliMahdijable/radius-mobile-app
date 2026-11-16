@@ -235,7 +235,7 @@ class DeskRateTile extends StatelessWidget {
               return DeskBigValue(n, u, color: color);
             }(),
       footer: v == null
-          ? deskSub(measuring ? 'بعد القراءة الثانية' : 'لا ترافيك')
+          ? deskSub(measuring ? 'بعد القراءة الثانية' : 'لا حركة')
           : (source == null || source!.isEmpty)
               ? (note == null ? null : deskSub(note!))
               : Align(alignment: AlignmentDirectional.centerStart, child: DeskPill(source!, AppTone.neutral)),
@@ -907,7 +907,7 @@ class DeskTrafficCard extends StatelessWidget {
     required this.capacity,
     required this.interval,
     this.subtitle,
-    this.title = 'سير الترفك',
+    this.title = 'حركة البيانات',
     this.rxLabel = 'تنزيل',
     this.txLabel = 'رفع',
   });

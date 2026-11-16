@@ -25,7 +25,7 @@ const Map<String, String> _kVariableLabels = {
   '{agent_code}': 'رمز الوكيل',
   // «كلمة سر المشترك» (١٠ نوفمبر): الخادم يقرؤها من الشركة لحظة الإرسال وتصل رقم المشترك وحده (لا تُخزَّن)؛
   // شركةٌ تمنع قراءتها ⇒ يُحذف سطرها من الرسالة. مع {username} و{agent_code} = بيانات دخوله لتطبيق MyServices.
-  '{password}': 'كلمة سر المشترك',
+  '{password}': 'كلمة مرور المشترك',
   '{phone}': 'رقم الهاتف',
   // اسمها في «بوابة المشترك» إن كتبه الحساب، وإلّا اسم الساس (الخادم: server/packageNames.js)؛ والأصل بـ{sas_package_name}
   '{package_name}': 'اسم الباقة',
@@ -461,7 +461,7 @@ class _TemplateTile extends StatelessWidget {
       label = 'معطّل';
       color = AppColors.warning;
     } else {
-      label = 'فاضي';
+      label = 'فارغ';
       color = AppColors.textLow;
     }
     return Container(

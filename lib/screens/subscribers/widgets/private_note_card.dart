@@ -244,7 +244,7 @@ class _PrivateNoteSheetState extends State<_PrivateNoteSheet> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('خاصّة بك — تظهر في كرت المشترك فقط، ولا تُرسل له ولا تُكتب في الساس.', style: AppType.muted()),
+          Text('خاصّة بك — تظهر في بطاقة المشترك فقط، ولا تُرسل له ولا تُكتب في الساس.', style: AppType.muted()),
           const SizedBox(height: Sp.md),
           TextField(
             controller: _ctrl,

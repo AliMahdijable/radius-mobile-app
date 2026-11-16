@@ -199,7 +199,7 @@ void main() {
       );
     });
 
-    test('🚨 كلمة السرّ: لا تُنسخ وهي مخفيّة، وتُنسخ حين تظهر', () {
+    test('🚨 كلمة المرور: لا تُنسخ وهي مخفيّة، وتُنسخ حين تظهر', () {
       final sub = _sub(_full());
       expect(_text(sub, password: 'pa55word'), isNot(contains('pa55word')));
       final shown = _text(sub, password: 'pa55word', passwordVisible: true);
@@ -433,7 +433,7 @@ void main() {
           'نوع الجهاز: Huawei ONT',
           'RX Power: -21.55 dBm',
           'TX Power: 2.31 dBm',
-          'فولتيّة موديول الضوء: 3.30 V', // ٦ نوفمبر: بالفولت وباسمها (موديول الضوء لا الأدابتر)
+          'فولتيّة وحدة الضوء: 3.30 V', // ٦ نوفمبر: بالفولت وباسمها (موديول الضوء لا الأدابتر)
           'الحرارة: 45 °C',
           'حالة الليف: OK',
           'وقت قراءة الجهاز: 2026/10/18 11:55',
@@ -441,7 +441,7 @@ void main() {
       );
     });
 
-    test('Ubiquiti: الإصدار والسكتور والمنافذ — وبلا الترافيك اللحظيّ', () {
+    test('Ubiquiti: الإصدار والسكتور والمنافذ — وبلا حركة البيانات اللحظيّ', () {
       final text = copyFieldsText(deviceCopyFields(_ubnt));
       expect(text.split('\n'), [
         'نوع الجهاز: NanoBeam-7 (UBNT)',
@@ -454,7 +454,7 @@ void main() {
         'Peer MAC: AA:BB:CC:DD:EE:FF',
         'المنافذ: ETH0 · 100 Mbps، ETH1 · مفصول',
       ]);
-      expect(text, isNot(contains('الترافيك')));
+      expect(text, isNot(contains('حركة البيانات')));
     });
 
     test('ضمن نسخ الكلّ: بعد الاتّصال وقبل الموقع', () {
@@ -560,7 +560,7 @@ void main() {
         ValueListenableBuilder<String?>(
           valueListenable: value,
           builder: (_, v, __) => Copyable(
-            label: 'الترافيك',
+            label: 'حركة البيانات',
             value: v,
             child: const _StateProbe(),
           ),
@@ -578,7 +578,7 @@ void main() {
   });
 
   group('copyToClipboard — إشعارٌ يُرى أينما نُسخ', () {
-    testWidgets('🚨 من داخل شيت: الإشعار فوق الشيت لا تحته', (t) async {
+    testWidgets('🚨 من داخل شيت: الإشعار فوق النافذة لا تحته', (t) async {
       final clips = _mockClipboard(t);
       await t.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -800,7 +800,7 @@ void main() {
         await close(t);
       });
 
-      testWidgets('$who: «نسخ كلّ المعلومات» — وكلمة السرّ حين تظهر وحدها',
+      testWidgets('$who: «نسخ كلّ المعلومات» — وكلمة المرور حين تظهر وحدها',
           (t) async {
         ProviderService.debugSet(el ? 'earthlink' : null);
         PermissionsService.debugSet(isEmployee: false);
@@ -867,12 +867,12 @@ void main() {
         expect(clips, hasLength(1));
         expect(clips.single, contains('اسم المستخدم: user7'));
         expect(find.byType(BottomSheet), findsNothing,
-            reason: 'الشيت يُغلق كباقي صفوفه');
+            reason: 'النافذة يُغلق كباقي صفوفه');
         await close(t);
       });
     }
 
-    testWidgets('موظّفٌ بلا مفتاح كلمة السرّ: لا تُجلب ولا تُنسخ', (t) async {
+    testWidgets('موظّفٌ بلا مفتاح كلمة المرور: لا تُجلب ولا تُنسخ', (t) async {
       PermissionsService.debugSet(
           isEmployee: true, permissions: const {'subscribers.view': true});
       await open(t);

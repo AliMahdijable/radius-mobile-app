@@ -311,8 +311,8 @@ class _NationalTeamSheetState extends State<NationalTeamSheet> {
       ),
       if (_add) ...[
         const SizedBox(height: Sp.lg),
-        _label('كلمة السرّ *', hint: m.policyAssumed ? 'شروطٌ تقريبيّة — البوّابة تتحقّق عند الحفظ' : null),
-        NationalLatinField(controller: _pw, maxLength: 64, secret: true, enabled: !frozen, semanticLabel: 'كلمة السرّ', onChanged: (_) => setState(() {})),
+        _label('كلمة المرور *', hint: m.policyAssumed ? 'شروطٌ تقريبيّة — البوّابة تتحقّق عند الحفظ' : null),
+        NationalLatinField(controller: _pw, maxLength: 64, secret: true, enabled: !frozen, semanticLabel: 'كلمة المرور', onChanged: (_) => setState(() {})),
         const SizedBox(height: 6),
         Wrap(spacing: 10, runSpacing: 4, children: [
           for (final c in m.policy.checks(_pw.text, u))

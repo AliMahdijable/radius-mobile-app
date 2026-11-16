@@ -538,7 +538,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     };
     if (!ShellNav.ready) {
       ScaffoldMessenger.maybeOf(widget.rootContext)
-          ?.showSnackBar(const SnackBar(content: Text('افتح تبويب «المشتركون» واختر الفلتر من أعلاه')));
+          ?.showSnackBar(const SnackBar(content: Text('افتح تبويب «المشتركون» واختر التصفية من أعلاه')));
       return;
     }
     Navigator.of(context).pop();
@@ -664,7 +664,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (devs.isEmpty) {
-      messenger?.showSnackBar(const SnackBar(content: Text('ما عندك أجهزة بقسم الأجهزة')));
+      messenger?.showSnackBar(const SnackBar(content: Text('ليست لديك أجهزة في قسم الأجهزة')));
       return;
     }
     if (!viaVpn && AgentNetPresence.isOff) {
@@ -911,7 +911,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             child: Text(
               intent.action == VoiceAction.checkAll
                   ? 'أجلب أجهزتك…'
-                  : 'أدوّر على «${intent.query}»${_merged ? mergedWord(' بكلّ الشركات', ' بكلّ الصفحات') : ''}…',
+                  : 'أبحث عن «${intent.query}»${_merged ? mergedWord(' بكلّ الشركات', ' بكلّ الصفحات') : ''}…',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),
@@ -957,7 +957,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             key: const ValueKey('voice-list'),
             icon: LucideIcons.users,
             title: _filterNames[f]!,
-            lines: const ['قائمة المشتركين بهذا الفلتر'],
+            lines: const ['قائمة المشتركين بهذه التصفية'],
             button: 'افتح القائمة',
             onTap: () => _openList(f),
           ),
@@ -1053,7 +1053,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         // الجواب أوّلاً: حاله (المالك: «يا اما مخلص متصل ومخلص طافي»)
         Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
           if (c.disabled)
-            chip('مطفي', AppTone.neutral)
+            chip('موقوف', AppTone.neutral)
           else
             chip(c.expired ? 'منتهي' : 'فعّال', c.expired ? AppTone.danger : AppTone.success),
           // غير المتّصل بكلمة قسمه في «الفحص العامّ» (١٠ نوفمبر)
@@ -1356,7 +1356,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
 
   Widget _subscriberCard(Subscriber s, VoiceIntent intent) {
     final name = s.fullName.trim().isEmpty ? s.username : s.fullName;
-    final status = s.isDisabled ? 'مطفي' : (s.isOnline ? 'متّصل' : 'غير متّصل');
+    final status = s.isDisabled ? 'موقوف' : (s.isOnline ? 'متّصل' : 'غير متّصل');
     final days = s.remainingDays;
     final expiry = days == null
         ? null

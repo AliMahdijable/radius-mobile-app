@@ -296,7 +296,7 @@ void main() {
   });
 
   group('F1 سكتر ميموزا: مسح محطّاته لم يكتمل ⇒ لا «سكتر · سليم» ولا «ما عليه أحد الآن»', () {
-    test('🚨 جدول الإحصاء الرسميّ انتهت مهلته (٥٠٤ الممرّ) والبديل غائب ⇒ «قائمة مشتركيه ما انقرت»، واللقطة 20',
+    test('🚨 جدول الإحصاء الرسميّ انتهت مهلته (٥٠٤ الممرّ) والبديل غائب ⇒ «قائمة مشتركيه لم تُقرأ»، واللقطة 20',
         () async {
       final d = dev(11);
       final p = await readMimosa(d, SnmpPipe(mimosaAgent(rssi: [-52, -55, -58]), lose: {_stats}));
@@ -304,7 +304,7 @@ void main() {
       final r = judge(d, p, prev: const CheckMemo(peers: 20));
       expect(r.role, CheckRole.sector);
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(r), ['قائمة مشتركيه لم تُقرأ']);
       expect(r.memo!.peers, 20, reason: 'لا صفرٌ يجعل كلّ فشلٍ بعده «سليم»');
       // وأوّل فحصٍ له (بلا لقطة): لا «ما عليه أحد الآن» بحالٍ «سليم»
       expect(judge(d, p).state, CheckState.unread);
@@ -317,17 +317,17 @@ void main() {
       expect(p.detail.glance.peersKnown, isFalse);
       final r = judge(d, p, prev: const CheckMemo(peers: 6));
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(texts(r), ['قائمة مشتركيه لم تُقرأ']);
       expect(r.memo!.peers, 6);
     });
 
-    test('🚨 نقطة وصولٍ مسجّلة «وصلة» بلا إشارةٍ ومسح محطّاتها فشل ⇒ «إشارة الوصلة ما انقرت» لا «الوصلة بلا طرفٍ ثانٍ»',
+    test('🚨 نقطة وصولٍ مسجّلة «وصلة» بلا إشارةٍ ومسح محطّاتها فشل ⇒ «إشارة الوصلة لم تُقرأ» لا «الوصلة بلا طرفٍ ثانٍ»',
         () async {
       final d = dev(13, type: 'link');
       final r = judge(d, await readMimosa(d, SnmpPipe(mimosaAgent(rssi: [-60]), lose: {_stats}), rx: null));
       expect(r.role, CheckRole.link);
       expect(texts(r), isNot(contains('الوصلة بلا طرفٍ ثانٍ')));
-      expect(texts(r), ['إشارة الوصلة ما انقرت']);
+      expect(texts(r), ['إشارة الوصلة لم تُقرأ']);
       expect(r.state, CheckState.unread);
     });
 
@@ -385,7 +385,7 @@ void main() {
           ros({'ap': null, 'radio': true, 'reg_ok': true, 'sig': null, 'peers': [peer]});
       final r = remote(d, v({'n': 'TWR-AP', 's': -63, 'm': 'aa:bb:cc:00:00:01'}));
       expect(r.role, CheckRole.link);
-      expect(texts(r), isNot(contains('إشارة الوصلة ما انقرت')));
+      expect(texts(r), isNot(contains('إشارة الوصلة لم تُقرأ')));
       expect(r.state, CheckState.ok);
       expect(r.signal, -63);
       expect(r.remoteSignal, isNull, reason: 'ما يستقبله هذا الجهاز «الإشارة» لا «الطرف الثاني»');
@@ -416,7 +416,7 @@ void main() {
       expect(r.signal, -61);
     });
 
-    test('جدولها قُرئ فارغاً ⇒ «الوصلة بلا طرفٍ ثانٍ» (قرار المالك ١٠ نوفمبر)؛ وبإشارةٍ غير مقروءة (0) ⇒ «إشارة الوصلة ما انقرت» — لا «0 dBm»', () {
+    test('جدولها قُرئ فارغاً ⇒ «الوصلة بلا طرفٍ ثانٍ» (قرار المالك ١٠ نوفمبر)؛ وبإشارةٍ غير مقروءة (0) ⇒ «إشارة الوصلة لم تُقرأ» — لا «0 dBm»', () {
       final d = dev(33, type: 'link', brand: 'mikrotik', protocol: 'api');
       final none = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': const []}));
       expect(texts(none), ['الوصلة بلا طرفٍ ثانٍ']);
@@ -425,7 +425,7 @@ void main() {
         {'n': 'TWR-AP', 's': 0}
       ]}));
       expect(zero.signal, isNull);
-      expect(texts(zero), ['إشارة الوصلة ما انقرت']);
+      expect(texts(zero), ['إشارة الوصلة لم تُقرأ']);
     });
   });
 
@@ -435,27 +435,27 @@ void main() {
     final none = {'ap': null, 'radio': true, 'reg_ok': true, 'peers': const <Map>[]};
 
     test(
-        '🚨 R2-2 سكتر والخادم (2edbcb5، بلا ru) قرأ جدوله فارغاً ⇒ «ما عليه أحد الآن» + «حال الراديو ما انقرأ» '
-        'و«لم يُقرأ» — لا «سليم» ولا «قائمة مشتركيه ما انقرت»', () {
+        '🚨 R2-2 سكتر والخادم (2edbcb5، بلا ru) قرأ جدوله فارغاً ⇒ «ما عليه أحد الآن» + «حال الراديو لم يُقرأ» '
+        'و«لم يُقرأ» — لا «سليم» ولا «قائمة مشتركيه لم تُقرأ»', () {
       final d = dev(41, brand: 'mikrotik', protocol: 'api');
       final r = remote(d, ros(none));
       expect(r.role, CheckRole.sector);
       expect(r.state, CheckState.unread);
-      expect(texts(r), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
+      expect(texts(r), ['ما عليه أحد الآن', 'حال الراديو لم يُقرأ']);
       expect(r.subsKnown, isTrue, reason: 'قائمته قُرئت (reg_ok) — المجهول حال راديوه وحده');
       // النصّ المنسوخ (والصوت من الأسطر نفسها) كالشاشة
       expect(r.toText(), endsWith('— لم يُقرأ\nالمعالج 9٪ · الذاكرة 40٪ · يعمل منذ ${DeviceVitals.fmtUptime(864000)} · '
-          'المنافذ 1/1\n• ما عليه أحد الآن\n• حال الراديو ما انقرأ'));
+          'المنافذ 1/1\n• ما عليه أحد الآن\n• حال الراديو لم يُقرأ'));
       final was = remote(d, ros(none), prev: const CheckMemo(peers: 7));
       expect(was.state, CheckState.warn);
-      expect(texts(was), ['ما عليه أحد الآن — كانوا 7 بالفحص السابق', 'حال الراديو ما انقرأ']);
+      expect(texts(was), ['ما عليه أحد الآن — كانوا 7 بالفحص السابق', 'حال الراديو لم يُقرأ']);
       expect(was.memo!.peers, 0, reason: 'صفرٌ قُرئ — لا «كانوا 7 بالفحص السابق» عن فحصٍ قرأه فارغاً');
       final next = remote(d, ros(none), prev: was.memo);
-      expect(texts(next), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
+      expect(texts(next), ['ما عليه أحد الآن', 'حال الراديو لم يُقرأ']);
       expect(next.state, CheckState.unread);
     });
 
-    test('🚨 والخادم يقول راديوه لا يعمل (ru:false) ⇒ «الراديو لا يعمل» للسكتر و«الوصلة مقطوعة» للوصلة — كموبايلك، '
+    test('🚨 والخادم يقول راديوه لا يعمل (ru:false) ⇒ «الراديو لا يعمل» للسكتر و«الوصلة مقطوعة» للوصلة — كهاتفك، '
         'والفحص التالي لا «كانوا 7» عن فحصٍ قرأه طافياً', () async {
       final down = ros({...none, 'ru': false});
       final sec = remote(dev(42, brand: 'mikrotik', protocol: 'api'), down, prev: const CheckMemo(peers: 7));
@@ -523,13 +523,13 @@ void main() {
       expect(idle.state, CheckState.ok);
       // والخرج نفسه من الخادم الحاليّ (بلا ru): القائمة مقروءة وحال الراديو وحده مجهول (R2-2)
       final live = remote(dev(49, brand: 'mikrotik', protocol: 'api'), v('$head$tail'));
-      expect(texts(live), ['ما عليه أحد الآن', 'حال الراديو ما انقرأ']);
+      expect(texts(live), ['ما عليه أحد الآن', 'حال الراديو لم يُقرأ']);
       expect(live.state, CheckState.unread);
     });
   });
 
   group('١٠ نوفمبر (قرار المالك «سويها الافضل حسب مقترحك»): وصلةٌ قُرئ جدولها فارغاً، وراوترٌ قُرئ لاسلكيّه', () {
-    test('🚨 وصلة RouterOS جدولها قُرئ فارغاً بلا إشارة ⇒ «الوصلة بلا طرفٍ ثانٍ» (مشكلة) لا «إشارة الوصلة ما انقرت · لم يُقرأ» — '
+    test('🚨 وصلة RouterOS جدولها قُرئ فارغاً بلا إشارة ⇒ «الوصلة بلا طرفٍ ثانٍ» (مشكلة) لا «إشارة الوصلة لم تُقرأ · لم يُقرأ» — '
         'وراديوها يعمل (ru:true) أو لا يُعرف؛ والطافي (ru:false) «الوصلة مقطوعة»', () {
       final d = dev(70, type: 'link', brand: 'mikrotik', protocol: 'api');
       for (final ru in [true, null]) {
@@ -541,10 +541,10 @@ void main() {
       expect(texts(down), ['الوصلة مقطوعة — لا إشارة']);
       // جدولها لم يقرأه الخادم (reg_ok:false) ⇒ لا يُدّعى «بلا طرف» — «ما انقرت» كما كانت
       final unread = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': false, 'peers': const <Map>[]}));
-      expect(texts(unread), ['إشارة الوصلة ما انقرت']);
+      expect(texts(unread), ['إشارة الوصلة لم تُقرأ']);
     });
 
-    test('🚨 قراءة موبايلك للوصلة نفسها (محطّةٌ شغّالة وجدولها فارغ) ⇒ «الوصلة بلا طرفٍ ثانٍ» كقراءة الخادم', () async {
+    test('🚨 قراءة هاتفك للوصلة نفسها (محطّةٌ تعمل وجدولها فارغ) ⇒ «الوصلة بلا طرفٍ ثانٍ» كقراءة الخادم', () async {
       final d = dev(71, type: 'link', brand: 'mikrotik', protocol: 'api');
       final replies = <String, Object>{
         '/interface/print': [
@@ -558,18 +558,18 @@ void main() {
       };
       final r = await judgeRos(d, replies);
       expect(texts(r), contains('الوصلة بلا طرفٍ ثانٍ'));
-      expect(texts(r), isNot(contains('إشارة الوصلة ما انقرت')));
+      expect(texts(r), isNot(contains('إشارة الوصلة لم تُقرأ')));
     });
 
     test('🚨 «كل الشركات»: راوترٌ (نقطة وصول بحزمة wifi) قرأ الخادم جدوله (reg_ok) وراديوه يعمل (ru:true) ⇒ «راوتر · سليم» '
-        'كموبايلك؛ وبلا ru ⇒ «وضعه اللاسلكيّ ما انقرأ» (بلا «ومشتركوه»)؛ وجدولٌ لم يُقرأ كما كان', () {
+        'كهاتفك؛ وبلا ru ⇒ «وضعه اللاسلكيّ لم يُقرأ» (بلا «ومشتركوه»)؛ وجدولٌ لم يُقرأ كما كان', () {
       final d = dev(72, type: 'router', brand: 'mikrotik', protocol: 'api');
       final ok = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'ru': true, 'peers': const <Map>[]}));
       expect(ok.state, CheckState.ok);
-      expect(texts(ok), isNot(contains('وضعه اللاسلكيّ ما انقرأ')));
+      expect(texts(ok), isNot(contains('وضعه اللاسلكيّ لم يُقرأ')));
       expect(texts(ok), isNot(contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا')));
       final noRu = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': true, 'peers': const <Map>[]}));
-      expect(texts(noRu), contains('وضعه اللاسلكيّ ما انقرأ'));
+      expect(texts(noRu), contains('وضعه اللاسلكيّ لم يُقرأ'));
       expect(noRu.state, CheckState.unread);
       final unread = remote(d, ros({'ap': null, 'radio': true, 'reg_ok': false, 'peers': const <Map>[]}));
       expect(texts(unread), contains('وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
@@ -704,12 +704,12 @@ void main() {
       final old = DevicesCheck.evaluate(d: d, alive: true, detail: p.detail, raw: p.raw, now: now,
           staleAt: now.subtract(const Duration(minutes: 3)), staleFrom: 'آخر قراءة');
       expect(old.signal, isNull);
-      expect(texts(old), ['إشارة الوصلة ما انقرت']);
+      expect(texts(old), ['إشارة الوصلة لم تُقرأ']);
       expect(old.stateLabel, 'لم يُقرأ · قبل 3 د');
       // wstalist لم يُقرأ وإشارة mca −93 (واجهة الإدارة): الإشارة لم تُقرأ — لا «ضعيفة»
       final unread = judge(d, await ubntAp(d, '-93', read: false));
       expect(unread.signal, isNull);
-      expect(texts(unread), ['إشارة الوصلة ما انقرت']);
+      expect(texts(unread), ['إشارة الوصلة لم تُقرأ']);
       expect(unread.state, CheckState.unread);
     });
 

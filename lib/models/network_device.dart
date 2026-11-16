@@ -179,7 +179,7 @@ class NetworkDeviceLabels {
   static const types = <String, String>{
     'link': 'لنكات',
     'switch': 'سويتشات',
-    'sector': 'سكاتر',
+    'sector': 'سكترات',
     'router': 'راوترات',
     'other': 'أخرى',
   };

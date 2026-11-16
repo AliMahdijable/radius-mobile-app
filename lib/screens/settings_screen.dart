@@ -320,7 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 valueListenable: ElDepositPassword.status,
                 builder: (_, st, __) => _Row(
                   icon: Icons.key_outlined,
-                  label: 'باسورد الإيداع',
+                  label: 'كلمة مرور الإيداع',
                   trailing:
                       st == null ? null : (st.saved ? 'محفوظ' : 'غير محفوظ'),
                   onTap: () => showElDepositPasswordSheet(context),
@@ -519,7 +519,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         backgroundColor: AppColors.surface,
                         title: const Text('مسح الحسابات المحفوظة'),
                         content: const Text(
-                            'سيُحذف من هذا الجهاز كلّ ما حُفظ من حسابات (اليوزر وكلمة السرّ)، وفتح أيّ شركة بعدها يطلب بياناتها من جديد. متأكّد؟'),
+                            'سيُحذف من هذا الجهاز كلّ ما حُفظ من حسابات (اليوزر وكلمة المرور)، وفتح أيّ شركة بعدها يطلب بياناتها من جديد. متأكّد؟'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.of(ctx).pop(false),

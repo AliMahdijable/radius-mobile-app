@@ -332,7 +332,7 @@ void main() {
         'role': {'code': 'Cashier'},
         'wallet_limit': {'limited': null, 'amount': null},
       });
-      expect((p.login, p.role, p.limited), ('•••4567', 'كاشير', null));
+      expect((p.login, p.role, p.limited), ('•••4567', 'أمين الصندوق', null));
       expect(NationalTeamMember.fromJson({'name': 'x', 'wallet_limit': {'limited': false, 'amount': null}}).limited, isFalse);
       final main = NationalTeamMember.fromJson({'name': 'الوكيل', 'role': {'code': 'Contractor'}, 'is_main': true, 'wallet_limit': null});
       expect((main.main, main.limited, main.role), (true, null, 'مشرف'), reason: 'بلا label ⇒ اسم البوّابة للرئيسيّ');
@@ -413,7 +413,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('«الجلسات»: البحث بالاسم داخل الصفحة يُقال، والزون من الفلاتر ⇒ zone=', (t) async {
+    testWidgets('«الجلسات»: البحث بالاسم داخل الصفحة يُقال، والزون من التصفية ⇒ zone=', (t) async {
       server.on('GET', '/api/v2/ftth/sessions', (req) => SimReply(
           200, _sessionsReply([_session(1)], status: 'online', inPage: (req.queryParameters['q'] ?? '').toString().isNotEmpty)));
       await pumpSim(t, _v, home: (_) => const NationalSessionsScreen());
@@ -421,7 +421,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 500));
       await t.pumpAndSettle();
       expect(find.textContaining('داخل الصفحة المعروضة وحدها'), findsOneWidget);
-      await t.tap(find.text('الفلاتر'));
+      await t.tap(find.text('التصفية'));
       await t.pumpAndSettle();
       await t.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('FBG2260-5')));
       await t.tap(find.text('تطبيق'));

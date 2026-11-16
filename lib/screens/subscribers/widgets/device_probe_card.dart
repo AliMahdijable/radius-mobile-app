@@ -1199,7 +1199,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// إعادة تشغيل الراوتر بأمر صفحته نفسها ([RouterOps.reboot]) — الجلسة الحيّة تُغلق ولا نطرقه وهو يقلع (~دقيقتين بالإنترنت).
   Future<({bool ok, String text})> _rebootRouter(String vendor) async {
     final c = await _routerCreds();
-    if (c == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا كلمة سرٍّ للراوتر — اكتبها من «الاعتمادات»');
+    if (c == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا كلمة مرور للراوتر — اكتبها من «بيانات الدخول»');
     await _routerOpBusy(true);
     final RouterResult<RouterReboot> r;
     try {
@@ -1225,7 +1225,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       slot: widget.slot,
       company: widget.company,
     );
-    if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وباسورد للجهاز — اكتبهن من زرّ الإعدادات');
+    if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وكلمة مرور للجهاز — اكتبهن من زرّ الإعدادات');
     final until = DateTime.now().add(const Duration(seconds: 15));
     while ((_pulsing || _probing) && DateTime.now().isBefore(until)) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -1242,9 +1242,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       return (ok: true, text: 'أُرسل أمر إعادة التشغيل — الجهاز يقلع الآن ويرجع خلال دقيقتين تقريباً');
     }
     final why = switch (r.issue) {
-      ZteLoginIssue.rejected => 'الجهاز رفض اليوزر أو الباسورد',
+      ZteLoginIssue.rejected => 'الجهاز رفض اليوزر أو كلمة المرور',
       ZteLoginIssue.busy => 'صفحة الجهاز مفتوحة بمكانٍ ثاني',
-      ZteLoginIssue.locked => 'الجهاز قافل الدخول',
+      ZteLoginIssue.locked => 'الجهاز أقفل الدخول',
       ZteLoginIssue.unknownForm => 'صفحة دخول الجهاز جديدة علينا',
       ZteLoginIssue.unreachable || ZteLoginIssue.notZte => 'الجهاز ما يجاوب',
       null => r.trace.startsWith('no-page') ? 'حساب الدخول هذا ما بصفحته إعادة تشغيل' : 'الجهاز ما قبل الأمر',
@@ -1260,7 +1260,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       slot: widget.slot,
       company: widget.company,
     );
-    if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وباسورد للجهاز — اكتبهن من «الاعتمادات»');
+    if (creds == null) return (ok: false, text: 'تعذّرت إعادة التشغيل: لا يوزر وكلمة مرور للجهاز — اكتبهن من «بيانات الدخول»');
     final r = await TplinkPharosService.reboot(creds.ip, creds.user, creds.pass);
     if (r.sent) {
       // الجهاز يقلع: جلسة الترافيك ماتت معه — لا نطرقه وهو يقلع. قِيس: الجهاز يقول ٨٠ث، انطفأ بعد ١٣ث ورجع يجاوب على الشبكة
@@ -1271,10 +1271,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       return (ok: true, text: 'أُرسل أمر إعادة التشغيل — الجهاز يقلع الآن ويرجع خلال دقيقتين تقريباً');
     }
     final why = switch (r.issue) {
-      PharosLoginIssue.rejected => 'الجهاز رفض اليوزر أو الباسورد',
+      PharosLoginIssue.rejected => 'الجهاز رفض اليوزر أو كلمة المرور',
       PharosLoginIssue.busy => 'صفحة الجهاز مفتوحة بمكانٍ ثاني',
-      PharosLoginIssue.locked || PharosLoginIssue.tooManyFails => 'الجهاز قافل الدخول',
-      PharosLoginIssue.needsSetup => 'الجهاز يطلب ضبط كلمة سرّه من صفحته أوّلاً',
+      PharosLoginIssue.locked || PharosLoginIssue.tooManyFails => 'الجهاز أقفل الدخول',
+      PharosLoginIssue.needsSetup => 'الجهاز يطلب ضبط كلمة مروره من صفحته أوّلاً',
       PharosLoginIssue.readFailed => 'الجهاز ما قبل الأمر',
       _ => 'الجهاز ما يجاوب',
     };
@@ -1443,13 +1443,13 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       border = AppColors.brandSoftBorder;
     } else if (_reach == false) {
       // بنگ حسم: غير واصل — بلا انتظار الفحص الكامل.
-      label = 'غير واصل';
+      label = 'لا يستجيب';
       fg = AppColors.dangerOnSoft;
       bg = AppColors.dangerSoftBg;
       border = AppColors.dangerSoftBorder;
     } else if (_reach == true) {
       // واصلٌ ببنگ؛ القراءة إمّا جاريةٌ أو تعذّرت — والجسم يفصّل.
-      label = 'واصل';
+      label = 'يستجيب';
       fg = AppColors.successFill;
       bg = AppColors.successSoftBg;
       border = AppColors.successSoftBorder;
@@ -1580,12 +1580,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     if (why?.vendor == 'tenda') {
       final t = switch (why!.issue) {
         ProbeIssue.needsCredentials => (
-            title: 'راوتر Tenda يحتاج باسورده',
-            hint: 'اكتبه بقسم «راوتر — باسورد فقط» من «الاعتمادات» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
+            title: 'راوتر Tenda يحتاج كلمة مروره',
+            hint: 'اكتبه بقسم «راوتر — كلمة مرور فقط» من «بيانات الدخول» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
           ),
         ProbeIssue.busy => (
             title: 'الراوتر عليه أربع جلسات مفتوحة',
-            hint: 'صفحته مفتوحة بأماكن ثانية — سكّر وحدة منها وحدّث',
+            hint: 'صفحته مفتوحة بأماكن ثانية — أغلِق واحدةً منها وحدّث',
           ),
         ProbeIssue.readFailed => (
             title: 'دخلنا للراوتر بس ما رجعت قراءاته',
@@ -1597,19 +1597,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     }
     return switch (why?.issue) {
       ProbeIssue.loginRejected => (
-          title: 'الجهاز رفض اليوزر أو الباسورد',
+          title: 'الجهاز رفض اليوزر أو كلمة المرور',
           hint: 'صحّحهن من زرّ الإعدادات — ما نعيد نفس المحاولة حتى ما ينقفل الجهاز',
         ),
       ProbeIssue.busy => (
           title: 'الجهاز رفض الدخول هسّه',
-          hint: 'صفحته مفتوحة بمكانٍ ثاني (متصفّح أو هاتف) — سكّرها وحدّث',
+          hint: 'صفحته مفتوحة بمكانٍ ثاني (متصفّح أو هاتف) — أغلِقها وحدّث',
         ),
       ProbeIssue.locked => (
-          title: left == null ? 'الجهاز قافل الدخول دقيقة' : 'الجهاز قافل الدخول $left ثانية',
+          title: left == null ? 'الجهاز أقفل الدخول دقيقة' : 'الجهاز أقفل الدخول $left ثانية',
           hint: 'صارت ثلاث محاولات غلط عليه — جرّب بعد ما يخلص الوقت',
         ),
       ProbeIssue.readFailed => (
-          title: 'دخلنا للجهاز بس ما قرينا الضوء',
+          title: 'دخلنا للجهاز بس لم نقرأ الضوء',
           hint: 'صفحة الضوء ما رجعت — حدّث بعد لحظات',
         ),
       ProbeIssue.unknownFormat => (
@@ -1618,21 +1618,21 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         ),
       ProbeIssue.unknownLogin => (
           title: 'صفحة دخول الجهاز جديدة علينا',
-          hint: 'ما أرسلنا اليوزر والباسورد حتى لا تنحسب محاولة غلط — انبعث شكل الصفحة (بلا أيّ قيم) حتى ينضاف هذا الطراز',
+          hint: 'ما أرسلنا اليوزر وكلمة المرور حتى لا تنحسب محاولة غلط — انبعث شكل الصفحة (بلا أيّ قيم) حتى ينضاف هذا الطراز',
         ),
       ProbeIssue.needsCredentials => (
-          title: 'جهاز ZTE يحتاج يوزر وباسورده',
-          hint: 'اكتبهن من زرّ الإعدادات — الباسورد مكتوب على ظهر الجهاز',
+          title: 'جهاز ZTE يحتاج يوزر وكلمة مروره',
+          hint: 'اكتبهن من زرّ الإعدادات — كلمة المرور مكتوبة على ظهر الجهاز',
         ),
       _ => _reach == false
           ? (
-              title: 'الجهاز غير واصل',
-              hint: 'ما يردّ على البنگ — تأكّد إنّه شغّال وبنفس الشبكة',
+              title: 'الجهاز لا يستجيب',
+              hint: 'لا يردّ على فحص الاتّصال — تأكّد أنّه يعمل وعلى الشبكة نفسها',
             )
           : _reach == true
               ? (
-                  title: 'الجهاز واصل بس تعذّرت قراءته',
-                  hint: 'البنگ يوصل — غالباً النوع أو بيانات الدخول، اضبطهن من زرّ الإعدادات',
+                  title: 'الجهاز يستجيب بس تعذّرت قراءته',
+                  hint: 'فحص الاتّصال يصل — غالباً النوع أو بيانات الدخول، اضبطهن من زرّ الإعدادات',
                 )
               : (
                   title: 'لم يُتمكّن من الوصول للجهاز',
@@ -1644,12 +1644,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// جملة «لا قراءة» لجهاز ميكروتك — null لما يكفيه النصّ العامّ (لا يجاوب).
   static ({String title, String hint})? _whyNoMikrotik(ProbeIssue issue) => switch (issue) {
         ProbeIssue.needsCredentials => (
-            title: 'جهاز MikroTik يحتاج يوزر وباسورده',
-            hint: 'اكتبهن بقسم MikroTik من «الاعتمادات» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
+            title: 'جهاز MikroTik يحتاج يوزر وكلمة مروره',
+            hint: 'اكتبهن بقسم MikroTik من «بيانات الدخول» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
           ),
         ProbeIssue.loginRejected => (
-            title: 'جهاز MikroTik رفض اليوزر أو الباسورد',
-            hint: 'صحّحهن من «الاعتمادات» أو زرّ الإعدادات — ما نعيد نفس المحاولة حتى ما ينحظر عنوانك',
+            title: 'جهاز MikroTik رفض اليوزر أو كلمة المرور',
+            hint: 'صحّحهن من «بيانات الدخول» أو زرّ الإعدادات — ما نعيد نفس المحاولة حتى ما ينحظر عنوانك',
           ),
         ProbeIssue.needsSetup => (
             title: 'جهاز MikroTik وخدمة الـAPI بيه مقفولة',
@@ -1665,21 +1665,21 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// جملة «لا قراءة» لجهاز TP-Link — null لما يكفيه النصّ العامّ (رفضٌ، مشغول، لا يجاوب).
   static ({String title, String hint})? _whyNoTplink(ProbeIssue issue, int? lockLeft) => switch (issue) {
         ProbeIssue.needsCredentials => (
-            title: 'جهاز TP-Link يحتاج يوزر وباسورده',
-            hint: 'اكتبهن بقسم TP-Link من «الاعتمادات» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
+            title: 'جهاز TP-Link يحتاج يوزر وكلمة مروره',
+            hint: 'اكتبهن بقسم TP-Link من «بيانات الدخول» بالإعدادات، أو لهذا المشترك من زرّ الإعدادات هنا',
           ),
         ProbeIssue.locked => (
             title: lockLeft == null
-                ? 'الجهاز قافل الدخول'
-                : 'الجهاز قافل الدخول — باقي ${(lockLeft / 60).ceil()} دقيقة',
+                ? 'الجهاز أقفل الدخول'
+                : 'الجهاز أقفل الدخول — باقي ${(lockLeft / 60).ceil()} دقيقة',
             hint: 'صارت عشر محاولات غلط عليه — جرّب بعد ما يخلص الوقت',
           ),
         ProbeIssue.tooManyFails => (
             title: 'محاولات دخول غلط كثيرة على الجهاز',
-            hint: 'ما نحاول حتى لا ينقفل — صحّح اليوزر والباسورد واضغط «حفظ وفحص الجهاز»',
+            hint: 'ما نحاول حتى لا ينقفل — صحّح اليوزر وكلمة المرور واضغط «حفظ وفحص الجهاز»',
           ),
         ProbeIssue.needsSetup => (
-            title: 'الجهاز يطلب ضبط كلمة سرّه من صفحته أوّلاً',
+            title: 'الجهاز يطلب ضبط كلمة مروره من صفحته أوّلاً',
             hint: 'افتح صفحة الجهاز وأكمل ضبطه، بعدها حدّث',
           ),
         ProbeIssue.readFailed => (
@@ -1688,7 +1688,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ),
         ProbeIssue.unknownLogin => (
             title: 'راوتر TP-Link بصيغة دخولٍ جديدة علينا',
-            hint: 'عرّفناه راوتر TP-Link، وما أرسلنا يوزر وباسورد حتى لا تنحسب محاولة غلط — نكمّل دعم قراءة هذا الطراز',
+            hint: 'عرّفناه راوتر TP-Link، وما أرسلنا يوزر وكلمة مرور حتى لا تنحسب محاولة غلط — نكمّل دعم قراءة هذا الطراز',
           ),
         _ => null,
       };
@@ -1702,7 +1702,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       'cpe' => 'من جهازه',
       'sector' => 'من السكتر',
       'olt' => 'من الأولت',
-      'ping' => 'بنگ وحده',
+      'ping' => 'فحص الاتّصال وحده',
       _ => '',
     };
     AppTone toneSig(int v) => v >= -65 ? AppTone.success : (v >= -75 ? AppTone.warning : AppTone.danger);
@@ -1732,7 +1732,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           tone: r.temp! < 60 ? AppTone.success : (r.temp! < 70 ? AppTone.warning : AppTone.danger),
           icon: LucideIcons.thermometer,
         ),
-      if (r.src == 'ping') MetricTile(label: 'البنگ', value: r.ms != null ? '${r.ms} ms' : 'واصل', tone: AppTone.success, icon: LucideIcons.radar),
+      if (r.src == 'ping') MetricTile(label: 'فحص الاتّصال', value: r.ms != null ? '${r.ms} ms' : 'يستجيب', tone: AppTone.success, icon: LucideIcons.radar),
     ];
     return Column(
       key: const ValueKey('device-card-vpn'),
@@ -1757,7 +1757,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             for (final w in tiles) SizedBox(width: 132, child: w),
           ]),
         const SizedBox(height: Sp.xs),
-        Text('القراءة الكاملة والترافك من موبايلك لمّا ترجع لشبكتك', style: AppType.micro(color: AppColors.textLow)),
+        Text('القراءة الكاملة وحركة البيانات من هاتفك لمّا ترجع لشبكتك', style: AppType.micro(color: AppColors.textLow)),
       ],
     );
   }
@@ -2578,7 +2578,7 @@ CopyField _ontRxTx(OntOpticalInfo o) => CopyField('RX / TX (dBm)', '${o.rxPower}
 CopyField _ontVoltage(OntOpticalInfo o) =>
     // ٦ نوفمبر (المالك: «لازم تتحول لل V» ثمّ «ماكو ٣.35 هيج فولتيه… اقل شي ١١ او ١٢»): هذه فولتيّة موديول الضوء داخل الجهاز (٣٫٣ V
     // دائماً) لا فولتيّة الأدابتر (١٢ V — لا يقيسها الجهاز) ⇒ اسمها الصريح وبالفولت
-    CopyField('فولتيّة موديول الضوء', _volts(o.voltage));
+    CopyField('فولتيّة وحدة الضوء', _volts(o.voltage));
 
 /// ملّي فولت (كما تعطيه صفحة الجهاز) ⇒ «3.35 V»؛ ما لا يُفهم يبقى كما هو.
 String _volts(String mv) {

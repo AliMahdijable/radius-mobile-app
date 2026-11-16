@@ -319,7 +319,7 @@ class _FiberLightScreenState extends State<FiberLightScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('نزل فجأة · آخر 7 أيّام', style: AppType.cardTitleBold(color: AppColors.textHi)),
           for (final d in r.suddenDrops.take(12)) _dropRow(d, byKey),
-          Text('نزولٌ فجائيّ لجهازٍ واحد غالباً وصلةٌ وسخة أو سلكٌ منثني عنده — يتصلّح قبل ما يشتكي المشترك.',
+          Text('نزولٌ فجائيّ لجهازٍ واحد غالباً وصلةٌ متّسخة أو سلكٌ منثني عنده — يُصلَح قبل ما يشتكي المشترك.',
               style: AppType.muted(color: AppColors.textMid)),
         ]),
       ),

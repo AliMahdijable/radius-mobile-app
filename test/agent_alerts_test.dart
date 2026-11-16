@@ -51,7 +51,7 @@ void main() {
     expect(st.quiet.single.untilMs, 9);
     expect(st.downStale, isEmpty, reason: 'خادمٌ أقدم لا يرسلها');
     final stale = AgentAlertsStatus.fromJson(Map<String, dynamic>.from(_status(
-      downStale: [{'id': 9, 'name': 'لنك', 'since_ms': 5, 'checked_ms': 7}, {'id': 10, 'name': 'سويج', 'since_ms': 5, 'checked_ms': null}],
+      downStale: [{'id': 9, 'name': 'لنك', 'since_ms': 5, 'checked_ms': 7}, {'id': 10, 'name': 'سويتش', 'since_ms': 5, 'checked_ms': null}],
     )['data'] as Map));
     expect(stale.down, isEmpty);
     expect(stale.downStale.map((d) => [d.id, d.checkedMs]), [[9, 7], [10, null]]);
@@ -68,13 +68,13 @@ void main() {
     expect(countDevices(14), '14 جهازاً');
   });
 
-  test('تنبيه الموبايل المحلّيّ يسكت حين يعمل الخادم لهذه الشركة وحده — ويعود بعد تبديل الشركة', () {
+  test('تنبيه الهاتف المحمول المحلّيّ يسكت حين يعمل الخادم لهذه الشركة وحده — ويعود بعد تبديل الشركة', () {
     AgentAlertsApi.forget();
     expect(AgentAlertsApi.shouldFireLocalAlerts(), true, reason: 'لم يُقرأ بعد ⇒ كما كان');
     AgentAlertsApi.cached = AgentAlertsStatus.fromJson(Map<String, dynamic>.from(_status()['data'] as Map));
     expect(AgentAlertsApi.shouldFireLocalAlerts(), false);
     AgentAlertsApi.cached = AgentAlertsStatus.fromJson(Map<String, dynamic>.from(_status(enabled: false)['data'] as Map));
-    expect(AgentAlertsApi.shouldFireLocalAlerts(), true, reason: 'أطفأه الوكيل ⇒ لا يُسكت تنبيه موبايله');
+    expect(AgentAlertsApi.shouldFireLocalAlerts(), true, reason: 'أطفأه الوكيل ⇒ لا يُسكت تنبيه هاتفه');
     AgentAlertsApi.cached = AgentAlertsStatus.off;
     expect(AgentAlertsApi.shouldFireLocalAlerts(), true);
     AgentAlertsApi.cached = AgentAlertsStatus.fromJson(Map<String, dynamic>.from(_status()['data'] as Map));
@@ -90,12 +90,12 @@ void main() {
       server = await simSetUp(secure: {'auth.admin_id': '2', 'auth.admin_username': 'admin@m'});
     });
 
-    testWidgets('غير مفتوحةٍ لحسابه ⇒ رسالةٌ وزرّ «تنبيهات موبايلك»، بلا طلب سجلّ', (t) async {
+    testWidgets('غير مفتوحةٍ لحسابه ⇒ رسالةٌ وزرّ «تنبيهات هاتفك»، بلا طلب سجلّ', (t) async {
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(available: false));
       await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
       await t.pumpAndSettle();
       expect(find.textContaining('غير مفعّلة لحسابك بعد'), findsOneWidget);
-      expect(find.text('تنبيهات موبايلك'), findsOneWidget);
+      expect(find.text('تنبيهات هاتفك'), findsOneWidget);
       expect(server.calls('GET', '/api/v2/agent-alerts/log'), isEmpty);
       await simDrain(t);
     });
@@ -118,7 +118,7 @@ void main() {
           {'id': 3, 'name': 'سكتر 2', 'place': 'برج «النصر»', 'since_ms': _ago(const Duration(minutes: 12))},
           {'id': 5, 'name': 'لنك الحيّ', 'since_ms': _ago(const Duration(minutes: 3))},
         ],
-        quiet: [{'id': 6, 'name': 'سويج 1', 'until_ms': DateTime.now().add(const Duration(minutes: 40)).millisecondsSinceEpoch}],
+        quiet: [{'id': 6, 'name': 'سويتش 1', 'until_ms': DateTime.now().add(const Duration(minutes: 40)).millisecondsSinceEpoch}],
       ));
       server.reply('GET', '/api/v2/agent-alerts/log', 200, _log([
         {'id': 9, 'kind': 'tower_down', 'title': '🔴 طفى برج «النصر»', 'detail': 'كلّ أجهزته (3) لا تستجيب منذ 3 د', 'push': 'dry', 'at_ms': _ago(const Duration(minutes: 9))},
@@ -129,12 +129,12 @@ void main() {
       await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
       await t.pumpAndSettle();
       expect(find.textContaining('تجربة: يُسجَّل ما كان سيُقال لك'), findsOneWidget);
-      expect(find.text('جهازان طافيان الآن'), findsOneWidget);
+      expect(find.text('جهازان منقطعان الآن'), findsOneWidget);
       expect(find.textContaining('14 جهازاً تحت المراقبة'), findsOneWidget);
       expect(find.text('سكتر 2'), findsOneWidget);
       expect(find.text('برج «النصر»'), findsOneWidget);
       expect(find.text('منذ 12 د'), findsOneWidget);
-      expect(find.text('سويج 1'), findsOneWidget);
+      expect(find.text('سويتش 1'), findsOneWidget);
       await t.scrollUntilVisible(find.text('طفى برج «النصر»'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('طفى برج «النصر»'), findsOneWidget, reason: 'العنوان بلا رمزه الملوّن');
       expect(find.text('تجربة'), findsOneWidget);
@@ -146,7 +146,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.textContaining('«الاتصال العكسي»'), findsWidgets);
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(enabled: false, remote: {'on': false, 'why': 'reverse_off'}));
-      await t.scrollUntilVisible(find.text('نبّهني حين يطفى جهاز'), -300, scrollable: find.byType(Scrollable).first);
+      await t.scrollUntilVisible(find.text('نبّهني حين ينقطع جهاز'), -300, scrollable: find.byType(Scrollable).first);
       await t.tap(find.byType(Switch).first);
       await t.pumpAndSettle();
       expect(server.bodies('PUT', '/api/v2/agent-alerts/settings').single, {'enabled': false});
@@ -160,35 +160,35 @@ void main() {
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(
         enabled: false,
         downStale: [
-          {'id': 1514, 'name': 'سيرفر التوزيع', 'place': 'برج «برجي»', 'since_ms': _ago(const Duration(days: 2, hours: 18)), 'checked_ms': null},
+          {'id': 1514, 'name': 'خادم التوزيع', 'place': 'برج «برجي»', 'since_ms': _ago(const Duration(days: 2, hours: 18)), 'checked_ms': null},
           {'id': 5308, 'name': 'AirFiber 60LR', 'place': 'برج «برجي»', 'since_ms': _ago(const Duration(days: 2)), 'checked_ms': _ago(const Duration(hours: 3))},
         ],
       ));
       server.reply('GET', '/api/v2/agent-alerts/log', 200, _log([]));
       await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
       await t.pumpAndSettle();
-      expect(find.text('طافية الآن'), findsNothing, reason: 'لا دعوى عن «الآن» بلا فحصٍ حديث');
-      expect(find.text('كانت طافية عند آخر فحص'), findsOneWidget);
+      expect(find.text('منقطعة الآن'), findsNothing, reason: 'لا دعوى عن «الآن» بلا فحصٍ حديث');
+      expect(find.text('كانت منقطعة عند آخر فحص'), findsOneWidget);
       expect(find.textContaining('افتح قسم الأجهزة وأنت على شبكتك لتُعرف حالها الآن'), findsOneWidget);
-      expect(find.text('سيرفر التوزيع'), findsOneWidget);
+      expect(find.text('خادم التوزيع'), findsOneWidget);
       expect(find.textContaining('آخر فحص'), findsWidgets);
       expect(find.text('التنبيه مطفأ — لا يُقال لك شيء'), findsOneWidget);
       // مفعّلاً: لا «كلّ أجهزتك تعمل» وبعضها لم يُعرف حاله
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(
-        downStale: [{'id': 1514, 'name': 'سيرفر التوزيع', 'since_ms': _ago(const Duration(hours: 5)), 'checked_ms': _ago(const Duration(hours: 4))}],
+        downStale: [{'id': 1514, 'name': 'خادم التوزيع', 'since_ms': _ago(const Duration(hours: 5)), 'checked_ms': _ago(const Duration(hours: 4))}],
       ));
       final before = server.calls('GET', '/api/v2/agent-alerts/status').length;
       await t.pump(AgentAlertsScreen.refreshEvery + const Duration(seconds: 1));
       await t.pumpAndSettle();
       expect(server.calls('GET', '/api/v2/agent-alerts/status').length, before + 1, reason: 'تحدّثت وحدها');
-      expect(find.textContaining('لا شيء طافٍ الآن ممّا فُحص — جهازٌ واحد لم يُفحص منذ مدّة'), findsOneWidget);
+      expect(find.textContaining('لا شيء منقطع الآن ممّا فُحص — جهازٌ واحد لم يُفحص منذ مدّة'), findsOneWidget);
       expect(find.text('كلّ أجهزتك تعمل'), findsNothing);
       // جولة قسم الأجهزة حسمته: يعمل ⇒ يختفي بلا سحب
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(downStale: []));
       await t.pump(AgentAlertsScreen.refreshEvery + const Duration(seconds: 1));
       await t.pumpAndSettle();
       expect(find.text('كلّ أجهزتك تعمل'), findsOneWidget);
-      expect(find.text('كانت طافية عند آخر فحص'), findsNothing);
+      expect(find.text('كانت منقطعة عند آخر فحص'), findsNothing);
       // تحديثٌ فاشل لا يمسح المعروض
       server.reply('GET', '/api/v2/agent-alerts/status', 500, {'success': false});
       await t.pump(AgentAlertsScreen.refreshEvery + const Duration(seconds: 1));
@@ -230,7 +230,7 @@ void main() {
         ]));
         await pumpSim(t, v, home: (_) => const AgentAlertsScreen());
         await t.pumpAndSettle();
-        expect(find.text('جهازٌ واحد طافٍ الآن'), findsOneWidget);
+        expect(find.text('جهازٌ واحد منقطع الآن'), findsOneWidget);
         expect(t.takeException(), isNull);
         await simDrain(t);
       });

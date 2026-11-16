@@ -401,7 +401,7 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
         Center(
           child: OutlinedButton(
             onPressed: _more ? null : _loadMore,
-            child: Text(_more ? 'جاري التحميل…' : 'تحميل المزيد'),
+            child: Text(_more ? 'جارٍ التحميل…' : 'تحميل المزيد'),
           ),
         ),
       ],

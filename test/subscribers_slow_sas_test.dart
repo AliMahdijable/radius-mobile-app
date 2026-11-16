@@ -15,7 +15,7 @@ void main() {
       );
     });
 
-    test('مهلة التطبيق (٣٠ث) ⇒ «سيرفر الشركة بطيء» لا رسالة الخادم', () {
+    test('مهلة التطبيق (٣٠ث) ⇒ «خادم الشركة بطيء» لا رسالة الخادم', () {
       final t = SubscribersApi.listErrorText({'message': 'x'}, timedOut: true);
       expect(t, contains('بطيء'));
       expect(t, contains('٣٠'));
@@ -52,7 +52,7 @@ void main() {
       expect(body.indexOf('} finally {\n      _silentBusy = false;'), greaterThan(fetch));
     });
 
-    test('«المتّصلون»: الطلب الجاري لنفس التوكن يُعاد ولا يُكرَّر، ويُنظَّف بعد انتهائه', () {
+    test('«المتّصلون»: الطلب الجاري لنفس رمز البوت يُعاد ولا يُكرَّر، ويُنظَّف بعد انتهائه', () {
       final start = api.indexOf('static Future<Map<String, OnlineSessionInfo>?> loadOnline() async {');
       expect(start, greaterThan(0));
       final body = api.substring(start, api.indexOf('static Future<Map<String, OnlineSessionInfo>?> _loadOnline(', start));
@@ -65,7 +65,7 @@ void main() {
       expect(screen, contains('error: _listNeverArrivedReason,'));
       expect(screen, contains('!_big && !_mergedOn && _all.isEmpty ? SubscribersApi.lastListError : null'));
       expect(screen, contains("if (error != null && query.isEmpty) return _failed(error!);"));
-      expect(screen, contains('تعذّر جلب المشتركين من سيرفر الشركة'));
+      expect(screen, contains('تعذّر جلب المشتركين من خادم الشركة'));
     });
   });
 }

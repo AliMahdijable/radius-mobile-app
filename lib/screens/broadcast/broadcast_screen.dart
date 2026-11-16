@@ -594,7 +594,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     // الكبير «الكلّ»: الخادم يجمع المدينين كلّهم — فلتر المدير لا يصله، فلا يُرسَل لأوسع ممّا اختاره المدير (كـ«عام» الكبير)
     final bigAll = _big && !specific;
     if (bigAll && _managerFilter.isNotEmpty) {
-      _snack('فلتر المدير لا يُطبَّق على «الكلّ» في الحساب الكبير — ألغِه أو استعمل «أختار بنفسي»', isError: true);
+      _snack('تصفية المدير لا تُطبَّق على «الكلّ» في الحساب الكبير — ألغِها أو استعمل «أختار بنفسي»', isError: true);
       return;
     }
     setState(() => _checkingRisk = true);
@@ -681,7 +681,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   Future<void> _sendBigAll() async {
     // الخادم يجمع الفئة كلّها — فلتر المدير لا يصله، فلا يُرسَل لأوسع ممّا اختاره المدير
     if (_managerFilter.isNotEmpty) {
-      _snack('فلتر المدير لا يُطبَّق على «عام» في الحساب الكبير — ألغِه أو استعمل «محدّد»', isError: true);
+      _snack('تصفية المدير لا تُطبَّق على «عام» في الحساب الكبير — ألغِها أو استعمل «محدّد»', isError: true);
       return;
     }
     final n = _counts[_filter] ?? -1;
@@ -1816,7 +1816,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: _messageOptional
-                  ? 'اختياري — يستخدم القالب التلقائي لو فاضي'
+                  ? 'اختياري — يستخدم القالب التلقائي لو فارغ'
                   : 'اكتب الرسالة هنا…',
               hintStyle: AppType.muted().copyWith(fontSize: 12.5),
               filled: true,
@@ -1846,7 +1846,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
               Expanded(
                 child: Text(
                   _messageOptional
-                      ? 'لو فاضي، يُستخدم قالب افتراضي'
+                      ? 'لو فارغ، يُستخدم قالب افتراضي'
                       : 'المتغيرات تُستبدل تلقائياً لكل مشترك',
                   style: AppType.muted().copyWith(fontSize: 10.5),
                 ),
@@ -2026,7 +2026,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
               label: Text(
                 _checkingRisk
                     ? 'يفحص الأرقام...'
-                    : (_sending ? 'جاري الإرسال...' : 'إرسال'),
+                    : (_sending ? 'جارٍ الإرسال...' : 'إرسال'),
                 style: AppType.button(color: AppColors.onBrand)
                     .copyWith(fontSize: 14),
               ),

@@ -94,7 +94,7 @@ void main() {
       final r = await DeviceVitals.fetch(d, detailed: true);
       expect(r.detail.glance.peersKnown, isFalse);
       final rep = DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw, prev: const CheckMemo(peers: 6));
-      expect([for (final f in rep.findings) f.text], ['قائمة مشتركيه ما انقرت']);
+      expect([for (final f in rep.findings) f.text], ['قائمة مشتركيه لم تُقرأ']);
       expect(rep.state, CheckState.unread);
       expect(rep.memo!.peers, 6);
     });
@@ -660,7 +660,7 @@ void main() {
       cases.forEach((name, want) => expect(portShortLabel(name), want, reason: name));
     });
 
-    testWidgets('🚨 السويتش/السيرفر: الإيثرات وحدها — جلسات PPP والأنفاق لا تُعدّ منافذ ولا تدخل «الأعلى حِملاً»', (t) async {
+    testWidgets('🚨 السويتش/الخادم: الإيثرات وحدها — جلسات PPP والأنفاق لا تُعدّ منافذ ولا تدخل «الأعلى حِملاً»', (t) async {
       final st = fx.stateOf(fx.switchDev);
       final ports = [
         ...st.detail!.ports,

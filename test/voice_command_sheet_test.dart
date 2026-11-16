@@ -126,7 +126,7 @@ void main() {
     await close(t);
   });
 
-  testWidgets('«طفي علي حسين» ⇒ كرتٌ واحد بزرّ «طفّي» ⇒ صفحته ونافذة التطفية للتأكيد (لا تطفية قبلها)', (t) async {
+  testWidgets('«طفي علي حسين» ⇒ كرتٌ واحد بزرّ «طفّي» ⇒ صفحته ونافذة الإيقاف للتأكيد (لا تطفية قبلها)', (t) async {
     await open(t);
     expect(find.text('جرّب:'), findsOneWidget, reason: 'أمثلةٌ قبل أيّ أمر');
     await say(t, 'طفي علي حسين');
@@ -138,7 +138,7 @@ void main() {
     final det = t.widget<SubscriberDetailScreen>(find.byType(SubscriberDetailScreen));
     expect(det.autoAction, SubscriberAutoAction.disable);
     expect(det.sub.username, 'ali.hussein');
-    expect(find.byType(AlertDialog), findsOneWidget, reason: 'نافذة التطفية نفسها — التنفيذ بضغطة الوكيل');
+    expect(find.byType(AlertDialog), findsOneWidget, reason: 'نافذة الإيقاف نفسها — التنفيذ بضغطة الوكيل');
     await close(t);
   });
 
@@ -162,7 +162,7 @@ void main() {
     // «شغّل زينب» (مطفيّة) ⇒ الكرت يقول «مطفي» وزرّه «شغّل»
     await say(t, 'شغل زينب');
     expect(find.text('شغّل'), findsOneWidget);
-    expect(find.textContaining('مطفي'), findsOneWidget);
+    expect(find.textContaining('موقوف'), findsOneWidget);
     await close(t);
   });
 

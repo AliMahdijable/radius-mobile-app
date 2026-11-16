@@ -402,7 +402,7 @@ void main() {
     });
   });
 
-  group('سير الترافيك وحال الوصلة', () {
+  group('سير حركة البيانات وحال الوصلة', () {
     test('ما ينزل للفرعيّ = ما يستقبله طرف الفرعيّ على الهواء (وما يرسله طرف الرئيسيّ إن لم يُقرأ الفرعيّ)', () {
       final both = LinkFlow.of(
         ra: rd(tx: 90000000, rx: 11000000, signal: -55, ccq: 97),
@@ -535,7 +535,7 @@ void main() {
   });
 
   // ── ١١ نوفمبر صباحاً — المالك: «اكو ابراج ترتبط مع بعضها فايبر… مرات مو لنك يعني مباشر كيبل ضوئي بين سوجات» ──
-  group('الكيبل الضوئيّ بين سويجين', () {
+  group('الكيبل الضوئيّ بين سويتشين', () {
     PortTraffic port(String name, {bool up = true, int? rx, int? tx, String? speed, double? light, bool half = false, bool physical = true}) =>
         PortTraffic(name: name, up: up, rxBps: rx, txBps: tx, linkSpeed: speed, sfpRx: light, halfDuplex: half, physical: physical);
     TowerReading sw(List<PortTraffic> ports) => TowerReading(at: DateTime(2026, 11, 11, 8), ports: ports);
@@ -556,14 +556,14 @@ void main() {
       expect(TowerLayouts.fromJson({'success': true, 'links': [], 'links_ready': true}).fiberReady, isFalse, reason: 'خادمٌ أقدم');
     });
 
-    test('قراءة السويج: المنفذ باسمه (بلا حالة أحرف)، والسلكيّة وحدها تصلح طرفَ كيبل', () {
+    test('قراءة السويتش: المنفذ باسمه (بلا حالة أحرف)، والسلكيّة وحدها تصلح طرفَ كيبل', () {
       final r = sw([port('sfp-sfpplus1'), port('ether2'), port('wlan1'), port('bridge1', physical: false)]);
       expect(r.port('SFP-SFPPLUS1')?.name, 'sfp-sfpplus1');
       expect([r.port('sfp9'), r.port(null), r.port('  ')], [null, null, null]);
       expect(r.wiredPorts.map((p) => p.name).toList(), ['sfp-sfpplus1', 'ether2']);
     });
 
-    test('🚨 ما يعبر الكيبل = ما يعبر منفذه بعينه — لا «أنشط منفذ» في السويج', () {
+    test('🚨 ما يعبر الكيبل = ما يعبر منفذه بعينه — لا «أنشط منفذ» في السويتش', () {
       // سويج الفرعيّ: منفذ الكيبل sfp1 يستقبل 340 ميغا من الرئيسيّ؛ ومنفذٌ آخر (ether5) أنشط منه
       final sub = sw([port('sfp1', rx: 340000000, tx: 28000000, speed: '10Gbps', light: -7.1), port('ether5', rx: 900000000, tx: 900000000, speed: '1Gbps')]);
       final main = sw([port('sfp-sfpplus1', tx: 342000000, rx: 28500000, speed: '10Gbps', light: -6.4), port('sfp-sfpplus2', tx: 5, rx: 5)]);
@@ -578,7 +578,7 @@ void main() {
       expect([onlySubPort.toSubBps, onlySubPort.light], [340000000, -7.1]);
     });
 
-    test('🚨 «واقع» بدليل: السويج يردّ ويقول المنفذ طافٍ — أو طرفٌ لا يردّ؛ ومنفذٌ شغّال بلا عدّادات «يعمل» بلا رقم', () {
+    test('🚨 «واقع» بدليل: السويتش يردّ ويقول المنفذ طافٍ — أو طرفٌ لا يردّ؛ ومنفذٌ شغّال بلا عدّادات «يعمل» بلا رقم', () {
       final up = sw([port('sfp1', rx: 10, tx: 10)]);
       final off = sw([port('sfp1', up: false)]);
       final a = LinkFlow.ofFiber(ra: up, rb: off, aPort: 'sfp1', bPort: 'sfp1');
@@ -616,9 +616,9 @@ void main() {
       expect([of(light: -26.5).state, TopoText.stateOf(of(light: -26.5))], [LinkState.fair, 'ضوء ضعيف']);
       expect([of(light: -31).state, TopoText.stateOf(of(light: -31))], [LinkState.weak, 'ضوء ضعيف جدّاً']);
       expect([of(half: true).state, TopoText.stateOf(of(half: true))], [LinkState.fair, 'half-duplex']);
-      expect([of(speed: '10Mbps').state, TopoText.stateOf(of(speed: '10Mbps'))], [LinkState.fair, 'سرعة واطية']);
+      expect([of(speed: '10Mbps').state, TopoText.stateOf(of(speed: '10Mbps'))], [LinkState.fair, 'سرعة منخفضة']);
       expect(of(speed: '100Mbps').state, LinkState.ok, reason: 'كيبل 100M قديم ليس عطلاً');
-      expect(of().state, LinkState.ok, reason: 'سويجٌ لا يقرأ ضوء الـSFP لا يُتّهم');
+      expect(of().state, LinkState.ok, reason: 'سويتش لا يقرأ ضوء الـSFP لا يُتّهم');
       // أبطأ السرعتين وأضعف الضوءين من الطرفين
       final both = LinkFlow.ofFiber(
         ra: sw([port('a', rx: 1, tx: 1, speed: '10Gbps', light: -5)]),

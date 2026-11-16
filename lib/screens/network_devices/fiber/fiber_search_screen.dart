@@ -115,7 +115,7 @@ class _FiberSearchScreenState extends State<FiberSearchScreen> {
           else if (hits.isEmpty)
             Padding(
               padding: const EdgeInsets.all(Sp.xl),
-              child: Text('ما لقينا جهازاً يطابق «${q.trim()}» على هذا الأولت.',
+              child: Text('لم نجد جهازاً يطابق «${q.trim()}» على هذا الأولت.',
                   textAlign: TextAlign.center, style: AppType.body(color: AppColors.textMid)),
             )
           else

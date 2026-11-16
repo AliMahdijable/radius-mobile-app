@@ -286,17 +286,17 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
             FilledButton.icon(
               onPressed: !canEdit || _saving ? null : () => _confirm(sure),
               icon: Icon(canEdit ? LucideIcons.checkCheck : LucideIcons.lock, size: 16),
-              label: Text(canEdit ? 'ثبّت الأكيدة (${sure.length})' : 'لا صلاحيّة'),
+              label: Text(canEdit ? 'ثبّت المؤكَّدة (${sure.length})' : 'لا صلاحيّة'),
               style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
             )
           else if (all.any((s) => s.sure))
-            Text('ثُبّتت كلّ الأكيدة', style: AppType.bodyBold(color: AppTone.success.onSoft)),
+            Text('ثُبّتت كلّ المؤكَّدة', style: AppType.bodyBold(color: AppTone.success.onSoft)),
         ]),
         if (all.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: Sp.md),
             child: Text(
-              _loading ? 'يحسب الاقتراحات…' : 'ما عندنا اقتراحات الآن — كلّ جهازٍ بقي بلا ربط مكتوب سببه تحت.',
+              _loading ? 'يحسب الاقتراحات…' : 'لا توجد اقتراحات الآن — كلّ جهازٍ بقي بلا ربط مكتوب سببه تحت.',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),
@@ -351,7 +351,7 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
             ),
           ),
           const SizedBox(width: 6),
-          FiberPill(done ? 'مربوط' : (s.sure ? 'أكيد' : 'محتمل'), tone: tone),
+          FiberPill(done ? 'مربوط' : (s.sure ? 'مؤكَّد' : 'محتمل'), tone: tone),
         ]),
         const SizedBox(height: 6),
         Row(children: [
@@ -403,9 +403,9 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
   Widget _unlinked(FiberLinkPlan plan, Map<String, FiberOnuLive> byKey, bool canEdit) {
     const order = [FiberUnlinkedReason.noSession, FiberUnlinkedReason.offline, FiberUnlinkedReason.unknownDevices];
     const titles = {
-      FiberUnlinkedReason.noSession: ('شغّالة بس ماكو جلسة تطابقها', 'غالباً راوتر المشترك مطفي، أو جهاز تجربة'),
-      FiberUnlinkedReason.offline: ('طافية الآن', 'ما نقدر نقرأ الأجهزة اللي خلفها وهي طافية'),
-      FiberUnlinkedReason.unknownDevices: ('الأجهزة اللي خلفها ما انقرأت بعد', 'الأولت ما كشف جدولها — نعيد القراءة كلّ 5 دقائق'),
+      FiberUnlinkedReason.noSession: ('تعمل بس ماكو جلسة تطابقها', 'غالباً راوتر المشترك مطفأ، أو جهاز تجربة'),
+      FiberUnlinkedReason.offline: ('منقطعة الآن', 'ما نقدر نقرأ الأجهزة اللي خلفها وهي منقطعة'),
+      FiberUnlinkedReason.unknownDevices: ('الأجهزة اللي خلفها لم تُقرأ بعد', 'الأولت ما كشف جدولها — نعيد القراءة كلّ 5 دقائق'),
     };
     final n = plan.unlinkedCount;
     return FiberCard(
@@ -481,7 +481,7 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'بعد الربط: صفحة كلّ مشترك تبيّن جهازه وضوءه، والعطل يعرف منو تأثّر فيبلّغه بالواتساب.',
+              'بعد الربط: صفحة كلّ مشترك تبيّن جهازه وضوءه، والعطل يعرف مَن تأثّر فيبلّغه بالواتساب.',
               style: AppType.body(color: AppColors.textBody),
             ),
           ),
@@ -622,7 +622,7 @@ class _LinkPickerState extends State<_LinkPicker> {
     setState(() {
       _checking = false;
       _found = got[u.toLowerCase()];
-      if (_found == null) _error = 'ما لقينا اليوزر «$u» بالساس';
+      if (_found == null) _error = 'لم نجد اليوزر «$u» بالساس';
     });
   }
 
@@ -680,7 +680,7 @@ class _LinkPickerState extends State<_LinkPicker> {
           _candidate(
             title: FiberLinkData.nameOf(s.username) ?? s.username,
             sub: [if (FiberLinkData.nameOf(s.username) != null) s.username, s.why].join(' · '),
-            pill: FiberPill(s.sure ? 'أكيد' : 'محتمل', tone: s.sure ? AppTone.success : AppTone.warning),
+            pill: FiberPill(s.sure ? 'مؤكَّد' : 'محتمل', tone: s.sure ? AppTone.success : AppTone.warning),
             onTap: () => _save(s.username, s.source),
           ),
           const SizedBox(height: Sp.md),
@@ -735,7 +735,7 @@ class _LinkPickerState extends State<_LinkPicker> {
         else if (!big && q.length >= 2 && !_loading)
           Padding(
             padding: const EdgeInsets.only(top: Sp.sm),
-            child: Text('ما لقينا مشتركاً بهذا الاسم أو اليوزر', style: AppType.body(color: AppColors.textMid)),
+            child: Text('لم نجد مشتركاً بهذا الاسم أو اليوزر', style: AppType.body(color: AppColors.textMid)),
           ),
         if (rec?.username != null) ...[
           const SizedBox(height: Sp.md),

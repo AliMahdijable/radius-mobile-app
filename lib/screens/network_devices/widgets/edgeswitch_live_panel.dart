@@ -204,7 +204,7 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
                 strokeWidth: 2, color: AppColors.brand),
           ),
           const SizedBox(width: 10),
-          Text('جاري الاتصال بـEdgeSwitch…',
+          Text('جارٍ الاتصال بـEdgeSwitch…',
               style: AppType.body(color: AppColors.textMid)),
         ]),
       );

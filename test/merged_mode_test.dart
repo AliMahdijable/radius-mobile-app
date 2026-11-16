@@ -498,7 +498,7 @@ void main() {
       expect(k.packageCost!.sum, 15000, reason: 'كلفة من تُطرح عنده وحده');
       expect(k.profitAfterCost, 12000 + 9000, reason: 'A بلا كلفة: صافيها النقديّ؛ B: مبيعات − مصاريف − كلفة');
       expect(m.mixedProfitRules, isTrue);
-      expect(m.excluded, ['C: تعذّرت قراءة صرفياتها', 'D: USD', 'E: تعذّر جلب تقريرها']);
+      expect(m.excluded, ['C: تعذّرت قراءة مصاريفها', 'D: USD', 'E: تعذّر جلب تقريرها']);
       expect(m.logsPartial, ['A']);
       expect([for (final l in m.report!.recentLogs) '${m.logCompany[l]}:${l.id}'], ['$_kA:1', '$_kB:1', '$_kA:2'],
           reason: 'الأحدث أوّلاً، والخارجة من المجموع لا تُعرض حركاتها تحته');
@@ -508,7 +508,7 @@ void main() {
       expect(ar.hidden, isTrue);
     });
 
-    test('moneyGap: التقرير كلّه، والتفعيلات، والصرفيات، وجزءٌ مجهول — وrecent_logs وحده عرض', () {
+    test('moneyGap: التقرير كلّه، والتفعيلات، والمصاريف، وجزءٌ مجهول — وrecent_logs وحده عرض', () {
       FinanceReport r({bool un = false, List<String> parts = const []}) =>
           FinanceReport(kpis: const FinanceKPIs(), recentLogs: const [], unavailable: un, unavailableParts: parts);
       expect(r(un: true).moneyGap, 'reply');

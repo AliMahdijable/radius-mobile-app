@@ -178,13 +178,13 @@ class FiberDiagnose {
         case FiberDropReason.power:
           return FiberDiagnosis(
             kind: FiberVerdictKind.power,
-            title: 'الكهرباء طافية عنده',
-            body: 'الجهاز بعث إشارة انطفاء$since، يعني طفى وماكو عطل بالشبكة. يرجع وحده لمّا ترجع الكهرباء.',
+            title: 'الكهرباء مقطوعة عنده',
+            body: 'الجهاز بعث إشارة انطفاء$since، يعني انطفأ وماكو عطل بالشبكة. يرجع وحده لمّا ترجع الكهرباء.',
             steps: steps,
           );
         case FiberDropReason.fiber:
           final neighbours = boxTotal != null && boxTotal > 0 && boxOnline != null
-              ? (boxOnline == boxTotal ? 'وجيرانه على الصندوق شغّالين، ' : '')
+              ? (boxOnline == boxTotal ? 'وجيرانه على الصندوق يعملون، ' : '')
               : '';
           return FiberDiagnosis(
             kind: FiberVerdictKind.fiberHome,
@@ -199,7 +199,7 @@ class FiberDiagnose {
           return FiberDiagnosis(
             kind: FiberVerdictKind.onuDown,
             title: 'جهاز الألياف مفصول',
-            body: 'الجهاز انقطع$since والأولت ما يقول السبب. إذا الكهرباء عنده شغّالة فالخلل بالليف أو الوصلة.',
+            body: 'الجهاز انقطع$since والأولت ما يقول السبب. إذا الكهرباء عنده موجودة فالخلل بالليف أو الوصلة.',
             steps: steps,
           );
       }
@@ -216,7 +216,7 @@ class FiberDiagnose {
       }
       return FiberDiagnosis(
         kind: onu == null ? FiberVerdictKind.noOnu : FiberVerdictKind.onuOnly,
-        title: onu == null ? 'ما عندنا شي نفحصه' : 'جهاز الألياف يشتغل',
+        title: onu == null ? 'لا يوجد ما نفحصه' : 'جهاز الألياف يعمل',
         body: onu == null
             ? 'لا جهاز ولا مشترك معروف — اختر الجهاز أو اربطه بمشترك.'
             : 'الجهاز متّصل${rx == null ? '' : ' وضوءه ${_rxIn(rx)}'}. $subUnknown، فالاشتراك والجلسة ما نقدر نفحصهم من هنا.',
@@ -248,7 +248,7 @@ class FiberDiagnose {
         title: onu == null ? 'ماكو اتّصال من عنده' : 'المشكلة بالراوتر عند المشترك',
         body: onu == null
             ? 'اشتراكه فعّال بس ماكو جلسة. اربط جهاز أليافه حتى نعرف إذا الخلل بالضوء أو بالراوتر.'
-            : 'الضوء والجهاز سليمين واشتراكه فعّال، بس الراوتر ما اتّصل. طفّي الراوتر وشغّله، وتأكّد من كلمة سرّ الاتصال.',
+            : 'الضوء والجهاز سليمين واشتراكه فعّال، بس الراوتر ما اتّصل. أطفئ الراوتر ثمّ شغّله، وتأكّد من كلمة مرور الاتصال.',
         steps: steps,
       );
     }

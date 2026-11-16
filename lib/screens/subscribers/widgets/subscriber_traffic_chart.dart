@@ -96,7 +96,7 @@ class SubscriberTrafficChart extends StatelessWidget {
           Icon(Icons.info_outline_rounded, size: 15, color: AppColors.textHint),
           const SizedBox(width: Sp.x6),
           Expanded(
-              child: Text('الترافيك: الجهاز ما يعدّ التحميل',
+              child: Text('حركة البيانات: الجهاز ما يعدّ التحميل',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.microBold(color: AppColors.textMid))),
@@ -117,9 +117,9 @@ class SubscriberTrafficChart extends StatelessWidget {
         : readings.last.at.difference(readings.first.at).inSeconds;
     final period = seconds >= 60 ? 'آخر ${seconds ~/ 60} د' : 'آخر $seconds ث';
     final status = live
-        ? 'الترافيك الآن'
+        ? 'حركة البيانات الآن'
         : unavailable
-            ? 'تعذّرت قراءة الترافيك'
+            ? 'تعذّرت قراءة حركة البيانات'
             : readings.isEmpty
                 ? 'بانتظار القراءة'
                 : 'القراءة متوقفة';

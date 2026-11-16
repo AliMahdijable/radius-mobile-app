@@ -622,7 +622,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             ),
             Padding(
               padding: const EdgeInsets.only(bottom: 6, right: 2),
-              child: Text('يبقى اختيارك للعمليّات الجاية',
+              child: Text('يبقى اختيارك للعمليّات القادمة',
                   style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 11)),
             ),
           ],

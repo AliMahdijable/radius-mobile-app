@@ -179,7 +179,7 @@ class RecurringExpensesApi {
       );
     } catch (e) {
       _log('list', e);
-      return (page: null, error: 'تعذّر جلب الصرفيات الثابتة');
+      return (page: null, error: 'تعذّر جلب المصاريف الثابتة');
     }
   }
 

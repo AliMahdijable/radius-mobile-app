@@ -95,7 +95,7 @@ class ElDepositPasswordField extends StatefulWidget {
     super.key,
     required this.controller,
     this.enabled = true,
-    this.hint = 'باسورد الإيداع',
+    this.hint = 'كلمة مرور الإيداع',
     this.onSubmitted,
   });
 
@@ -138,7 +138,7 @@ class _ElDepositPasswordFieldState extends State<ElDepositPasswordField> {
                   strokeWidth: 2, color: AppColors.textMid),
             ),
             const SizedBox(width: Sp.sm),
-            Text('باسورد الإيداع…',
+            Text('كلمة مرور الإيداع…',
                 style: AppType.input(color: AppColors.textPlaceholder)),
           ],
         ),
@@ -158,7 +158,7 @@ class _ElDepositPasswordFieldState extends State<ElDepositPasswordField> {
             const SizedBox(width: Sp.sm),
             Expanded(
               child: Text(
-                'باسورد الإيداع محفوظ — لا حاجة لإدخاله',
+                'كلمة مرور الإيداع محفوظة — لا حاجة لإدخالها',
                 style: AppType.label(color: AppColors.success)
                     .copyWith(fontWeight: FontWeight.w700),
                 maxLines: 2,

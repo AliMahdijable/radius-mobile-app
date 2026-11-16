@@ -195,7 +195,7 @@ class _TowerPlaceScreenState extends State<TowerPlaceScreen> {
         child: ListView(shrinkWrap: true, children: [
           ListTile(
             leading: const Icon(LucideIcons.sparkles),
-            title: const Text('من الموديل (تلقائيّ)'),
+            title: const Text('من الطراز (تلقائيّ)'),
             onTap: () => Navigator.pop(ctx, 'auto'),
           ),
           for (final s in TowerShape.values)
@@ -327,7 +327,7 @@ class _TowerPlaceScreenState extends State<TowerPlaceScreen> {
   Widget _deviceHead(ArrangedDevice a) {
     final p = _placeOf(a);
     final shape = p.shape ?? a.shape;
-    final from = p.shape != null ? 'اخترته أنت' : 'عُرف من الموديل';
+    final from = p.shape != null ? 'اخترته أنت' : 'عُرف من الطراز';
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(

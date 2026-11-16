@@ -199,7 +199,7 @@ class _AddSheetState extends State<_AddSheet> {
 
   String? _validate() {
     if (_username.text.trim().isEmpty) return 'اسم المستخدم مطلوب';
-    if (_password.text.isEmpty) return 'كلمة السر مطلوبة';
+    if (_password.text.isEmpty) return 'كلمة المرور مطلوبة';
     if (_profileId == null) return 'اختر الباقة';
     return null;
   }
@@ -274,7 +274,7 @@ class _AddSheetState extends State<_AddSheet> {
         onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _saving ? 'جاري الحفظ...' : 'إضافة المشترك',
+        label: _saving ? 'جارٍ الحفظ...' : 'إضافة المشترك',
         icon: LucideIcons.userPlus,
         enabled: !_saving,
         busy: _saving,
@@ -293,7 +293,7 @@ class _AddSheetState extends State<_AddSheet> {
             icon: LucideIcons.user,
           ),
           const SizedBox(height: Sp.md),
-          const _Lbl('كلمة السر *'),
+          const _Lbl('كلمة المرور *'),
           _Field(
             controller: _password,
             hint: '••••••••',

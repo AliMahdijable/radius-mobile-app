@@ -342,7 +342,7 @@ void main() {
   Future<void> runSnackInline(WidgetTester t, SimVariant v,
       {bool shot = true}) async {
     await failThenSnack(t, v, message: 'حسابك ما يسمح بالتفعيل بالرصيد');
-    expect(find.text('اشرحلي'), findsOneWidget);
+    expect(find.text('اشرح لي'), findsOneWidget);
     await _check(t, v, 'snack_inline', shot: shot);
     await simDrain(t);
   }
@@ -353,7 +353,7 @@ void main() {
         message:
             'الساس رفض التفعيل بالرصيد لهذا الحساب — صلاحيّة «التفعيل بالرصيد» '
             'مقفلة عند الشركة، اطلبها منهم أو فعّل بالكارت');
-    expect(find.text('اشرحلي'), findsOneWidget);
+    expect(find.text('اشرح لي'), findsOneWidget);
     await _check(t, v, 'snack_stacked', shot: shot);
     await simDrain(t);
   }

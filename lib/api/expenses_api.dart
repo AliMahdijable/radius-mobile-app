@@ -235,12 +235,12 @@ class ExpensesApi {
       final msg = body is Map ? body['message']?.toString() : null;
       return (
         ok: false,
-        message: msg ?? 'تعذّر إضافة الصرفية',
+        message: msg ?? 'تعذّر إضافة المصروف',
         id: null,
       );
     } catch (e) {
       _log('admin/expenses (POST)', e);
-      return (ok: false, message: 'تعذّر إضافة الصرفية', id: null);
+      return (ok: false, message: 'تعذّر إضافة المصروف', id: null);
     }
   }
 

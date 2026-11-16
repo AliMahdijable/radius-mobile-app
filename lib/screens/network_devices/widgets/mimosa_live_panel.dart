@@ -1121,7 +1121,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Row(children: [
           Icon(LucideIcons.chartLine, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('سير الترفك', style: AppType.pillBold(color: AppColors.textHi)),
+          Text('حركة البيانات', style: AppType.pillBold(color: AppColors.textHi)),
           const Spacer(),
           // لا رقم قبل عيّنتين: «٠» يوحي بوصلةٍ صامتة وهي تحمل عشرات
           // الميغا، والعيّنة الأولى بلا سابقة فلا فارق.

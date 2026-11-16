@@ -25,7 +25,7 @@ import 'sim_el/sim_harness.dart';
 /// وأُغلقت كأنّها حفظت؛ وحفظٌ كهذا من جهازٍ يمسح ما حفظه جهازٌ آخر في الحقول الأولى (الخادم يكتب الكلّ).
 const _v = SimVariant(390, dark: false);
 const _u = 'samer@m';
-const _hint = 'من «الاعتمادات» إذا فارغ';
+const _hint = 'من «بيانات الدخول» إذا فارغ';
 
 class _Devices {
   final rows = <String, Map<String, Object?>>{};
@@ -147,7 +147,7 @@ void main() {
 
   List<Map<String, dynamic>> puts([String u = _u]) => server.bodies('PUT', dev.path(u));
 
-  testWidgets('المشكلة: يوزر وكلمة سرّ في خانتَي «الجهاز الثاني» بلا آيبي ولا منفذ ⇒ لا تُغلق الورقة كأنّها حفظت، ولا يُرسل شيء', (t) async {
+  testWidgets('المشكلة: يوزر وكلمة مرور في خانتَي «الجهاز الثاني» بلا آيبي ولا منفذ ⇒ لا تُغلق الورقة كأنّها حفظت، ولا يُرسل شيء', (t) async {
     await pumpSim(t, _v, home: (_) => home(_u));
     await open(t);
     await t.ensureVisible(_f(_fUser2));
@@ -157,7 +157,7 @@ void main() {
     expect(find.byType(DeviceConfigSheet), findsOneWidget, reason: 'الورقة باقية — ما كُتب لم يُهمل بصمت');
     expect(puts(), isEmpty, reason: 'لا حفظ لصفٍّ فارغ');
     expect(dev.rows[_u], isNull);
-    expect(find.textContaining('الجهاز الثاني يحتاج آيبي أو منفذ'), findsOneWidget, reason: 'الرسالة تقول ما ينقص وأين يُكتب اعتماد الجهاز نفسه');
+    expect(find.textContaining('الجهاز الثاني يحتاج عنوان IP أو منفذ'), findsOneWidget, reason: 'الرسالة تقول ما ينقص وأين يُكتب اعتماد الجهاز نفسه');
     expect(find.byKey(const ValueKey('second-needs-address')), findsOneWidget);
     expect([_text(t, _fUser2), _text(t, _fPass2)], ['admin', 'r0uter'], reason: 'ما كتبه باقٍ أمامه');
 
@@ -179,7 +179,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('اعتماد الجهاز الثاني بلا عنوان: مسحُه يكفي للحفظ؛ وكلمة سرٍّ وحدها بلا عنوان تُرفض كذلك', (t) async {
+  testWidgets('اعتماد الجهاز الثاني بلا عنوان: مسحُه يكفي للحفظ؛ وكلمة مرور وحدها بلا عنوان تُرفض كذلك', (t) async {
     await pumpSim(t, _v, home: (_) => home(_u));
     await open(t);
     await t.ensureVisible(_f(_fPass2));
@@ -201,7 +201,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('كلمة سرّ وحدها في الحقل الأوّل (راوتر بلا يوزر): تُحفظ وتبقى بعد الخروج والدخول، وحفظٌ بلا تغيير لا يمسحها', (t) async {
+  testWidgets('كلمة مرور وحدها في الحقل الأوّل (راوتر بلا يوزر): تُحفظ وتبقى بعد الخروج والدخول، وحفظٌ بلا تغيير لا يمسحها', (t) async {
     await pumpSim(t, _v, home: (_) => home(_u));
     await open(t);
     expect(_text(t, _fPass), '');
@@ -212,7 +212,7 @@ void main() {
     await cardReads(t);
     for (var i = 0; i < 3; i++) {
       await open(t);
-      expect(_text(t, _fPass), 'r0uter', reason: 'الفتحة ${i + 2}: كلمة السرّ المحفوظة ظاهرة');
+      expect(_text(t, _fPass), 'r0uter', reason: 'الفتحة ${i + 2}: كلمة المرور المحفوظة ظاهرة');
       await save(t);
       expect(dev.rows[_u]!['password'], 'r0uter', reason: 'الحفظ ${i + 2}: لا يمسح');
       await cardReads(t);
@@ -220,7 +220,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('يوزر وكلمة سرّ: يُحفظان ويظهران بعد الخروج والدخول', (t) async {
+  testWidgets('يوزر وكلمة مرور: يُحفظان ويظهران بعد الخروج والدخول', (t) async {
     await pumpSim(t, _v, home: (_) => home('saidnaser'));
     await open(t);
     await t.enterText(_f(_fUser), 'admin');
@@ -310,7 +310,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('التلميحات: حقول الاعتماد الفارغة تقول «من الاعتمادات إذا فارغ» — لا افتراض مصنّعٍ رماديّ يبدو محفوظاً', (t) async {
+  testWidgets('التلميحات: حقول الاعتماد الفارغة تقول «من بيانات الدخول إذا فارغ» — لا افتراض مصنّعٍ رماديّ يبدو محفوظاً', (t) async {
     await pumpSim(t, _v, home: (_) => home(_u));
     await open(t);
     for (final i in [_fUser, _fPass, _fUser2, _fPass2]) {

@@ -152,7 +152,7 @@ class _FiberxTopupScreenState extends State<FiberxTopupScreen> {
     } else {
       await _load();
       if (mounted) {
-        showSheetSnack(context, s.found ? 'الدفعة قيد المعالجة — تحقّق بعد لحظات' : 'ما لقينا الدفعة بعد — أكمل الدفع ثمّ تحقّق');
+        showSheetSnack(context, s.found ? 'الدفعة قيد المعالجة — تحقّق بعد لحظات' : 'لم نجد الدفعة بعد — أكمل الدفع ثمّ تحقّق');
       }
     }
   }

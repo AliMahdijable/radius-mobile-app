@@ -242,7 +242,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
     if (!mounted) return;
     if (res.password == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.message ?? 'تعذّر جلب كلمة السر'),
+        content: Text(res.message ?? 'تعذّر جلب كلمة المرور'),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
@@ -251,7 +251,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
     await showRevealPasswordSheet(
       context,
       title: m.username,
-      subtitle: 'كلمة سرّ المدير الفرعي',
+      subtitle: 'كلمة مرور المدير الفرعي',
       password: res.password!,
       accentColor: AppColors.brandAccent,
     );

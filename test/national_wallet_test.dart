@@ -249,7 +249,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('التحويلات: مسارها، آخر ٧ أيّام، والمالك من الفلاتر', (t) async {
+  testWidgets('التحويلات: مسارها، آخر ٧ أيّام، والمالك من التصفية', (t) async {
     server.reply('GET', '/api/v2/ftth/wallet', 200, _walletReply());
     server.reply('GET', '/api/v2/ftth/transfers', 200, {
       'success': true,
@@ -266,7 +266,7 @@ void main() {
     expect(q['from'], _day(DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6))));
     expect(find.text('محفظة المشترك'), findsOneWidget);
     expect(find.textContaining('1,250,000'), findsWidgets, reason: 'الرصيد يبقى من «محفظتي»');
-    await t.tap(find.text('الفلاتر'));
+    await t.tap(find.text('التصفية'));
     await t.pumpAndSettle();
     await t.ensureVisible(find.text('المشتركين'));
     await t.tap(find.text('المشتركين'));
@@ -277,10 +277,10 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('الفلاتر: النوع والمنفّذ ورقم المعاملة (بأرقامٍ هنديّة) ⇒ معاملات الطلب', (t) async {
+  testWidgets('التصفية: النوع والمنفّذ ورقم المعاملة (بأرقامٍ هنديّة) ⇒ معاملات الطلب', (t) async {
     server.reply('GET', '/api/v2/ftth/wallet', 200, _walletReply());
     await pumpSim(t, _v, home: (_) => const NationalWalletScreen());
-    await t.tap(find.text('الفلاتر'));
+    await t.tap(find.text('التصفية'));
     await t.pumpAndSettle();
     await t.tap(find.text('تجديد').last);
     await t.ensureVisible(find.text('أنا وحدي'));
@@ -293,7 +293,7 @@ void main() {
     await t.pumpAndSettle();
     final q = server.calls('GET', '/api/v2/ftth/wallet').last.queryParameters;
     expect((q['types'], q['by'], q['tx']), ('PLAN_RENEW', 'me', '1234'));
-    expect(find.text('3'), findsOneWidget, reason: 'عدّاد الفلاتر المفعّلة');
+    expect(find.text('3'), findsOneWidget, reason: 'عدّاد التصفية المفعّلة');
     await simDrain(t);
   });
 
@@ -305,14 +305,14 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('خادمٌ أقدم (v1): لا شرائح فرزٍ لا يفهمها ولا بحث ولا «الفلاتر» ولا تبويب', (t) async {
+  testWidgets('خادمٌ أقدم (v1): لا شرائح فرزٍ لا يفهمها ولا بحث ولا «التصفية» ولا تبويب', (t) async {
     server.reply('GET', '/api/v2/ftth/wallet', 200, _walletReply(v2: false));
     await pumpSim(t, _v, home: (_) => const NationalWalletScreen());
     expect(find.text('حركات التفعيل'), findsNothing);
     expect(find.text('التحويلات'), findsNothing);
     expect(find.byType(NationalSearchField), findsNothing);
     expect(find.byType(NationalFilterButton), findsNothing);
-    expect(find.text('الفلاتر'), findsNothing);
+    expect(find.text('التصفية'), findsNothing);
     expect(find.textContaining('−35,000'), findsOneWidget);
     await simDrain(t);
   });

@@ -246,14 +246,14 @@ void main() {
   simCase(_screen, 'transfer_failed', (t, v) async {
     server.reply('POST', _transferPath, 400, {
       'success': false,
-      'message': 'فشل التحويل: باسورد الإيداع غير صحيح',
+      'message': 'فشل التحويل: كلمة مرور الإيداع غير صحيح',
     });
     await open(t, v);
     await fillTransfer(t);
     await reveal(t, find.text('تحويل'));
     await t.tap(find.text('تحويل'));
     await t.pumpAndSettle();
-    expect(find.text('فشل التحويل: باسورد الإيداع غير صحيح'), findsOneWidget);
+    expect(find.text('فشل التحويل: كلمة مرور الإيداع غير صحيح'), findsOneWidget);
     expect(find.text('10,000'), findsOneWidget, reason: 'المبلغ باقٍ');
     await simCheck(t, v, _screen, 'transfer_failed');
     await simDrain(t);
@@ -300,10 +300,10 @@ void main() {
     for (final r in server.requests) {
       final url = Uri.decodeFull(r.uri.toString());
       expect(url, isNot(contains(_secret)),
-          reason: 'كلمة السرّ في رابط ${r.method} ${r.path}');
+          reason: 'كلمة المرور في رابط ${r.method} ${r.path}');
       expect(r.headers.values.map((h) => '$h').join(' '),
           isNot(contains(_secret)),
-          reason: 'كلمة السرّ في ترويسة ${r.method} ${r.path}');
+          reason: 'كلمة المرور في ترويسة ${r.method} ${r.path}');
     }
     await reveal(t, find.text('لا توجد حركات في كشف الحساب'));
     await simCheck(t, v, _screen, 'statement_post_contract');
@@ -323,7 +323,7 @@ void main() {
     expect(server.calls('GET', _statementPath), isEmpty, reason: 'لا GET');
     for (final r in server.requests) {
       expect(Uri.decodeFull(r.uri.toString()), isNot(contains(_secret)),
-          reason: 'كلمة السرّ لا تظهر في أيّ رابط (${r.method} ${r.path})');
+          reason: 'كلمة المرور لا تظهر في أيّ رابط (${r.method} ${r.path})');
     }
     expect(find.text('تجديد المشترك ali1@alnoor-net — Economy'), findsOneWidget);
     expect(find.text('+500,000'), findsOneWidget);
@@ -366,7 +366,7 @@ void main() {
   });
 
   simCase(_screen, 'statement_error', (t, v) async {
-    const msg = 'تعذّر جلب كشف الحساب — تحقّق من باسورد الإيداع';
+    const msg = 'تعذّر جلب كشف الحساب — تحقّق من كلمة مرور الإيداع';
     server.reply('POST', _statementPath, 400, {'success': false, 'message': msg});
     await open(t, v);
     await showStatement(t, password: 'wrong');
@@ -381,7 +381,7 @@ void main() {
     await reveal(t, find.text('عرض كشف الحساب'));
     await t.tap(find.text('عرض كشف الحساب'));
     await t.pumpAndSettle();
-    expect(find.text('أدخل كلمة سرّ الإيداع أوّلاً'), findsOneWidget);
+    expect(find.text('أدخل كلمة مرور الإيداع أوّلاً'), findsOneWidget);
     expect(server.calls('POST', _statementPath), isEmpty);
     await simCheck(t, v, _screen, 'statement_no_password');
     await simDrain(t);

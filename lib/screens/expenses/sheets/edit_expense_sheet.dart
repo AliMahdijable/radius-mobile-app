@@ -131,12 +131,12 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.pencil,
-        title: 'تعديل الصرفيّة',
+        title: 'تعديل المصروف',
         subtitle: (widget.companyName ?? '').trim().isEmpty ? '' : 'في «${widget.companyName!.trim()}»',
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'جاري التعديل...' : 'حفظ التعديل',
+        label: _submitting ? 'جارٍ التعديل...' : 'حفظ التعديل',
         icon: LucideIcons.save,
         enabled: !_submitting && _amount > 0,
         busy: _submitting,
@@ -184,7 +184,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                         initialDate: _date,
                         firstDate: DateTime(_date.year - 2, 1, 1),
                         lastDate: DateTime.now(),
-                        helpText: 'اختر تاريخ الصرفية',
+                        helpText: 'اختر تاريخ المصروف',
                         cancelText: 'إلغاء',
                         confirmText: 'تأكيد',
                       );
@@ -225,7 +225,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
             maxLines: 2,
             style: AppType.input(color: AppColors.textHi),
             decoration: InputDecoration(
-              hintText: 'وصف الصرفية…',
+              hintText: 'وصف المصروف…',
               hintStyle: AppType.input(color: AppColors.textLow),
               filled: true,
               fillColor: AppColors.surface,

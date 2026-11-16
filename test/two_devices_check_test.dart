@@ -31,7 +31,7 @@ void main() {
         peek: (s) => snaps[s.username] == null ? null : (snap: snaps[s.username], stale: false, at: DateTime(2026, 11, 14)));
   }
 
-  test('نانو سليم وراوترٌ لا يردّ ⇒ «عند المشترك» بسطر «راوتر المشترك مطفي»، لا «سليم» ولا «بمشكلة»', () {
+  test('نانو سليم وراوترٌ لا يردّ ⇒ «عند المشترك» بسطر «راوتر المشترك مطفأ»، لا «سليم» ولا «بمشكلة»', () {
     final r = run({'a': _nano(), 'b': _nano()}, {'a': (second: true, routerOff: true), 'b': (second: true, routerOff: false)});
     expect(r.atSub.map((x) => x.sub.username), ['a']);
     expect(r.atSub.single.note, SubscribersCheck.routerOffNote);
@@ -41,10 +41,10 @@ void main() {
     final text = SubscribersCheck.reportText(r, progress: SubscribersCheck.progress(subs: 2));
     expect(text, contains('عند المشترك 1'));
     expect(text, contains('عند المشترك (1):'));
-    expect(text, contains('راوتر المشترك مطفي'));
+    expect(text, contains('راوتر المشترك مطفأ'));
   });
 
-  test('كيبل النانو مفصول ⇒ مشكلةٌ واحدة «كيبل النانو: …» ولو كان الراوتر مطفياً (لا عطلان)', () {
+  test('كيبل النانو مفصول ⇒ مشكلةٌ واحدة «كيبل النانو: …» ولو كان الراوتر مطفياً (لا معطّل)', () {
     final r = run({'a': _nano(cableOk: false)}, {'a': (second: true, routerOff: true)});
     expect(r.atSub, isEmpty);
     final row = r.rows.single;

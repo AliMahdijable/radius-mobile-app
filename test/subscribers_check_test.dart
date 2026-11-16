@@ -136,7 +136,7 @@ void main() {
     expect([for (final m in r.missing) m.why], [SubsMissWhy.dead, SubsMissWhy.unmeasured, SubsMissWhy.offline],
         reason: 'الميّت أوّلاً ثمّ من يردّ بلا مقاييس');
     expect(r.missing[1].sub.username, 'p');
-    expect(r.missing[1].note, 'يردّ، ما انقرت مقاييسه');
+    expect(r.missing[1].note, 'يردّ، لم تُقرأ مقاييسه');
     expect([r.total, r.read], [6, 3]);
   });
 
@@ -154,7 +154,7 @@ void main() {
       expect([r.read, r.unread], [0, 156]);
       expect(r.missing.every((m) => m.why == SubsMissWhy.unmeasured), isTrue);
       expect(r.missing.where((m) => m.note == 'يردّ، ما انفتح برمزه المحفوظ').length, 153);
-      expect(r.missing.where((m) => m.note == 'يردّ، ما انقرت مقاييسه').length, 3, reason: 'خادمٌ بلا err ⇒ السطر العامّ');
+      expect(r.missing.where((m) => m.note == 'يردّ، لم تُقرأ مقاييسه').length, 3, reason: 'خادمٌ بلا err ⇒ السطر العامّ');
     });
 
     test('الأسباب من الخادم إن أعطاها، والحقل اختياريّ؛ وجهازٌ قُرئ بلا أرقام «بلا قياسات»', () {
@@ -272,7 +272,7 @@ void main() {
       final noReply = {for (final m in r.missingIn(SubsCheckCat.noReply)) m.sub.username: SubscribersCheck.missText(m)};
       expect(noReply, {
         'dead': 'لا يستجيب',
-        'ping': 'يردّ، ما انقرت مقاييسه',
+        'ping': 'يردّ، لم تُقرأ مقاييسه',
         'auth': 'يردّ، ما انفتح برمزه المحفوظ',
       });
       // ١٠ نوفمبر: فحصٌ مكتمل بلا قراءةٍ له = الخادم لم يسأل جهازه (يوبيكويتي وحدها والمؤجَّل) ⇒ «لم يُفحص» بسببه

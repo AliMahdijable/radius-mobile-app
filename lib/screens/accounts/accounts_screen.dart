@@ -168,7 +168,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       final pw = await CompanyRoute.runOpen(() => ManagersApi.fetchPassword(row.id));
       if (!mounted) return;
       if (pw.password == null) {
-        _snack(pw.message ?? 'تعذّر جلب كلمة السر', error: true);
+        _snack(pw.message ?? 'تعذّر جلب كلمة المرور', error: true);
         return;
       }
       // Pro البند ٤ ③: نفس ساس الجلسة الحاليّة — بدونه يذهب للأصل.
@@ -543,7 +543,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'اضغط "دخول" لتسجيل الدخول بحساب مدير آخر بلا كتابة كلمة السر.',
+                  'اضغط "دخول" لتسجيل الدخول بحساب مدير آخر بلا كتابة كلمة المرور.',
                   style: TextStyle(
                     fontFamily: AppType.family,
                     fontSize: 11,

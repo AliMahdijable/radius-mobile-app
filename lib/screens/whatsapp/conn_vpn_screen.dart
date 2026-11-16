@@ -186,14 +186,14 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('تعديل بيانات الـVPN', style: AppType.sheetTitle()),
           const SizedBox(height: 2),
-          Text('الملفّ نفسه يبقى — تغيّر اليوزر والباسورد وحدهما. الباسورد الفارغ يبقى كما هو.',
+          Text('الملفّ نفسه يبقى — تغيّر اليوزر وكلمة المرور وحدهما. كلمة المرور الفارغة تبقى كما هي.',
               style: AppType.micro(color: AppColors.textMid)),
           const SizedBox(height: Sp.md),
           _field(user, 'يوزر الـVPN'),
           const SizedBox(height: Sp.sm),
-          _field(pass, 'باسورد الـVPN الجديد', secret: true),
+          _field(pass, 'كلمة مرور الـVPN الجديدة', secret: true),
           const SizedBox(height: Sp.sm),
-          _field(keyPass, 'كلمة سرّ المفتاح (إن وُجدت)', secret: true),
+          _field(keyPass, 'كلمة مرور المفتاح (إن وُجدت)', secret: true),
           const SizedBox(height: Sp.md),
           FilledButton(
             onPressed: () => Navigator.pop(c, true),
@@ -264,7 +264,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
     return [
       Text(
         'ملفٌّ واحد يفحص مشتركينك وأجهزتك وأنت خارج شبكتك — حين تضغط «فحص الآن» بقسم المشتركين أو الأجهزة. '
-        'وعلى شبكتك يفحص موبايلك بنفسه.'
+        'وعلى شبكتك يفحص هاتفك بنفسه.'
         // صفحةٌ تمرّ من VPN رئيسيّتها لا مفتاح «اتصال عكسي» لها أدناه (يتبع الرئيسيّة)
         '${st.viaMain ? '' : ' وإن فعّلت «الاتصال العكسي» أدناه يقيس النظام وحده للتنبيهات كلّ نصف ساعة نهاراً وساعة ليلاً.'}',
         style: AppType.muted(color: AppColors.textMid),
@@ -302,7 +302,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
                   ? 'تمرّ من VPN ${st.viaManager ? 'مديرك الرئيسيّ' : 'صفحتك الرئيسيّة'}${st.mainLabel!.isEmpty ? '' : ' ${iso(st.mainLabel!)}'}'
                   : st.remoteScan
                       ? 'النظام يفحص شبكتك عبر الـVPN وأنت بعيد'
-                      : 'الفحص الآن من موبايلك وأنت على شبكتك فقط',
+                      : 'الفحص الآن من هاتفك وأنت على شبكتك فقط',
               style: AppType.bodyStrong(color: AppColors.textHi),
             ),
           ),
@@ -331,7 +331,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
         if (st.autoLinked && _analysis == null) ...[
           _note(
             text: 'متاحٌ ربطك عبر ${st.autoLabel} بحسابك ${iso(st.autoUser ?? '')} بلا ملف — جرّب «فحص الاتصال» ثمّ فعّل «الاتصال العكسي».',
-            hint: 'يوزرك هناك مختلف؟ ارفع ملفّك بيوزرك وباسوردك.',
+            hint: 'يوزرك هناك مختلف؟ ارفع ملفّك بيوزرك وكلمة مرورك.',
           ),
           const SizedBox(height: Sp.sm),
         ],
@@ -356,14 +356,14 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
               const SizedBox(width: Sp.sm),
               Expanded(
                 child: Text(
-                    'ملفّك محفوظ مشفّراً${st.profileUser != null ? ' · اليوزر ${st.profileUser}' : st.profileHasAuth ? ' مع اليوزر والباسورد' : ''}',
+                    'ملفّك محفوظ مشفّراً${st.profileUser != null ? ' · اليوزر ${st.profileUser}' : st.profileHasAuth ? ' مع اليوزر وكلمة المرور' : ''}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.body(color: AppColors.textHi)),
               ),
               if (st.profileHasAuth)
                 IconButton(
-                  tooltip: 'تعديل اليوزر والباسورد',
+                  tooltip: 'تعديل اليوزر وكلمة المرور',
                   onPressed: _busy == null ? () => _editCredentials(st) : null,
                   icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.textMid),
                 ),
@@ -424,7 +424,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('الاتصال العكسي عند الخروج من الشبكة', style: AppType.bodyStrong(color: AppColors.textHi)),
                   const SizedBox(height: 2),
-                  Text('مفعّلاً: حين لا يقيس تطبيقك من شبكتك ٢٠ دقيقة، يقيس النظام عبر الـVPN. مطفأً: الفحص من موبايلك وأنت على شبكتك فقط.',
+                  Text('مفعّلاً: حين لا يقيس تطبيقك من شبكتك ٢٠ دقيقة، يقيس النظام عبر الـVPN. مطفأً: الفحص من هاتفك وأنت على شبكتك فقط.',
                       style: AppType.micro(color: AppColors.textMid)),
                 ]),
               ),
@@ -465,13 +465,13 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
             const SizedBox(height: Sp.sm),
             _field(_user, 'يوزر الـVPN'),
             const SizedBox(height: Sp.sm),
-            _field(_pass, 'باسورد الـVPN', secret: true),
+            _field(_pass, 'كلمة مرور الـVPN', secret: true),
           ],
           if (a.needsKeyPassword) ...[
             const SizedBox(height: Sp.sm),
-            _field(_keyPass, 'كلمة سرّ المفتاح', secret: true),
+            _field(_keyPass, 'كلمة مرور المفتاح', secret: true),
             const SizedBox(height: 2),
-            Text('مفتاح هذا الملفّ مشفّر — غير باسورد الدخول (تعطيك إيّاها شركتك مع الملفّ).',
+            Text('مفتاح هذا الملفّ مشفّر — غير كلمة مرور الدخول (تعطيك إيّاها شركتك مع الملفّ).',
                 style: AppType.micro(color: AppColors.textMid)),
           ],
           const SizedBox(height: Sp.md),

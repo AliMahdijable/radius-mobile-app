@@ -329,7 +329,7 @@ class FiberOltSettings {
   static const minOnusCeil = 32;
 
   static const defaultOutageMessage =
-      'مشتركنا العزيز، صار عطل بخطّ الألياف بمنطقتكم والفنّي يشتغل عليه. نبلّغكم أوّل ما يرجع النت، ونعتذر عن الإزعاج.';
+      'مشتركنا العزيز، صار عطل بخطّ الألياف بمنطقتكم والفنّي يعمل عليه. نبلّغكم أوّل ما يرجع النت، ونعتذر عن الإزعاج.';
   static const defaultBackMessage = 'مشتركنا العزيز، رجع النت عندكم. شكراً لصبركم.';
 
   final int oltId;

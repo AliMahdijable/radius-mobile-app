@@ -176,9 +176,9 @@ void main() {
     await open(t);
     await t.tap(find.text('كارت (0)'));
     await t.pumpAndSettle();
-    expect(find.textContaining('ما عندك كارت لباقة'), findsOneWidget);
-    expect(footer('ما عندك كارت لهالباقة'), findsOneWidget);
-    await t.tap(footer('ما عندك كارت لهالباقة'));
+    expect(find.textContaining('ليس لديك كارت لباقة'), findsOneWidget);
+    expect(footer('ليس لديك كارت لهذه الباقة'), findsOneWidget);
+    await t.tap(footer('ليس لديك كارت لهذه الباقة'));
     await t.pumpAndSettle();
     expect(server.activateBodies, isEmpty, reason: 'الزرّ معطّل');
 
@@ -215,7 +215,7 @@ void main() {
     await t.tap(find.text('كارت (0)'));
     await t.pumpAndSettle();
     expect(find.byKey(pinKey), findsOneWidget);
-    expect(footer('ما عندك كارت لهالباقة'), findsOneWidget);
+    expect(footer('ليس لديك كارت لهذه الباقة'), findsOneWidget);
     expect(find.textContaining('اكتب رقم بطاقة خارجيّة'), findsOneWidget, reason: 'السطر يدلّ على البديل');
 
     // رموزٌ غير الأرقام والحروف الإنكليزيّة لا تُكتب، وما دون ٨ خانات يقفل الزرّ بسببه
@@ -414,7 +414,7 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('رفض NO_CARDS: رسالة، والشيت يصير «لا كارت» ويبقى مفتوحاً',
+  testWidgets('رفض NO_CARDS: رسالة، والنافذة يصير «لا كارت» ويبقى مفتوحاً',
       (t) async {
     server.activationExtra = cardsData(available: 3);
     server.activateReply = (
@@ -429,12 +429,12 @@ void main() {
     await t.tap(find.text('كارت (3)'));
     await t.pumpAndSettle();
     await submit(t, 'تجديد بكارت');
-    expect(find.textContaining('ما عندك كارت متاح لباقة'), findsOneWidget);
-    expect(find.textContaining('ما عندك كارت لباقة'), findsOneWidget);
-    expect(footer('ما عندك كارت لهالباقة'), findsOneWidget);
+    expect(find.textContaining('ليس لديك كارت متاح لباقة'), findsOneWidget);
+    expect(find.textContaining('ليس لديك كارت لباقة'), findsOneWidget);
+    expect(footer('ليس لديك كارت لهذه الباقة'), findsOneWidget);
     expect(find.text('طريقة التفعيل'), findsOneWidget, reason: 'لم يُغلق');
     await drainSnack(t);
-    await t.tap(footer('ما عندك كارت لهالباقة'));
+    await t.tap(footer('ليس لديك كارت لهذه الباقة'));
     await t.pumpAndSettle();
     expect(server.activateBodies, hasLength(1), reason: 'لا ضغطة ثانية');
   });

@@ -106,7 +106,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
 
   /// «فعّال ومتّصل» · «منتهي وغير متّصل الآن» · «مطفي (معطّل)» — غير المتّصل بكلمة قسمه في «الفحص العامّ».
   String get headline {
-    if (disabled) return 'مطفي (معطّل)${online ? ' — ومتّصل' : ''}';
+    if (disabled) return 'موقوف (معطّل)${online ? ' — ومتّصل' : ''}';
     return '${expired ? 'منتهي' : 'فعّال'} و${online ? 'متّصل' : SubsCheckCat.offline.label}';
   }
 

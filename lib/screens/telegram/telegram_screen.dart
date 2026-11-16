@@ -84,7 +84,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         title: const Text('فصل البوت',
             style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: const Text(
-            'سيتوقّف كل إرسال تلغرام. المشتركون المربوطون يبقون في قاعدة البيانات — يمكن إعادة الربط لاحقاً بنفس التوكن.',
+            'سيتوقّف كل إرسال تلغرام. المشتركون المربوطون يبقون في قاعدة البيانات — يمكن إعادة الربط لاحقاً بنفس رمز البوت.',
             style: TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
@@ -627,8 +627,8 @@ class _StepsCard extends StatelessWidget {
           _step(1, 'افتح ', botLink: '@BotFather', suffix: ' في تلغرام'),
           _step(2, 'أرسل الأمر ', code: '/newbot', suffix: ' واتّبع التعليمات'),
           _step(3, 'اختر اسم بوت + username ينتهي بـ ', code: 'bot'),
-          _step(4, 'انسخ التوكن الذي يبدأ بـ ', code: '123456789:AAE...'),
-          _step(5, 'الصق التوكن أدناه واضغط ', codeBold: 'ربط البوت'),
+          _step(4, 'انسخ رمز البوت الذي يبدأ بـ ', code: '123456789:AAE...'),
+          _step(5, 'الصق رمز البوت أدناه واضغط ', codeBold: 'ربط البوت'),
         ],
       ),
     );
@@ -754,7 +754,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
   Future<void> _connect() async {
     final token = _ctrl.text.trim();
     if (token.isEmpty) {
-      setState(() => _err = 'أدخل التوكن أوّلاً');
+      setState(() => _err = 'أدخل رمز البوت أوّلاً');
       return;
     }
     setState(() {
@@ -797,7 +797,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('توكن البوت',
+          Text('رمز البوت',
               style: TextStyle(
                 fontFamily: AppType.family,
                 fontSize: 11, height: 1.25,
@@ -889,7 +889,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
             children: [
               Icon(LucideIcons.shieldCheck, size: 12, color: AppColors.textLow),
               const SizedBox(width: 5),
-              Text('التوكن يُحفظ مشفَّراً — لا يظهر مجدَّداً.',
+              Text('رمز البوت يُحفظ مشفَّراً — لا يظهر مجدَّداً.',
                   style: TextStyle(
                     fontFamily: AppType.family,
                     fontSize: 10.5, height: 1.3,

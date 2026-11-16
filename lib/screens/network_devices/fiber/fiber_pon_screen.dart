@@ -332,7 +332,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
                   style: AppType.cardTitleBold(color: AppColors.onBrand), maxLines: 1, overflow: TextOverflow.ellipsis),
               Text(
                 iso([
-                  port == null ? '—' : (port.up ? 'شغّال' : 'مطفأ'),
+                  port == null ? '—' : (port.up ? 'يعمل' : 'مطفأ'),
                   port?.technology == VsolPonTechnology.gpon ? 'GPON' : 'EPON',
                   FiberText.devices(tree.all.length),
                 ].join(' · ')),

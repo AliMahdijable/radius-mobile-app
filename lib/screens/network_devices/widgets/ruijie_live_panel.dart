@@ -392,7 +392,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           samples: [for (final t in _traffic) (rx: t.rx, tx: t.tx)],
           capacity: _maxTraffic,
           interval: _refreshInterval,
-          title: wan ? 'سير الترفك' : 'حِمل المنفذ',
+          title: wan ? 'حركة البيانات' : 'حِمل المنفذ',
           subtitle: up == null ? null : (wan ? 'منفذ ${up.name}' : 'أنشط منفذ · ${up.name}'),
           rxLabel: wan ? 'تنزيل' : 'وارد',
           txLabel: wan ? 'رفع' : 'صادر',
@@ -661,9 +661,9 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         Row(children: [
           Text(
             _uplinkName == null
-                ? 'الترفك'
+                ? 'حركة البيانات'
                 : (_uplinkIsWan
-                    ? 'ترفك ${_uplinkName!}'
+                    ? 'حركة ${_uplinkName!}'
                     : 'أنشط منفذ · ${_uplinkName!}'),
             style: AppType.microBold(),
           ),

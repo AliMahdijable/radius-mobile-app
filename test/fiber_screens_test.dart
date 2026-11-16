@@ -390,7 +390,7 @@ void main() {
     await t.pump();
     expect(ticks, 1, reason: 'نغمة تأكيد فور التشغيل — يسمعها الفنّي');
     expect(awake, [true]);
-    expect(find.textContaining('شغّالة'), findsWidgets);
+    expect(find.textContaining('تعمل'), findsWidgets);
     // الضوء ‎-21 ⇒ نغمة كلّ ~٠٫٧ث
     await t.pump(const Duration(milliseconds: 800));
     await t.pump(const Duration(milliseconds: 800));
@@ -459,7 +459,7 @@ void main() {
     await unmount(t);
   });
 
-  testWidgets('الربط: المقترح بسببه، و«ثبّت الأكيدة» يحفظ للخادم', (t) async {
+  testWidgets('الربط: المقترح بسببه، و«ثبّت المؤكَّدة» يحفظ للخادم', (t) async {
     FiberLinkScreen.debugSeed(
       sessions: {'ali.k12': '02:00:00:00:03:04'},
       directory: {
@@ -480,7 +480,7 @@ void main() {
     expect(find.textContaining('الجهاز نفسه يتّصل بيوزره'), findsOneWidget);
     expect(find.textContaining('علي كريم', findRichText: true), findsOneWidget, reason: 'الاسم من دليل الحساب لا اليوزر وحده');
 
-    await t.tap(find.text('ثبّت الأكيدة (2)'));
+    await t.tap(find.text('ثبّت المؤكَّدة (2)'));
     for (var i = 0; i < 4; i++) {
       await t.pump(const Duration(milliseconds: 30));
     }
@@ -490,7 +490,7 @@ void main() {
     expect(l.recordFor(9, 'EPON0/3:21', '020000000304')?.source, FiberLinkSource.onuMac);
     final posted = server.to('/api/v2/admin/devices/fiber/onus').single.data as Map;
     expect((posted['records'] as List).map((r) => (r as Map)['username']).toSet(), {'u20', 'ali.k12'});
-    expect(find.text('ثُبّتت كلّ الأكيدة'), findsOneWidget);
+    expect(find.text('ثُبّتت كلّ المؤكَّدة'), findsOneWidget);
     expect(find.text(iso('مربوط')), findsNWidgets(2), reason: 'المثبَّت يبقى بمكانه بحبّة «مربوط»');
     expect(t.takeException(), isNull);
     await t.pump(const Duration(seconds: 4)); // رسالة «ثُبّت ربط…» تختفي

@@ -57,7 +57,7 @@ enum BalanceState {
 /// مصدر مبلغ «تسوية الرصيد».
 enum BalanceSource {
   income('income', 'من الدخل'),
-  pocket('pocket', 'من جيبي'),
+  pocket('pocket', 'من مالي الخاصّ'),
   other('other', 'غير ذلك');
 
   const BalanceSource(this.wire, this.label);
@@ -357,11 +357,11 @@ class BalanceOverview {
 
   /// ما دخل من غير تفعيلات الفترات (لا يدخل مبلغ أيّ شحنة) — بتسمياته.
   List<({String label, double value, String id})> get outside => [
-        if (oldPaid > 0) (label: 'تسديد ديون قديمة (قبل أوّل شحنة مسجّلة)', value: oldPaid, id: 'old'),
+        if (oldPaid > 0) (label: 'تسديد ديون قديمة (قبل أوّل شحن مسجَّل)', value: oldPaid, id: 'old'),
         if (manualPaid > 0) (label: 'تسديد ديون يدويّة («إضافة دين» ومبيعات)', value: manualPaid, id: 'manual'),
         if (otherPaid > 0) (label: 'تسديد ديون عُدّلت من خارج النظام', value: otherPaid, id: 'other'),
         if (advance > 0) (label: 'دفعات مقدَّمة لم تُستعمل بعد', value: advance, id: 'advance'),
-        if (managersOldPaid > 0) (label: 'تسديد ديون مدراء فرعيّين أقدم من أوّل شحنة (أو لا يُعرف شحنها)', value: managersOldPaid, id: 'managers'),
+        if (managersOldPaid > 0) (label: 'تسديد ديون مدراء فرعيّين أقدم من أوّل شحن (أو لا يُعرف تاريخ شحنها)', value: managersOldPaid, id: 'managers'),
       ];
 
   /// أسطر جودة البيانات التي يجب أن يراها الوكيل (لا رقم ناقص بصمت).
@@ -608,7 +608,7 @@ String balanceDayTime(int ms, {int? nowMs}) {
   return '${balanceDay(ms, nowMs: nowMs)} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
-String balancePeriodTitle(BalancePeriod p, {int? nowMs}) => 'شحنة ${balanceDay(p.startedAtMs, nowMs: nowMs)}';
+String balancePeriodTitle(BalancePeriod p, {int? nowMs}) => 'شحن ${balanceDay(p.startedAtMs, nowMs: nowMs)}';
 
 String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
     ? 'من ${balanceDay(p.startedAtMs, nowMs: nowMs)} حتى الآن'
@@ -660,12 +660,12 @@ enum BalanceBannerKind { done, ended, empty }
 /// [liveBalance]: رصيد الوكيل الآن، أو null إن لم يُعرف (فلا نقول «خلص» بلا علم).
 ({BalanceBannerKind kind, String text})? balanceBanner(BalancePeriod p, num? liveBalance) {
   if (p.isClosed) return null;
-  if (p.canClose) return (kind: BalanceBannerKind.done, text: 'اكتمل مبلغ الشحنة — تگدر تغلق الفترة');
+  if (p.canClose) return (kind: BalanceBannerKind.done, text: 'اكتمل مبلغ الشحن — يمكنك إغلاق الفترة');
   if (p.state == BalanceState.waiting) {
-    return (kind: BalanceBannerKind.ended, text: 'انتهت هذه الفترة والمبلغ ما مكتمل — معوز ${balanceIqd(p.remaining)}');
+    return (kind: BalanceBannerKind.ended, text: 'انتهت هذه الفترة ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}');
   }
   if (liveBalance != null && liveBalance <= balanceLowMark(p.amount)) {
-    return (kind: BalanceBannerKind.empty, text: 'رصيدك خلص والمبلغ ما مكتمل — معوز ${balanceIqd(p.remaining)}');
+    return (kind: BalanceBannerKind.empty, text: 'نفد رصيدك ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}');
   }
   return null;
 }
@@ -791,7 +791,7 @@ class BalanceReportsApi {
   static Future<BalanceResult<BalanceOverview>> createPeriod({required int amount, required int startedAtMs, String? note, required String clientRef}) => _write(
         () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods',
             options: _open, data: {'amount': amount, 'started_at_ms': startedAtMs, 'note': (note ?? '').trim(), 'client_ref': clientRef}),
-        'تعذّر تسجيل الشحنة',
+        'تعذّر تسجيل الشحن',
       );
 
   /// [startedAtMs] يُرسل حين تغيّر وحده (وقتٌ لم يتغيّر لا يُعاد فحصه).
@@ -802,7 +802,7 @@ class BalanceReportsApi {
       );
 
   static Future<BalanceResult<BalanceOverview>> deletePeriod(int id) =>
-      _write(() => ApiClient.dio.delete<Map<String, dynamic>>('$_base/periods/$id', options: _open), 'تعذّر حذف الشحنة');
+      _write(() => ApiClient.dio.delete<Map<String, dynamic>>('$_base/periods/$id', options: _open), 'تعذّر حذف الشحن');
 
   static Future<BalanceResult<BalanceOverview>> addAdjustment(int id, {required int amount, required BalanceSource source, String? note, required String clientRef}) => _write(
         () => ApiClient.dio.post<Map<String, dynamic>>('$_base/periods/$id/adjustments', options: _open, data: {

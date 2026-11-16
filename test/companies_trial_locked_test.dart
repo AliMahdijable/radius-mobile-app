@@ -88,7 +88,7 @@ void main() {
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
     expect(find.text('انتهت التجربة لهذه الشركة'), findsOneWidget);
-    expect(find.text('تفعيل كود'), findsOneWidget, reason: 'غير الآيفون: طريق التشغيل بكود');
+    expect(find.text('تفعيل رمز'), findsOneWidget, reason: 'غير الآيفون: طريق التشغيل برمز');
     await t.tap(find.text('حذف الشركة').last);
     for (var i = 0; i < 6; i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
@@ -102,14 +102,14 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('آيفون: لا «تفعيل كود» في الشريط ولا النافذة (3.1.1)، والحذف باقٍ', (t) async {
+  testWidgets('آيفون: لا «تفعيل رمز» في الشريط ولا النافذة (3.1.1)، والحذف باقٍ', (t) async {
     StorePolicy.debugHidePurchaseFlows = true;
     await pump(t);
-    expect(find.textContaining('فعّل كود'), findsNothing);
+    expect(find.textContaining('فعّل رمز'), findsNothing);
     await t.tap(find.text('Speednet'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
-    expect(find.text('تفعيل كود'), findsNothing);
+    expect(find.text('تفعيل رمز'), findsNothing);
     expect(find.text('حذف الشركة'), findsWidgets);
     await t.pumpWidget(const SizedBox());
   });

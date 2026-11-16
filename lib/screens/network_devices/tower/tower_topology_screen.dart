@@ -542,7 +542,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
             _notice(
               AppTone.neutral,
               LucideIcons.wifiOff,
-              'أنت خارج شبكة أجهزتك — سير الترافيك يظهر حين تتّصل بها أو تفعّل «وضع VPN».',
+              'أنت خارج شبكة أجهزتك — حركة البيانات تظهر حين تتّصل بها أو تفعّل «وضع VPN».',
             ),
           if (towers.length < 2 && !topo.hasLinks) ...[
             _emptyTowers(towers),
@@ -1160,8 +1160,8 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
       // السويج يردّ ويقول إنّ المنفذ طافٍ — الكيبل نفسه أو وحدة الـSFP أو الطرف الثاني مطفأ
       if (f.mainPortDown || f.subPortDown) {
         return f.mainPortDown && f.subPortDown
-            ? 'المنفذان طافيان — الكيبل أو الـSFP'
-            : (f.mainPortDown ? 'منفذ الرئيسي طافي — الكيبل أو الـSFP' : 'منفذ الفرعي طافي — الكيبل أو الـSFP');
+            ? 'المنفذان متوقّفان — الكيبل أو الـSFP'
+            : (f.mainPortDown ? 'منفذ الرئيسي متوقّف — الكيبل أو الـSFP' : 'منفذ الفرعي متوقّف — الكيبل أو الـSFP');
       }
       return f.mainDown && f.subDown ? 'الطرفان لا يردّان' : (f.mainDown ? 'طرف الرئيسي لا يردّ' : 'طرف الفرعي لا يردّ');
     }
@@ -1315,8 +1315,8 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
                 const SizedBox(height: 2),
                 Text(
                     _fiberReady
-                        ? 'لنك لاسلكي (ماستر وسليف) أو كيبل ضوئي بين سويجين — يظهر مسار الترافيك من الرئيسي للفرعيّات.'
-                        : 'اختر لنك البرج الرئيسي وطرفه في البرج الفرعي — يظهر مسار الترافيك من الرئيسي للفرعيّات.',
+                        ? 'لنك لاسلكي (ماستر وسليف) أو كيبل ضوئي بين سويتشين — يظهر مسار حركة البيانات من الرئيسي للفرعيّات.'
+                        : 'اختر لنك البرج الرئيسي وطرفه في البرج الفرعي — يظهر مسار حركة البيانات من الرئيسي للفرعيّات.',
                     style: AppType.muted(color: AppColors.textMid)),
               ]),
             ),
@@ -1346,7 +1346,7 @@ class _TowerTopologyScreenState extends State<TowerTopologyScreen> with SingleTi
               style: AppType.cardTitle(color: AppColors.textHi), textAlign: TextAlign.center),
           const SizedBox(height: Sp.xs),
           Text(
-            'قسّم أجهزتك على أبراج (كلّ برجٍ منطقة) ثمّ اربطها — لنكات لاسلكيّة أو كيابل ضوئيّة — يظهر هنا الرئيسي والفرعيّات وسير الترافيك بينها.',
+            'قسّم أجهزتك على أبراج (كلّ برجٍ منطقة) ثمّ اربطها — لنكات لاسلكيّة أو كيابل ضوئيّة — يظهر هنا الرئيسي والفرعيّات وحركة البيانات بينها.',
             textAlign: TextAlign.center,
             style: AppType.body(color: AppColors.textMid),
           ),
@@ -1456,7 +1456,7 @@ class _LinkSheet extends StatelessWidget {
       final gone = portName != null && port == null && reading != null && reading.wiredPorts.isNotEmpty;
       final portFacts = [
         if (gone) 'غير موجود بالجهاز',
-        if (port != null && !port.up) 'طافي',
+        if (port != null && !port.up) 'متوقّف',
         if (port != null && port.up && (port.linkSpeed ?? '').isNotEmpty) TopoText.speed(port.linkSpeed),
         if (port?.sfpRx != null) TopoText.lightFact(port!.sfpRx),
       ];

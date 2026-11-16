@@ -1112,7 +1112,7 @@ class AiApi {
 
   static String _fallbackText(int code) => switch (code) {
         429 =>
-          _t('ai.err_rate', 'كثّرت الأسئلة بسرعة — استنّى دقيقة وارجع اسأل'),
+          _t('ai.err_rate', 'كثّرت الأسئلة بسرعة — انتظر دقيقة وارجع اسأل'),
         403 => _t('ai.err_forbidden', 'المساعد غير متاح لك حالياً'),
         400 => _t('ai.err_bad_question', 'اكتب سؤالك (من ٣ إلى ٥٠٠ حرف)'),
         >= 500 => _t('ai.err_server', 'المساعد مو متاح هسه — جرّب بعد شوية'),

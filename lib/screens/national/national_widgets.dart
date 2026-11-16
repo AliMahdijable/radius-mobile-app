@@ -117,7 +117,7 @@ class NationalFilterButton extends StatelessWidget {
             children: [
               Icon(LucideIcons.slidersHorizontal, size: 18, color: on ? AppColors.brand : AppColors.textMid),
               const SizedBox(width: 6),
-              Text('الفلاتر', style: AppType.label(color: on ? AppColors.brand : AppColors.textHi)),
+              Text('التصفية', style: AppType.label(color: on ? AppColors.brand : AppColors.textHi)),
               if (on) ...[
                 const SizedBox(width: 6),
                 Container(
@@ -261,7 +261,7 @@ class _FiltersSheetState extends State<_FiltersSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.slidersHorizontal,
-        title: 'الفلاتر',
+        title: 'التصفية',
         subtitle: 'اختر ثمّ «تطبيق»',
         onClose: () => Navigator.of(context).pop(),
       ),

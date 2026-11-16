@@ -36,7 +36,7 @@ import 'visual_perm/visual_perm_harness.dart';
 const _png1x1 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-const _wrongCode = 'الكود غير صحيح';
+const _wrongCode = 'الرمز غير صحيح';
 const _expiredMsg = 'انتهت صلاحية الجلسة المؤقّتة — أعد تسجيل الدخول';
 
 Map<String, dynamic> _challenge(String tempId) => {
@@ -44,7 +44,7 @@ Map<String, dynamic> _challenge(String tempId) => {
       'requires2fa': true,
       'tempId': tempId,
       'expiresIn': 120,
-      'message': 'أدخل كود 2FA من تطبيق Google Authenticator',
+      'message': 'أدخل رمز 2FA من تطبيق Google Authenticator',
     };
 
 /// ردّ `/api/auth/2fa/verify` الناجح لمالك ساس — شكل ردّ الدخول نفسه.
@@ -160,7 +160,7 @@ void main() {
       expect(s.canonicalPermissions, {'subscribers.add': true});
     });
 
-    test('verify2fa: كودٌ خاطئ ⇒ 2fa-invalid (الجلسة المعلَّقة باقية)', () async {
+    test('verify2fa: رمز خاطئ ⇒ 2fa-invalid (الجلسة المعلَّقة باقية)', () async {
       server.reply('POST', '/api/auth/2fa/verify', 401,
           {'success': false, 'message': _wrongCode});
       final f = await AuthApi.verify2fa(tempId: 't', code: '000000') as LoginFailure;
@@ -181,7 +181,7 @@ void main() {
       expect(b.isAccountGate, isFalse);
     });
 
-    test('verify2fa: مهلة شبكة ⇒ بلا رمز (عابر، يُعاد بالكود نفسه)', () async {
+    test('verify2fa: مهلة شبكة ⇒ بلا رمز (عابر، يُعاد بالرمز نفسه)', () async {
       server.on('POST', '/api/auth/2fa/verify', simTimeout);
       final f = await AuthApi.verify2fa(tempId: 't', code: '000000') as LoginFailure;
       expect(f.code, isNull);
@@ -190,7 +190,7 @@ void main() {
   });
 
   // ═══════════════════════ ١. التحقّق بخطوتين — نافذة الكود ═══════════════════════
-  group('التحقّق بخطوتين — نافذة الكود عبر SasCaptchaLogin', () {
+  group('التحقّق بخطوتين — نافذة الرمز عبر SasCaptchaLogin', () {
     setUpAll(simSetUpAll);
     late SimServer server;
     late DateTime fakeNow;
@@ -222,7 +222,7 @@ void main() {
       await t.pump(const Duration(seconds: 1));
     }
 
-    testWidgets('🚨 كودٌ خاطئ ثمّ صحيح: الخطأ بمكانه والحقل يُمسح ثمّ الجلسة',
+    testWidgets('🚨 رمز خاطئ ثمّ صحيح: الخطأ بمكانه والحقل يُمسح ثمّ الجلسة',
         (t) async {
       server.reply('POST', '/api/auth/login', 200, _challenge('2fa_1'));
       server.on('POST', '/api/auth/2fa/verify', (req) {
@@ -242,7 +242,7 @@ void main() {
       await _steps(t);
       expect(find.text(_wrongCode), findsOneWidget);
       expect(t.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty,
-          reason: 'يُمسح ليكتب الكود التالي');
+          reason: 'يُمسح ليكتب الرمز التالي');
       expect(h.result(), isNull, reason: 'النافذة باقية');
 
       await t.enterText(find.byType(TextField), '123456');
@@ -274,15 +274,15 @@ void main() {
 
       fakeNow = fakeNow.add(const Duration(seconds: 60));
       await t.pump(const Duration(seconds: 1));
-      expect(find.text('انتهت مهلة الكود — أعد الدخول لمهلةٍ جديدة'),
+      expect(find.text('انتهت مهلة الرمز — أعد الدخول لمهلةٍ جديدة'),
           findsOneWidget);
       expect(find.text('إعادة الدخول'), findsOneWidget);
       expect(t.widget<TextField>(find.byType(TextField)).enabled, isFalse,
-          reason: 'لا كود يصلح بعد الانتهاء');
+          reason: 'لا رمز يصلح بعد الانتهاء');
 
       await t.tap(find.text('إعادة الدخول'));
       await _steps(t);
-      expect(logins, 2, reason: 'إعادة الإرسال = إعادة الدخول بكلمة السرّ نفسها');
+      expect(logins, 2, reason: 'إعادة الإرسال = إعادة الدخول بكلمة المرور نفسها');
       expect(server.bodies('POST', '/api/auth/login').last['password'], 'pw');
       expect(simText('تنتهي المهلة خلال 2:00'), findsOneWidget);
 
@@ -308,7 +308,7 @@ void main() {
       await close(t);
     });
 
-    testWidgets('«إلغاء» ⇒ 2fa-cancelled بلا رسالة (لا نموذج كلمة سرّ ولا خطأ)',
+    testWidgets('«إلغاء» ⇒ 2fa-cancelled بلا رسالة (لا نموذج كلمة مرور ولا خطأ)',
         (t) async {
       server.reply('POST', '/api/auth/login', 200, _challenge('2fa_1'));
       final h = await open(t);
@@ -325,7 +325,7 @@ void main() {
       await close(t);
     });
 
-    testWidgets('رمز صورة الساس ثمّ الكود: التحدّيان بالترتيب', (t) async {
+    testWidgets('رمز صورة الساس ثمّ الرمز: التحدّيان بالترتيب', (t) async {
       server.on('POST', '/api/auth/login', (req) {
         final body = req.data as Map;
         if (body['captchaId'] == null) {
@@ -346,7 +346,7 @@ void main() {
       await t.tap(find.text('دخول'));
       await _steps(t, 12);
       expect(server.bodies('POST', '/api/auth/login').last['captchaText'], 'ab12');
-      expect(find.text('التحقّق بخطوتين'), findsOneWidget, reason: 'ثمّ نافذة الكود');
+      expect(find.text('التحقّق بخطوتين'), findsOneWidget, reason: 'ثمّ نافذة الرمز');
 
       await t.enterText(find.byType(TextField), '123456');
       await _steps(t);

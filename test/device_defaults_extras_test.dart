@@ -78,7 +78,7 @@ void main() {
 
   /// زرّ الحفظ آخر القائمة — قد يكون خارج ما بُني منها (خمسة أقسام منذ ميكروتك): تمريرٌ حتى يظهر.
   Future<void> toSave(WidgetTester t) async {
-    await t.scrollUntilVisible(find.text('حفظ الاعتمادات'), 300, scrollable: _pageScroll);
+    await t.scrollUntilVisible(find.text('حفظ بيانات الدخول'), 300, scrollable: _pageScroll);
     await t.pumpAndSettle();
   }
 
@@ -113,7 +113,7 @@ void main() {
     expect(find.widgetWithText(TextField, 'x-1'), findsNothing);
 
     await toSave(t);
-    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ بيانات الدخول'));
     await t.pumpAndSettle();
     expect(server.saved, hasLength(1));
     final body = server.saved.single;
@@ -136,7 +136,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('اعتماد 2'), findsOneWidget);
     await toSave(t);
-    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ بيانات الدخول'));
     await t.pumpAndSettle();
     expect(server.saved.single['ubntExtra'], isEmpty);
     expect(server.saved.single['ontExtra'], isEmpty);
@@ -155,7 +155,7 @@ void main() {
     await open(t);
     final section = find.byKey(const ValueKey('creds-tplink'));
     expect(section, findsOneWidget);
-    expect(find.descendant(of: section, matching: find.text('TP-Link — يوزر + باسورد (CPE / راوتر قديم)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('TP-Link — يوزر + كلمة مرور (CPE / راوتر قديم)')), findsOneWidget);
     expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'tp-old')), findsOneWidget);
 
     final fields = find.descendant(of: section, matching: find.byType(TextField));
@@ -171,7 +171,7 @@ void main() {
     expect(t.takeException(), isNull);
 
     await toSave(t);
-    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ بيانات الدخول'));
     await t.pumpAndSettle();
     final body = server.saved.single;
     expect([body['tplinkUsername'], body['tplinkPassword']], ['tp-new', 'tp-new-p']);
@@ -183,12 +183,12 @@ void main() {
   });
 
   // ١١ نوفمبر — المالك: «الرواترات… النوع الي يدور فقط باسورد». راوتر Agile (Archer) يدخل بكلمة سرٍّ محلّيّة بلا يوزر.
-  testWidgets('قسم راوتر Agile (باسورد فقط): المحفوظ يظهر بلا خانة يوزر، والجديد وإضافيّه يُرسلان', (t) async {
+  testWidgets('قسم راوتر Agile (كلمة مرور فقط): المحفوظ يظهر بلا خانة يوزر، والجديد وإضافيّه يُرسلان', (t) async {
     server.defaults = {'tprouterPassword': 'r-old'};
     await open(t);
     final section = find.byKey(const ValueKey('creds-tprouter'));
     expect(section, findsOneWidget);
-    expect(find.descendant(of: section, matching: find.text('راوتر — باسورد فقط (TP-Link Archer · Tenda)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('راوتر — كلمة مرور فقط (TP-Link Archer · Tenda)')), findsOneWidget);
     expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'r-old')), findsOneWidget);
     // باسورد فقط: حقلٌ نصّيٌّ واحد قبل الإضافة (لا خانة يوزر).
     expect(find.descendant(of: section, matching: find.byType(TextField)), findsOneWidget);
@@ -197,12 +197,12 @@ void main() {
     await t.tap(find.descendant(of: section, matching: find.text('إضافة اعتماد آخر')));
     await t.pumpAndSettle();
     final fields = find.descendant(of: section, matching: find.byType(TextField));
-    expect(fields, findsNWidgets(2), reason: 'باسورد أوّل + إضافيّ، بلا يوزر');
+    expect(fields, findsNWidgets(2), reason: 'كلمة مرور أوّل + إضافيّ، بلا يوزر');
     await t.enterText(fields.at(0), 'r-new');
     await t.enterText(fields.at(1), 'r-extra');
 
     await toSave(t);
-    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ بيانات الدخول'));
     await t.pumpAndSettle();
     final body = server.saved.single;
     expect(body['tprouterPassword'], 'r-new');
@@ -222,7 +222,7 @@ void main() {
     final section = find.byKey(const ValueKey('creds-mikrotik'));
     await t.scrollUntilVisible(section, 300, scrollable: _pageScroll);
     await t.pumpAndSettle();
-    expect(find.descendant(of: section, matching: find.text('MikroTik — نانو وراوتر (يوزر + باسورد)')), findsOneWidget);
+    expect(find.descendant(of: section, matching: find.text('MikroTik — نانو وراوتر (يوزر + كلمة مرور)')), findsOneWidget);
     expect(find.descendant(of: section, matching: find.widgetWithText(TextField, 'mt-old')), findsOneWidget);
     final fields = find.descendant(of: section, matching: find.byType(TextField));
     await t.enterText(fields.at(0), ' admin ');
@@ -236,10 +236,10 @@ void main() {
     expect(t.takeException(), isNull);
 
     await toSave(t);
-    await t.tap(find.text('حفظ الاعتمادات'));
+    await t.tap(find.text('حفظ بيانات الدخول'));
     await t.pumpAndSettle();
     final body = server.saved.single;
-    expect([body['mikrotikUsername'], body['mikrotikPassword']], ['admin', 'p w'], reason: 'اليوزر يُقصّ وكلمة السرّ كما هي');
+    expect([body['mikrotikUsername'], body['mikrotikPassword']], ['admin', 'p w'], reason: 'اليوزر يُقصّ وكلمة المرور كما هي');
     expect(body['mikrotikExtra'], [
       {'username': 'noc', 'password': 'noc-p'},
     ]);

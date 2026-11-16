@@ -677,11 +677,11 @@ class ElEmployeePerms {
   /// ما يشمله المفتاح عند ايرث لنك ولا تقوله تسميته في الكتالوج.
   static const hints = <String, String>{
     voidPaymentKey: 'تسديدٌ سجّله هو فقط — يرجع دين المشترك وينقص المبلغ من الصندوق',
-    'subscribers.add': 'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
+    'subscribers.add': 'بالرصيد (بكلمة مرور الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
     'subscribers.toggle': 'يشمل قطع اتصال المشترك',
     'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',
     'reports.packages': 'المشتركون والتفعيلات والإيراد لكلّ باقة — الكلفة والربح لصاحب الحساب وحده',
-    'reports.expenses': 'عرض الصرفيات وإدارتها',
+    'reports.expenses': 'عرض المصاريف وإدارتها',
     'subscribers.edit_location': 'موقع المشترك على الخريطة',
     // بيانات دخول أجهزة المشتركين (الافتراضيّة وجهاز كلّ مشترك) تصل بالعرض
     // والمراقبة أيضاً — يحتاجها فحص الجهاز (`device_probe_api`). تُقال صراحةً
@@ -1017,9 +1017,9 @@ class EmployeesApi {
       return (password: data?['password']?.toString(), message: null);
     } on DioException catch (e) {
       final msg = e.response?.data is Map ? (e.response?.data as Map)['message']?.toString() : null;
-      return (password: null, message: msg ?? 'تعذّر جلب كلمة السر');
+      return (password: null, message: msg ?? 'تعذّر جلب كلمة المرور');
     } catch (_) {
-      return (password: null, message: 'تعذّر جلب كلمة السر');
+      return (password: null, message: 'تعذّر جلب كلمة المرور');
     }
   }
 

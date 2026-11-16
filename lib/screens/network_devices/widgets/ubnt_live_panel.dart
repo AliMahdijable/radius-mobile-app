@@ -727,7 +727,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             child: CircularProgressIndicator(
                 strokeWidth: 2, color: AppColors.brand)),
         const SizedBox(width: 10),
-        Text('جاري الاتصال بـUBNT…',
+        Text('جارٍ الاتصال بـUBNT…',
             style: AppType.body(color: AppColors.textMid)),
       ]),
     );
@@ -1534,7 +1534,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
           // يُقاس بلا حدٍّ أعلى، فـ`maxLines` و`ellipsis` عليه لا تعملان
           // أبداً — يأخذ مقاسه كاملاً ويدفع الصفّ إلى الخطوط الصفراء.
           Flexible(
-            child: Text('أعلى interface (سير الترفك)',
+            child: Text('أعلى interface (حركة البيانات)',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppType.pillBold(color: AppColors.textHi)),

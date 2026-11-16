@@ -784,7 +784,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         // فايبر اكس: «تمديد» رسالةٌ منهم للمشترك بمفتاحه — كزرّه
         if (sessionIsFiberx && sub.companyKey == null && _shows('fiberx.extend')) {
           if (_locked('fiberx.extend')) {
-            showSheetSnack(context, 'ما عندك صلاحيّة التمديد — اطلبها من مديرك', isError: true);
+            showSheetSnack(context, 'ليست لديك صلاحيّة التمديد — اطلبها من مديرك', isError: true);
             return;
           }
           await showFiberxExtendFlow(context, sub);
@@ -792,7 +792,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         }
         if (_shows('subscribers.extend')) {
           if (_locked('subscribers.extend')) {
-            showSheetSnack(context, 'ما عندك صلاحيّة التمديد — اطلبها من مديرك', isError: true);
+            showSheetSnack(context, 'ليست لديك صلاحيّة التمديد — اطلبها من مديرك', isError: true);
             return;
           }
           await showExtendSheet(context, sub);
@@ -810,7 +810,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         final pkg = a == SubscriberAutoAction.changePackage;
         if (_shows('subscribers.edit')) {
           if (_locked('subscribers.edit')) {
-            showSheetSnack(context, 'ما عندك صلاحيّة التعديل — اطلبها من مديرك', isError: true);
+            showSheetSnack(context, 'ليست لديك صلاحيّة التعديل — اطلبها من مديرك', isError: true);
             return;
           }
           final want = (widget.autoHint ?? '').trim();
@@ -840,7 +840,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           return;
         }
         if (_locked('subscribers.toggle')) {
-          showSheetSnack(context, 'ما عندك صلاحيّة الفصل — اطلبها من مديرك', isError: true);
+          showSheetSnack(context, 'ليست لديك صلاحيّة الفصل — اطلبها من مديرك', isError: true);
           return;
         }
         if (!sub.isOnline) {
@@ -860,7 +860,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           showSheetSnack(
               context,
               _locked('subscribers.edit_location')
-                  ? 'ما له موقع مسجّل — وما عندك صلاحيّة إضافته'
+                  ? 'ما له موقع مسجّل — وليست لديك صلاحيّة إضافته'
                   : 'ما له موقع مسجّل');
           return;
         }
@@ -894,7 +894,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           return;
         }
         if (_locked('sales.sell') || SalesState.gate.value!.scoped) {
-          showSheetSnack(context, 'ما عندك صلاحيّة البيع — اطلبها من مديرك', isError: true);
+          showSheetSnack(context, 'ليست لديك صلاحيّة البيع — اطلبها من مديرك', isError: true);
           return;
         }
         if (_autoPageLocked()) return;
@@ -912,7 +912,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           return;
         }
         if (_locked('subscribers.private_note')) {
-          showSheetSnack(context, 'ما عندك صلاحيّة الملاحظة — اطلبها من مديرك', isError: true);
+          showSheetSnack(context, 'ليست لديك صلاحيّة الملاحظة — اطلبها من مديرك', isError: true);
           return;
         }
         if (_autoPageLocked()) return;
@@ -933,15 +933,15 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       case SubscriberAutoAction.enable:
         final wantEnable = a == SubscriberAutoAction.enable;
         if (sub.idx == null || !_shows('subscribers.toggle')) {
-          showSheetSnack(context, 'التطفية والتشغيل غير متاحين لهذا المشترك من حسابك', isError: true);
+          showSheetSnack(context, 'الإيقاف والتشغيل غير متاحين لهذا المشترك من حسابك', isError: true);
           return;
         }
         if (_locked('subscribers.toggle')) {
-          showSheetSnack(context, 'ما عندك صلاحيّة التطفية والتشغيل — اطلبها من مديرك', isError: true);
+          showSheetSnack(context, 'ليست لديك صلاحيّة الإيقاف والتشغيل — اطلبها من مديرك', isError: true);
           return;
         }
         if (wantEnable != sub.isDisabled) {
-          showSheetSnack(context, wantEnable ? 'المشترك شغّال أصلاً' : 'المشترك مطفي أصلاً');
+          showSheetSnack(context, wantEnable ? 'المشترك مُشغَّل أصلاً' : 'المشترك موقوف أصلاً');
           return;
         }
         if (_autoPageLocked()) return;
@@ -1003,7 +1003,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       case SubscriberAutoAction.whatsapp:
         final phone = (sub.phone ?? '').trim();
         if (phone.isEmpty) {
-          showSheetSnack(context, 'ما عنده رقم هاتف مسجّل', isError: true);
+          showSheetSnack(context, 'ليس لديه رقم هاتف مسجّل', isError: true);
           return;
         }
         await _launchUri(a == SubscriberAutoAction.call
@@ -1022,7 +1022,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       return;
     }
     if (_locked('subscribers.activate')) {
-      showSheetSnack(context, 'ما عندك صلاحيّة التجديد — اطلبها من مديرك', isError: true);
+      showSheetSnack(context, 'ليست لديك صلاحيّة التجديد — اطلبها من مديرك', isError: true);
       return;
     }
     await showActivateSheet(context, sub, prefill: prefill);
@@ -1043,7 +1043,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       return false;
     }
     if (_locked(perm)) {
-      showSheetSnack(context, 'ما عندك صلاحيّة $what — اطلبها من مديرك', isError: true);
+      showSheetSnack(context, 'ليست لديك صلاحيّة $what — اطلبها من مديرك', isError: true);
       return false;
     }
     return true;

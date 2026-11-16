@@ -67,7 +67,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
     if (c == null) {
       setState(() {
         _busy = false;
-        _error = 'لا كلمة سرٍّ للراوتر — اكتبها من «الاعتمادات» أو إعداد المشترك';
+        _error = 'لا كلمة مرور للراوتر — اكتبها من «بيانات الدخول» أو إعداد المشترك';
       });
       return;
     }
@@ -83,7 +83,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
   void _toggle() {
     if (!_allowed) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('لا صلاحيّة — كلمة سرّ الواي فاي لمن عنده «إدارة الأجهزة»'),
+        content: Text('لا صلاحيّة — كلمة مرور الواي فاي لمن عنده «إدارة الأجهزة»'),
         behavior: SnackBarBehavior.floating,
       ));
       return;
@@ -134,7 +134,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
         builder: (ctx) => AlertDialog(
           icon: Icon(LucideIcons.power, color: AppColors.warning, size: 30),
           title: const Text('انحفظت — تطبّق بعد إعادة التشغيل'),
-          content: const Text('الراوتر حفظ كلمة السرّ الجديدة ويطبّقها بعد إعادة تشغيله.\nينقطع إنترنت المشترك دقيقة إلى دقيقتين.'),
+          content: const Text('الراوتر حفظ كلمة المرور الجديدة ويطبّقها بعد إعادة تشغيله.\nينقطع إنترنت المشترك دقيقة إلى دقيقتين.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لاحقاً')),
             FilledButton.icon(
@@ -162,7 +162,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(r.ok ? 'تغيّرت كلمة سرّ الواي فاي — الأجهزة تتّصل بالكلمة الجديدة' : 'ما تغيّرت: ${routerFailText(r.fail!)}'),
+      content: Text(r.ok ? 'تغيّرت كلمة مرور الواي فاي — الأجهزة تتّصل بالكلمة الجديدة' : 'ما تغيّرت: ${routerFailText(r.fail!)}'),
       backgroundColor: r.ok ? AppColors.success : AppColors.error,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 5),
@@ -180,7 +180,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
           children: [
             Icon(LucideIcons.wifi, size: 16, color: AppColors.brandAccent),
             const SizedBox(width: Sp.sm),
-            Expanded(child: Text('كلمة سرّ الواي فاي', style: AppType.bodyStrong(color: AppColors.textHi))),
+            Expanded(child: Text('كلمة مرور الواي فاي', style: AppType.bodyStrong(color: AppColors.textHi))),
             if (_busy)
               SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandAccent))
             else if (!_allowed)
@@ -210,7 +210,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
             child: OutlinedButton.icon(
               onPressed: _busy ? null : _change,
               icon: const Icon(LucideIcons.keyRound, size: 16),
-              label: const Text('تغيير كلمة السرّ'),
+              label: const Text('تغيير كلمة المرور'),
             ),
           ),
       ],
@@ -257,7 +257,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
           ),
           const SizedBox(height: Sp.x6),
           if (pass == null)
-            Text(w.security == 'مفتوحة' ? 'بلا كلمة سرّ (شبكة مفتوحة)' : 'لا كلمة سرٍّ شخصيّة تُعرض', style: AppType.muted())
+            Text(w.security == 'مفتوحة' ? 'بلا كلمة مرور (شبكة مفتوحة)' : 'لا كلمة مرور شخصيّة تُعرض', style: AppType.muted())
           else
             Row(
               children: [
@@ -278,7 +278,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   tooltip: 'نسخ',
-                  onPressed: () => copyToClipboard(context, pass, label: 'كلمة سرّ الواي فاي'),
+                  onPressed: () => copyToClipboard(context, pass, label: 'كلمة مرور الواي فاي'),
                   icon: Icon(LucideIcons.copy, size: 17, color: AppColors.brandAccent),
                 ),
               ],
@@ -323,12 +323,12 @@ class _ChangeWifiDialogState extends State<_ChangeWifiDialog> {
     final names = widget.networks.where((w) => w.enabled && w.canChange).map((w) => w.band.isEmpty ? w.ssid : '${w.ssid} (${w.band})').join('، ');
     return AlertDialog(
       icon: Icon(LucideIcons.keyRound, color: AppColors.warning, size: 30),
-      title: const Text('تغيير كلمة سرّ الواي فاي'),
+      title: const Text('تغيير كلمة مرور الواي فاي'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('تتغيّر لـ: $names\nالأجهزة المتّصلة تنقطع الآن وتحتاج كلمة السرّ الجديدة.', style: AppType.body()),
+          Text('تتغيّر لـ: $names\nالأجهزة المتّصلة تنقطع الآن وتحتاج كلمة المرور الجديدة.', style: AppType.body()),
           const SizedBox(height: Sp.md),
           TextField(
             controller: _c,

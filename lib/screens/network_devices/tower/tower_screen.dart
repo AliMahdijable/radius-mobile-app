@@ -994,7 +994,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
               const SizedBox(width: 6),
               Text('الكابينة · ${list.length}', style: AppType.bodyStrong(color: AppColors.textHi)),
               const Spacer(),
-              Text('السويجات والراوترات', style: AppType.micro(color: AppColors.textMid)),
+              Text('السويتشات والراوترات', style: AppType.micro(color: AppColors.textMid)),
             ]),
           ),
           for (final a in list) _cabinetRow(a),
@@ -1348,7 +1348,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
             Center(child: Text('رتّب حسب  ', style: AppType.muted(color: AppColors.textMid))),
             sortChip(_Sort.clients, 'المشتركين'),
             sortChip(_Sort.quality, 'CCQ'),
-            sortChip(_Sort.traffic, 'الترافك'),
+            sortChip(_Sort.traffic, 'حركة البيانات'),
             sortChip(_Sort.signal, 'الإشارة'),
           ],
         ),
@@ -1361,7 +1361,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           Expanded(child: Text('الجهاز', style: head)),
           SizedBox(width: 40, child: Text('مشترك', style: head, textAlign: TextAlign.center)),
           SizedBox(width: 44, child: Text('CCQ', style: head, textAlign: TextAlign.center)),
-          SizedBox(width: 62, child: Text('ترافك', style: head, textAlign: TextAlign.center)),
+          SizedBox(width: 62, child: Text('الحركة', style: head, textAlign: TextAlign.center)),
           SizedBox(width: 46, child: Text('إشارة', style: head, textAlign: TextAlign.center)),
         ]),
       ),
@@ -1479,7 +1479,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           ('المشتركون', r?.clients?.toString() ?? '—'),
           ('CCQ', r?.quality == null ? '—' : '${r!.quality}٪'),
           ('الإشارة', r?.signal == null ? '—' : '${r!.signal} dBm'),
-          ('الترافك', TowerText.bps(r?.downBps)),
+          ('حركة البيانات', TowerText.bps(r?.downBps)),
         ]);
       case TowerRole.cabinet when olt != null:
         // الأولت: مشتركو الفايبر ومنافذ PON — من لقطة البنية نفسها التي تملأ بطاقة الجدار.
@@ -1516,7 +1516,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       // السويج والراوتر: المنافذ وأنشطها والطاقة (المالك ٢٧ أكتوبر: «السويجات ما يظهر بيها شي»).
       final bp = r?.busiestPort;
       info.addAll([
-        ('المنافذ الشغّالة', r?.portsTotal == null ? '—' : '${r!.portsUp}/${r.portsTotal}', null),
+        ('المنافذ العاملة', r?.portsTotal == null ? '—' : '${r!.portsUp}/${r.portsTotal}', null),
         ('المنفذ الأنشط', bp == null ? '—' : bp.name, null),
         ('استهلاك PoE', r?.poeWatts == null ? '—' : '${r!.poeWatts!.toStringAsFixed(1)} W', null),
         ('الفولتيّة', r?.voltage == null ? '—' : '${r!.voltage!.toStringAsFixed(1)} V',

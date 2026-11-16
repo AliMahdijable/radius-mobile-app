@@ -1903,8 +1903,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final footNote = switch (st) {
       _ when declined => '',
       _ when KitCardApi.live.contains(st) && (st == 'paid' || st == 'applying') =>
-        'لا تدفع مرّةً ثانية — يمكنك إغلاق الشيت، يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يتفعّل.',
-      _ when KitCardApi.live.contains(st) => 'يمكنك إغلاق الشيت — يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يكتمل الدفع.',
+        'لا تدفع مرّةً ثانية — يمكنك إغلاق النافذة، يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يتفعّل.',
+      _ when KitCardApi.live.contains(st) => 'يمكنك إغلاق النافذة — يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يكتمل الدفع.',
       'applied' when o.debtSure => 'سُجّل عندنا.',
       _ => '',
     };
@@ -2298,7 +2298,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           icon: LucideIcons.triangleAlert,
           // على طريق موقع الشحن: البديل بطاقةٌ خارجيّة يكتب رقمها في الحقل تحته
           text: _rail != null
-              ? 'ما عندك بطاقة بموقع الشحن لهذه الباقة — اكتب رقم بطاقة خارجيّة بالحقل تحته'
+              ? 'ليست لديك بطاقة بموقع الشحن لهذه الباقة — اكتب رقم بطاقة خارجيّة بالحقل تحته'
               : 'cards.none_for'.tr(namedArgs: {'profile': profile}),
           maxLines: _rail != null ? 3 : 2,
         ),

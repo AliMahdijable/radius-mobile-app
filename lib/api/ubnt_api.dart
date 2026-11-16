@@ -1484,7 +1484,7 @@ class UbntStats {
         }
         // الاحتياطيّ ٥ گيگا → التفاصيل (لا يضيع)
         extras.add((
-          k: 'الراديو الاحتياطيّ (٥ گيگا)',
+          k: 'الراديو الاحتياطيّ (٥ غيغا)',
           v: '${wireless.frequency} MHz'
               '${wireless.signal < 0 ? ' · ${wireless.signal} dBm' : ''}',
         ));

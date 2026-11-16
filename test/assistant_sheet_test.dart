@@ -118,7 +118,7 @@ void main() {
     await open(t, explain: req);
     await t.tap(find.text('اسأل سؤال ثاني'));
     await t.pumpAndSettle();
-    expect(find.textContaining('اشرحلي هذا الخطأ'), findsOneWidget);
+    expect(find.textContaining('اشرح لي هذا الخطأ'), findsOneWidget);
     await ask(t, 'وشلون أطلب الصلاحيّة؟');
     final body = server.bodies('POST', askPath).single;
     final h = (body['history'] as List).cast<Map>();
@@ -163,12 +163,12 @@ void main() {
     server.reply('POST', askPath, 403, {
       'success': false,
       'code': 'AI_NO_PERMISSION',
-      'message': 'ما عندك صلاحيّة المساعد — اطلبها من مديرك',
+      'message': 'ليست لديك صلاحيّة المساعد — اطلبها من مديرك',
     });
     await open(t);
     await ask(t, 'شلون أفعّل مشترك؟');
     expect(
-        find.text('ما عندك صلاحيّة المساعد — اطلبها من مديرك'), findsWidgets);
+        find.text('ليست لديك صلاحيّة المساعد — اطلبها من مديرك'), findsWidgets);
     expect(find.byIcon(LucideIcons.lock), findsWidgets);
     expect(find.byType(EditableText), findsNothing);
     expect(find.text('أعد المحاولة'), findsNothing);
@@ -183,7 +183,7 @@ void main() {
           ? const SimReply(429, {
               'success': false,
               'code': 'AI_RATE_LIMITED',
-              'message': 'كثّرت الأسئلة بسرعة — استنّى دقيقة وارجع اسأل',
+              'message': 'كثّرت الأسئلة بسرعة — انتظر دقيقة وارجع اسأل',
               'retry_after_sec': 40,
             })
           : SimReply(200, answer('جواب بعد الانتظار'));
@@ -228,7 +228,7 @@ void main() {
     expect(find.text('باقي لك اليوم: 0'), findsOneWidget);
   });
 
-  testWidgets('حساب Pro وحده (الدخول/«شركاتي») ⇒ «اشرحلي» بلا «اسأل سؤال ثاني»',
+  testWidgets('حساب Pro وحده (الدخول/«شركاتي») ⇒ «اشرح لي» بلا «اسأل سؤال ثاني»',
       (t) async {
     FlutterSecureStorage.setMockInitialValues({});
     AiApi.hasAccount = () => true;

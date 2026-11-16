@@ -135,7 +135,7 @@ void main() {
       await _settle(t);
     }
 
-    testWidgets('الإضافة: الاسم يُفحص، وكلمة السرّ بالشروط، والوظيفة والزون وحدّ المحفظة ⇒ POST واحد بجسمٍ بالضبط', (t) async {
+    testWidgets('الإضافة: الاسم يُفحص، وكلمة المرور بالشروط، والوظيفة والزون وحدّ المحفظة ⇒ POST واحد بجسمٍ بالضبط', (t) async {
       routes();
       await open(t);
       expect(find.text('إضافة عضو'), findsOneWidget);
@@ -147,7 +147,7 @@ void main() {
       await _settle(t);
       expect(find.text('الاسم متاح'), findsOneWidget);
       await _type(t, 'رقم الهاتف', '07701234567');
-      await _type(t, 'كلمة السرّ', 'Abcdefgh1234');
+      await _type(t, 'كلمة المرور', 'Abcdefgh1234');
       await t.ensureVisible(find.text('محفظة نقديّة'));
       await t.tap(find.text('محفظة نقديّة'));
       await t.pumpAndSettle();

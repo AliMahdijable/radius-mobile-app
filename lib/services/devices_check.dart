@@ -317,7 +317,7 @@ class DevicesCheck {
 
   static String roleLabel(CheckRole r, NetworkDevice d) => switch (r) {
         CheckRole.router => 'راوتر',
-        CheckRole.switcher => 'سويج',
+        CheckRole.switcher => 'سويتش',
         CheckRole.sector => 'سكتر',
         CheckRole.link => 'وصلة',
         CheckRole.olt => 'أولت',
@@ -395,7 +395,7 @@ class DevicesCheck {
   }
 
   static String stateName(CheckState s) => switch (s) {
-        CheckState.down => 'طافي',
+        CheckState.down => 'منقطع',
         CheckState.warn => 'ملاحظات',
         CheckState.unread => 'لم يُقرأ',
         CheckState.ok => 'سليم',
@@ -489,7 +489,7 @@ class DevicesCheck {
         at: at,
         viaVpn: viaVpn,
         ms: ms,
-        findings: [CheckFinding(CheckLevel.info, unreadReason ?? 'يردّ، لكن ما انقرت معلوماته')],
+        findings: [CheckFinding(CheckLevel.info, unreadReason ?? 'يردّ، لكن لم تُقرأ معلوماته')],
         memo: prev,
         pending: pending,
         readVia: readVia,
@@ -529,9 +529,9 @@ class DevicesCheck {
       for (final fan in raw.fans) {
         // RPM صفر وحده ليس عطلاً (وضع auto يوقفها والجهاز بارد) — إلّا والحرارة عالية؛ حال fail صريح عطل.
         if (fan.isOk == false) {
-          f.add(CheckFinding(CheckLevel.bad, 'المروحة ${fan.name} عاطلة'));
+          f.add(CheckFinding(CheckLevel.bad, 'المروحة ${fan.name} متوقّفة'));
         } else if (fan.intValue == 0 && (g.temp ?? 0) >= 65) {
-          f.add(CheckFinding(CheckLevel.warn, 'المروحة ${fan.name} واقفة والحرارة ${g.temp}°'));
+          f.add(CheckFinding(CheckLevel.warn, 'المروحة ${fan.name} متوقّفة والحرارة ${g.temp}°'));
         }
       }
       for (final p in raw.psus) {
@@ -580,7 +580,7 @@ class DevicesCheck {
           f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة $worst dBm — ضعيفة$far'));
         }
         if (g.ccq != null && g.ccq! > 0 && g.ccq! < limits.linkCcqMin) {
-          f.add(CheckFinding(CheckLevel.warn, 'CCQ الوصلة ${g.ccq}٪ — واطي'));
+          f.add(CheckFinding(CheckLevel.warn, 'CCQ الوصلة ${g.ccq}٪ — منخفض'));
         }
       }
     }
@@ -619,7 +619,7 @@ class DevicesCheck {
       if (w > 0 || l > 0) {
         // الرقم بعد الكلمة لا قبلها: «1 CCQ» يُرسم «CCQ 1» في سطرٍ عربيّ (لقطة ٦ نوفمبر)
         f.add(CheckFinding(
-            CheckLevel.warn, '${[if (w > 0) 'إشارة ضعيفة: $w', if (l > 0) 'CCQ واطي: $l'].join(' · ')} — من ${subs.length} مشترك'));
+            CheckLevel.warn, '${[if (w > 0) 'إشارة ضعيفة: $w', if (l > 0) 'CCQ منخفض: $l'].join(' · ')} — من ${subs.length} مشترك'));
       }
       if (g.linkDown && !stale) {
         // راديو نقطة الوصول مفعّلٌ ومقروءٌ ولا يعمل — لا «ما عليه أحد الآن» بحالٍ «سليم» (المراجعة الثانية)
@@ -633,12 +633,12 @@ class DevicesCheck {
         // خادمٌ لا يرسل `ru`: قائمته قُرئت فارغة وهل يعمل راديوه لم يُقرأ — راديو طافٍ يُقرأ كذلك ⇒ لا «سليم»
         // (مراجعة 180، الجولة ٢: لا «قائمة مشتركيه ما انقرت» وقد قُرئت)
         if (g.radioRunUnread) {
-          f.add(const CheckFinding(CheckLevel.info, 'حال الراديو ما انقرأ'));
+          f.add(const CheckFinding(CheckLevel.info, 'حال الراديو لم يُقرأ'));
           radioRunGap = true;
         }
       } else if (!subsKnown) {
         // لا رقم ولا «لا أحد»: يُقال إنّها لم تُقرأ (والعدد السابق يبقى للمقارنة التالية)
-        f.add(const CheckFinding(CheckLevel.info, 'قائمة مشتركيه ما انقرت'));
+        f.add(const CheckFinding(CheckLevel.info, 'قائمة مشتركيه لم تُقرأ'));
       }
     }
 
@@ -647,10 +647,10 @@ class DevicesCheck {
     // وحدها) ⇒ بنيته لم تُقرأ: «لم يُقرأ» لا «أولت · سليم»، ولا «ONU 0/0» (المراجعة الثالثة). ملخّص الخادم (منافذه من
     // مشتركيه، وقراءته تمّت عنده) يُحكم به كما كان
     final oltGap = role == CheckRole.olt && !detail.onuLightsServer && g.pons.isEmpty && (g.onusTotal ?? 0) == 0;
-    if (oltGap) f.add(const CheckFinding(CheckLevel.info, 'منافذ PON ما انقرت'));
+    if (oltGap) f.add(const CheckFinding(CheckLevel.info, 'منافذ PON لم تُقرأ'));
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
-      if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON طافي: ${downPons.join('، ')}'));
+      if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON متوقّف: ${downPons.join('، ')}'));
       // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
       // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
       final wanted = detail.onuLightsWanted;
@@ -669,7 +669,7 @@ class DevicesCheck {
           f.add(CheckFinding(
               CheckLevel.info,
               read == 0
-                  ? (srv ? 'ضوء المشتركين لم يقرأه الخادم' : 'ضوء المشتركين ما انقرأ هالمرّة')
+                  ? (srv ? 'ضوء المشتركين لم يقرأه الخادم' : 'ضوء المشتركين لم يُقرأ هالمرّة')
                   : cut
                       ? 'الضوء: أضعف $read من $wanted — الباقي أقوى منها أو لم يقرأه الخادم'
                       : 'الضوء: قُرئ $read من $wanted — ${srv ? 'الباقي لم يقرأه الخادم' : 'الباقي ما لحق'}'));
@@ -717,12 +717,12 @@ class DevicesCheck {
         final mb = mbpsOf(p.linkSpeed);
         final was = prev?.ports[p.name];
         if (!p.up) {
-          if (was?.up == true) notes.add((CheckLevel.warn, 'طفى من الفحص السابق'));
+          if (was?.up == true) notes.add((CheckLevel.warn, 'توقّف منذ آخر فحص'));
         } else {
           if (mb != null && mb <= 10) {
-            notes.add((CheckLevel.warn, 'يشتغل ${p.linkSpeed} — كيبل أو كونكتر'));
+            notes.add((CheckLevel.warn, 'يعمل ${p.linkSpeed} — كيبل أو موصل'));
           } else if (mb != null && (was?.mbps ?? 0) >= 1000 && mb < was!.mbps!) {
-            notes.add((CheckLevel.warn, 'نزل من ${fmtMbps(was.mbps!)} إلى ${fmtMbps(mb)} — كيبل أو كونكتر'));
+            notes.add((CheckLevel.warn, 'نزل من ${fmtMbps(was.mbps!)} إلى ${fmtMbps(mb)} — كيبل أو موصل'));
           }
           if (p.halfDuplex) notes.add((CheckLevel.warn, 'half-duplex — كيبل أو إعداد'));
           final sfp = p.sfpRx;
@@ -736,7 +736,7 @@ class DevicesCheck {
           if (wasLd != null && ld >= wasLd) {
             if (ld - wasLd >= 2) notes.add((CheckLevel.warn, 'انقطع ${ld - wasLd} مرّة من الفحص السابق'));
           } else if (upDays != null && ld >= 5 && ld / math.max(upDays, 1) >= 2) {
-            notes.add((CheckLevel.warn, 'انقطع $ld مرّة خلال ${_days(upDays)} — كيبل مرخي أو كهرباء الطرف الثاني'));
+            notes.add((CheckLevel.warn, 'انقطع $ld مرّة خلال ${_days(upDays)} — كيبل مرتخٍ أو كهرباء الطرف الثاني'));
           }
         }
         final er = p.errors;
@@ -754,7 +754,7 @@ class DevicesCheck {
           case 'overload':
             notes.add((CheckLevel.bad, 'PoE: حمل زائد'));
           case 'voltage-too-low':
-            notes.add((CheckLevel.bad, 'PoE: فولتيّة واطية'));
+            notes.add((CheckLevel.bad, 'PoE: فولتيّة منخفضة'));
         }
         ports.add(CheckPort(
           name: p.name,
@@ -782,14 +782,14 @@ class DevicesCheck {
     var radioGap = radioRunGap; // والسكتر حال راديوه لم يُقرأ (أعلاه) — «لم يُقرأ» لا «سليم»
     if (role == CheckRole.link) {
       if (!linkJudged && here == null && g.signalPct == null && remote == null && g.hasRadio != false) {
-        f.add(const CheckFinding(CheckLevel.info, 'إشارة الوصلة ما انقرت'));
+        f.add(const CheckFinding(CheckLevel.info, 'إشارة الوصلة لم تُقرأ'));
         radioGap = true;
       }
     } else if (g.radioUnread && role != CheckRole.sector && role != CheckRole.olt && role != CheckRole.switcher) {
       // السويج يُحكم بمنافذه — جدولٌ لم يُقرأ يقوله «المنافذ ما انقرت» أدناه، لا «وضعه اللاسلكيّ»
       // ١٠ نوفمبر (قرار المالك): قائمته قُرئت (reg_ok) ووضعه وحده مجهول ⇒ لا «ومشتركوه»
       f.add(CheckFinding(
-          CheckLevel.info, g.peersKnown ? 'وضعه اللاسلكيّ ما انقرأ' : 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
+          CheckLevel.info, g.peersKnown ? 'وضعه اللاسلكيّ لم يُقرأ' : 'وضعه اللاسلكيّ ومشتركوه ما انقرأوا'));
       radioGap = true;
     }
     // جدول المنافذ لم يُقرأ (المراجعة الثانية): صريحاً من القارئ، أو سويج/راوتر كانت له منافذ وقراءته الجديدة بلا منفذٍ واحد —
@@ -799,7 +799,7 @@ class DevicesCheck {
             phys.isEmpty &&
             (role == CheckRole.switcher || role == CheckRole.router) &&
             (prev?.ports.isNotEmpty ?? false));
-    if (portsGap) f.add(const CheckFinding(CheckLevel.info, 'المنافذ ما انقرت'));
+    if (portsGap) f.add(const CheckFinding(CheckLevel.info, 'المنافذ لم تُقرأ'));
 
     // «سليم» للسكتر حكمٌ عليه وعلى مشتركيه — قائمتهم لم تُقرأ ⇒ «لم يُقرأ» بحيويّاته وسطرها، لا «سليم» (٩ نوفمبر)
     final state = f.any((x) => x.level != CheckLevel.info)

@@ -129,7 +129,7 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
               if (on && desktop)
                 Padding(
                   padding: const EdgeInsetsDirectional.only(end: Sp.md),
-                  child: TextButton.icon(key: const ValueKey('bal-new'), onPressed: _new, icon: const Icon(LucideIcons.plus, size: 16), label: const Text('شحنة جديدة')),
+                  child: TextButton.icon(key: const ValueKey('bal-new'), onPressed: _new, icon: const Icon(LucideIcons.plus, size: 16), label: const Text('شحن جديد')),
                 ),
             ],
           ),
@@ -140,7 +140,7 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
                   foregroundColor: AppColors.onBrand,
                   onPressed: _new,
                   icon: const Icon(LucideIcons.plus, size: 16),
-                  label: const Text('شحنة جديدة'),
+                  label: const Text('شحن جديد'),
                 )
               : null,
           body: SafeArea(child: _body(data)),
@@ -174,9 +174,9 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         key: const ValueKey('bal-empty'),
         icon: LucideIcons.walletCards,
         tone: AppTone.brand,
-        title: 'سجّل أوّل شحنة رصيد',
-        body: 'اكتب تاريخ الشحنة ومبلغها، والنظام يحسب من سجلّاته شگد طبّلك منها وشگد باقي حتى يرجع مبلغها — حتى لو تاريخها قديم.',
-        action: 'شحنة جديدة',
+        title: 'سجّل أوّل شحن للرصيد',
+        body: 'اكتب تاريخ الشحن ومبلغه، ويحسب النظام من سجلّاته كم حصّلت منه وكم بقي حتى يعود مبلغه — حتى لو كان تاريخه قديماً.',
+        action: 'شحن جديد',
         actionKey: const ValueKey('bal-first'),
         onAction: _new,
       );
@@ -191,7 +191,7 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         key: const ValueKey('bal-list'),
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 96),
         children: [
-          Text('لكلّ شحنة رصيد: شگد طبّلك منها، شگد معوز حتى يرجع مبلغها، وشگد ربحك', style: AppType.muted(color: AppColors.textMid)),
+          Text('لكلّ شحن رصيد: ما حصّلته منه، والمتبقّي حتى يعود مبلغه، وربحك', style: AppType.muted(color: AppColors.textMid)),
           const SizedBox(height: Sp.md),
           BalancePeriodHero(period: periods.first, live: _c.live, controller: _c, onDetail: () => _detail(periods.first)),
           if (periods.length > 1) ...[
@@ -214,9 +214,9 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (outside.isNotEmpty) ...[
-                    Text('خارج حساب الشحنات', style: AppType.bodyBold(color: AppColors.textHi)),
+                    Text('خارج حساب الشحن', style: AppType.bodyBold(color: AppColors.textHi)),
                     const SizedBox(height: 2),
-                    Text('مبالغ دخلت من غير تفعيلات الفترات — ما تدخل بمبلغ أيّ شحنة.', style: AppType.micro(color: AppColors.textMid)),
+                    Text('مبالغ دخلت من غير تفعيلات الفترات — لا تُحسب ضمن مبلغ أيّ شحن.', style: AppType.micro(color: AppColors.textMid)),
                     const SizedBox(height: Sp.sm),
                     for (final o in outside) BalanceLine(key: ValueKey('bal-outside-${o.id}'), label: o.label, value: balanceIqd(o.value)),
                   ],
@@ -359,7 +359,7 @@ class BalanceProgress extends StatelessWidget {
     final adj = ((period.adjustmentsSum / total) * 1000).round().clamp(0, 1000 - got);
     final rest = 1000 - got - adj;
     return Semantics(
-      label: 'اكتمل ${(period.progress * 100).round()}% من مبلغ الشحنة',
+      label: 'اكتمل ${(period.progress * 100).round()}% من مبلغ الشحن',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(R.pill),
         child: SizedBox(
@@ -445,7 +445,7 @@ class BalanceStats extends StatelessWidget {
         : p.isClosed && p.lateProfit > 0
             ? 'منها بعد الإغلاق ${formatIQD(p.lateProfit)}'
             : p.net < 0
-                ? 'يبدي بعد ما يرجع مبلغ الشحنة'
+                ? 'يبدأ بعد أن يعود مبلغ الشحن'
                 : null;
     Widget pair(Widget a, Widget b) => IntrinsicHeight(
           child: Row(
@@ -460,7 +460,7 @@ class BalanceStats extends StatelessWidget {
             key: const ValueKey('bal-stat-collected'),
             icon: LucideIcons.handCoins,
             tone: AppTone.success,
-            label: 'طبّلك',
+            label: 'المحصَّل',
             value: balanceIqd(p.collected),
             lines: [
               'نقد التفعيلات ${formatIQD(p.cashNow)}',
@@ -475,17 +475,17 @@ class BalanceStats extends StatelessWidget {
                   key: const ValueKey('bal-stat-remaining'),
                   icon: LucideIcons.scale,
                   tone: AppTone.warning,
-                  label: 'المعوز',
+                  label: 'المتبقّي',
                   value: balanceIqd(p.remaining),
-                  lines: [p.adjustmentsSum > 0 ? 'بعد تسوية ${formatIQD(p.adjustmentsSum)}' : 'حتى يرجع مبلغ الشحنة'],
+                  lines: [p.adjustmentsSum > 0 ? 'بعد تسوية ${formatIQD(p.adjustmentsSum)}' : 'حتى يعود مبلغ الشحن'],
                 )
               : _Stat(
                   key: const ValueKey('bal-stat-remaining'),
                   icon: LucideIcons.circleCheck,
                   tone: AppTone.success,
-                  label: 'المعوز',
+                  label: 'المتبقّي',
                   value: 'مكتمل',
-                  lines: [p.adjustmentsSum > 0 ? 'منها تسوية ${formatIQD(p.adjustmentsSum)}' : 'رجع مبلغ الشحنة كاملاً'],
+                  lines: [p.adjustmentsSum > 0 ? 'منها تسوية ${formatIQD(p.adjustmentsSum)}' : 'عاد مبلغ الشحن كاملاً'],
                 ),
         ),
         const SizedBox(height: Sp.sm),
@@ -697,7 +697,7 @@ class BalancePeriodHero extends StatelessWidget {
               if (!p.isClosed) ...[
                 IconButton(
                   key: ValueKey('bal-edit-${p.id}'),
-                  tooltip: 'تعديل الشحنة',
+                  tooltip: 'تعديل الشحن',
                   visualDensity: VisualDensity.compact,
                   icon: Icon(LucideIcons.pencil, size: 17, color: AppColors.textMid),
                   onPressed: () async {
@@ -707,7 +707,7 @@ class BalancePeriodHero extends StatelessWidget {
                 ),
                 IconButton(
                   key: ValueKey('bal-delete-${p.id}'),
-                  tooltip: 'حذف الشحنة',
+                  tooltip: 'حذف الشحن',
                   visualDensity: VisualDensity.compact,
                   icon: Icon(LucideIcons.trash2, size: 17, color: AppColors.textMid),
                   onPressed: () => confirmBalanceDelete(context, controller, p),
@@ -719,7 +719,7 @@ class BalancePeriodHero extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('مبلغ الشحنة', style: AppType.micro(color: AppColors.textMid)),
+              Text('مبلغ الشحن', style: AppType.micro(color: AppColors.textMid)),
               const SizedBox(width: Sp.md),
               Expanded(
                 child: FittedBox(
@@ -742,7 +742,7 @@ class BalancePeriodHero extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'طبّلك ${formatIQD(p.collected)}${p.adjustmentsSum > 0 ? ' + تسوية ${formatIQD(p.adjustmentsSum)}' : ''}',
+                  'المحصَّل ${formatIQD(p.collected)}${p.adjustmentsSum > 0 ? ' + تسوية ${formatIQD(p.adjustmentsSum)}' : ''}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.micro(color: AppColors.textMid),
@@ -803,11 +803,11 @@ class _PeriodCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = period;
     final facts = <({String label, String value, Color? color})>[
-      (label: 'طبّلك', value: formatIQD(p.collected), color: null),
+      (label: 'المحصَّل', value: formatIQD(p.collected), color: null),
       (label: 'ديون باقية', value: formatIQD(p.debtsOpen), color: p.debtsOpen > 0 ? AppTone.danger.onSoft : null),
       p.isClosed
           ? (label: 'صافي الربح', value: '${p.net < 0 ? '−' : ''}${formatIQD(p.net.abs())}', color: p.net >= 0 ? AppTone.success.onSoft : AppTone.danger.onSoft)
-          : (label: 'المعوز', value: p.remaining > 0 ? formatIQD(p.remaining) : 'مكتمل', color: p.remaining > 0 ? AppTone.warning.onSoft : AppTone.success.onSoft),
+          : (label: 'المتبقّي', value: p.remaining > 0 ? formatIQD(p.remaining) : 'مكتمل', color: p.remaining > 0 ? AppTone.warning.onSoft : AppTone.success.onSoft),
     ];
     return Material(
       color: AppColors.surface,
@@ -921,7 +921,7 @@ Future<void> confirmBalanceReopen(BuildContext context, BalanceReportsController
     context,
     title: 'إلغاء الإغلاق',
     subtitle: balancePeriodTitle(p),
-    message: 'ترجّع الفترة مفتوحة؟\nما دخل بعد إغلاقها يرجع ينحسب «طبّلك» لا ربح.',
+    message: 'إعادة فتح الفترة؟\nما دخل بعد إغلاقها سيُحسب ضمن «المحصَّل» لا ضمن الربح.',
     confirmLabel: 'إلغاء الإغلاق',
     icon: LucideIcons.undo2,
   );
@@ -932,7 +932,7 @@ Future<void> confirmBalanceReopen(BuildContext context, BalanceReportsController
 Future<void> confirmBalanceDelete(BuildContext context, BalanceReportsController c, BalancePeriod p, {VoidCallback? after}) async {
   final ok = await showConfirmSheet(
     context,
-    title: 'حذف الشحنة',
+    title: 'حذف الشحن',
     subtitle: '${balancePeriodTitle(p)} — ${balanceIqd(p.amount)}',
     message: 'تنحذف من هذا التقرير هي وتسوياتها.\nحركات المشتركين وديونهم ما تتغيّر.',
     confirmLabel: 'حذف',
@@ -940,7 +940,7 @@ Future<void> confirmBalanceDelete(BuildContext context, BalanceReportsController
     tone: AppTone.danger,
   );
   if (ok != true || !context.mounted) return;
-  await _runWrite(context, c, () => BalanceReportsApi.deletePeriod(p.id), 'حُذفت الشحنة', after: after);
+  await _runWrite(context, c, () => BalanceReportsApi.deletePeriod(p.id), 'حُذف الشحن', after: after);
 }
 
 Future<void> confirmBalanceUnadjust(BuildContext context, BalanceReportsController c, BalancePeriod p, BalanceAdjustment a) async {
@@ -948,7 +948,7 @@ Future<void> confirmBalanceUnadjust(BuildContext context, BalanceReportsControll
     context,
     title: 'حذف التسوية',
     subtitle: '${a.source.label} — ${balanceIqd(a.amount)}',
-    message: 'يرجع المعوز يزيد بقدرها.',
+    message: 'يزيد المتبقّي بقدرها.',
     confirmLabel: 'حذف التسوية',
     icon: LucideIcons.trash2,
     tone: AppTone.danger,
@@ -1003,8 +1003,8 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
   }
 
   String? get _problem {
-    if (_amount <= 0) return 'اكتب مبلغ الشحنة';
-    if (_ms > _now + 5 * 60 * 1000) return 'تاريخ الشحنة لا يكون في المستقبل';
+    if (_amount <= 0) return 'اكتب مبلغ الشحن';
+    if (_ms > _now + 5 * 60 * 1000) return 'لا يمكن أن يكون تاريخ الشحن في المستقبل';
     return null;
   }
 
@@ -1015,9 +1015,9 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
       initialDate: DateTime(_at.year, _at.month, _at.day),
       firstDate: DateTime(2020, 1, 1),
       lastDate: DateTime(today.year, today.month, today.day),
-      helpText: 'تاريخ الشحنة',
+      helpText: 'تاريخ الشحن',
       cancelText: 'رجوع',
-      confirmText: 'تمام',
+      confirmText: 'حسناً',
     );
     if (picked != null && mounted) setState(() => _at = DateTime.utc(picked.year, picked.month, picked.day, _at.hour, _at.minute));
   }
@@ -1026,9 +1026,9 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _at.hour, minute: _at.minute),
-      helpText: 'وقت الشحنة',
+      helpText: 'وقت الشحن',
       cancelText: 'رجوع',
-      confirmText: 'تمام',
+      confirmText: 'حسناً',
     );
     if (picked != null && mounted) setState(() => _at = DateTime.utc(_at.year, _at.month, _at.day, picked.hour, picked.minute));
   }
@@ -1046,11 +1046,11 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {
-      showSheetSnack(context, r.message ?? (p == null ? 'تعذّر تسجيل الشحنة' : 'تعذّر حفظ التعديل'), isError: true);
+      showSheetSnack(context, r.message ?? (p == null ? 'تعذّر تسجيل الشحن' : 'تعذّر حفظ التعديل'), isError: true);
       return;
     }
     Navigator.of(context).pop(r.data);
-    showSheetSnack(context, p == null ? 'سُجّلت الشحنة ${balanceIqd(amount)}' : 'حُفظ تعديل الشحنة');
+    showSheetSnack(context, p == null ? 'سُجّل الشحن ${balanceIqd(amount)}' : 'حُفظ تعديل الشحن');
   }
 
   @override
@@ -1062,14 +1062,14 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.walletCards,
-        title: edit ? 'تعديل الشحنة' : 'شحنة رصيد جديدة',
-        subtitle: 'المبلغ اللي دفعته للشركة — هو السقف اللي لازم يرجع',
+        title: edit ? 'تعديل الشحن' : 'شحن رصيد جديد',
+        subtitle: 'المبلغ الذي دفعته للشركة — وهو ما يجب أن يعود إليك',
         subtitleMaxLines: 2,
         onClose: _busy ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
         key: const ValueKey('bal-topup-save'),
-        label: _busy ? 'جاري الحفظ...' : (problem ?? (edit ? 'حفظ التعديل' : 'تسجيل الشحنة — ${balanceIqd(_amount)}')),
+        label: _busy ? 'جارٍ الحفظ...' : (problem ?? (edit ? 'حفظ التعديل' : 'تسجيل الشحن — ${balanceIqd(_amount)}')),
         icon: LucideIcons.check,
         busy: _busy,
         enabled: problem == null,
@@ -1079,7 +1079,7 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetSection(
-            label: 'مبلغ الشحنة',
+            label: 'مبلغ الشحن',
             child: SheetBox(
               focused: _amount > 0,
               child: AmountTextField(key: const ValueKey('bal-topup-amount'), controller: _amountCtrl, enabled: !_busy, autofocus: !edit, onValue: (_) => setState(() {})),
@@ -1087,7 +1087,7 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
           ),
           const SizedBox(height: Sp.lg),
           SheetSection(
-            label: 'تاريخ الشحنة ووقتها',
+            label: 'تاريخ الشحن ووقته',
             child: Row(
               children: [
                 Expanded(
@@ -1103,7 +1103,7 @@ class _BalanceTopupSheetState extends State<BalanceTopupSheet> {
             ),
           ),
           const SizedBox(height: Sp.sm),
-          Text('النظام يحسب من هذا الوقت كلّ تفعيل (نقدي، آجل، جزئي) وتسديد ديونه. بيع الموادّ والصرفيات ما تدخل.', style: AppType.muted(color: AppColors.textHint)),
+          Text('النظام يحسب من هذا الوقت كلّ تفعيل (نقدي، آجل، جزئي) وتسديد ديونه. بيع الموادّ والمصاريف ما تدخل.', style: AppType.muted(color: AppColors.textHint)),
           const SizedBox(height: Sp.lg),
           SheetNoteField(controller: _noteCtrl, hint: 'ملاحظة (اختياريّ)', maxLength: 200, enabled: !_busy),
         ],
@@ -1194,7 +1194,7 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
   String? get _problem {
     final a = _amount;
     if (a <= 0) return 'اكتب المبلغ';
-    if (a > widget.period.remaining + 0.5) return 'المبلغ أكبر من المعوز (${balanceIqd(widget.period.remaining)})';
+    if (a > widget.period.remaining + 0.5) return 'المبلغ أكبر من المتبقّي (${balanceIqd(widget.period.remaining)})';
     if (_source == BalanceSource.other && _noteCtrl.text.trim().isEmpty) return 'اكتب ملاحظة توضّح مصدر المبلغ';
     return null;
   }
@@ -1230,7 +1230,7 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
       ),
       footer: SheetFooterBar(
         key: const ValueKey('bal-adjust-save'),
-        label: _busy ? 'جاري التسجيل...' : (problem ?? 'تسجيل التسوية — ${balanceIqd(_amount)}'),
+        label: _busy ? 'جارٍ التسجيل...' : (problem ?? 'تسجيل التسوية — ${balanceIqd(_amount)}'),
         icon: LucideIcons.check,
         busy: _busy,
         enabled: problem == null,
@@ -1248,7 +1248,7 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
               borderRadius: BorderRadius.circular(R.card),
               border: Border.all(color: AppTone.warning.softBorder),
             ),
-            child: BalanceLine(label: 'المعوز حتى يكتمل مبلغ الشحنة', value: balanceIqd(p.remaining), strong: true, valueColor: AppTone.warning.onSoft),
+            child: BalanceLine(label: 'المتبقّي حتى يكتمل مبلغ الشحن', value: balanceIqd(p.remaining), strong: true, valueColor: AppTone.warning.onSoft),
           ),
           const SizedBox(height: Sp.lg),
           SheetSection(
@@ -1260,7 +1260,7 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
           ),
           const SizedBox(height: Sp.lg),
           SheetSection(
-            label: 'منين المبلغ؟',
+            label: 'مصدر المبلغ',
             child: SheetSegmented(
               key: const ValueKey('bal-adjust-source'),
               labels: [for (final s in sources) s.label],
@@ -1283,7 +1283,7 @@ class _BalanceAdjustSheetState extends State<BalanceAdjustSheet> {
             enabled: !_busy,
           ),
           const SizedBox(height: Sp.sm),
-          Text('التسوية تكمّل مبلغ الشحنة حتى تگدر تغلق الفترة. قيدٌ بهذا التقرير بس — ما تغيّر صندوقك ولا ديون المشتركين.', style: AppType.muted(color: AppColors.textHint)),
+          Text('التسوية تُكمل مبلغ الشحن لتتمكّن من إغلاق الفترة. قيدٌ في هذا التقرير فقط — لا تغيّر صندوقك ولا ديون المشتركين.', style: AppType.muted(color: AppColors.textHint)),
         ],
       ),
     );

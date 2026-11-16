@@ -10,11 +10,11 @@ import 'package:rad_mysvcs/api/whatsapp_api.dart';
 /// واتساب المدير نفسه (اليدويّ) وفي المعاينة — وبلا كلمةٍ يُحذف سطرها (لا «{password}» حرفيّاً للمشترك).
 void main() {
   group('WhatsAppApi.applyPassword', () {
-    const tpl = 'مرحباً علي\n👤 اليوزر: ali@net\n🔑 الباسورد: {password}\n🔐 رمز الوكيل: 550121';
+    const tpl = 'مرحباً علي\n👤 اليوزر: ali@net\n🔑 كلمة المرور: {password}\n🔐 رمز الوكيل: 550121';
 
     test('كلمةٌ معلومة تدخل مكان المتغيّر في كلّ مواضعه — بحروفها كما هي', () {
       expect(WhatsAppApi.applyPassword(tpl, r'S3cr$t&*1'),
-          'مرحباً علي\n👤 اليوزر: ali@net\n🔑 الباسورد: S3cr\$t&*1\n🔐 رمز الوكيل: 550121');
+          'مرحباً علي\n👤 اليوزر: ali@net\n🔑 كلمة المرور: S3cr\$t&*1\n🔐 رمز الوكيل: 550121');
       expect(WhatsAppApi.applyPassword('{password} / {password}', 'x1'), 'x1 / x1');
     });
 
@@ -42,7 +42,7 @@ void main() {
     expect(WhatsAppApi.kPasswordVariable, '{password}');
     expect(BroadcastVariables.all.any((v) => v.token == '{password}'), isTrue);
     final editor = File('lib/screens/whatsapp/whatsapp_templates_screen.dart').readAsStringSync();
-    expect(editor.contains("'{password}': 'كلمة سر المشترك'"), isTrue);
+    expect(editor.contains("'{password}': 'كلمة مرور المشترك'"), isTrue);
     final vars = RegExp(r'static const _subscriberVariables = <String>\[(.*?)\];', dotAll: true).firstMatch(editor)!.group(1)!;
     expect(vars.contains("'{password}'"), isTrue);
     expect(vars.indexOf("'{username}'") < vars.indexOf("'{password}'"), isTrue);

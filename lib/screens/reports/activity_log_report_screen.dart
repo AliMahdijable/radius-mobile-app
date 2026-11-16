@@ -96,8 +96,8 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
               missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')]))
           case final n?)
         n,
-      mergedWord('الصرفيات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تفتحها وحدها',
-          'الصرفيات لا تُخلط هنا — تظهر في سجلّ كلّ صفحةٍ حين تفتحها وحدها'),
+      mergedWord('المصاريف لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تفتحها وحدها',
+          'المصاريف لا تُخلط هنا — تظهر في سجلّ كلّ صفحةٍ حين تفتحها وحدها'),
     ];
     return lines.join('\n');
   }

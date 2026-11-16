@@ -305,7 +305,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     if (res.password == null) {
       ScaffoldMessenger.of(context).showSnackBar(explainableSnackBar(
         context,
-        res.message ?? 'تعذّر جلب كلمة السر',
+        res.message ?? 'تعذّر جلب كلمة المرور',
         error: true,
         backgroundColor: AppColors.errorFill,
       ));
@@ -314,7 +314,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     await showRevealPasswordSheet(
       context,
       title: emp.fullName?.isNotEmpty == true ? emp.fullName! : emp.username,
-      subtitle: 'كلمة سرّ الموظّف',
+      subtitle: 'كلمة مرور الموظّف',
       password: res.password!,
       accentColor: AppColors.brandAccent,
     );
@@ -999,7 +999,7 @@ class _EmployeeTile extends StatelessWidget {
                   icon: Icon(LucideIcons.keyRound,
                       color: AppColors.brandAccent, size: 16),
                   onPressed: onShowPassword,
-                  tooltip: 'إظهار كلمة السر',
+                  tooltip: 'إظهار كلمة المرور',
                   splashRadius: 18,
                   padding: EdgeInsets.zero,
                   constraints:

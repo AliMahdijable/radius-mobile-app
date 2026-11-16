@@ -104,8 +104,8 @@ void main() {
     expect(chipIn(t, key('devices-strip'), 'الكلّ').selected, isTrue);
     expect(chipIn(t, key('devices-strip'), 'متّصل').count, 11);
     expect(chipIn(t, key('devices-strip'), 'مفصول').count, 2);
-    expect(chipIn(t, key('devices-strip'), 'سكاتر').count, 5);
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 0);
+    expect(chipIn(t, key('devices-strip'), 'سكترات').count, 5);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 0);
     // أوّل جهاز (الترتيب بالعنوان) قريبٌ من الأعلى: كان تحت ~٣٠٥ نقطة من أربع كتل.
     expect(t.getTopLeft(device(9)).dy, lessThan(230));
     await finish(t);
@@ -118,15 +118,15 @@ void main() {
     expect(device(3), findsOneWidget);
     expect(device(13), findsOneWidget);
     expect(device(9), findsNothing, reason: 'المتّصل خارج المرشّح');
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 1);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 1);
     expect(chipIn(t, key('devices-strip'), 'الكلّ').selected, isFalse);
     // الأنواع ضمن «مفصول»: سكترٌ وأولت وحدهما
-    expect(inStrip('سكاتر'), findsOneWidget);
+    expect(inStrip('سكترات'), findsOneWidget);
     expect(inStrip('لنكات'), findsNothing, reason: 'لا لنك مفصول — الشريط لا يملؤه صفر');
     await t.tap(key('devices-status-offline'));
     await settle(t, ms: 500);
     expect(device(9), findsOneWidget);
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 0);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 0);
     // نوعٌ من آخر الشريط
     await t.ensureVisible(inStrip('راوترات'));
     await t.pump(const Duration(milliseconds: 300));
@@ -139,7 +139,7 @@ void main() {
     await finish(t);
   });
 
-  testWidgets('ورقة «فلاتر»: المنطقة والحالة معاً، فوراً، بأعدادٍ ضمن المرشّحات الأخرى — وشريحة المنطقة تُزال', (t) async {
+  testWidgets('ورقة «تصفية»: المنطقة والحالة معاً، فوراً، بأعدادٍ ضمن المرشّحات الأخرى — وشريحة المنطقة تُزال', (t) async {
     await open(t);
     await openSheet(t);
     for (final s in ['الحالة', 'النوع', 'المنطقة', 'كلّ المناطق', 'بلا منطقة']) {
@@ -165,19 +165,19 @@ void main() {
     expect(device(10), findsOneWidget);
     expect(device(13), findsNothing, reason: 'أولت الكورنيش مفصول');
     // الشريط: «فلاتر» بعددها، والمنطقة شريحةٌ بـ✕ في أوّله
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 2);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 2);
     expect(key('devices-region-chip'), findsOneWidget);
     expect(find.descendant(of: key('devices-region-chip'), matching: find.text('الكورنيش')), findsOneWidget);
     expect(chipIn(t, key('devices-strip'), 'مفصول').count, 1, reason: 'التوزيع داخل المنطقة');
     await t.tap(key('devices-region-chip'));
     await settle(t, ms: 500);
     expect(key('devices-region-chip'), findsNothing);
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 1);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 1);
     expect(device(9), findsOneWidget, reason: 'المتّصل في كلّ المناطق');
     // «الكلّ» يمسح ما بقي
     await t.tap(key('devices-clear-filters'));
     await settle(t, ms: 500);
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 0);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 0);
     expect(chipIn(t, key('devices-strip'), 'الكلّ').selected, isTrue);
     await finish(t);
   });
@@ -191,7 +191,7 @@ void main() {
     await t.tap(inSheet('راوترات'));
     await t.tap(inSheet('مفصول'));
     await settle(t, ms: 400);
-    expect(inSheet('لا نتائج — غيّر الفلاتر'), findsOneWidget, reason: 'راوتر الطوارئ لم يُفحص — ليس مفصولاً');
+    expect(inSheet('لا نتائج — غيّر التصفية'), findsOneWidget, reason: 'راوتر الطوارئ لم يُفحص — ليس مفصولاً');
     await t.tap(inSheet('إعادة تعيين'));
     await settle(t, ms: 400);
     expect(inSheet('عرض 14 جهازاً'), findsOneWidget);
@@ -199,7 +199,7 @@ void main() {
     await t.tap(find.byIcon(Icons.close_rounded));
     await settle(t, ms: 800);
     expect(sheet, findsNothing);
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 0);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 0);
     await finish(t);
   });
 
@@ -294,7 +294,7 @@ void main() {
     await t.tap(inSheet('عرض 3 أجهزة'));
     await settle(t, ms: 800);
     expect(find.byType(DeskSheetDialog), findsNothing);
-    expect(chipIn(t, key('devices-strip'), 'فلاتر').badge, 1);
+    expect(chipIn(t, key('devices-strip'), 'تصفية').badge, 1);
     await t.tap(find.byIcon(LucideIcons.plus));
     await settle(t, ms: 600);
     expect(find.text('اكتشاف أجهزة الشبكة'), findsOneWidget);

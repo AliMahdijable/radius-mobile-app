@@ -25,7 +25,7 @@ const _kindLabel = <String, String>{
 };
 
 const _modes = <(String, String, String)>[
-  ('manual', 'يدويّ', 'ترسل أنت من كرت المشترك كما الآن — لا شيء تلقائيّ'),
+  ('manual', 'يدويّ', 'ترسل أنت من بطاقة المشترك كما الآن — لا شيء تلقائيّ'),
   ('approval', 'بموافقتي', 'النظام يكتشف المشكلة ويتأكّد منها، وأنت تضغط «أرسل» قبل أن تصل للمشترك'),
   ('auto', 'تلقائيّ', 'النظام يرسل وحده بعد التأكّد — ضمن ساعات الإرسال والسقف اليوميّ'),
 ];
@@ -248,7 +248,7 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
           child: _NavTile(
             icon: LucideIcons.shieldCheck,
             title: 'ربط VPN',
-            subtitle: 'فعّل «الاتصال العكسي» ليقيس النظام وأنت خارج شبكتك — بدونه الفحص من موبايلك على شبكتك فقط',
+            subtitle: 'فعّل «الاتصال العكسي» ليقيس النظام وأنت خارج شبكتك — بدونه الفحص من هاتفك على شبكتك فقط',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen())),
           ),
         ),

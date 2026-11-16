@@ -39,7 +39,7 @@ String? vpnCasesText(Iterable<String?> states) {
 List<String> vpnProblemsOf(VpnSubReading r, ConnectionAlertThresholds t) {
   final out = <String>[];
   if (r.lan == 'unplugged') out.add('الكيبل غير مربوط');
-  if (r.lan == '10') out.add('الكيبل 10 ميكا');
+  if (r.lan == '10') out.add('الكيبل 10 ميغا');
   final sig = r.sig;
   if (sig != null && sig < 0 && sig < t.signalDbm) out.add('إشارة ${iso('$sig dBm')}');
   final ccq = r.ccq;

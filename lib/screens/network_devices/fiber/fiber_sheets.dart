@@ -499,7 +499,7 @@ class _AssignSheetState extends State<_AssignSheet> {
           const SizedBox(height: Sp.xs),
           Text(
             iso(over
-                ? 'الصندوق 1:${target.ratio} — يتّسع لـ${FiberText.devices(fit.free)} بعد، ومختار ${FiberText.devices(fit.needed)} جديدة. شيل ${fit.needed - fit.free} أو كبّر نسبته.'
+                ? 'الصندوق 1:${target.ratio} — يتّسع لـ${FiberText.devices(fit.free)} بعد، ومختار ${FiberText.devices(fit.needed)} جديدة. أزِل ${fit.needed - fit.free} أو كبّر نسبته.'
                 : 'فيه ${FiberText.ports(target.ratio)} — مستعمل ${tree.usedPorts(target.id)}، يبقى ${fit.free} · مختار ${fit.needed} جديد'),
             style: AppType.muted(color: over ? AppColors.error : AppColors.textMid),
           ),

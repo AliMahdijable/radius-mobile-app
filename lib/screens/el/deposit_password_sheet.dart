@@ -64,15 +64,15 @@ class _DepositPasswordSheetState extends State<_DepositPasswordSheet> {
         _ctrl.clear();
       }
     });
-    showSheetSnack(context, r.message ?? (r.ok ? 'حُفظ باسورد الإيداع' : 'تعذّر الحفظ'),
+    showSheetSnack(context, r.message ?? (r.ok ? 'حُفظت كلمة مرور الإيداع' : 'تعذّر الحفظ'),
         isError: !r.ok);
   }
 
   Future<void> _remove() async {
     final ok = await showConfirmSheet(
       context,
-      title: 'مسح الباسورد المحفوظ',
-      message: 'سيُطلب باسورد الإيداع في كلّ عمليّة رصيد بعد المسح.',
+      title: 'مسح كلمة المرور المحفوظة',
+      message: 'ستُطلب كلمة مرور الإيداع في كلّ عمليّة رصيد بعد المسح.',
       confirmLabel: 'مسح',
       icon: LucideIcons.trash2,
       tone: AppTone.danger,
@@ -82,7 +82,7 @@ class _DepositPasswordSheetState extends State<_DepositPasswordSheet> {
     final r = await ElDepositPassword.remove();
     if (!mounted) return;
     setState(() => _busy = false);
-    showSheetSnack(context, r.message ?? (r.ok ? 'مُسح الباسورد' : 'تعذّر المسح'),
+    showSheetSnack(context, r.message ?? (r.ok ? 'مُسحت كلمة المرور' : 'تعذّر المسح'),
         isError: !r.ok);
   }
 
@@ -96,7 +96,7 @@ class _DepositPasswordSheetState extends State<_DepositPasswordSheet> {
         return DesignSheet(
           header: SheetHeaderBar(
             icon: LucideIcons.keyRound,
-            title: 'باسورد الإيداع',
+            title: 'كلمة مرور الإيداع',
             subtitle: 'ايرث لنك — يُحفظ مشفّراً',
             onClose: () => Navigator.of(context).maybePop(),
           ),
@@ -126,7 +126,7 @@ class _DepositPasswordSheetState extends State<_DepositPasswordSheet> {
               if (showInput) ...[
                 const SizedBox(height: Sp.lg),
                 SheetSection(
-                  label: saved ? 'الباسورد الجديد' : 'باسورد الإيداع',
+                  label: saved ? 'كلمة المرور الجديدة' : 'كلمة مرور الإيداع',
                   child: SheetBox(
                     focused: _ctrl.text.isNotEmpty,
                     child: TextField(

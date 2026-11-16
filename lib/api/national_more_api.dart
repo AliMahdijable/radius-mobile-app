@@ -391,7 +391,7 @@ String nationalTeamRole(String? code) {
     'fieldworkersmanagingcustomers': 'عامل ميداني يدير المشتركين',
     'superadminmember': 'مشرف عام',
     'supportteammember': 'عضو فريق الدعم',
-    'cashier': 'كاشير',
+    'cashier': 'أمين الصندوق',
     'zoneadmin': 'مشرف منطقة',
     'regionaladminmember': 'مشرف إقليمي',
   };

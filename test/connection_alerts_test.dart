@@ -170,11 +170,11 @@ void main() {
       expect(kinds(snapU(u)), [ConnectionProblemKind.cable]);
     });
 
-    test('يقرأ 10 ميكا', () {
+    test('يقرأ 10 ميغا', () {
       final u = ubnt(lan: const [
         LanPort(name: 'eth0', speed: '10Mbps-Half', plugged: true),
       ]);
-      expect(ConnectionAlerts.lanState(u), 'يقرأ 10 ميكا');
+      expect(ConnectionAlerts.lanState(u), 'يقرأ 10 ميغا');
       expect(kinds(snapU(u)), [ConnectionProblemKind.cable]);
     });
 
@@ -281,7 +281,7 @@ void main() {
         lines: const {'conn_alert_cable': '• الكيبل {lan_state}'},
         problems: ConnectionAlerts.detect(snapU(u), t),
       );
-      expect(msg, contains('• الكيبل يقرأ 10 ميكا'));
+      expect(msg, contains('• الكيبل يقرأ 10 ميغا'));
     });
 
     test('قالبٌ حُذف منه {problems} لا يبتلع المشاكل', () {
@@ -294,8 +294,8 @@ void main() {
     });
   });
 
-  group('فولتيّة موديول الضوء واسم المشترك (٥–٦ نوفمبر)', () {
-    test('فولتيّة موديول الضوء ليست مشكلةً تُرسل (٦ نوفمبر — ليست فولتيّة الأدابتر): لا سطر ولا قالب لها مهما كانت', () {
+  group('فولتيّة وحدة الضوء واسم المشترك (٥–٦ نوفمبر)', () {
+    test('فولتيّة وحدة الضوء ليست مشكلةً تُرسل (٦ نوفمبر — ليست فولتيّة الأدابتر): لا سطر ولا قالب لها مهما كانت', () {
       for (final mv in ['2950', '3620', '3300', '', '0']) {
         expect(kinds(snapO(volt: mv)), isEmpty, reason: mv);
       }

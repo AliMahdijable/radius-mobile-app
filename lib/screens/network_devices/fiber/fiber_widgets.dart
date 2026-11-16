@@ -174,7 +174,7 @@ class FiberSlots extends StatelessWidget {
     final sug = slots.where((s) => s == FiberSlot.suggested).length;
     final label = [
       'منافذ الصندوق ${slots.length}',
-      if (up > 0) '$up شغّالة',
+      if (up > 0) '$up تعمل',
       if (down > 0) '$down مفصولة',
       if (sug > 0) '$sug مقترحة',
       if (free > 0) '$free فارغة',

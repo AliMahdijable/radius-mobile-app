@@ -49,7 +49,7 @@ void main() {
   test('مشاكل القراءة بحدود الوكيل: الكيبل والإشارة وCCQ والضوئيّ والحرارة؛ السليم والبنگ والساقط بلا مشكلة', () {
     const t = ConnectionAlertThresholds();
     final r = result().readings;
-    expect(vpnProblemsOf(r['ali@popq']!, t).length, 2, reason: 'الكيبل 10 ميكا + إشارة -72');
+    expect(vpnProblemsOf(r['ali@popq']!, t).length, 2, reason: 'الكيبل 10 ميغا + إشارة -72');
     expect(vpnProblemsOf(r['sara@popq']!, t).single, contains('ضوئي'));
     expect(vpnProblemsOf(r['ok@popq']!, t), isEmpty);
     expect(vpnProblemsOf(r['dead@popq']!, t), isEmpty);
@@ -79,7 +79,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('2 بمشكلة بآخر فحص'), findsOneWidget);
     expect(find.text('علي حسن'), findsOneWidget);
-    expect(find.textContaining('الكيبل 10 ميكا'), findsOneWidget);
+    expect(find.textContaining('الكيبل 10 ميغا'), findsOneWidget);
     expect(find.textContaining('ضوئي'), findsOneWidget);
     await t.tap(find.text('علي حسن'));
     await t.pumpAndSettle();
@@ -92,7 +92,7 @@ void main() {
     await visualTearDown();
   });
 
-  testWidgets('كرت الجهاز بصفحة المشترك: «وضع VPN» ⇒ قراءة الـVPN (الإشارة وCCQ والكيبل) بعلامة VPN بدل «غير واصل»', (t) async {
+  testWidgets('كرت الجهاز بصفحة المشترك: «وضع VPN» ⇒ قراءة الـVPN (الإشارة وCCQ والكيبل) بعلامة VPN بدل «لا يستجيب»', (t) async {
     await visualSetUp(s1bSasOwner);
     AgentNetPresence.debugSet(NetPresence.off);
     VpnNow.debugApply(VpnNowKind.subscribers, result());
@@ -104,7 +104,7 @@ void main() {
     expect(find.text('-72 dBm'), findsOneWidget);
     expect(find.text('88%'), findsOneWidget);
     expect(find.text('10M'), findsOneWidget);
-    expect(find.text('الجهاز غير واصل'), findsNothing);
+    expect(find.text('الجهاز لا يستجيب'), findsNothing);
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 20));
     await visualTearDown();

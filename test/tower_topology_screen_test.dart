@@ -71,21 +71,21 @@ List<Map<String, Object?>> fourRegions() => [
 
 List<Map<String, Object?>> fourTowersDevices() => [
       _d(101, 'CCR الرئيسي', 1, type: 'router'),
-      _d(102, 'سويج الرئيسي', 1, type: 'switch'),
+      _d(102, 'سويتش الرئيسي', 1, type: 'switch'),
       _d(111, 'لنك الحي (ماستر)', 1, type: 'link', brand: 'ubnt', model: 'airFiber 60 LR', mac: '78:8A:20:00:01:11'),
       _d(112, 'لنك المعامل (ماستر)', 1, type: 'link', mac: '48:8F:5A:00:01:12'),
       _d(113, 'لنك الجامعة (ماستر)', 1, type: 'link', mac: '48:8F:5A:00:01:13'),
       _d(121, 'سكتر 1 شمال', 1),
       _d(122, 'سكتر 2 جنوب', 1),
       _d(211, 'لنك الحي (سليف)', 2, type: 'link', brand: 'ubnt', model: 'airFiber 60 LR', mac: '78:8A:20:00:02:11'),
-      _d(201, 'سويج الحي', 2, type: 'switch'),
+      _d(201, 'سويتش الحي', 2, type: 'switch'),
       _d(221, 'سكتر الحي 1', 2),
       _d(222, 'سكتر الحي 2', 2),
       _d(311, 'لنك المعامل (سليف)', 3, type: 'link', mac: '48:8F:5A:00:03:11'),
       _d(301, 'راوتر المعامل', 3, type: 'router'),
       _d(321, 'سكتر المعامل', 3),
       _d(411, 'لنك الجامعة (سليف)', 4, type: 'link', mac: '48:8F:5A:00:04:11'),
-      _d(401, 'سويج الجامعة', 4, type: 'switch'),
+      _d(401, 'سويتش الجامعة', 4, type: 'switch'),
       _d(421, 'سكتر الجامعة 1', 4),
       _d(422, 'سكتر الجامعة 2', 4),
       _d(423, 'سكتر الجامعة 3', 4),
@@ -912,7 +912,7 @@ void main() {
 
       await t.tap(find.byKey(const ValueKey('link-end-main')));
       await settle(t, seconds: 1);
-      expect(find.text('الماستر — منه يخرج الترافيك'), findsWidgets);
+      expect(find.text('الماستر — منه تخرج حركة البيانات'), findsWidgets);
       await snap(t, 'editor_picker', p390);
       await t.tap(find.byKey(const ValueKey('pick-device-112')));
       await settle(t, seconds: 1);
@@ -926,7 +926,7 @@ void main() {
       expect(find.descendant(of: find.byKey(const ValueKey('pick-device-211')), matching: find.text('مربوطٌ بلنكٍ آخر')), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('pick-device-211')), warnIfMissed: false);
       await settle(t, seconds: 1);
-      expect(find.text('السليف — إليه يصل الترافيك'), findsWidgets, reason: 'المعطّل لا يُختار — المنتقي باقٍ');
+      expect(find.text('السليف — إليه تصل حركة البيانات'), findsWidgets, reason: 'المعطّل لا يُختار — المنتقي باقٍ');
       await t.scrollUntilVisible(find.byKey(const ValueKey('pick-device-311')), 120, scrollable: list);
       await t.tap(find.byKey(const ValueKey('pick-device-311')));
       await settle(t, seconds: 1);
@@ -987,7 +987,7 @@ void main() {
   });
 
   // ── ١١ نوفمبر صباحاً — المالك: «اكو ابراج ترتبط مع بعضها فايبر… مرات مو لنك يعني مباشر كيبل ضوئي بين سوجات» ──
-  group('الكيبل الضوئيّ بين سويجين', () {
+  group('الكيبل الضوئيّ بين سويتشين', () {
     // سويج الرئيسيّ (102) يخرج منه كيبلان: للحيّ (201) وللجامعة (401)؛ والمعامل بلنكٍ لاسلكيّ كما هو
     List<Map<String, Object?>> mixedLinks() => [
           _f(1, 102, 201, aPort: 'sfp-sfpplus1', bPort: 'sfp1'),
@@ -1043,14 +1043,14 @@ void main() {
       }
     });
 
-    testWidgets('🚨 منفذ الكيبل طافٍ والسويج يردّ ⇒ «واقع» بسببه؛ ومنفذٌ بلا عدّادات (قراءة VPN) «يعمل»', (t) async {
+    testWidgets('🚨 منفذ الكيبل طافٍ والسويتش يردّ ⇒ «واقع» بسببه؛ ومنفذٌ بلا عدّادات (قراءة VPN) «يعمل»', (t) async {
       final readings = mixedReadings();
       readings[201] = _sw([_port('sfp1', up: false), _port('ether1', rx: 4000000, tx: 300000000, speed: '1Gbps')]);
       readings[102] = _sw([_port('sfp-sfpplus1', up: false), _port('sfp-sfpplus2', speed: '10Gbps')]);
       readings[401] = _sw([_port('sfp-sfpplus1', speed: '10Gbps', light: -9.0)]);
       await boot(t, links: mixedLinks(), readings: readings);
       await openHub(t, tall(p390));
-      expect(plain('كيبل · المنفذان طافيان — الكيبل أو الـSFP'), findsOneWidget);
+      expect(plain('كيبل · المنفذان متوقّفان — الكيبل أو الـSFP'), findsOneWidget);
       expect(plain('1 واقع'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('topo-pill-1-2')), matching: plain('واقع')), findsOneWidget);
       // كيبل الجامعة: شغّال بلا رقم
@@ -1062,20 +1062,20 @@ void main() {
       await t.tap(find.byKey(const ValueKey('topo-pill-1-2')));
       await settle(t, seconds: 1);
       expect(plain('كيبل ضوئي · واقع'), findsOneWidget);
-      expect(plain('المنفذان طافيان — الكيبل أو الـSFP'), findsOneWidget);
+      expect(plain('المنفذان متوقّفان — الكيبل أو الـSFP'), findsOneWidget);
       expect(plain('سرعة المنفذ'), findsOneWidget);
       expect(plain('ضوء الـSFP'), findsOneWidget);
       expect(plain('الإشارة'), findsNothing, reason: 'لا إشارة ولا CCQ لكيبل');
-      expect(plainHas('sfp1 · طافي'), findsOneWidget);
+      expect(plainHas('sfp1 · متوقّف'), findsOneWidget);
       await snap(t, 'fiber_sheet_down', p390);
       await close(t);
     });
 
-    testWidgets('كيبل بلا منفذ: «اختر المنفذ» — من تفاصيله يُختار من منافذ السويج كما تُقرأ الآن، والمأخوذ معطّل', (t) async {
+    testWidgets('كيبل بلا منفذ: «اختر المنفذ» — من تفاصيله يُختار من منافذ السويتش كما تُقرأ الآن، والمأخوذ معطّل', (t) async {
       final readings = mixedReadings();
       await boot(t, links: [_f(1, 102, 201, aPort: 'sfp-sfpplus1'), _f(3, 301, 201)], readings: readings, devices: [
         ...fourTowersDevices(),
-        _d(302, 'سويج المعامل', 3, type: 'switch'),
+        _d(302, 'سويتش المعامل', 3, type: 'switch'),
       ]);
       // كيبل الحيّ منفذه عند الرئيسيّ وحده ⇒ يُقرأ منه؛ وكيبل المعامل (راوتره ⇐ سويج الحيّ) بلا منفذ
       await openHub(t, tall(p390));
@@ -1133,7 +1133,7 @@ void main() {
       await close(t);
     });
 
-    testWidgets('«ربط برجين» ⇒ «كيبل ضوئي»: السويجات أوّلاً، والمنفذ بعد كلّ جهاز، والحفظ بنوعه ومنفذيه', (t) async {
+    testWidgets('«ربط برجين» ⇒ «كيبل ضوئي»: السويتشات أوّلاً، والمنفذ بعد كلّ جهاز، والحفظ بنوعه ومنفذيه', (t) async {
       await boot(t, links: [_l(2, 112, 311)], readings: mixedReadings());
       await openHub(t, p390);
       await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
@@ -1142,7 +1142,7 @@ void main() {
       expect(plain('لنك لاسلكي'), findsOneWidget);
       await t.tap(plain('كيبل ضوئي'));
       await settle(t, seconds: 1);
-      expect(plainHas('كيبل ضوئي (فايبر) مباشر بين سويجين'), findsOneWidget);
+      expect(plainHas('كيبل ضوئي (فايبر) مباشر بين سويتشين'), findsOneWidget);
       await snap(t, 'fiber_editor_empty', p390);
       await t.tap(find.byKey(const ValueKey('link-end-main')));
       await settle(t, seconds: 1);
@@ -1183,7 +1183,7 @@ void main() {
       await close(t);
     });
 
-    testWidgets('السويج لا يُقرأ الآن: يُكتب اسم المنفذ أو يُترك لوقتٍ لاحق — والربط يُحفظ ويُرسم', (t) async {
+    testWidgets('السويتش لا يُقرأ الآن: يُكتب اسم المنفذ أو يُترك لوقتٍ لاحق — والربط يُحفظ ويُرسم', (t) async {
       await boot(t, links: [], readings: {});
       await openHub(t, p390);
       await t.tap(find.byTooltip('ربط برجين — لنك أو كيبل'));
@@ -1194,7 +1194,7 @@ void main() {
       await settle(t, seconds: 1);
       await t.tap(find.byKey(const ValueKey('pick-device-102')));
       await settle(t, seconds: 1);
-      expect(plainHas('تعذّرت قراءة منافذ «سويج الرئيسي» الآن'), findsOneWidget);
+      expect(plainHas('تعذّرت قراءة منافذ «سويتش الرئيسي» الآن'), findsOneWidget);
       await snap(t, 'fiber_port_manual', p390);
       await t.enterText(find.byKey(const ValueKey('port-manual')), '  sfp-sfpplus3 ');
       await t.tap(find.byKey(const ValueKey('port-manual-use')));
@@ -1266,7 +1266,7 @@ void main() {
       await close(t);
     });
 
-    testWidgets('منفذٌ محدَّد وليس بين منافذ السويج كما قُرئت: يُقال عند طرفه — ولو قُرئ الكيبل من الطرف الآخر', (t) async {
+    testWidgets('منفذٌ محدَّد وليس بين منافذ السويتش كما قُرئت: يُقال عند طرفه — ولو قُرئ الكيبل من الطرف الآخر', (t) async {
       // منفذ الفرعيّ كُتب خطأً (sfp9)، ومنفذ الرئيسيّ صحيح ⇒ الكيبل يُقرأ من الرئيسيّ، والخطأ يظهر عند طرفه
       await boot(t, links: [_f(1, 102, 201, aPort: 'sfp-sfpplus1', bPort: 'sfp9')], readings: mixedReadings());
       await openHub(t, p390);
