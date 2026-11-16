@@ -44,6 +44,11 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   late final TextEditingController _passCtrl;
   late final TextEditingController _communityCtrl;
 
+  /// دخول صفحة أولت HSGQ (لبرمجيّته القديمة: قائمة الـONU من الصفحة لا من SNMP — [HsgqWeb]).
+  late final TextEditingController _webUserCtrl;
+  late final TextEditingController _webPassCtrl;
+  bool _obscureWebPassword = true;
+
   late String _type;
   late String _brand;
   String? _protocol;
@@ -76,6 +81,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     _userCtrl = TextEditingController();
     _passCtrl = TextEditingController();
     _communityCtrl = TextEditingController(text: 'public');
+    _webUserCtrl = TextEditingController();
+    _webPassCtrl = TextEditingController();
     _type = e?.type ?? 'router';
     _brand = e?.brand ?? 'mikrotik';
     _protocol = e?.protocol;
@@ -116,6 +123,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         _passCtrl.text = (creds['pass'] ?? '').toString();
         _communityCtrl.text = (creds['community'] ?? 'public').toString();
         _snmpVersion = (creds['version'] ?? 'v2c').toString();
+        _webUserCtrl.text = (creds['web_user'] ?? '').toString();
+        _webPassCtrl.text = (creds['web_pass'] ?? '').toString();
       });
     } catch (_) {
       // فشل جلب بيانات الدخول: الحقول تبقى فارغة والمستخدم يملؤها يدويّاً.
@@ -135,6 +144,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     _userCtrl.dispose();
     _passCtrl.dispose();
     _communityCtrl.dispose();
+    _webUserCtrl.dispose();
+    _webPassCtrl.dispose();
     super.dispose();
   }
 
@@ -143,7 +154,14 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     if (_protocol == 'snmp') {
       final community = _communityCtrl.text.trim();
       if (community.isEmpty) return null;
-      return {'community': community, 'version': _snmpVersion};
+      final wu = _webUserCtrl.text.trim();
+      final wp = _webPassCtrl.text;
+      return {
+        'community': community,
+        'version': _snmpVersion,
+        // أولت HSGQ وحده: دخول صفحته يُحفظ مع الـcommunity (مشفّراً على الخادم كبقيّة بيانات الجهاز)
+        if (_brand == 'hsgq' && wu.isNotEmpty && wp.isNotEmpty) ...{'web_user': wu, 'web_pass': wp},
+      };
     }
     final u = _userCtrl.text.trim();
     final p = _passCtrl.text;
@@ -525,6 +543,36 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         const SizedBox(height: 10),
         _textField(_communityCtrl, 'Community string',
             hint: 'public', icon: LucideIcons.key),
+        if (_brand == 'hsgq') ..._hsgqWebFields(),
+      ];
+
+  /// دخول صفحة أولت HSGQ — اختياريّ. برمجيّاته القديمة (مثل E04 بـV3.0) لا تكشف قائمة الـONU عبر SNMP، فيقرؤها التطبيق من
+  /// صفحته بهذا الحساب (قراءة وحدها). الأحدث لا يحتاجه.
+  List<Widget> _hsgqWebFields() => [
+        const SizedBox(height: 14),
+        Row(children: [
+          Icon(LucideIcons.globe, size: 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('دخول صفحة الأولت (اختياريّ)', style: AppType.pillBold(color: AppColors.textHi)),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+          'لأولتات HSGQ ببرمجيّةٍ قديمة لا تُظهر قائمة الـONU عبر SNMP — يقرؤها التطبيق من صفحة الأولت بهذا الحساب، للعرض فقط.',
+          style: AppType.micro(color: AppColors.textMid),
+        ),
+        const SizedBox(height: 10),
+        _textField(_webUserCtrl, 'اسم مستخدم الصفحة', hint: 'root', icon: LucideIcons.user),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: _webPassCtrl,
+          obscureText: _obscureWebPassword,
+          decoration: _inputDecoration('كلمة مرور الصفحة', icon: LucideIcons.lock).copyWith(
+            suffixIcon: IconButton(
+              icon: Icon(_obscureWebPassword ? LucideIcons.eye : LucideIcons.eyeOff, size: 18),
+              onPressed: () => setState(() => _obscureWebPassword = !_obscureWebPassword),
+            ),
+          ),
+        ),
       ];
 
   Widget _textField(

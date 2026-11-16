@@ -152,6 +152,7 @@ class VsolOltApi {
         uptime: uptime,
         withCounters: withCounters,
         onPartialReady: onPartialReady,
+        host: host,
       );
     }
 

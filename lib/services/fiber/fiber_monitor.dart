@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../api/bdcom_epon.dart';
 import '../../api/company_route.dart';
 import '../../api/bridge_fdb.dart';
+import '../../api/hsgq_web.dart';
 import '../../api/broadcast_api.dart';
 import '../../api/fiber_api.dart';
 import '../../api/olt_get_tables.dart';
@@ -31,6 +32,7 @@ class FiberBackend {
 
   Future<String?> community(NetworkDevice d) async {
     final c = await NetworkDevicesApi.getCredentials(d.id);
+    HsgqWeb.registerFrom(d.ip, c); // HSGQ ببرمجيّةٍ قديمة: قائمة الـONU من صفحته
     final v = (c['community'] ?? c['pass'] ?? '').toString().trim();
     return v.isEmpty ? null : v;
   }

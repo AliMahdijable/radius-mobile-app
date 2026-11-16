@@ -28,6 +28,7 @@ abstract class OltGetTables {
     Duration? uptime,
     bool withCounters = false,
     void Function(VsolOltStats partial)? onPartialReady,
+    String? host,
   });
 
   Future<({VsolOltStats stats, int unknown})?> refreshStatus(OltGet get, VsolOltStats previous);
@@ -55,14 +56,16 @@ class _Hsgq extends OltGetTables {
           String? sysName,
           Duration? uptime,
           bool withCounters = false,
-          void Function(VsolOltStats partial)? onPartialReady}) =>
+          void Function(VsolOltStats partial)? onPartialReady,
+          String? host}) =>
       HsgqOlt.fetchStats(get,
           profile: profile,
           sysDescr: sysDescr,
           sysName: sysName,
           uptime: uptime,
           withCounters: withCounters,
-          onPartialReady: onPartialReady);
+          onPartialReady: onPartialReady,
+          host: host);
 
   @override
   Future<({VsolOltStats stats, int unknown})?> refreshStatus(OltGet get, VsolOltStats previous) =>
@@ -102,7 +105,8 @@ class _Cdata extends OltGetTables {
           String? sysName,
           Duration? uptime,
           bool withCounters = false,
-          void Function(VsolOltStats partial)? onPartialReady}) =>
+          void Function(VsolOltStats partial)? onPartialReady,
+          String? host}) =>
       CdataOlt.fetchStats(get,
           profile: profile,
           sysDescr: sysDescr,

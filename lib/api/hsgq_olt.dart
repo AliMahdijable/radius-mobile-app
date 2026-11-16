@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/fiber/fiber_band.dart';
 import 'bdcom_epon.dart';
+import 'hsgq_web.dart';
 import 'olt_profile.dart';
 import 'snmp_client.dart';
 import 'vsol_olt_api.dart';
@@ -435,7 +436,10 @@ class HsgqOlt {
     Duration? uptime,
     bool withCounters = false,
     void Function(VsolOltStats partial)? onPartialReady,
+    String? host,
   }) async {
+    // برمجيّةٌ قديمة بدخول صفحةٍ محفوظ: القائمة تُطلب الآن فتتوازى مع المنافذ ([HsgqWeb.prefetch]) — ٧ ث ⇒ ~٤ ث حيّاً.
+    if (host != null) HsgqWeb.prefetch(host);
     final id = await _getAll(get, const [ponCountOid, portCountOid, firmwareOid], strict: true);
     final pons = _count(id?[ponCountOid], 64);
     final count = _count(id?[portCountOid], 256);
@@ -467,6 +471,20 @@ class HsgqOlt {
     onPartialReady?.call(early);
     final status = await scanOnus(get, pons);
     if (status == null) throw VsolException('قراءةٌ ناقصة: لم يُجب الأولت بحالة كلّ الـONU');
+    // ١٦ نوفمبر (HSGQ-E04 ببرمجيّة V3.0.18): لا ONU في أيّ موضع — أهو أولتٌ فارغ («noSuchInstance» لكلّ موضع) أم أولتٌ لا جدول
+    // له أصلاً («noSuchObject»)؟ الثاني تُملأ قائمته من صفحته ([HsgqWeb]) — وإن لم يُسجَّل دخولها أو فشل فرسالةٌ تقول ما يلزم،
+    // لا «٠ مشترك» على أولتٍ يخدم مئة.
+    if (status.isEmpty) {
+      final probe = statusOid(onuIndex(1, 1));
+      final vb = (await _getAll(get, [probe]))?[probe];
+      if (vb != null && vb.rawTag == 0x80) {
+        final viaWeb = host != null && HsgqWeb.has(host);
+        throw VsolException(viaWeb
+            ? 'تعذّرت قراءة قائمة الـONU من صفحة الأولت: ${HsgqWeb.issueFor(host) ?? 'لم تردّ'}'
+            : 'هذا الأولت (HSGQ ببرمجيّةٍ قديمة) لا يكشف قائمة الـONU عبر SNMP — أضف «دخول صفحة الأولت» '
+                '(اسم المستخدم وكلمة المرور) في تعديل الجهاز فيقرؤها التطبيق من صفحته');
+      }
+    }
     onPartialReady?.call(snap(status));
     final d = await details(get, status.keys);
     if (kDebugMode) {
