@@ -76,7 +76,9 @@ void main() {
     packages(const []);
     await openPackages(t);
     packages(const [economy]);
-    await t.fling(find.byType(SingleChildScrollView).last,
+    // داخل التبويب نفسه (١٦ نوفمبر: شريط التبويبات الأربعة يتمرّر أفقيّاً على الهاتف الضيّق — وهو SingleChildScrollView أيضاً)
+    await t.fling(
+        find.descendant(of: find.byType(TabBarView), matching: find.byType(SingleChildScrollView)).last,
         const Offset(0, 400), 1200);
     await t.pumpAndSettle();
     expect(server.calls('GET', _packages), hasLength(2));
