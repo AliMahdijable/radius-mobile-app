@@ -22,10 +22,11 @@ const _fixturePath = 'test/fixtures/receipt_layout.fixtures.json';
 const _frozenPath = 'test/fixtures/receipt_layout.fixtures.v1.json';
 
 /// البصمة المثبّتة — هي `RECEIPT_FIXTURES_SHA256` في الموقع. ملفٌّ تغيّر في جهةٍ واحدة يُسقط هذا الاختبار.
-const _pinnedSha = 'ce3363995b28f8c435ee9b4e1573ad7b48b4d0e43490f174b7417d387e91b94f'; // ٢ نوفمبر: «wallet» (تفعيل الوطنيّ من محفظة المشترك)
+const _pinnedSha = '3e7c3193edfc68c4b732a25ac80919e0521b11c89d3c338740194421966ec37b'; // ١٧ نوفمبر: «المدفوع نقداً» + «حراريّ ٥٨/٨٠»
 
-/// الملفّ الأوّل مجمَّداً (بند 29) — لا يتغيّر أبداً.
-const _frozenSha = 'd18f3130a40e532cdaed7301fb32f6adfdd699cae87dde0a399a5e54f07614f1';
+/// الملفّ الأوّل مجمَّداً (بند 29) — لا يتغيّر إلّا بقرارٍ يمسّ العقد في المستودعين معاً
+/// (١٧ نوفمبر: العنوان «المُدفَع نقداً» ⇐ «المدفوع نقداً» وحده — كانت d18f3130…).
+const _frozenSha = '9198c4f63d6b0d55d909e271a6e7a46eb90d21732ea0f30372fa98350f8f13b6';
 
 /// ناتج v3 بلا مفاتيحه الجديدة — ويذكر أيّ مفتاحٍ جديد خرج بغير قيمته الحياديّة (`stripV3` في فحص الموقع).
 ({Map<String, dynamic> out, List<String> bad}) _stripV3(Map<String, dynamic> r) {
