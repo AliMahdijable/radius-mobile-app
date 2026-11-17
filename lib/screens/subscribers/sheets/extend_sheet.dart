@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'dart:ui' as ui;
 
@@ -11,6 +13,7 @@ import '../../../models/subscriber.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../services/op_wa_notice.dart';
 import '../../../services/provider_service.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
@@ -224,6 +227,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     final profileId = pkg['id']?.toString() ?? '';
     if (profileId.isEmpty) return;
     setState(() => _submitting = true);
+    // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التمديد؟» (OpWaNotice).
+    final pressedAt = DateTime.now();
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يعيد wa_preview
     // بلا إرسال، ونفتح modal بعد النجاح.
     final manualMode = ManualWaPrefs.enabled.value;
@@ -263,7 +268,16 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       return;
     }
     SubscriberEvents.notifyChange();
-    showSheetSnack(context, 'sheets.extend_ok'.tr(), isError: false);
+    // النجاح ومعه نتيجة رسالة التمديد (أُرسلت / لم تُرسل بسببها) — يبقى بعد إغلاق الورقة.
+    unawaited(OpWaNotice.show(
+      context,
+      sub: widget.sub,
+      op: OpWaKind.extend,
+      okText: 'sheets.extend_ok'.tr(),
+      pressedAt: pressedAt,
+      wa: result.wa,
+      manual: manualMode,
+    ));
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       setState(() => _printingReceipt = true);
