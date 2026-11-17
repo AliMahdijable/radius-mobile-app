@@ -86,7 +86,13 @@ class _Row extends StatelessWidget {
     // يطلبه (`include_voids` — dashboard_api.dart) ويعلّمه `pay_void` ومعه مبلغه ومن ألغاه: فلا يُشتقّ شيءٌ من نوعه ولا من وصفه
     // (كان سيُقرأ «تسديد دين» بمبلغه).
     final isVoid = _truthy(m['pay_void']);
-    final visual = isVoid ? (Icons.undo_rounded, AppTone.danger) : _visualForAction(action);
+    // «إضافة رصيد» (١٧ نوفمبر): أيقونة رصيدٍ خضراء لا محفظة الدين الحمراء — من وصفها (السطر BALANCE_ADD نفسه).
+    final isCredit = descr.trimLeft().startsWith('إضافة رصيد') && !action.toLowerCase().contains('manager');
+    final visual = isVoid
+        ? (Icons.undo_rounded, AppTone.danger)
+        : isCredit
+            ? (Icons.savings_rounded, descr.contains('(تعويض)') ? AppTone.neutral : AppTone.success)
+            : _visualForAction(action);
     // Backend enriches each row with user_firstname / user_lastname /
     // user_username via SAS4's user directory (see
     // /api/activities/daily-activations row enrichment). The Arabic
@@ -305,6 +311,19 @@ class _Row extends StatelessWidget {
       );
       return (
         label: 'تسديد دين',
+        detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
+      );
+    }
+    // «إضافة رصيد» (١٧ نوفمبر — المالك: «الحركه جاي تطلع اضافة دين وليس اضافة رصيد»): سطر BALANCE_ADD ووصفه «إضافة رصيد X د.ع
+    // (مقدّم نقداً|تعويض) …» — باسمها قبل «إضافة دين».
+    if ((lower.contains('balance_add') || lower.contains('add_balance') || lower.contains('add_credit')) &&
+        description.trimLeft().startsWith('إضافة رصيد')) {
+      final amt = _extractAmount(
+        description,
+        RegExp(r'إضافة\s+رصيد\s+([\d,]+)'),
+      );
+      return (
+        label: description.contains('(تعويض)') ? 'إضافة رصيد (تعويض)' : 'إضافة رصيد',
         detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
       );
     }

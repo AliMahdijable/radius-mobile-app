@@ -94,7 +94,7 @@ const List<ReportActionTypeOption> kFinancialActionTypes = [
       key: 'SUBSCRIBER_ACTIVATE_CASH', label: 'actions.activate_cash'),
   ReportActionTypeOption(
       key: 'SUBSCRIBER_ACTIVATE_NON_CASH', label: 'actions.activate_non_cash'),
-  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_or_credit_add'),
   ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend_sub'),
   ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'actions.expense'),
 ];
@@ -112,7 +112,7 @@ const List<ReportActionTypeOption> kAccountStatementActionTypes = [
   ReportActionTypeOption(key: 'DEBT_PAY', label: 'actions.debt_pay'),
   ReportActionTypeOption(
       key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
-  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_or_credit_add'),
 ];
 
 const List<ReportActionTypeOption> kAllActionTypes = [
@@ -121,7 +121,7 @@ const List<ReportActionTypeOption> kAllActionTypes = [
   ReportActionTypeOption(key: 'DEBT_PAY', label: 'actions.debt_pay'),
   ReportActionTypeOption(
       key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
-  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_or_credit_add'),
   ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'actions.expense'),
   ReportActionTypeOption(key: 'EXPENSE_ADD', label: 'actions.expense_manual'),
   ReportActionTypeOption(key: 'SUBSCRIBER_ADD', label: 'actions.sub_add'),

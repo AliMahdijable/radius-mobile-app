@@ -547,7 +547,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                   'cost': formatIQD(cost.sum),
                   'goods': '${k.goodsProfitSum < 0 ? '-' : ''}${formatIQD(k.goodsProfitSum)}',
                   'loss': '${k.goodsLossSum < 0 ? '-' : ''}${formatIQD(k.goodsLossSum)}',
-                }),
+                }) +
+                    // «إضافة رصيد» تعويضاً (١٧ نوفمبر): يُطرح من الصافي بعد الكلفة — بحدّه في الصيغة.
+                    (k.creditCompSum > 0 ? ' − تعويضات ${formatIQD(k.creditCompSum)}' : ''),
                 warn: false,
               ),
             if (cost.missingRows > 0)
@@ -709,8 +711,16 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     final items = <_KpiItem>[
       _KpiItem('actions.activate_cash'.tr(), formatIQD(k.activateCashSum),
           AppColors.success, LucideIcons.zap),
-      _KpiItem('actions.debt_pay'.tr(), formatIQD(debtPayTotal),
+      // المقدّم نقداً داخلٌ في «تسديد الديون» عند الخادم — يُفصل عنه بسطره (١٧ نوفمبر).
+      _KpiItem('actions.debt_pay'.tr(), formatIQD(debtPayTotal - k.creditCashSum),
           AppColors.success, LucideIcons.banknote),
+      if (k.creditCashSum > 0)
+        _KpiItem('رصيد مقدّم (نقداً)', formatIQD(k.creditCashSum),
+            AppColors.success, LucideIcons.coins),
+      if (k.creditCompSum > 0)
+        _KpiItem('تعويضات بلا نقد', formatIQD(k.creditCompSum),
+            AppColors.textMid, LucideIcons.gift,
+            isCount: true),
       _KpiItem(
           'actions.activate_non_cash'.tr(),
           formatIQD(k.activateNonCashSum),
@@ -874,6 +884,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         balanceDeduct = 0,
         balanceAdd = 0,
         balanceAddSales = 0,
+        creditCash = 0,
+        creditComp = 0,
         expenses = 0;
     int activationsCount = 0, extendCount = 0, expensesCount = 0;
     for (final l in logs) {
@@ -898,6 +910,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         debtPay += l.amount;
       } else if (at == 'BALANCE_DEDUCT') {
         balanceDeduct += l.amount;
+      } else if (at == 'BALANCE_ADD' && l.isCredit) {
+        // «إضافة رصيد» (١٧ نوفمبر — كالخادم): المقدّم نقداً نقدٌ محصَّل (داخل «تسديد الديون» كـdebt_pay_sum)، والتعويض يُطرح من
+        // الصافي بعد الكلفة؛ وما قبله بلا نوع لا نقد — ولا شيء منها «إضافة دين».
+        if (l.creditKind == 'cash') {
+          debtPay += l.amount.abs();
+          creditCash += l.amount.abs();
+        } else if (l.creditKind == 'comp') {
+          creditComp += l.amount.abs();
+        }
       } else if (at == 'BALANCE_ADD') {
         balanceAdd += l.amount;
         // دين البيع وإنقاصه عند الإلغاء — ثمن مادّة لا «إضافة دين يدويّة» ([FinanceKPIs.manualDebtAddSum]).
@@ -920,6 +941,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       packageCost: packageCost,
       partialUnpaidFromLogs: partialUnpaid,
       balanceAddSalesSum: balanceAddSales,
+      creditCashSum: creditCash,
+      creditCompSum: creditComp,
     );
   }
 

@@ -21,6 +21,10 @@ import '../../../widgets/merged_write_lock.dart';
 /// بإشارةٍ موجبة ولونٍ أخضر: الرصيد يزيد (`balance + amount`)، والمعاينة تُظهر
 /// الناتج (دائن إن صار موجباً، أو ديناً متبقّياً إن بقي سالباً). يرسل إلى
 /// `/api/v2/subscribers/:idx/add-credit`.
+///
+/// «نوع الرصيد» (١٧ نوفمبر — المالك: «اضمنها ضمن التقارير المالية وتقارير الارصده»): اختيارٌ صريح بلا اختيارٍ مسبق —
+/// «استلمت نقداً» (مقدّمٌ يدخل الصندوق والنقد المُستلم الآن؛ والتفعيل منه لاحقاً «غير نقدي» لا يُعدّ نقداً ثانيةً) أو
+/// «تعويض بلا نقد». الزرّ معطّلٌ حتى يُختار؛ ويُرسل `credit_kind`.
 Future<bool?> showAddCreditSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
   if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
@@ -50,6 +54,9 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
   int _amount = 0;
   bool _submitting = false;
   bool _suppressFormat = false;
+
+  /// `cash` | `comp` | null (لم يُختر بعد — الزرّ معطّل).
+  String? _kind;
 
   late final double _currentBalance = widget.sub.balanceAmount;
   late final double _currentDebt =
@@ -115,7 +122,7 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
     return buf.toString();
   }
 
-  bool get _canSubmit => !_submitting && widget.sub.idx != null && _amount > 0;
+  bool get _canSubmit => !_submitting && widget.sub.idx != null && _amount > 0 && _kind != null;
 
   Future<void> _confirmAndSubmit() async {
     final amount = _amount.toDouble();
@@ -133,7 +140,7 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
         ),
         content: Text(
           'سيتم إضافة ${formatIQD(amount.round())} د.ع كرصيدٍ دائن إلى '
-          '"${widget.sub.fullName}".\n$after',
+          '"${widget.sub.fullName}" — ${_kind == 'comp' ? 'تعويض بلا نقد' : 'استلمت المبلغ نقداً'}.\n$after',
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
@@ -159,9 +166,12 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
     final idx = widget.sub.idx;
     if (idx == null) return;
     setState(() => _submitting = true);
+    final kind = _kind;
+    if (kind == null) return;
     final result = await MergedOps.write(widget.sub, () => SubscribersApi.addCredit(
       idx: idx,
       amount: _amount.toDouble(),
+      creditKind: kind,
       comment:
           _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
     ));
@@ -171,7 +181,7 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
     showSheetSnack(
       context,
       result.ok
-          ? 'تم إضافة الرصيد بنجاح'
+          ? (kind == 'comp' ? 'تم إضافة الرصيد (تعويض)' : 'تم إضافة الرصيد (نقداً)')
           : (result.message ?? 'فشل إضافة الرصيد'),
       isError: !result.ok,
     );
@@ -235,6 +245,32 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
                         onTap: () => _addToAmount(c),
                       ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Sp.lg),
+          SheetSection(
+            label: 'نوع الرصيد',
+            gap: 9,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SheetChoiceTiles(
+                  labels: const ['استلمت نقداً', 'تعويض بلا نقد'],
+                  icons: const [LucideIcons.banknote, LucideIcons.gift],
+                  selectedIndex: _kind == 'cash' ? 0 : _kind == 'comp' ? 1 : -1,
+                  enabled: !_submitting,
+                  onSelect: (i) => setState(() => _kind = i == 0 ? 'cash' : 'comp'),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  _kind == 'cash'
+                      ? 'يدخل الصندوق والنقد المُستلم الآن، والتفعيل منه لاحقاً لا يُحسب نقداً مرّةً ثانية.'
+                      : _kind == 'comp'
+                          ? 'لا نقد: لا يدخل الصندوق ولا النقد المُستلم.'
+                          : 'اختر: استلمت المبلغ من المشترك نقداً، أم هو تعويضٌ منك بلا نقد؟',
+                  style: AppType.muted(),
                 ),
               ],
             ),
