@@ -21,7 +21,7 @@ import 'package:flutter/foundation.dart';
 /// نقيّ: لا ساعة ولا شبكة ولا واجهة — الوقت والرقم يصلان نصّاً جاهزاً، وما لا يُفهم من التصميم افتراضيّ (لا رمي أبداً).
 
 /// بصمة sha256 لملفّ التثبيت المشترك — هي نفسها `RECEIPT_FIXTURES_SHA256` في الموقع.
-const String receiptFixturesSha256 = 'ce3363995b28f8c435ee9b4e1573ad7b48b4d0e43490f174b7417d387e91b94f';
+const String receiptFixturesSha256 = '3e7c3193edfc68c4b732a25ac80919e0521b11c89d3c338740194421966ec37b';
 
 // ───────────────────────── الثوابت المشتركة (tokens في ملفّ التثبيت) ─────────────────────────
 
@@ -168,7 +168,7 @@ const Map<String, ReceiptFieldDef> receiptFieldDefs = {
   'payment_type': ReceiptFieldDef('transaction', 'طريقة الدفع', bold: true, ltr: false, mode: 'row', kinds: _kActExt),
   'amount': ReceiptFieldDef('transaction', 'المبلغ',
       bold: true, ltr: false, mode: 'row', kinds: ['activation', 'extension', 'payment']),
-  'cash_paid': ReceiptFieldDef('transaction', 'المُدفَع نقداً', bold: true, ltr: false, mode: 'row', kinds: _kActExt),
+  'cash_paid': ReceiptFieldDef('transaction', 'المدفوع نقداً', bold: true, ltr: false, mode: 'row', kinds: _kActExt),
   'balance_debt': ReceiptFieldDef('transaction', 'الدين المتبقّي', bold: true, ltr: false, mode: 'row', kinds: _kSubs),
   'balance_credit': ReceiptFieldDef('transaction', 'الرصيد المتبقّي', bold: true, ltr: false, mode: 'row', kinds: _kSubs),
   'qr_caption':
@@ -560,14 +560,14 @@ const List<String> receiptTemplateIds = ['pos58_compact', 'pos80', 'a4_formal'];
 
 final Map<String, ReceiptTemplateDef> receiptTemplates = {
   'pos58_compact': ReceiptTemplateDef(
-    'كاشير ٥٨ مضغوط',
+    'حراريّ ٥٨ مضغوط',
     paperSize: 'pos',
     v1: {'paper_width_mm': 58, ...receiptPresets['compact']!.v1},
     density: 'compact',
     mono: true,
   ),
   'pos80': ReceiptTemplateDef(
-    'كاشير ٨٠',
+    'حراريّ ٨٠',
     paperSize: 'pos',
     v1: {'paper_width_mm': 80, ...receiptPresets['normal']!.v1},
     density: 'normal',

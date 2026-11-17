@@ -155,7 +155,7 @@ class ReceiptDoc {
       if (pay != null) rows.add(('طريقة الدفع', pay!.label, null));
       if (amount != null) rows.add(('المبلغ', ReceiptPdf.money(amount!), null));
       if (pay == ReceiptPay.partial && partialAmount != null) {
-        rows.add(('المُدفَع نقداً', ReceiptPdf.money(partialAmount!), null));
+        rows.add(('المدفوع نقداً', ReceiptPdf.money(partialAmount!), null));
       }
     } else if (kind == ReceiptKind.payment && amount != null) {
       rows.add(('المبلغ المسدَّد', ReceiptPdf.money(amount!), null));

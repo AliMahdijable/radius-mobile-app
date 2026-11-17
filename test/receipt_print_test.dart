@@ -214,7 +214,7 @@ void main() {
       expect(_receipt(ReceiptKind.activation).transactionRows.map((r) => r.$1), [
         'طريقة الدفع',
         'المبلغ',
-        'المُدفَع نقداً',
+        'المدفوع نقداً',
         'الدين المتبقّي',
       ]);
       final pay = ReceiptDoc(

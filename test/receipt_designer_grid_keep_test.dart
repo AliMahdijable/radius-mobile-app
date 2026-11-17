@@ -49,7 +49,7 @@ Future<(ReceiptDesignController, List<Map<String, dynamic>>)> _ctl(Map<String, d
 }
 
 void main() {
-  test('وصل الشبكة: قالبٌ جاهز (كاشير ٥٨) يضبط الورق ويُبقي الشبكة كما هي — بلا density/mono', () async {
+  test('وصل الشبكة: قالبٌ جاهز (حراريّ ٥٨) يضبط الورق ويُبقي الشبكة كما هي — بلا density/mono', () async {
     final (c, sent) = await _ctl({'paper_width_mm': 80, 'layout': _grid});
     expect(c.isGrid, isTrue);
     c.applyTemplate('pos58_compact');
