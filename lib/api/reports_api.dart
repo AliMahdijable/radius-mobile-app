@@ -347,7 +347,8 @@ class FinanceKPIs {
 /// (`voided_by_employee_id`: رقم الموظّف، أو null = صاحب الصفحة). true ⇒ المنفّذ المعروض والمصدَّر صاحب الصفحة لا الموظّف.
 bool voidedByManager(Map<String, dynamic> j) {
   bool on(Object? v) => v == true || v == 1 || v == '1' || v == 'true';
-  return (on(j['pay_void']) || on(j['pay_void_link'])) && j['voided_by_employee_id'] == null;
+  // و«إلغاء إضافة دين/رصيد» (١٧ نوفمبر — op_void) كذلك: سطره منسوبٌ لمن سجّل الأصل.
+  return (on(j['pay_void']) || on(j['pay_void_link']) || on(j['op_void'])) && j['voided_by_employee_id'] == null;
 }
 
 class FinanceLog {

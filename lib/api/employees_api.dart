@@ -462,6 +462,8 @@ class ElEmployeePerms {
     'subscribers.add_debt',
     'subscribers.pay_debt',
     voidPaymentKey,
+    voidAddDebtKey,
+    voidAddCreditKey,
     'subscribers.add_credit',
     'subscribers.send_whatsapp',
     'subscribers.view_activity',
@@ -519,6 +521,8 @@ class ElEmployeePerms {
     'subscribers.add_debt',
     'subscribers.pay_debt',
     voidPaymentKey,
+    voidAddDebtKey,
+    voidAddCreditKey,
     'subscribers.send_whatsapp',
     'subscribers.view_activity',
     'packages.view',
@@ -603,6 +607,9 @@ class ElEmployeePerms {
     'sales.void',
     // «إلغاء تسديد» (١١ نوفمبر) — يُرجع دين المشترك ويُخرج مبلغه من الصندوق، فيُمنح وحده (خارج «موظّف عام»).
     voidPaymentKey,
+    // «إلغاء إضافة دين/رصيد» (١٧ نوفمبر) كذلك — ما سجّله الموظّف وحده.
+    voidAddDebtKey,
+    voidAddCreditKey,
     // «التذاكر» (٩ نوفمبر) — تُمنح وحدها (خارج «موظّف عام»).
     ...ticketKeys,
     // الفحصان (مفعّلان افتراضاً) وما عبر VPN والتنبيهات (٩ نوفمبر) — خارج الأدوار الجاهزة ([roleFreeKeys]).
@@ -674,9 +681,16 @@ class ElEmployeePerms {
   /// الميزة للحساب ([offered]). وفي قوائم الشركات الثلاث ليُرسَل كما اختاره المالك — ما خارجها لا يُرسل، والخادم يُبقيه على المحفوظ.
   static const voidPaymentKey = 'subscribers.void_payment';
 
+  /// «إلغاء إضافة دين» و«إلغاء إضافة رصيد» (١٧ نوفمبر — الخادم `server/opVoids.js`): الموظّف يلغي ما سجّله هو فقط. مطفأتان افتراضاً
+  /// عند الخادم وخارج كلّ دورٍ جاهز، والكتالوج لا يعرضهما حتى تُفتح الميزة للحساب ([offered]) — كمفتاح «إلغاء تسديد».
+  static const voidAddDebtKey = 'subscribers.void_add_debt';
+  static const voidAddCreditKey = 'subscribers.void_add_credit';
+
   /// ما يشمله المفتاح عند ايرث لنك ولا تقوله تسميته في الكتالوج.
   static const hints = <String, String>{
     voidPaymentKey: 'تسديدٌ سجّله هو فقط — يرجع دين المشترك وينقص المبلغ من الصندوق',
+    voidAddDebtKey: 'إضافة دينٍ سجّلها هو فقط — ينقص دين المشترك',
+    voidAddCreditKey: 'إضافة رصيدٍ سجّلها هو فقط — ينقص رصيد المشترك، والنقد يخرج من الصندوق',
     'subscribers.add': 'بالرصيد (بكلمة مرور الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
     'subscribers.toggle': 'يشمل قطع اتصال المشترك',
     'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',

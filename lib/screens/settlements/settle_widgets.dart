@@ -163,6 +163,7 @@ class MovementTile extends StatelessWidget {
       'supplier_refund_void' => LucideIcons.undo2,
       'debt_payment_void' => LucideIcons.undo2,
       'credit_cash' => LucideIcons.coins,
+      'credit_cash_void' => LucideIcons.undo2,
       'emp_advance' || 'emp_withdraw' || 'emp_loan' || 'emp_repayment' || 'emp_payslip_recover' => LucideIcons.users,
       'emp_advance_void' || 'emp_withdraw_void' || 'emp_loan_void' || 'emp_repayment_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
@@ -179,6 +180,8 @@ class MovementTile extends StatelessWidget {
       'debt_payment_void' => 'settle.kind_debt_payment_void'.tr(),
       // «إضافة رصيد» مقدّماً نقداً (١٧ نوفمبر): نقدٌ داخلٌ بيد من استلمه — بلا زرّ إلغاء (الخادم لا يرسل رقم سطر تسديد).
       'credit_cash' => 'settle.kind_credit_cash'.tr(),
+      // «إلغاء إضافة رصيد» نقداً (١٧ نوفمبر — server/opVoids.js): خارجٌ من حصّة من استلم الأصل.
+      'credit_cash_void' => 'settle.kind_credit_cash_void'.tr(),
       'emp_advance' => 'settle.kind_emp_advance'.tr(),
       'emp_withdraw' => 'settle.kind_emp_withdraw'.tr(),
       'emp_loan' => 'settle.kind_emp_loan'.tr(),
@@ -225,7 +228,7 @@ class MovementTile extends StatelessWidget {
         if (isSale && (m.description ?? '').isNotEmpty)
           m.description!.replaceFirst(RegExp(r'^(?:إلغاء بيع|بيع):\s*'), ''),
         // سطر الإلغاء منسوبٌ لمن استلم التسديد (من حصّته يخرج المبلغ) — «من حصّة فلان» فلا يُقرأ «فلان ألغى»
-        m.kind == 'debt_payment_void' ? 'settle.pay_void_from_share'.tr(namedArgs: {'who': who}) : who,
+        m.kind == 'debt_payment_void' || m.kind == 'credit_cash_void' ? 'settle.pay_void_from_share'.tr(namedArgs: {'who': who}) : who,
         settleWhen(m.createdAt),
       ], ' · '),
       style: AppType.muted(),

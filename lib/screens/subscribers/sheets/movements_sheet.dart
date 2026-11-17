@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../services/merged_mode.dart';
+import '../../../api/op_voids_api.dart';
 import '../../../api/payment_voids_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
@@ -14,6 +15,7 @@ import '../../../theme/typography.dart';
 import '../../../core/util/server_time.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../widgets/payment_void_bits.dart';
+import 'op_void_sheet.dart';
 import 'payment_void_sheet.dart';
 
 /// Subscriber movements / account-statement sheet — direct port of
@@ -62,6 +64,10 @@ class _MovementsSheetState extends State<_MovementsSheet> {
   PaymentVoidStatus _voids = PaymentVoidStatus.off;
   int _voidsGen = 0;
 
+  /// «إلغاء إضافة دين/رصيد» (١٧ نوفمبر): حال الإضافات المعروضة وهل يلغي هذا الفاعل كلّ نوع.
+  OpVoidStatus _opVoids = OpVoidStatus.off;
+  int _opGen = 0;
+
   /// الإلغاء للشركة المفتوحة وحدها: صفٌّ بمفتاح شركة («كل الشركات») كشفه موجَّهٌ لها، والخادم لا يوجّه الإلغاء.
   bool get _voidHere => widget.sub.companyKey == null;
 
@@ -91,7 +97,52 @@ class _MovementsSheetState extends State<_MovementsSheet> {
       }
       _loading = false;
     });
-    if (txs != null) _loadVoids(txs);
+    if (txs != null) {
+      _loadVoids(txs);
+      _loadOpVoids(txs);
+    }
+  }
+
+  Future<void> _loadOpVoids(List<Map<String, dynamic>> txs) async {
+    final gen = ++_opGen;
+    final ids = <int>[
+      if (_voidHere)
+        for (final t in txs)
+          if (OpVoidsApi.opIdOf(t) != null) OpVoidsApi.opIdOf(t)!,
+    ];
+    final st = ids.isEmpty ? OpVoidStatus.off : await OpVoidsApi.status(ids);
+    if (!mounted || gen != _opGen) return;
+    setState(() => _opVoids = st);
+  }
+
+  /// رصيد المشترك كما يعرضه السجلّ الآن (أحدث حركةٍ تحمل رصيداً) — لمعاينة «الآن ⇒ بعد الإلغاء».
+  num? get _currentBalance {
+    for (final t in _all) {
+      final b = t['balance_after'] == null ? null : _MovementTile._readSigned(t['balance_after']);
+      if (b != null) return b;
+    }
+    return null;
+  }
+
+  Future<void> _openOpVoid(Map<String, dynamic> txn) async {
+    final id = OpVoidsApi.opIdOf(txn);
+    final kind = OpVoidsApi.opKindOf(txn);
+    if (id == null || kind == null || !_voidHere) return;
+    final changed = await showOpVoidSheet(
+      context,
+      opId: id,
+      kind: kind,
+      creditKind: OpVoidsApi.opCreditKindOf(txn),
+      amount: _MovementTile.readAmount(txn['amount']),
+      subscriber: widget.sub.username,
+      currentBalance: _currentBalance,
+    );
+    if (!mounted) return;
+    if (changed == true) {
+      await _load();
+    } else {
+      _loadOpVoids(_all);
+    }
   }
 
   Future<void> _loadVoids(List<Map<String, dynamic>> txs) async {
@@ -128,6 +179,8 @@ class _MovementsSheetState extends State<_MovementsSheet> {
   /// (١٧ نوفمبر) فلترها وحدها ([_isCreditRow]).
   static String _kindOf(Map<String, dynamic> t) {
     final type = (t['action_type'] ?? '').toString().toUpperCase();
+    // «إلغاء إضافة رصيد» مع «إضافة رصيد»، و«إلغاء إضافة دين» مع «إضافة دين».
+    if (OpVoidsApi.isOpVoidRow(t)) return OpVoidsApi.voidKindOf(t) == 'add_credit' ? 'CREDIT_ADD' : 'BALANCE_ADD';
     if (PaymentVoidsApi.isVoidRow(t)) return 'BALANCE_ADD';
     if (_isCreditRow(t)) return 'CREDIT_ADD';
     if (type == 'DEBT_PAY') return 'BALANCE_DEDUCT';
@@ -251,11 +304,15 @@ class _MovementsSheetState extends State<_MovementsSheet> {
           if (i < group.length) {
             final t = group[i];
             final pid = _voidHere ? PaymentVoidsApi.paymentIdOf(t) : null;
+            final oid = _voidHere ? OpVoidsApi.opIdOf(t) : null;
             return _MovementTile(
               txn: t,
               voided: _voids.of(pid),
               voidAction: _voids.actionFor(pid),
               onVoid: () => _openVoid(t),
+              opVoided: _opVoids.of(oid),
+              opAction: _opVoids.actionFor(oid, OpVoidsApi.opKindOf(t)),
+              onOpVoid: () => _openOpVoid(t),
             );
           }
           i -= group.length;
@@ -479,8 +536,16 @@ class _MovementTile extends StatelessWidget {
     this.voided,
     this.voidAction = PaymentVoidAction.none,
     this.onVoid,
+    this.opVoided,
+    this.opAction = PaymentVoidAction.none,
+    this.onOpVoid,
   });
   final Map<String, dynamic> txn;
+
+  /// «إلغاء إضافة دين/رصيد» (١٧ نوفمبر): حال الإضافة في قيد الإلغاء، وزرّها، ونداؤه.
+  final OpVoidItem? opVoided;
+  final PaymentVoidAction opAction;
+  final VoidCallback? onOpVoid;
 
   /// حال هذا التسديد في قيد الإلغاء («ملغى» · «بانتظار حسم») — أو null.
   final PaymentVoidItem? voided;
@@ -523,11 +588,18 @@ class _MovementTile extends StatelessWidget {
       desc,
       isVoid: PaymentVoidsApi.isVoidRow(txn),
       negative: (_readSigned(rawAmt) ?? 0) < 0,
+      opVoidKind: OpVoidsApi.isOpVoidRow(txn) ? (OpVoidsApi.voidKindOf(txn) ?? 'add_debt') : null,
     );
+    // سطر إضافةٍ تُلغى ⇒ زرّها وشارتها؛ وإلّا زرّ التسديد كما كان.
+    final isOp = opAction != PaymentVoidAction.none || opVoided != null;
     final v = voided;
-    final voidedDone = v != null && v.isDone;
+    final ov = opVoided;
+    final voidedDone = isOp ? (ov != null && ov.isDone) : (v != null && v.isDone);
+    final hasBadge = isOp ? ov != null : v != null;
     // زرّ الفتح بلا معالجٍ لا يُعرض؛ والمقفل («لا صلاحيّة») لا يحتاج معالجاً.
-    final action = voidAction == PaymentVoidAction.open && onVoid == null ? PaymentVoidAction.none : voidAction;
+    final rawAction = isOp ? opAction : voidAction;
+    final press = isOp ? onOpVoid : onVoid;
+    final action = rawAction == PaymentVoidAction.open && press == null ? PaymentVoidAction.none : rawAction;
 
     // ⚠️ نفس السبب: UTC عارٍ يُقرأ محلّيّاً فيتأخّر ثلاث ساعات.
     final dt = parseServerUtc(createdAt);
@@ -587,11 +659,14 @@ class _MovementTile extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (v != null) ...[
+                            if (isOp && ov != null) ...[
+                              const SizedBox(width: 4),
+                              Flexible(child: OpVoidBadge(item: ov)),
+                            ] else if (!isOp && v != null) ...[
                               const SizedBox(width: 4),
                               Flexible(child: PaymentVoidBadge(item: v)),
                             ],
-                            if (timeStr.isNotEmpty && (v == null || box.maxWidth >= _timeWithBadgeMin)) ...[
+                            if (timeStr.isNotEmpty && (!hasBadge || box.maxWidth >= _timeWithBadgeMin)) ...[
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
@@ -714,8 +789,11 @@ class _MovementTile extends StatelessWidget {
           end: 5,
           child: PaymentVoidRowButton(
             action: action,
-            resume: v != null,
-            onOpen: onVoid ?? () {},
+            resume: hasBadge,
+            onOpen: press ?? () {},
+            tipOpen: isOp ? 'إلغاء الحركة' : null,
+            tipLocked: isOp ? 'إلغاء الحركة — لا صلاحيّة' : null,
+            tipResume: isOp ? 'إكمال إلغاء الحركة' : null,
           ),
         ),
       ],
@@ -727,7 +805,10 @@ class _MovementTile extends StatelessWidget {
     String desc, {
     bool isVoid = false,
     bool negative = false,
+    String? opVoidKind,
   }) {
+    // «إلغاء إضافة دين/رصيد» (١٧ نوفمبر): السطر المقابل باسمه (الخادم يعلّمه op_void).
+    if (opVoidKind != null) return (LucideIcons.undo2, AppColors.error, opVoidLabel(opVoidKind));
     // «إلغاء تسديد»: تسديدٌ بمبلغٍ سالب (أو معلَّمٌ من دفتر ايرث لنك) — رجع دينه.
     if (isVoid) return (LucideIcons.undo2, AppColors.error, 'إلغاء تسديد');
     // سطر تسوية الربط (الدين كان أُعيد يدويّاً بإضافة دين — محاسبةٌ بلا أثرٍ على دين المشترك): باسمه كما في التقارير،

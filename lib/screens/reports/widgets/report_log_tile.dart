@@ -435,6 +435,14 @@ _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
       // فصل جلسة المشترك من الشبكة — مو مالي، فحيادي رمادي.
       return _ActionMeta('فصل المستخدم', LucideIcons.power, AppColors.textMid);
     case 'BALANCE_ADD':
+      // «إلغاء إضافة دين/رصيد» (١٧ نوفمبر — server/opVoids.js): السطر المقابل باسمه — إلغاء الدين يُنقص الدين (موجبٌ أخضر)،
+      // وإلغاء الرصيد يُنقص رصيده (سالبٌ أحمر).
+      if (desc.startsWith('إلغاء إضافة رصيد')) {
+        return _ActionMeta('إلغاء إضافة رصيد', LucideIcons.undo2, AppColors.error, debit: true);
+      }
+      if (desc.startsWith('إلغاء إضافة دين')) {
+        return _ActionMeta('إلغاء إضافة دين', LucideIcons.undo2, _kPositive);
+      }
       // إلغاء بيعٍ على الدين: السطر نفسه بمبلغٍ سالب يُنقص الدين — موجبٌ أخضر.
       if (desc.startsWith('إلغاء بيع')) {
         return _ActionMeta('إنقاص دين (إلغاء بيع)', LucideIcons.undo2, _kPositive);
@@ -454,6 +462,10 @@ _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
           debit: true);
     case 'BALANCE_DEDUCT':
     case 'DEBT_PAY':
+      // «إلغاء إضافة دين» من كشف دفتر ايرث لنك (حركةٌ موجبة تُنقص الدين — ١٧ نوفمبر).
+      if (desc.startsWith('إلغاء إضافة دين')) {
+        return _ActionMeta('إلغاء إضافة دين', LucideIcons.undo2, _kPositive);
+      }
       // «إلغاء تسديد» (١١ نوفمبر): تسديدٌ بمبلغٍ سالب — رجع دينه وخرج مبلغه من الصندوق. سالبٌ أحمر.
       if (amount < 0 || desc.startsWith('إلغاء تسديد')) {
         return _ActionMeta('إلغاء تسديد', LucideIcons.undo2, AppColors.error,

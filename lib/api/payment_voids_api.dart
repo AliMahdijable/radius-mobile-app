@@ -283,11 +283,12 @@ class PaymentVoidsApi {
     return n != null && n < 0;
   }
 
-  static final RegExp _marker = RegExp(r'\s*\[pv:\d+\]');
+  // و`[ov:رقم]` لحركة «إلغاء إضافة دين/رصيد» (١٧ نوفمبر — server/opVoids.js) في كشف دفتر ايرث لنك
+  static final RegExp _marker = RegExp(r'\s*\[(?:pv|ov):\d+\]');
 
   /// وصف حركةٍ بلا وسم الإلغاء الداخليّ (`[pv:رقم]` — يُكتب في ملاحظة حركة الدفتر ليُعرف بها الإرجاع إن ضاع ردّه؛ كشف دفتر
   /// ايرث لنك يعرض الملاحظة كما هي). للعرض وحده.
-  static String cleanNote(String s) => s.contains('[pv:') ? s.replaceAll(_marker, '').trim() : s;
+  static String cleanNote(String s) => (s.contains('[pv:') || s.contains('[ov:')) ? s.replaceAll(_marker, '').trim() : s;
 
   /// رقم سطر التسديد في سطر كشف المشترك — الخادم يرسله لسطور التسديد وحدها.
   static int? paymentIdOf(Map<String, dynamic> txn) {

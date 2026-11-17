@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../api/op_voids_api.dart';
 import '../api/payment_voids_api.dart';
 import '../core/widgets/permission_locked.dart';
 import '../theme/colors.dart';
@@ -55,10 +56,18 @@ class PaymentVoidRowButton extends StatelessWidget {
     required this.onOpen,
     this.resume = false,
     this.size = 32,
+    this.tipOpen,
+    this.tipLocked,
+    this.tipResume,
   });
 
   final PaymentVoidAction action;
   final VoidCallback onOpen;
+
+  /// تسمياتٌ لغير التسديد («إلغاء إضافة دين/رصيد» — ١٧ نوفمبر)؛ null ⇒ تسميات «إلغاء التسديد».
+  final String? tipOpen;
+  final String? tipLocked;
+  final String? tipResume;
 
   /// إلغاءٌ بدأ ولم يكتمل (بانتظار حسم، أو عمليّةٌ انقطعت) — الزرّ يُكمله أو يحسمه.
   final bool resume;
@@ -72,8 +81,8 @@ class PaymentVoidRowButton extends StatelessWidget {
     if (action == PaymentVoidAction.none) return const SizedBox.shrink();
     final locked = action == PaymentVoidAction.locked;
     final tip = locked
-        ? 'settle.pay_void_locked'.tr()
-        : (resume ? 'settle.pay_void_continue'.tr() : 'settle.pay_void_action'.tr());
+        ? (tipLocked ?? 'settle.pay_void_locked'.tr())
+        : (resume ? (tipResume ?? 'settle.pay_void_continue'.tr()) : (tipOpen ?? 'settle.pay_void_action'.tr()));
     return Tooltip(
       message: tip,
       child: InkResponse(
@@ -90,6 +99,31 @@ class PaymentVoidRowButton extends StatelessWidget {
                 : (resume ? AppTone.warning.fill : AppColors.textMid),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// شارة حال «إضافة دين/رصيد» في قيد الإلغاء (١٧ نوفمبر): «ملغاة» · «بانتظار حسم» · «قيد الإلغاء» — بحجم شارة التسديد.
+class OpVoidBadge extends StatelessWidget {
+  const OpVoidBadge({super.key, required this.item});
+  final OpVoidItem item;
+
+  static String labelOf(OpVoidItem v) => v.isDone ? 'ملغاة' : (v.isUnknown ? 'بانتظار حسم' : 'قيد الإلغاء');
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final tone = item.isDone ? AppTone.danger : AppTone.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.pill)),
+      child: Text(
+        labelOf(item),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.microBold(color: tone.onSoft),
       ),
     );
   }
