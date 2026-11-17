@@ -162,6 +162,7 @@ class MovementTile extends StatelessWidget {
       'purchase_void' => LucideIcons.undo2,
       'supplier_refund_void' => LucideIcons.undo2,
       'debt_payment_void' => LucideIcons.undo2,
+      'credit_cash' => LucideIcons.coins,
       'emp_advance' || 'emp_withdraw' || 'emp_loan' || 'emp_repayment' || 'emp_payslip_recover' => LucideIcons.users,
       'emp_advance_void' || 'emp_withdraw_void' || 'emp_loan_void' || 'emp_repayment_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
@@ -176,6 +177,8 @@ class MovementTile extends StatelessWidget {
       'supplier_refund' => 'settle.kind_supplier_refund'.tr(),
       'supplier_refund_void' => 'settle.kind_supplier_refund_void'.tr(),
       'debt_payment_void' => 'settle.kind_debt_payment_void'.tr(),
+      // «إضافة رصيد» مقدّماً نقداً (١٧ نوفمبر): نقدٌ داخلٌ بيد من استلمه — بلا زرّ إلغاء (الخادم لا يرسل رقم سطر تسديد).
+      'credit_cash' => 'settle.kind_credit_cash'.tr(),
       'emp_advance' => 'settle.kind_emp_advance'.tr(),
       'emp_withdraw' => 'settle.kind_emp_withdraw'.tr(),
       'emp_loan' => 'settle.kind_emp_loan'.tr(),

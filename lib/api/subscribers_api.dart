@@ -1594,9 +1594,13 @@ class SubscribersApi {
 
   /// POST /api/v2/subscribers/:idx/add-credit — عكس «إضافة الدين»: يزيد
   /// رصيد المشترك (الموجب = دائن). مرآةُ [addDebt].
+  ///
+  /// [creditKind] (١٧ نوفمبر): `cash` = مقدّمٌ استُلم نقداً (يدخل الصندوق والنقد المُستلم)، `comp` = تعويضٌ بلا نقد —
+  /// الخادم يرفض غيرهما 400؛ والنسخ الأقدم بلاه تُعدّ «نقداً» عنده.
   static Future<({bool ok, String? message})> addCredit({
     required String idx,
     required double amount,
+    required String creditKind,
     String? comment,
   }) async {
     try {
@@ -1604,6 +1608,7 @@ class SubscribersApi {
         '/api/v2/subscribers/$idx/add-credit',
         data: {
           'amount': amount,
+          'credit_kind': creditKind,
           if (comment != null && comment.isNotEmpty) 'comment': comment,
         },
       );

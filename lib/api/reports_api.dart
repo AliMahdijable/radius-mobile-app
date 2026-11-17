@@ -176,7 +176,15 @@ class FinanceKPIs {
     this.empGivenSum = 0,
     this.empBackSum = 0,
     this.empOutstanding = 0,
+    this.creditCashSum = 0,
+    this.creditCompSum = 0,
   });
+
+  /// «إضافة رصيد» مقدّماً نقداً (١٧ نوفمبر): **داخلةٌ أصلاً** في [debtPaySum] عند الخادم (نقدٌ محصَّل) — للعرض وحده.
+  final num creditCashSum;
+
+  /// «إضافة رصيد» تعويضاً بلا نقد: لا تدخل النقد؛ وتُطرح من [profitAfterCost] (التفعيل منها لاحقاً بيعٌ لم يُقبض).
+  final num creditCompSum;
 
   /// «حركات الموظف» (١٣ نوفمبر): الخادم أرسل قسمها (لهذا النطاق حركات) — وإلّا الشاشة كما كانت حرفاً. كلّها **للعرض**:
   /// السلف والقروض ليست مصروفاً ولا تدخل الصافي هنا؛ المصروف راتبهم، وهو داخلٌ أصلاً في [expensesSum].
@@ -282,9 +290,13 @@ class FinanceKPIs {
   /// من النقد كان يُظهر خسارةً لمالكٍ رابح (مراجعة ١٨ أكتوبر: ٩ من ١٦ مالكاً).
   /// [netCash] يبقى سطره كما كان (وفيه طرح إضافة الدين اليدوي بطلب المالك).
   /// + ربح المواد (البيع − كلفة المخزون، نقداً وديناً) − التالف والعطلان — صفرٌ بلا مبيعات.
+  /// − تعويضات «إضافة رصيد» بلا نقد (١٧ نوفمبر — كالويب): التفعيل منها «غير نقدي» يُعدّ بيعاً لم يُقبض. المقدّم نقداً لا يمسّه
+  /// (نقدٌ لا بيع، والتفعيل منه يُعدّ بيعاً مرّة).
   num? get profitAfterCost =>
       profitAfterCostOverride ??
-      (packageCost == null ? null : salesSum - expensesSum - packageCost!.sum + goodsProfitSum - goodsLossSum);
+      (packageCost == null
+          ? null
+          : salesSum - expensesSum - packageCost!.sum + goodsProfitSum - goodsLossSum - creditCompSum);
 
   /// «كل الشركات»: مجموع صافي كلّ شركةٍ بقاعدتها (من بلا كلفةٍ — سوبرنت — صافيه
   /// النقديّ) — لا صيغةٌ واحدة على المجموع (قاعدة الويب sumFigures). null خارجه.
@@ -323,6 +335,9 @@ class FinanceKPIs {
       empGivenSum: _n(j['emp_given_sum']),
       empBackSum: _n(j['emp_recovered_sum']) + _n(j['emp_repaid_sum']),
       empOutstanding: _n(j['emp_receivable_outstanding']),
+      // «إضافة رصيد» (١٧ نوفمبر): يرسلها الخادم حين يوجد رصيدٌ بالفترة وحدها — وإلّا أصفار ⇒ الشاشة كما كانت.
+      creditCashSum: _n(j['credit_cash_sum']),
+      creditCompSum: _n(j['credit_comp_sum']),
     );
   }
 }
@@ -356,7 +371,14 @@ class FinanceLog {
     this.packageCostSource,
     this.packageCostSent = false,
     this.partialUnpaid = 0,
+    this.isCredit = false,
+    this.creditKind,
   });
+
+  /// «إضافة رصيد» (١٧ نوفمبر): سطر BALANCE_ADD بمبلغٍ سالب — الخادم يعلّمه (`is_credit`)، والوصف «إضافة رصيد …» لما قبله.
+  /// [creditKind]: `cash` مقدّمٌ نقداً · `comp` تعويض · null سطرٌ قبل ١٧ نوفمبر (لا نقد).
+  final bool isCredit;
+  final String? creditKind;
   final int id;
   final String actionType;
   final String? actionDescription;
@@ -463,6 +485,10 @@ class FinanceLog {
           : null,
       packageCostSent: includePackageCost && j.containsKey('package_cost'),
       partialUnpaid: FinanceKPIs._n(j['partial_unpaid']),
+      isCredit: _truthy(j['is_credit']) ||
+          (at.toUpperCase().trim() == 'BALANCE_ADD' &&
+              (j['action_description']?.toString() ?? '').trimLeft().startsWith('إضافة رصيد')),
+      creditKind: j['credit_kind']?.toString(),
     );
   }
 

@@ -11,6 +11,10 @@ library;
 String arabicActionLabel(String actionType, [String description = '']) {
   final at = actionType.trim().toUpperCase();
   final nonCash = description.contains('غير نقدي');
+  // «إضافة رصيد» (١٧ نوفمبر): BALANCE_ADD (أو DEBT_PAY من كشف دفتر ايرث لنك) ووصفه «إضافة رصيد …» — لا «إضافة دين».
+  if ((at == 'BALANCE_ADD' || at == 'DEBT_PAY') && description.trimLeft().startsWith('إضافة رصيد')) {
+    return description.contains('(تعويض)') ? 'إضافة رصيد (تعويض)' : 'إضافة رصيد';
+  }
   switch (at) {
     case 'SUBSCRIBER_ACTIVATE':
       // مُزامَنٌ من الساس (صفحة الساس أو تطبيقٌ آخر): بلا نقدٍ ولا دين عندنا.

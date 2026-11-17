@@ -124,12 +124,23 @@ class _MovementsSheetState extends State<_MovementsSheet> {
     }
   }
 
-  /// نوع الحركة للفلتر: إلغاء التسديد يعيد الدين فيُفرز مع «إضافة دين» لا مع «تسديد»؛ وDEBT_PAY (كشف الدفتر) تسديد.
+  /// نوع الحركة للفلتر: إلغاء التسديد يعيد الدين فيُفرز مع «إضافة دين» لا مع «تسديد»؛ وDEBT_PAY (كشف الدفتر) تسديد؛ و«إضافة رصيد»
+  /// (١٧ نوفمبر) فلترها وحدها ([_isCreditRow]).
   static String _kindOf(Map<String, dynamic> t) {
     final type = (t['action_type'] ?? '').toString().toUpperCase();
     if (PaymentVoidsApi.isVoidRow(t)) return 'BALANCE_ADD';
+    if (_isCreditRow(t)) return 'CREDIT_ADD';
     if (type == 'DEBT_PAY') return 'BALANCE_DEDUCT';
     return type;
+  }
+
+  /// «إضافة رصيد»: سطر BALANCE_ADD بمبلغٍ سالب ووصفه «إضافة رصيد …» (الساس والشركات المُضافة)، أو is_credit من كشف دفتر ايرث لنك
+  /// (سطر DEBT_PAY) — رصيدٌ للمشترك، لا «إنقاص دين» ولا «تسديد».
+  static bool _isCreditRow(Map<String, dynamic> t) {
+    if (t['is_credit'] == true) return true;
+    final type = (t['action_type'] ?? '').toString().toUpperCase();
+    final desc = (t['description'] ?? '').toString().trimLeft();
+    return (type == 'BALANCE_ADD' || type == 'DEBT_PAY') && desc.startsWith('إضافة رصيد');
   }
 
   List<Map<String, dynamic>> get _filtered {
@@ -373,6 +384,7 @@ class _FilterChips extends StatelessWidget {
     ('SUBSCRIBER_ACTIVATE', 'تفعيل'),
     ('SUBSCRIBER_EXTEND', 'تمديد'),
     ('BALANCE_DEDUCT', 'تسديد'),
+    ('CREDIT_ADD', 'إضافة رصيد'),
     ('BALANCE_ADD', 'إضافة دين'),
   ];
 
@@ -723,7 +735,13 @@ class _MovementTile extends StatelessWidget {
     if (type == 'BALANCE_ADD' && desc.trimLeft().startsWith('تسوية إلغاء تسديد')) {
       return (LucideIcons.undo2, AppColors.textMid, 'تسوية إلغاء تسديد');
     }
-    // «إضافة دين» بمبلغٍ سالب تُنقص الدين (إلغاء بيعٍ على الدين، إضافة رصيد).
+    // «إضافة رصيد» (١٧ نوفمبر): باسمها — والتعويض بلا نقد محايد.
+    if ((type == 'BALANCE_ADD' || type == 'DEBT_PAY') && desc.trimLeft().startsWith('إضافة رصيد')) {
+      return desc.contains('(تعويض)')
+          ? (LucideIcons.coins, AppColors.brandAccent, 'إضافة رصيد (تعويض)')
+          : (LucideIcons.coins, AppColors.success, 'إضافة رصيد');
+    }
+    // «إضافة دين» بمبلغٍ سالب تُنقص الدين (إلغاء بيعٍ على الدين).
     if (type == 'BALANCE_ADD' && negative) return (LucideIcons.minus, AppColors.success, 'إنقاص دين');
     switch (type) {
       case 'SUBSCRIBER_ACTIVATE':

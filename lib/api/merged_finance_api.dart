@@ -207,6 +207,9 @@ class MergedFinanceApi {
       empGivenSum: n((k) => k.empGivenSum),
       empBackSum: n((k) => k.empBackSum),
       empOutstanding: n((k) => k.empOutstanding),
+      // «إضافة رصيد» (١٧ نوفمبر): تُجمع كما هي (شركةٌ بلا رصيد أصفار)
+      creditCashSum: n((k) => k.creditCashSum),
+      creditCompSum: n((k) => k.creditCompSum),
       // شركةٌ بلا الحقل (خادمٌ أقدم) ⇒ ديْن مبيعاتها المكتملة مكانه — كقاعدة الشركة الواحدة.
       balanceAddSalesSum: ks.any((k) => k.balanceAddSalesSum != null)
           ? n((k) => k.balanceAddSalesSum ?? k.goodsDebtSum)

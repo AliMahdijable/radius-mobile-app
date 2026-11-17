@@ -363,7 +363,21 @@ bool _isNonCash(String desc) => desc.contains('غير نقدي');
 bool _isCash(String desc) =>
     desc.contains('نقدي') && !desc.contains('غير نقدي');
 
+/// «إضافة رصيد» (١٧ نوفمبر — المالك: «الحركه جاي تطلع اضافة دين وليس اضافة رصيد»): سطر BALANCE_ADD بمبلغٍ سالب (أو DEBT_PAY من كشف
+/// دفتر ايرث لنك) ووصفه «إضافة رصيد …» — رصيدٌ للمشترك لا دين. المقدّم نقداً موجبٌ أخضر (نقدٌ داخل)؛ التعويض وما قبل ١٧ نوفمبر
+/// بلا نوع محايدان (لا نقد). null لغيره.
+_ActionMeta? _creditMeta(String at, String desc) {
+  if ((at != 'BALANCE_ADD' && at != 'DEBT_PAY') || !desc.trimLeft().startsWith('إضافة رصيد')) return null;
+  if (desc.contains('(تعويض)')) {
+    return _ActionMeta('إضافة رصيد (تعويض)', LucideIcons.coins, AppColors.textMid, neutral: true);
+  }
+  if (desc.contains('(مقدّم نقداً)')) return _ActionMeta('إضافة رصيد', LucideIcons.coins, _kPositive);
+  return _ActionMeta('إضافة رصيد', LucideIcons.coins, AppColors.textMid, neutral: true);
+}
+
 _ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
+  final credit = _creditMeta(at, desc);
+  if (credit != null) return credit;
   switch (at) {
     case 'SUBSCRIBER_ACTIVATE':
       // مُزامَنٌ من الساس (صفحة الساس أو تطبيقٌ آخر): لا نقد ولا دين عندنا —
