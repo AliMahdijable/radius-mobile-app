@@ -377,6 +377,7 @@
     "logins_title": "آخر دخول المشتركين",
     "logins_empty": "ما دخل أيّ مشترك بعد",
     "logins_empty_hint": "تظهر هنا محاولات دخول مشتركيك من تطبيق MyServices",
+    "logins_more": "عرض المزيد",
     "logins_failed": "تعذّر تحميل السجلّ",
     "via_password": "كلمة مرور",
     "via_qr": "QR",
