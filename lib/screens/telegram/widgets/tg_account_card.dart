@@ -273,7 +273,11 @@ class _TgAccountCardState extends State<TgAccountCard> {
               Row(children: [
                 Icon(icon, size: 18, color: selected ? _tgBlue : AppColors.textMid),
                 const SizedBox(width: Sp.sm),
-                Expanded(child: Text(title, style: AppType.bodyStrong(color: AppColors.textHi))),
+                // حارس النصّ المرن (flex_text_guard): سطران بحدّ — يلتفّ بجانب «المستعمَلة» ولا يُسحق.
+                Expanded(
+                  child: Text(title,
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+                ),
                 if (selected)
                   Row(mainAxisSize: MainAxisSize.min, children: [
                     Text('المستعمَلة', style: AppType.micro(color: _tgBlue)),
