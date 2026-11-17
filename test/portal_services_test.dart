@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,8 +23,6 @@ import 'sim_el/sim_harness.dart';
 const _list = '/api/v2/portal/services';
 const _settings = '/api/v2/portal/settings';
 const _logins = '/api/v2/portal/logins';
-
-const _v = SimVariant(360, dark: false);
 
 Map<String, dynamic> _svc(int id, String name, String url, {String? image}) =>
     {'id': id, 'name': name, 'url': url, 'image': image};
@@ -166,7 +162,7 @@ void main() {
         'services': [_svc(4, 'قناة التلغرام', 'https://t.me/example', image: '/api/portal/svc-img/4-0123456789ab.png')],
       });
       server.on('PUT', '$_list/4', (req) => SimReply(200, {'success': true, 'service': _svc(4, 'قناة التلغرام', 'https://t.me/example')}));
-      server.on('DELETE', '$_list/4', (_) => SimReply(200, {'success': true}));
+      server.on('DELETE', '$_list/4', (_) => const SimReply(200, {'success': true}));
       await openServices(t);
       await t.tap(find.text('قناة التلغرام').first);
       await t.pumpAndSettle();
