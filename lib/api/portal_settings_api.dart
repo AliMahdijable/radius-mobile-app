@@ -506,37 +506,47 @@ class PortalSettingsApi {
 
   /// PUT عام — يقبل حقول جزئية (displayName, description, imageUrl,
   /// displayOrder, isHidden). null = مسح القيمة على السيرفر.
-  /// [message] سبب الرفض العربيّ من الخادم (رابط صفحةٍ لا صورة) — وإلّا null.
-  static Future<({bool ok, String? message})> updatePackage(
+  /// [imageData] صورةٌ مضغوطة من الهاتف (data URL — ١٧ نوفمبر): الخادم يخزّنها ويكتب عنوانها في image_url (ويتقدّم على [imageUrl]).
+  /// [message] سبب الرفض العربيّ من الخادم (رابط صفحةٍ لا صورة، صورةٌ كبيرة) — وإلّا null.
+  /// [imageUrl] في الردّ: ما خزّنه الخادم فعلاً في image_url (عنوان الصورة المرفوعة) — وإلّا null.
+  static Future<({bool ok, String? message, String? imageUrl})> updatePackage(
     int profileId, {
     Object? displayName = _sentinel,
     Object? description = _sentinel,
     Object? imageUrl = _sentinel,
+    String? imageData,
     int? displayOrder,
     bool? isHidden,
   }) async {
     final body = <String, dynamic>{};
     if (!identical(displayName, _sentinel)) body['display_name'] = displayName;
     if (!identical(description, _sentinel)) body['description'] = description;
-    if (!identical(imageUrl, _sentinel)) body['image_url'] = imageUrl;
+    if (imageData != null && imageData.isNotEmpty) {
+      body['image_data'] = imageData;
+    } else if (!identical(imageUrl, _sentinel)) {
+      body['image_url'] = imageUrl;
+    }
     if (displayOrder != null) body['display_order'] = displayOrder;
     if (isHidden != null) body['is_hidden'] = isHidden;
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
         '/api/v2/admin/portal-packages/$profileId',
         data: body,
+        // صورةٌ حتى ~٤٠٠ ك.ب بالـbase64 على شبكةٍ ضعيفة — مهلةٌ أطول للإرسال وحده
+        options: imageData != null ? Options(sendTimeout: const Duration(seconds: 60)) : null,
       );
       if (r.statusCode == 200 && r.data?['success'] == true) {
         PackageNamesApi.clearCache(); // الرسائل والوصل بالاسم الجديد من الآن
-        return (ok: true, message: null);
+        final u = r.data?['image_url'];
+        return (ok: true, message: null, imageUrl: u is String && u.trim().isNotEmpty ? u.trim() : null);
       }
-      return (ok: false, message: _refusal(r));
+      return (ok: false, message: _refusal(r), imageUrl: null);
     } on DioException catch (e) {
       _log('portal-packages (PUT $profileId)', e);
-      return (ok: false, message: null);
+      return (ok: false, message: null, imageUrl: null);
     } catch (e) {
       _log('portal-packages (PUT $profileId)', e);
-      return (ok: false, message: null);
+      return (ok: false, message: null, imageUrl: null);
     }
   }
 
