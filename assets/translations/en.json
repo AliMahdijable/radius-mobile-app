@@ -377,6 +377,7 @@
     "logins_title": "Recent subscriber logins",
     "logins_empty": "No subscriber has logged in yet",
     "logins_empty_hint": "Your subscribers' login attempts from the MyServices app show up here",
+    "logins_more": "Show more",
     "logins_failed": "Couldn't load the log",
     "via_password": "Password",
     "via_qr": "QR",
