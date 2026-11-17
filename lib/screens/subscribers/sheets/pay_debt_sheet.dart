@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -11,6 +13,7 @@ import '../../../models/subscriber.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../services/op_wa_notice.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -204,6 +207,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final idx = widget.sub.idx;
     if (idx == null) return;
     setState(() => _submitting = true);
+    // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التأكيد؟» (OpWaNotice).
+    final pressedAt = DateTime.now();
     // 2026-08-26 (manual WA phase 2): لو المدير مفعّل الوضع اليدوي، backend
     // ما يرسل WA تلقائياً — يرجع wa_preview بالنصّ الجاهز، ونفتح modal بعد
     // النجاح ليختار المدير: إرسال يدوي من واتسابه أو تلقائي من السيرفر.
@@ -228,15 +233,18 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       return;
     }
     SubscriberEvents.notifyChange();
-    showSheetSnack(context, 'تم التسديد بنجاح');
-    // مطلب 2026-06-11: لو الإرسال (التلقائي) فشل لسبب فني، أظهر تحذير.
-    if (result.wa != null && result.wa!.shouldShowFailure) {
-      showSheetSnack(
-        context,
-        'لم يُرسل واتساب: ${result.wa!.arabicReason}',
-        isError: true,
-      );
-    }
+    // النجاح ومعه نتيجة رسالة التأكيد: «أُرسلت» دائماً، و«لم تُرسل» بسببها حين يملك المدير ما يفعله (مطلب ١١ يونيو:
+    // ما اختاره بنفسه — الإشعار مطفأ، القالب معطَّل — لا يُقال). الخادم يردّ فور التسديد ولا ينتظر الإشعار، فالنتيجة من
+    // الردّ إن حضرت وإلّا تُسأل بعد ثوانٍ؛ والإشعار على الطبقة الجذريّة فيبقى بعد إغلاق الورقة.
+    unawaited(OpWaNotice.show(
+      context,
+      sub: widget.sub,
+      op: OpWaKind.pay,
+      okText: 'تم التسديد بنجاح',
+      pressedAt: pressedAt,
+      wa: result.wa,
+      manual: manualMode,
+    ));
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox داخل المودل مُفعَّل.
     if (_printReceiptChecked) {
       setState(() => _printingReceipt = true);
