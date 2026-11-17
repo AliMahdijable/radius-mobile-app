@@ -316,8 +316,16 @@ Map<String, String> gridVars(ReceiptInput input, [String currency = receiptDefau
     total = amount != null && nb != null ? (nb - amount < 0 ? (nb - amount).abs() : 0) : amount;
     remaining = nb != null ? (nb < 0 ? nb.abs() : 0) : null;
   } else if (kind == 'activation' || kind == 'extension') {
-    total = amount;
-    remaining = amount != null && paid != null ? (amount - paid < 0 ? 0 : amount - paid) : null;
+    // المتبقّي = ما على المشترك بعد العمليّة كلّه (دينه السابق + الباقي منها) حين يُعرف رصيده بعدها — لا الباقي من هذه العمليّة
+    // وحدها (المالك ١٧ نوفمبر: «على يدين كان 20,000، وفعل جزء 20 بقى 15… المفروض الباقي عليه يظهر 35»). ومن أصل = المدفوع +
+    // المتبقّي (فالحساب يصحّ على الوصل: استلام 20,000 من أصل 55,000 والمتبقّي 35,000). بلا رصيدٍ بعدها ⇒ كما كان.
+    if (nb != null && paid != null) {
+      remaining = nb < 0 ? nb.abs() : 0;
+      total = paid + remaining;
+    } else {
+      total = amount;
+      remaining = amount != null && paid != null ? (amount - paid < 0 ? 0 : amount - paid) : null;
+    }
   }
   out['datetime'] = input.issuedText.trim();
   out['total_amount'] = total != null ? _money(total, currency) : '';
