@@ -24,6 +24,8 @@ const _realm = 'TP-Link Wireless N Router WR940N';
 
 // مفتاح RSA اختباريّ (512 بتّاً، مولَّدٌ للاختبار وحده)
 const _n = 'b79ddd418ac13a616664d882a55de44905e031e5d69ba4a322b2193a5f6f5fcf5f3cd1663d8527b80bbb57e13d3c5647b44335525725f95cd97e0f40c6ddf81b';
+/// مفتاح ملفّ getRsa.json الثابت القديم الذي يعيده الجهاز الحيّ لطلب GET (منسوخٌ منه — عامّ، ليس سرّاً).
+const _staleN = '00d1fd5a84b461b5561c3ba67860ab797b1d736ad7b7b53464d9a92a468641f0de221c1db68eac497d2bd2cfcf6bd18002e97947a8b35c5b238a1178a7557d695b';
 const _e = '10001';
 const _d = '9730827db44dd4cf5c6b8f274c18da9f121a7f9b9bb13ec8210a7ae168b1a1360f2ed95fe2d56ad7f23878d009fb246e28f0448f14e52468bf60e374f7b2f049';
 const _seq = 56630;
@@ -66,6 +68,7 @@ class _FakeRsa {
   int logins = 0;
   int logouts = 0;
   int wrong = 0;
+  int garbled = 0; // دخولٌ بتوقيعٍ لا يُفكّ (مفتاحٌ خطأ)
   bool resetStateAfterWrong = false; // بعض الفيرموَيرات قد لا تقول «خطأ» في صفحة الدخول بعد الرفض
   final paths = <String>[];
   final bad = <String>[]; // ما يجب ألّا يصل أبداً
@@ -85,16 +88,30 @@ class _FakeRsa {
       if (path == '/') {
         res.headers.set(HttpHeaders.wwwAuthenticateHeader, 'Basic realm="$_realm"');
         res.write(_loginPage(state, host));
-      } else if (path == '/login/getRsa.json') {
+      } else if (path == '/login/getRsa.json' && req.method == 'POST') {
         res.write(jsonEncode({'rsa': {'nn': _n, 'mm': _e}, 'seq': _seq}));
+      } else if (path == '/login/getRsa.json') {
+        // كالجهاز الحيّ: GET يعيد ملفّاً ثابتاً قديماً بمفتاحٍ آخر (ليس مفتاح الجلسة)
+        res.write(jsonEncode({'rsa': {'nn': _staleN, 'mm': _e}, 'seq': 56630}));
       } else if (path == '/login/login.json' && req.method == 'POST') {
         logins++;
         final body = await utf8.decoder.bind(req).join();
         expect(body.startsWith('JSONDATA: ') && body.endsWith('\n'), isTrue, reason: 'شكل نصّ الدخول كصفحة الجهاز');
         expect(req.headers.value(HttpHeaders.contentTypeHeader), 'application/json; charset=UTF-8');
         final j = jsonDecode(body.substring('JSONDATA: '.length).trim()) as Map<String, dynamic>;
-        final s = AgileCrypto.rsaDecrypt(j['sign'] as String, _n, _d);
+        String s;
+        try {
+          s = AgileCrypto.rsaDecrypt(j['sign'] as String, _n, _d);
+        } catch (_) {
+          s = '';
+        }
         signs.add(s);
+        if (!s.startsWith('key=')) {
+          // توقيعٌ بمفتاحٍ غير مفتاح الجلسة ⇒ الجهاز الحيّ يردّ نصّاً فارغاً (لا valid ولا عدّاد خطأ)
+          garbled++;
+          await res.close();
+          return;
+        }
         final m = RegExp(r'^key=(\d{16})&iv=(\d{16})&h=([0-9a-f]{32})&s=(\d+)$').firstMatch(s);
         final data = j['data'] as String;
         var ok = false;
@@ -204,6 +221,14 @@ void main() {
       expect([d.logins, d.logouts, d.sid], [1, 1, null]);
       expect(d.bad, isEmpty, reason: 'لا LoginRpm.htm ولا صفحة مال/إقلاع/ضبط مصنع');
       expect(d.signs.single, matches(RegExp(r'^key=\d{16}&iv=\d{16}&h=[0-9a-f]{32}&s=\d+$')));
+    });
+
+    test('مفتاح الدخول بطلب POST كصفحة الجهاز — GET يعيد ملفّاً قديماً بمفتاحٍ آخر فيردّ الدخول فارغاً (100.66.1.230 حيّاً، ١٧ نوفمبر)', () async {
+      final snap = await TplinkClassicService.readOnce(d.host, 'admin', 'p@ss word');
+      expect(snap, isNotNull, reason: '${TplinkClassicService.lastIssue(d.host)}');
+      expect(d.paths, contains('POST /login/getRsa.json'));
+      expect(d.paths.where((p) => p == 'GET /login/getRsa.json'), isEmpty, reason: 'GET يعطي المفتاح القديم');
+      expect([d.garbled, d.wrong, d.logins], [0, 0, 1]);
     });
 
     test('كلمة سرٍّ غلط ⇒ «رفض» تُحفظ فلا تُرسل ثانيةً (العدّاد عدّةٌ واحدة)، و«حفظ وفحص» يسمح بمحاولة', () async {
