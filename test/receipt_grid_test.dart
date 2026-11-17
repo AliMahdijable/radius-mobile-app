@@ -86,8 +86,20 @@ void main() {
     final p = gridVars(_input(kind: 'payment', pay: null, amount: 10000, partial: null, nb: -5000));
     expect((p['total_amount'], p['remaining_amount'], p['amount_words']), ('15,000 د.ع', '5,000 د.ع', 'فقط عشرة آلاف دينار عراقي لا غير'));
     // الآجل: لا مبلغ كتابةً (المدفوع صفر)، والمتبقّي كلّه
-    final c = gridVars(_input(pay: 'non-cash', partial: null));
+    final c = gridVars(_input(pay: 'non-cash', partial: null, nb: -25000));
     expect((c['amount_words'], c['remaining_amount']), ('', '25,000 د.ع'));
+    // (١٧ نوفمبر — حالة المالك) دينٌ سابق 20,000 ثمّ تفعيلٌ جزئيّ بـ35,000 دفع منه 20,000: المتبقّي دينه كلّه 35,000 لا 15,000،
+    // ومن أصل 55,000 (المدفوع + المتبقّي)
+    final o = gridVars(_input(amount: 35000, partial: 20000, nb: -35000));
+    expect((o['total_amount'], o['remaining_amount'], o['amount_words']), ('55,000 د.ع', '35,000 د.ع', 'فقط عشرون ألف دينار عراقي لا غير'));
+    // نقداً كاملاً وعليه دينٌ سابق 20,000 باقٍ: المتبقّي 20,000 ومن أصل 55,000؛ ونقدٌ يسدّد القديم أيضاً ⇒ لا متبقٍّ
+    final f = gridVars(_input(pay: 'cash', amount: 35000, partial: null, nb: -20000));
+    expect((f['total_amount'], f['remaining_amount']), ('55,000 د.ع', '20,000 د.ع'));
+    final g = gridVars(_input(amount: 35000, partial: 175000, nb: 0));
+    expect((g['total_amount'], g['remaining_amount']), ('175,000 د.ع', '0 د.ع'));
+    // بلا رصيدٍ بعدها ⇒ كما كان (الباقي من العمليّة)
+    final x = gridVars(_input(amount: 35000, partial: 20000, nb: null));
+    expect((x['total_amount'], x['remaining_amount']), ('35,000 د.ع', '15,000 د.ع'));
     // وصل المعلومات: لا متغيّرات مال
     final i = gridVars(_input(kind: 'info', pay: null));
     expect((i['total_amount'], i['remaining_amount'], i['amount_words']), ('', '', ''));
