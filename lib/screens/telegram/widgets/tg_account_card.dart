@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/tg_account_api.dart';
+import '../../../core/util/bidi.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
@@ -14,9 +15,13 @@ import '../../../theme/typography.dart';
 /// «طريقة الإرسال بتلغرام» (١٤ نوفمبر ٢٠٢٦ — كالويب): البوت / حسابي، وربط حساب الوكيل برقمه والرمز أو برمز QR. لا تظهر لحسابٍ لم
 /// تُفتح له الميزة. [onStatus] يُبلغ الشاشة بالحال (على «حسابي» تُخفى أقسام البوت كالويب).
 class TgAccountCard extends StatefulWidget {
-  const TgAccountCard({super.key, required this.adminId, this.onStatus});
+  const TgAccountCard({super.key, required this.adminId, this.onStatus, this.botConnected, this.botUsername});
   final String adminId;
   final ValueChanged<TgAccountStatus?>? onStatus;
+
+  /// حال البوت من الشاشة (TelegramStatus) — يُعرض في خيار «البوت» (مربوط @… / غير مربوط). null = لم يُعرف بعد.
+  final bool? botConnected;
+  final String? botUsername;
 
   @override
   State<TgAccountCard> createState() => _TgAccountCardState();
@@ -84,6 +89,8 @@ class _TgAccountCardState extends State<TgAccountCard> {
     if (linked == true) {
       _snack('رُبط حسابك على تلغرام');
       await _load();
+      // ١٧ نوفمبر (المالك: «يفهم الوكيل انه رابط بوت او رقم تلفون»): الحساب المربوط للتوّ يصير الطريقة المستعمَلة.
+      if (mounted && _s != null && _s!.linked && _s!.mode != 'account') await _setMode('account');
     }
   }
 
@@ -125,6 +132,12 @@ class _TgAccountCardState extends State<TgAccountCard> {
     if (!_loaded || s == null || !s.enabled) return const SizedBox.shrink();
     final limitedNow = s.limitedUntil != null && s.limitedUntil!.isAfter(DateTime.now());
     final notConfigured = s.configured == false;
+    final accountOk = s.linked && s.status != 'disconnected';
+    final bot = widget.botConnected;
+    final botName = (widget.botUsername ?? '').trim();
+    final botMode = s.mode != 'account';
+    // ١٧ نوفمبر (المالك: «تصميم قسم التليكرام مربك… يفهم الوكيل انه رابط بوت او رقم تلفون»): خياران بحاليهما — المحدَّد هو
+    // المستعمَل، وكلٌّ يقول أهو مربوط وبماذا. كان: زرّان ثمّ سطر الحساب تحتهما ولو كانت الطريقة «البوت» غير المربوط.
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       child: Container(
@@ -144,18 +157,76 @@ class _TgAccountCardState extends State<TgAccountCard> {
               Expanded(child: Text('طريقة الإرسال بتلغرام', style: AppType.label(color: AppColors.textHi))),
               if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
             ]),
+            const SizedBox(height: 4),
+            Text('المحدَّدة هي التي تخرج منها رسائل تلغرام لمشتركيك.', style: AppType.muted()),
             const SizedBox(height: Sp.md),
-            Row(children: [
-              Expanded(child: _seg('البوت', LucideIcons.bot, s.mode == 'bot', () => _setMode('bot'))),
-              const SizedBox(width: Sp.sm),
-              Expanded(child: _seg('حسابي', LucideIcons.userRound, s.mode == 'account', () => _setMode('account'))),
-            ]),
+            _methodTile(
+              key: const ValueKey('tg-method-bot'),
+              selected: botMode,
+              icon: LucideIcons.bot,
+              title: 'البوت',
+              hint: 'يصل لمن ضغط رابط بوتك من مشتركيك.',
+              status: bot == null
+                  ? null
+                  : bot
+                      ? _state(ok: true, label: 'مربوط', detail: botName.isEmpty ? null : '@$botName')
+                      : _state(ok: false, label: 'غير مربوط', detail: botMode ? 'اربطه من «ربط البوت» أدناه' : null),
+              footer: bot == true && !botMode
+                  ? Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        key: const ValueKey('tg-use-bot'),
+                        onPressed: _busy ? null : () => _setMode('bot'),
+                        icon: const Icon(LucideIcons.circleCheck, size: 15),
+                        label: const Text('استعمل البوت'),
+                      ),
+                    )
+                  : null,
+              onTap: () => _setMode('bot'),
+            ),
             const SizedBox(height: Sp.sm),
-            Text(
-              s.mode == 'account'
-                  ? 'تخرج رسائل تلغرام من حسابك لمن يُوجد برقمه، ومن ليس على تلغرام تصله بالواتساب.'
-                  : 'تخرج رسائل تلغرام من البوت للمشتركين المربوطين به.',
-              style: AppType.muted(),
+            _methodTile(
+              key: const ValueKey('tg-method-account'),
+              selected: !botMode,
+              icon: LucideIcons.smartphone,
+              title: 'حسابي — برقم هاتفي',
+              hint: 'يصل من حسابك لكلّ مشتركٍ رقمه على تلغرام، ومن ليس عليه تصله بالواتساب.',
+              status: accountOk
+                  ? _state(ok: true, label: 'مربوط', detail: s.user?.display.isNotEmpty == true ? s.user!.display : null)
+                  : s.linked
+                      ? _state(ok: false, label: 'خرج من الجهاز', detail: 'أعد الربط')
+                      : _state(ok: false, label: 'غير مربوط'),
+              footer: accountOk
+                  // ٣٢٠: العدّاد سطرٌ وحده والزرّان تحته (ينزلان سطراً إن ضاق) — كان العدّاد بجانبهما فيُعصر حرفاً حرفاً.
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      if (s.todayNew != null && s.dailyNewCap != null)
+                        Text('اليوم ${s.todayNew} من ${s.dailyNewCap} جديداً', style: AppType.micro(color: AppColors.textMid)),
+                      Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        if (botMode)
+                          TextButton.icon(
+                            key: const ValueKey('tg-use-account'),
+                            onPressed: _busy ? null : () => _setMode('account'),
+                            icon: const Icon(LucideIcons.circleCheck, size: 15),
+                            label: const Text('استعمل حسابي'),
+                          ),
+                        TextButton.icon(
+                          onPressed: _busy ? null : _logout,
+                          icon: const Icon(LucideIcons.unlink, size: 15),
+                          label: const Text('فصل'),
+                        ),
+                      ]),
+                    ])
+                  : SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('tg-account-link'),
+                        style: FilledButton.styleFrom(backgroundColor: _tgBlue),
+                        onPressed: _busy || !s.serviceUp || notConfigured ? null : _link,
+                        icon: const Icon(LucideIcons.link, size: 16),
+                        label: const Text('ربط حسابي'),
+                      ),
+                    ),
+              onTap: () => _setMode('account'),
             ),
             if (!s.serviceUp) ...[
               const SizedBox(height: Sp.sm),
@@ -168,66 +239,82 @@ class _TgAccountCardState extends State<TgAccountCard> {
               const SizedBox(height: Sp.sm),
               _warn('تلغرام قيّد حسابك مؤقّتاً عن مراسلة غير المعارف — حتى ${_hm(s.limitedUntil!)}'),
             ],
-            const SizedBox(height: Sp.md),
-            Divider(height: 1, color: AppColors.border),
-            const SizedBox(height: Sp.md),
-            if (s.linked && s.status != 'disconnected')
-              Row(children: [
-                Icon(LucideIcons.circleUserRound, size: 18, color: AppColors.textMid),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(s.user?.display.isNotEmpty == true ? s.user!.display : 'حسابك مربوط',
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
-                    if (s.todayNew != null && s.dailyNewCap != null)
-                      Text('اليوم ${s.todayNew} من ${s.dailyNewCap} جديداً', style: AppType.micro(color: AppColors.textMid)),
-                  ]),
-                ),
-                TextButton.icon(
-                  onPressed: _busy ? null : _logout,
-                  icon: const Icon(LucideIcons.unlink, size: 15),
-                  label: const Text('فصل'),
-                ),
-              ])
-            else ...[
-              if (s.linked && s.status == 'disconnected') ...[
-                _warn('خرج حسابك من الجهاز — أعد الربط'),
-                const SizedBox(height: Sp.sm),
-              ],
-              FilledButton.icon(
-                key: const ValueKey('tg-account-link'),
-                style: FilledButton.styleFrom(backgroundColor: _tgBlue),
-                onPressed: _busy || !s.serviceUp || notConfigured ? null : _link,
-                icon: const Icon(LucideIcons.link, size: 16),
-                label: const Text('ربط حسابي'),
-              ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _seg(String label, IconData icon, bool on, VoidCallback onTap) => Material(
-        color: on ? _tgBlue.withValues(alpha: 0.12) : AppColors.surfaceSunken,
+  /// خيار طريقة: أيقونة + اسم + علامة «المستعمَلة» + سطر ما يفعل + حاله (+ تذييل). النقر يختاره (الحساب غير المربوط ⇒ يُربط أوّلاً).
+  Widget _methodTile({
+    required Key key,
+    required bool selected,
+    required IconData icon,
+    required String title,
+    required String hint,
+    Widget? status,
+    Widget? footer,
+    required VoidCallback onTap,
+  }) =>
+      Material(
+        key: key,
+        color: selected ? _tgBlue.withValues(alpha: 0.08) : AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(R.md),
         child: InkWell(
           borderRadius: BorderRadius.circular(R.md),
-          onTap: _busy ? null : onTap,
+          onTap: _busy || selected ? null : onTap,
           child: Container(
-            height: 40,
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(R.md),
-              border: Border.all(color: on ? _tgBlue : AppColors.border, width: on ? 1.5 : 1),
+              border: Border.all(color: selected ? _tgBlue : AppColors.border, width: selected ? 1.5 : 1),
             ),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(icon, size: 16, color: on ? _tgBlue : AppColors.textMid),
-              const SizedBox(width: 6),
-              Text(label, style: AppType.label(color: on ? _tgBlue : AppColors.textMid)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(icon, size: 18, color: selected ? _tgBlue : AppColors.textMid),
+                const SizedBox(width: Sp.sm),
+                // حارس النصّ المرن (flex_text_guard): سطران بحدّ — يلتفّ بجانب «المستعمَلة» ولا يُسحق.
+                Expanded(
+                  child: Text(title,
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+                ),
+                if (selected)
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('المستعمَلة', style: AppType.micro(color: _tgBlue)),
+                    const SizedBox(width: 4),
+                    const Icon(LucideIcons.circleCheck, size: 17, color: _tgBlue),
+                  ])
+                else
+                  Icon(LucideIcons.circle, size: 17, color: AppColors.textLow),
+              ]),
+              const SizedBox(height: 4),
+              Text(hint, style: AppType.micro(color: AppColors.textMid)),
+              if (status != null) ...[const SizedBox(height: Sp.sm), status],
+              if (footer != null) ...[const SizedBox(height: Sp.sm), footer],
             ]),
           ),
         ),
       );
+
+  /// «مربوط» (أخضر) / «غير مربوط» (تنبيه) وبجانبه ما رُبط (الاسم واليوزر / @البوت) أو ما يُفعل.
+  Widget _state({required bool ok, required String label, String? detail}) => Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: ok ? AppColors.successSoftBg : AppColors.warningSoftBg,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: ok ? AppColors.successSoftBorder : AppColors.warningSoftBorder),
+          ),
+          child: Text(label, style: AppType.micro(color: ok ? AppColors.success : AppColors.warningOnSoft)),
+        ),
+        if (detail != null) ...[
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(iso(detail),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+          ),
+        ],
+      ]);
 
   Widget _warn(String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

@@ -83,35 +83,29 @@ class WhatsAppSendInfo {
     return WhatsAppSendInfo(sent: sent, reason: reason);
   }
 
-  /// True when the admin should see a "WhatsApp didn't send" notice.
-  /// مطلب المستخدم 2026-06-11: silence the cases the admin
-  /// intentionally configured (feature off / no template) — surface
-  /// only the technical failures they can act on.
-  bool get shouldShowFailure {
-    if (sent) return false;
-    final r = reason ?? '';
-    if (r.isEmpty) return false;
-    // intentional / configured silences:
-    if (r == 'notifications_disabled') return false;
-    if (r == 'no_template') return false;
-    if (r.startsWith('feature_off')) return false;
-    return true;
-  }
+  // ما يُقال للمدير من هذه النتيجة («أُرسلت» / «لم تُرسل» بسببها / لا شيء) ونصوصه في `OpWaNotice.verdictOf`
+  // (services/op_wa_notice.dart) — مطلب ١١ يونيو باقٍ هناك: ما اختاره المدير بنفسه لا يُعرض.
+}
 
-  /// Arabic display for the technical failure reasons. Used by the
-  /// sheet snackbar when shouldShowFailure is true.
-  String get arabicReason {
-    switch (reason ?? '') {
-      case 'not_connected':
-        return 'الواتساب غير متصل';
-      case 'no_phone':
-        return 'لا يوجد رقم هاتف للمشترك';
-      case 'no_admin_id':
-        return 'حساب المدير غير محدد';
-      default:
-        return reason ?? 'سبب غير معروف';
-    }
-  }
+/// حال رسالة العمليّة كما يقرؤها [SubscribersApi.opWa] من الخادم (سطر الحركة: wa_status / wa_reason).
+class OpWaRead {
+  const OpWaRead(this.state, this.reason);
+
+  /// `sent` · `failed` · `skipped` · `pending` · `none` — و`unreachable` محلّيّة (لم يصل ردّ).
+  final String state;
+  final String? reason;
+
+  static const states = {'sent', 'failed', 'skipped', 'pending', 'none'};
+
+  /// لم يصل ردٌّ من الخادم (شبكة/مهلة) — يجوز السؤال ثانيةً.
+  static const unreachable = OpWaRead('unreachable', null);
+
+  /// النتيجة النهائيّة بشكل ردّ العمليّة نفسه ([WhatsAppSendInfo]) — null ما دامت لم تُحسم (pending/none/unreachable).
+  WhatsAppSendInfo? get info => switch (state) {
+        'sent' => const WhatsAppSendInfo(sent: true, reason: null),
+        'failed' || 'skipped' => WhatsAppSendInfo(sent: false, reason: reason),
+        _ => null,
+      };
 }
 
 /// 2026-08-26 (manual WA phase 2): محتوى preview WA يُعاد من الـbackend
@@ -1535,6 +1529,37 @@ class SubscribersApi {
     } catch (e) {
       _log('pay-debt/$idx', e);
       return (ok: false, message: 'تعذّر التسديد', wa: null, waPreview: null);
+    }
+  }
+
+  /// «هل أُرسلت رسالة العمليّة؟» — GET /api/v2/subscribers/:idx/op-wa?op=pay|activate|extend&age_ms=<كم مضى على ضغط الزرّ>.
+  ///
+  /// العمليّة تردّ فور ثبوتها ولا تنتظر الإشعار (الخادم ١٧ نوفمبر)، فنتيجته قد لا تكون في ردّها: تُقرأ من هنا بعد ثوانٍ.
+  /// [OpWaRead.state]: `sent` · `failed` · `skipped` (والسبب في `reason`) · `pending` (لم ينتهِ بعد) · `none` (لا إشعار
+  /// لهذه العمليّة). `age_ms` فرقٌ بساعة الهاتف نفسها لا وقتٌ مطلق — ساعةٌ خاطئة لا تضرّ.
+  ///
+  /// `null` = ردٌّ لا يُقرأ (رفض، خادمٌ بلا المسار) ⇒ لا يُعاد السؤال. [OpWaRead.unreachable] = لم يصل ردٌّ أصلاً (شبكة) ⇒
+  /// يجوز السؤال ثانيةً. قراءةٌ وحدها — لا تُرسل شيئاً ولا تغيّر شيئاً.
+  static Future<OpWaRead?> opWa(String idx, {required String op, required int ageMs}) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/${Uri.encodeComponent(idx)}/op-wa',
+        queryParameters: {'op': op, 'age_ms': ageMs < 0 ? 0 : ageMs},
+        options: Options(receiveTimeout: const Duration(seconds: 12)),
+      );
+      final body = r.data ?? const <String, dynamic>{};
+      final data = body['data'];
+      if (body['success'] != true || data is! Map) return null;
+      final state = data['state']?.toString() ?? '';
+      if (!OpWaRead.states.contains(state)) return null;
+      final reason = data['reason']?.toString();
+      return OpWaRead(state, reason == null || reason.isEmpty ? null : reason);
+    } on DioException catch (e) {
+      _log('op-wa/$idx', e);
+      return e.response == null ? OpWaRead.unreachable : null;
+    } catch (e) {
+      _log('op-wa/$idx', e);
+      return null;
     }
   }
 

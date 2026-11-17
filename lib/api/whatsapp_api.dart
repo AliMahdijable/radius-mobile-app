@@ -331,7 +331,7 @@ class WhatsConnectionStatus {
   }
 }
 
-/// 7 toggles لكل المسارات التلقائية في واتساب. مطابق صفّ
+/// 8 toggles لكل المسارات التلقائية في واتساب. مطابق صفّ
 /// whatsapp_features في الـDB.
 class WhatsFeatures {
   const WhatsFeatures({
@@ -342,6 +342,7 @@ class WhatsFeatures {
     this.serviceEndNotification = false,
     this.welcomeMessage = false,
     this.sendOnExtension = false,
+    this.sendOnPayment = true,
   });
 
   /// Master switch — لو معطل، كل الإشعارات تتوقف بغض النظر عن بقية toggles.
@@ -353,6 +354,10 @@ class WhatsFeatures {
   final bool welcomeMessage;
   final bool sendOnExtension;
 
+  /// «تأكيد التسديد» (١٧ نوفمبر — المالك: «تمام سويها»): رسالة المشترك بعد «تسديد دين». **مفعّل افتراضيّاً** — قبله لم يكن
+  /// له مفتاح (القالب المحفوظ كان المفتاح)، والخادم القديم لا يرسل الحقل ⇒ غيابه = مفعّل كما يفعل الخادم.
+  final bool sendOnPayment;
+
   WhatsFeatures copyWith({
     bool? notificationsEnabled,
     bool? sendOnActivation,
@@ -361,6 +366,7 @@ class WhatsFeatures {
     bool? serviceEndNotification,
     bool? welcomeMessage,
     bool? sendOnExtension,
+    bool? sendOnPayment,
   }) {
     return WhatsFeatures(
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -371,6 +377,7 @@ class WhatsFeatures {
           serviceEndNotification ?? this.serviceEndNotification,
       welcomeMessage: welcomeMessage ?? this.welcomeMessage,
       sendOnExtension: sendOnExtension ?? this.sendOnExtension,
+      sendOnPayment: sendOnPayment ?? this.sendOnPayment,
     );
   }
 
@@ -385,6 +392,7 @@ class WhatsFeatures {
       serviceEndNotification: b(j['serviceEndNotification']),
       welcomeMessage: b(j['welcomeMessage']),
       sendOnExtension: b(j['sendOnExtension']),
+      sendOnPayment: j['sendOnPayment'] == null ? true : b(j['sendOnPayment']),
     );
   }
 
@@ -396,6 +404,7 @@ class WhatsFeatures {
         'serviceEndNotification': serviceEndNotification,
         'welcomeMessage': welcomeMessage,
         'sendOnExtension': sendOnExtension,
+        'sendOnPayment': sendOnPayment,
       };
 }
 
@@ -1291,10 +1300,16 @@ class WhatsAppApi {
   /// Replaces every {placeholder} in the template body. Mirrors v1's
   /// var set from subscriber_details_screen.dart line ~2012 — same
   /// keys so existing admin templates keep working unchanged.
+  /// «اسم المستخدم/اليوزر: {subscriber_name}» — المتغيّر هنا بمعنى اليوزر (قوالب قبل ١٧ نوفمبر).
+  static final RegExp _usernameLabelSubName =
+      RegExp(r'((?:اسم المستخدم|اليوزر|يوزرك|يوزر)[ \t]*[:：]?[ \t]*)\{subscriber_name\}');
+
   static String _renderTemplate(String body, Subscriber sub,
       [PackageNames names = PackageNames.empty]) {
     final arabicName = sub.fullName.trim();
-    final subscriberName = sub.username.isNotEmpty ? sub.username : arabicName;
+    // {subscriber_name} = الاسم العربيّ وإلّا اليوزر (١٧ نوفمبر بكلمة المالك — كالخادم templateHelper.subscriberDisplayName؛
+    // كان اليوزر أوّلاً باتّفاق ٦ أيار). fullName نفسه يعيد اليوزر حين لا اسم.
+    final subscriberName = arabicName.isNotEmpty ? arabicName : sub.username;
     final firstName = arabicName.isNotEmpty ? arabicName : sub.username;
     final price = sub.price?.toInt() ?? 0;
     final priceStr = price > 0 ? formatIQD(price) : '0';
@@ -1325,7 +1340,8 @@ class WhatsAppApi {
       '{paid_amount}': '0',
       '{username}': sub.username,
     };
-    var out = body;
+    // قوالب كتبت {subscriber_name} بمعنى اليوزر («اسم المستخدم: {subscriber_name}») ⇒ يبقى يوزراً هناك (كالخادم).
+    var out = body.replaceAllMapped(_usernameLabelSubName, (m) => '${m[1]}{username}');
     vars.forEach((k, v) => out = out.replaceAll(k, v));
     return out;
   }

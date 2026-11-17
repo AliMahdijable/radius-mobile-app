@@ -17,7 +17,7 @@
     "Variables (fill): /\\{([a-z_]+)\\}/ tokens whose name is in VARIABLES are replaced (no re-scan of inserted values); any other {…} stays literal. A variable whose kinds do not include the receipt kind is ''. Then every line: runs of [ \\t\\u00a0] ⇒ one space, trimmed; empty lines dropped; lines joined with '\\n'. hidden = result '' OR (≥1 known variable and every known variable empty). Hidden texts are not emitted.",
     "Variable values: shop_name (as printed), shop_phone, shop_address, receipt_type = RECEIPT_TYPE_LABELS[kind], receipt_no = receiptNoText, date / time = issuedText split at its first space, issuer, subscriber_name = display name, firstname = first whitespace-separated word of str(subscriber.name), username, phone, package_name, sas_package_name = str(sasPackageName) || str(packageName), package_price (money if > 0), expiry_date (expiry text), days_remaining = '<n>', remaining_days = '<n> يوم', payment_type (label), amount (money), paid_amount (payment ⇒ amount; cash ⇒ amount; partial-cash ⇒ partialAmount; non-cash ⇒ 0; else ''), debt_amount (money when newBalance < 0), credit_amount (money when > 0), balance ('دين <money>' / 'رصيد <money>' / '0 د.ع'), sale_total (money), sale_payment ('على حساب المشترك (دين)' | 'نقداً').",
     "Rendering tokens: final font px = round(font_size_base × RATIOS[value|label|caption] × scale) (subtitle/title box from font_size_title × 0.8 × scale; shop name = font_size_title × scale). DENSITY values are web px; the app uses pt = px × 0.75. tone 'debt' red / 'credit' green / 'total' = subtitle size, weight 800 (colours dropped when mono or on POS in the app). emoji (web only): 📍 before shop_address, 📞 before shop_phone, 🙏 after the default footer (icon 'pray'). Tashkeel is kept in resolved text; the app strips it when drawing.",
-    "fixtures/2 (receipt designer v3). The frozen first file is receipt-layout.fixtures.v1.json (sha256 d18f3130…) in both repos. Cases c01–c17 keep their inputs; their expected outputs gain the v3 keys at neutral values. Clauses 17–32 extend 1–16; where they differ, they win.",
+    "fixtures/2 (receipt designer v3). The frozen first file is receipt-layout.fixtures.v1.json (sha256 9198c4f6…) in both repos. Cases c01–c17 keep their inputs; their expected outputs gain the v3 keys at neutral values. Clauses 17–32 extend 1–16; where they differ, they win.",
     "17. v: clients parse any object as a layout; v is ignored for rendering. A client saves v = max(3, stored v) and never lowers it (compactLayout emits v: 3, or the stored integer v when it is above 3).",
     "18. Tolerant parse of the v3 props (fields, sections, blocks and texts alike): pt kept only when it is a number in PT_STEPS; align only in right|center|left; row_mode only stack|value (line = absent); gap_before/gap_after only numbers, clamped to 0–10 and rounded to the nearest 0.5 (round half up), 0 = absent; sep only in SEPS; only = the known kinds in KINDS order, an empty result = every kind. Section only exists for subscriber/package/transaction. Fields are read for ALL_FIELD_IDS (21 + the 3 reserved). Texts: at must be in TEXT_POS3 (else the text is skipped), the rest as clause 4. currency: a string, trimmed, one line, at most 8 code points (else the default «د.ع»; \"\" = no unit). digits: latin|arabic (default latin; phase 2 — not rendered yet). types is retired and ignored.",
     "19. Block order: the known ids of order.blocks (BLOCK_IDS), deduplicated in first-occurrence order, then every missing id in default order. It applies to every kind (sales too). Slots: top before the first block; after_shop after shop_lines; after_title after title; after_meta after meta; before_qr before qr; before_footer before footer; bottom after the last block; after_subscriber/after_package/after_transaction after their body section (on a sale: after sale_customer, after sale_items, after sale_totals before the note). A slot emits its texts even when its anchor block does not print. Texts in one slot keep their array order.",
@@ -361,7 +361,7 @@
       },
       "cash_paid": {
         "group": "transaction",
-        "label": "المُدفَع نقداً",
+        "label": "المدفوع نقداً",
         "bold": true,
         "ltr": false,
         "mode": "row",
@@ -1538,7 +1538,7 @@
     ],
     "TEMPLATES": {
       "pos58_compact": {
-        "label": "كاشير ٥٨ مضغوط",
+        "label": "حراريّ ٥٨ مضغوط",
         "paper_size": "pos",
         "v1": {
           "paper_width_mm": 58,
@@ -1561,7 +1561,7 @@
         }
       },
       "pos80": {
-        "label": "كاشير ٨٠",
+        "label": "حراريّ ٨٠",
         "paper_size": "pos",
         "v1": {
           "paper_width_mm": 80,
@@ -2029,7 +2029,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -2813,7 +2813,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -3613,7 +3613,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -4445,7 +4445,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -6215,7 +6215,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -6602,7 +6602,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -7912,7 +7912,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -8683,7 +8683,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -9159,7 +9159,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -9634,7 +9634,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -9914,7 +9914,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -10435,7 +10435,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -10941,7 +10941,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -11643,7 +11643,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -12040,7 +12040,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -12503,7 +12503,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -12968,7 +12968,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -13384,7 +13384,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -13781,7 +13781,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 IQD",
                 "ltr": false,
                 "bold": true,
@@ -14983,7 +14983,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -15342,7 +15342,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -16640,7 +16640,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -17118,7 +17118,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -17595,7 +17595,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,

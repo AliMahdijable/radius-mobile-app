@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/agent_code_tab.dart';
+import 'widgets/package_image.dart';
 import 'widgets/services_tab.dart';
 import 'widgets/link_image_preview.dart';
 import '../desktop/desk_widgets.dart';
@@ -30,7 +31,10 @@ import '../../widgets/merged_section.dart';
 /// يمكن أن يُمنحه، ومخفيّان عن موظّف ايرث لنك (لا يُمنح له — [permShown])،
 /// فيبقى له تبويب الرمز وحده بلا شريط تبويبات.
 class PortalSettingsScreen extends StatefulWidget {
-  const PortalSettingsScreen({super.key});
+  const PortalSettingsScreen({super.key, this.packageImagePicker = pickPackageImage});
+
+  /// اختيار صورة الباقة وضغطها (١٧ نوفمبر) — الاختبارات تحقن بديلاً بلا معرض.
+  final PackageImagePicker packageImagePicker;
 
   /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن «طلبات التفعيل» معاً.
   static Widget mergedPage() => const MergedSection(
@@ -110,7 +114,7 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
                 const AgentCodeTab(),
                 if (_canCustomize) const _InfoTab() else const _LockedTab(),
                 if (_canCustomize)
-                  const _PackagesTab()
+                  _PackagesTab(picker: widget.packageImagePicker)
                 else
                   const _LockedTab(),
                 // «خدماتنا» (١٦ نوفمبر): تطبيقات الوكيل وصفحاته لمشتركيه (widgets/services_tab.dart)
@@ -599,7 +603,8 @@ class _PackageImagePreview extends StatelessWidget {
 // وصف الباقات
 // ═════════════════════════════════════════════
 class _PackagesTab extends StatefulWidget {
-  const _PackagesTab();
+  const _PackagesTab({required this.picker});
+  final PackageImagePicker picker;
   @override
   State<_PackagesTab> createState() => _PackagesTabState();
 }
@@ -634,7 +639,7 @@ class _PackagesTabState extends State<_PackagesTab> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PackageEditorSheet(pkg: p),
+      builder: (_) => _PackageEditorSheet(pkg: p, picker: widget.picker),
     );
     if (result != null && mounted) {
       setState(() {
@@ -898,8 +903,9 @@ class _PackageRow extends StatelessWidget {
 // Package Editor (Bottom Sheet)
 // ═════════════════════════════════════════════
 class _PackageEditorSheet extends StatefulWidget {
-  const _PackageEditorSheet({required this.pkg});
+  const _PackageEditorSheet({required this.pkg, required this.picker});
   final PortalPackage pkg;
+  final PackageImagePicker picker;
 
   @override
   State<_PackageEditorSheet> createState() => _PackageEditorSheetState();
@@ -913,15 +919,51 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
   late bool _hidden;
   bool _saving = false;
 
+  /// صورة الباقة (١٧ نوفمبر): مختارةٌ الآن من الهاتف ومضغوطة (تُرفع مع «حفظ»)، أو مرفوعةٌ سابقاً (عنوانها على خادمنا — تبقى ما
+  /// لم تُزل أو تُستبدل). بلا أيّهما: حقل الرابط كما كان.
+  PreparedPackageImage? _picked;
+  String? _uploaded;
+  bool _picking = false;
+
   @override
   void initState() {
     super.initState();
     _displayName = TextEditingController(text: widget.pkg.displayName ?? '');
     _description = TextEditingController(text: widget.pkg.description ?? '');
-    _imageUrl = TextEditingController(text: widget.pkg.imageUrl ?? '');
+    final cur = widget.pkg.imageUrl;
+    _uploaded = isUploadedPackageImage(cur) ? cur!.trim() : null;
+    _imageUrl = TextEditingController(text: _uploaded != null ? '' : (cur ?? ''));
     _order = widget.pkg.displayOrder;
     _hidden = widget.pkg.isHidden;
   }
+
+  Future<void> _pickImage() async {
+    if (_picking || _saving) return;
+    setState(() => _picking = true);
+    try {
+      final p = await widget.picker();
+      if (!mounted || p == null) return;
+      setState(() {
+        _picked = p;
+        _uploaded = null;
+        _imageUrl.clear();
+      });
+    } on PackageImageError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.reason == 'too-big' ? 'portal.pkg_image_too_big'.tr() : 'portal.pkg_image_failed'.tr()),
+        backgroundColor: AppColors.errorFill,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  void _removeImage() => setState(() {
+        _picked = null;
+        _uploaded = null;
+      });
 
   @override
   void dispose() {
@@ -932,23 +974,35 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
   }
 
   Future<void> _save() async {
-    if (_saving) return;
+    if (_saving || _picking) return;
     setState(() => _saving = true);
-    final r = await PortalSettingsApi.updatePackage(
-      widget.pkg.profileId,
-      displayName: _nullIfEmpty(_displayName.text),
-      description: _nullIfEmpty(_description.text),
-      imageUrl: _nullIfEmpty(_imageUrl.text),
-      displayOrder: _order,
-      isHidden: _hidden,
-    );
+    final picked = _picked;
+    final uploaded = _uploaded;
+    // الصورة: مختارةٌ الآن ⇒ تُرفع (image_data)؛ مرفوعةٌ سابقاً باقية ⇒ لا تُلمس؛ وإلّا الرابط أو لا شيء (null يُزيلها)
+    final r = picked != null || uploaded != null
+        ? await PortalSettingsApi.updatePackage(
+            widget.pkg.profileId,
+            displayName: _nullIfEmpty(_displayName.text),
+            description: _nullIfEmpty(_description.text),
+            imageData: picked?.image.dataUrl,
+            displayOrder: _order,
+            isHidden: _hidden,
+          )
+        : await PortalSettingsApi.updatePackage(
+            widget.pkg.profileId,
+            displayName: _nullIfEmpty(_displayName.text),
+            description: _nullIfEmpty(_description.text),
+            imageUrl: _nullIfEmpty(_imageUrl.text),
+            displayOrder: _order,
+            isHidden: _hidden,
+          );
     if (!mounted) return;
     setState(() => _saving = false);
     if (r.ok) {
       Navigator.of(context).pop(widget.pkg.copyWith(
         displayName: _nullIfEmpty(_displayName.text),
         description: _nullIfEmpty(_description.text),
-        imageUrl: _nullIfEmpty(_imageUrl.text),
+        imageUrl: picked != null ? (r.imageUrl ?? widget.pkg.imageUrl) : (uploaded ?? _nullIfEmpty(_imageUrl.text)),
         displayOrder: _order,
         isHidden: _hidden,
       ));
@@ -1055,20 +1109,32 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                     maxLines: 4,
                   ),
                   const SizedBox(height: Sp.md),
-                  _labeledField(
-                    label: 'portal.pkg_image_url'.tr(),
-                    hint: 'https://example.com/pkg.png',
-                    controller: _imageUrl,
-                    maxLength: 500,
-                    keyboardType: TextInputType.url,
-                    helperText: 'portal.image_link_hint'.tr(),
+                  // صورة الباقة (١٧ نوفمبر): رفعٌ من الهاتف مضغوطةً، أو رابطٌ كما كان
+                  _PackageImageSection(
+                    picked: _picked,
+                    uploaded: _uploaded,
+                    picking: _picking,
+                    busy: _saving,
+                    onPick: _pickImage,
+                    onRemove: _removeImage,
                   ),
-                  // معاينةٌ حيّة مع الكتابة — لم يكن للصورة معاينةٌ أصلاً.
-                  ListenableBuilder(
-                    listenable: _imageUrl,
-                    builder: (_, __) =>
-                        _PackageImagePreview(url: _imageUrl.text.trim()),
-                  ),
+                  if (_picked == null && _uploaded == null) ...[
+                    const SizedBox(height: Sp.md),
+                    _labeledField(
+                      label: 'portal.pkg_image_url'.tr(),
+                      hint: 'https://example.com/pkg.png',
+                      controller: _imageUrl,
+                      maxLength: 500,
+                      keyboardType: TextInputType.url,
+                      helperText: 'portal.image_link_hint'.tr(),
+                    ),
+                    // معاينةٌ حيّة مع الكتابة — لم يكن للصورة معاينةٌ أصلاً.
+                    ListenableBuilder(
+                      listenable: _imageUrl,
+                      builder: (_, __) =>
+                          _PackageImagePreview(url: _imageUrl.text.trim()),
+                    ),
+                  ],
                   const SizedBox(height: Sp.md),
                   Row(
                     children: [
@@ -1121,6 +1187,145 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// صورة الباقة في محرّرها (١٧ نوفمبر — المالك: «امكانيه رفع صوره من التطبيق مالتنا بعد ضغطها حتى لاتاخذ حجم»): بلا صورةٍ مرفوعة ⇒
+/// زرّ «رفع صورة من الهاتف» فوق حقل الرابط (كما كان)؛ وبها ⇒ معاينةٌ بنسبة بطاقة المشترك (16:9) وحجمها بعد الضغط، و«تغيير الصورة» و«إزالة».
+class _PackageImageSection extends StatelessWidget {
+  const _PackageImageSection({
+    required this.picked,
+    required this.uploaded,
+    required this.picking,
+    required this.busy,
+    required this.onPick,
+    required this.onRemove,
+  });
+  final PreparedPackageImage? picked;
+  final String? uploaded;
+  final bool picking;
+  final bool busy;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+
+  // زرّان متجاوران بعرضٍ متساوٍ: حشوةٌ أصغر من الافتراضيّة (١٦/٢٤) كي لا يُقصّ الاسم على 320 × خطّ 1.2
+  static final ButtonStyle _compact = OutlinedButton.styleFrom(
+    padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
+    minimumSize: const Size(0, 44),
+  );
+
+  Widget _spinner(double size) => SizedBox(
+        width: size,
+        height: size,
+        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final p = picked;
+    final has = p != null || uploaded != null;
+    final locked = picking || busy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('portal.pkg_image'.tr(),
+            style: AppType.subtitle(color: AppColors.textMid).copyWith(fontSize: 11)),
+        const SizedBox(height: 4),
+        if (!has)
+          Material(
+            color: AppColors.brandSoftBg,
+            borderRadius: BorderRadius.circular(R.md),
+            child: InkWell(
+              key: const ValueKey('pkg-image-upload'),
+              borderRadius: BorderRadius.circular(R.md),
+              onTap: locked ? null : onPick,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
+                child: Row(
+                  children: [
+                    picking ? _spinner(22) : Icon(LucideIcons.imageUp, size: 22, color: AppColors.brand),
+                    const SizedBox(width: Sp.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('portal.pkg_image_upload'.tr(),
+                              style: AppType.button(color: AppColors.brand).copyWith(fontSize: 13.5)),
+                          const SizedBox(height: 2),
+                          Text('portal.pkg_image_upload_hint'.tr(),
+                              style: AppType.subtitle(color: AppColors.textMid).copyWith(fontSize: 11.5)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(R.md),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: ColoredBox(
+                color: AppColors.brandSoftBg,
+                child: p != null
+                    ? Image.memory(p.image.bytes,
+                        key: const ValueKey('pkg-image-picked'), fit: BoxFit.cover, gaplessPlayback: true)
+                    : Image.network(
+                        uploaded!,
+                        key: const ValueKey('pkg-image-uploaded'),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            Center(child: Icon(LucideIcons.imageOff, color: AppColors.error)),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: Sp.sm),
+          Text(
+            p != null
+                ? 'portal.pkg_image_compressed'.tr(namedArgs: {
+                    'size': packageImageSizeLabel(p.bytes),
+                    // الأبعاد LTR معزولة — «1280×720» لا تنقلب داخل سطرٍ عربيّ
+                    'dims': '\u2066${p.width}×${p.height}\u2069',
+                  })
+                : 'portal.pkg_image_uploaded'.tr(),
+            style: AppType.subtitle(color: AppColors.textMid).copyWith(fontSize: 11.5),
+          ),
+          const SizedBox(height: Sp.sm),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('pkg-image-change'),
+                  onPressed: locked ? null : onPick,
+                  style: _compact,
+                  icon: picking ? _spinner(16) : Icon(LucideIcons.imageUp, size: 16, color: AppColors.brand),
+                  label: Text('portal.pkg_image_change'.tr(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.button(color: AppColors.brand).copyWith(fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('pkg-image-remove'),
+                  onPressed: locked ? null : onRemove,
+                  style: _compact,
+                  icon: Icon(LucideIcons.trash2, size: 16, color: AppColors.error),
+                  label: Text('portal.pkg_image_remove'.tr(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.button(color: AppColors.error).copyWith(fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

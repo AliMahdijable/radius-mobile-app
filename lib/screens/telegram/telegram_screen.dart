@@ -161,12 +161,15 @@ class _TelegramScreenState extends State<TelegramScreen> {
                         if (MergedSection.routedCompanyOf(context) == null)
                           TgAccountCard(
                             adminId: _adminId!,
+                            botConnected: _status?.connected,
+                            botUsername: _status?.botUsername,
                             onStatus: (s) {
                               if (mounted) setState(() => _tgAcc = s);
                             },
                           ),
+                        // على «حسابي» لا أقسام للبوت (الخيار المحدَّد في البطاقة يقولها) — كان سطرٌ إضافيّ هنا.
                         if (_tgAcc?.accountMode == true)
-                          _accountModeNote()
+                          const SizedBox.shrink()
                         else if (_status?.connected == true)
                           ..._connectedContent()
                         else
@@ -177,21 +180,6 @@ class _TelegramScreenState extends State<TelegramScreen> {
       )),
     );
   }
-
-  /// على «حسابي»: سطرٌ مكان أقسام البوت (لا يبدو أنّ الطريقتين معاً).
-  Widget _accountModeNote() => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-        child: Container(
-          key: const ValueKey('tg-bot-hidden'),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceSunken,
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Text('رسائل تلغرام تخرج الآن من حسابك — البوت لا يُستعمل حتى ترجع إلى «البوت».', style: AppType.muted()),
-        ),
-      );
 
   // ─── SETUP (not connected) ─────────────────────────────────────
 
@@ -208,13 +196,9 @@ class _TelegramScreenState extends State<TelegramScreen> {
         ),
       ];
     }
+    // ١٧ نوفمبر (المالك: «ابد ربط البوت هاي لازم تلغيها او تحسن من تصميم ويكون اوضح»): لا لافتة «ابدأ بربط البوت» — بطاقة
+    // الخطوات نفسها عنوانها «ربط البوت»، وحال البوت (غير مربوط) في خيار «البوت» أعلاه.
     return [
-      _compactHeader(
-        icon: LucideIcons.send,
-        title: 'ابدأ بربط البوت',
-        subtitle: 'أنشئ بوت من @BotFather وربطه هنا خلال دقيقتين.',
-        color: _tgBlue,
-      ),
       const SizedBox(height: 12),
       const _StepsCard(tgBlue: _tgBlue),
       const SizedBox(height: 12),
@@ -620,7 +604,7 @@ class _StepsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('الخطوات (دقيقتان)',
+          Text('ربط البوت — الخطوات (دقيقتان)',
               style: AppType.label(color: AppColors.textHi)
                   .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),

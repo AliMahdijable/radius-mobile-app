@@ -112,6 +112,15 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
   List<PortalLogin>? _logins;
   bool _loginsLoading = false;
 
+  /// «آخر دخول المشتركين»: ٥ أوّلاً ثمّ «عرض المزيد» ٥ ٥ (١٧ نوفمبر — المالك: «السجل خلي ٥ قراءات فقط ويكدر يحمل المزيد»).
+  /// المجلوب ٢٠ (حتى ٢٠٠ — حدّ الخادم): تنفد المعروضة ⇒ «عرض المزيد» يجلب ٢٠ أخرى.
+  static const int _loginsStep = 5;
+  static const int _loginsFetchStep = 20;
+  static const int _loginsFetchMax = 200;
+  int _loginsShown = _loginsStep;
+  int _loginsLimit = _loginsFetchStep;
+  bool _loginsMoreLoading = false;
+
   /// ٤٠٣ على السجلّ: صلاحيّةٌ سُحبت ولم تتحدّث صلاحيّات الجهاز بعد — يُقفل
   /// القسم بمكانه كمن لا يملكها، لا «تعذّر التحميل» لصلاحيّةٍ ناقصة.
   bool _loginsDenied = false;
@@ -175,7 +184,7 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
   }
 
   Future<void> _loadLogins() async {
-    final r = await PortalSettingsApi.getLogins(limit: 20);
+    final r = await PortalSettingsApi.getLogins(limit: _loginsLimit);
     if (!mounted) return;
     setState(() {
       if (r.denied) {
@@ -196,6 +205,33 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
   Future<void> _retryLogins() async {
     setState(() => _loginsLoading = true);
     await _loadLogins();
+  }
+
+  /// المجلوب أكثر من المعروض، أو امتلأ المجلوب (قد يكون بالخادم أكثر) وما بلغ حدّه.
+  bool get _loginsCanMore {
+    final l = _logins;
+    if (l == null) return false;
+    return _loginsShown < l.length || (l.length >= _loginsLimit && _loginsLimit < _loginsFetchMax);
+  }
+
+  Future<void> _moreLogins() async {
+    final l = _logins;
+    if (l == null || _loginsMoreLoading) return;
+    if (_loginsShown < l.length) {
+      setState(() => _loginsShown += _loginsStep);
+      return;
+    }
+    if (l.length < _loginsLimit || _loginsLimit >= _loginsFetchMax) return;
+    setState(() {
+      _loginsMoreLoading = true;
+      _loginsLimit = (_loginsLimit + _loginsFetchStep).clamp(_loginsFetchStep, _loginsFetchMax);
+    });
+    await _loadLogins();
+    if (!mounted) return;
+    setState(() {
+      _loginsMoreLoading = false;
+      _loginsShown += _loginsStep;
+    });
   }
 
   // ─── الإجراءات ───
@@ -461,6 +497,10 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
               loading: _loginsLoading,
               rows: _logins,
               onRetry: _retryLogins,
+              shown: _loginsShown,
+              canMore: _loginsCanMore,
+              moreLoading: _loginsMoreLoading,
+              onMore: _moreLogins,
             ),
           ],
         ],
@@ -1049,11 +1089,21 @@ class _LoginsCard extends StatelessWidget {
     required this.loading,
     required this.rows,
     required this.onRetry,
+    this.shown = 5,
+    this.canMore = false,
+    this.moreLoading = false,
+    this.onMore,
   });
 
   final bool loading;
   final List<PortalLogin>? rows;
   final VoidCallback onRetry;
+
+  /// كم صفّاً يُرسم (٥ ثمّ ٥) — و«عرض المزيد» تحتها ما دام [canMore].
+  final int shown;
+  final bool canMore;
+  final bool moreLoading;
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -1088,11 +1138,25 @@ class _LoginsCard extends StatelessWidget {
       );
     } else {
       final now = DateTime.now();
+      final n = shown < list.length ? shown : list.length;
       body = Column(
         children: [
-          for (var i = 0; i < list.length; i++) ...[
+          for (var i = 0; i < n; i++) ...[
             if (i > 0) Divider(height: 1, color: AppColors.divider),
             _LoginRow(row: list[i], now: now),
+          ],
+          if (canMore) ...[
+            Divider(height: 1, color: AppColors.divider),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                key: const ValueKey('portal-logins-more'),
+                onPressed: moreLoading ? null : onMore,
+                child: moreLoading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text('portal.logins_more'.tr()),
+              ),
+            ),
           ],
         ],
       );

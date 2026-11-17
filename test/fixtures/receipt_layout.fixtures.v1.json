@@ -250,7 +250,7 @@
       },
       "cash_paid": {
         "group": "transaction",
-        "label": "المُدفَع نقداً",
+        "label": "المدفوع نقداً",
         "bold": true,
         "ltr": false,
         "mode": "row",
@@ -893,7 +893,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -1396,7 +1396,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -1903,7 +1903,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -2427,7 +2427,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -3524,7 +3524,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -3764,7 +3764,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -4605,7 +4605,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -5091,7 +5091,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -5410,7 +5410,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,
@@ -5708,7 +5708,7 @@
               },
               {
                 "id": "cash_paid",
-                "label": "المُدفَع نقداً",
+                "label": "المدفوع نقداً",
                 "value": "25,000 د.ع",
                 "ltr": false,
                 "bold": true,

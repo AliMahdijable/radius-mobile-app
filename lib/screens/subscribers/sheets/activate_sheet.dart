@@ -19,6 +19,7 @@ import '../../../models/subscriber.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../services/op_wa_notice.dart';
 import '../../../services/provider_service.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
@@ -807,6 +808,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       elData['user_price'] = _elRawPrice;
 
       setState(() => _submitting = true);
+      // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التفعيل؟» (OpWaNotice).
+      final pressedAt = DateTime.now();
       final manualMode = ManualWaPrefs.enabled.value;
       final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
         idx: idx,
@@ -860,16 +863,24 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         return;
       }
       SubscriberEvents.notifyChange();
-      // تنبيه «لم يُسجَّل الدين» بعد إشعار النجاح — على الطبقة العليا (تُلتقط
-      // قبل الإغلاق) فيبقى بعد إغلاق الشيت، تِلو النجاح لا فوقه (كشيت الإضافة).
-      final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
-      final okShown = showSheetSnack(context, 'sheets.renew_ok'.tr(), isError: false);
-      if (result.debtWriteFailed && rootOverlay != null) {
-        final warn = result.debtWriteMessage ??
-            'sheets.activate_debt_not_recorded'.tr();
-        unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, warn,
-            isError: true, duration: const Duration(seconds: 8))));
-      }
+      // النجاح، ثمّ تنبيه «لم يُسجَّل الدين» إن وقع، ثمّ نتيجة رسالة التفعيل (أُرسلت / لم تُرسل بسببها) — كلٌّ في دوره
+      // على الطبقة العليا (تُلتقط قبل الإغلاق) فيبقى بعد إغلاق الشيت، تِلو النجاح لا فوقه (كشيت الإضافة).
+      unawaited(OpWaNotice.show(
+        context,
+        sub: widget.sub,
+        op: OpWaKind.activate,
+        okText: 'sheets.renew_ok'.tr(),
+        pressedAt: pressedAt,
+        wa: result.wa,
+        manual: manualMode,
+        followUps: [
+          if (result.debtWriteFailed)
+            (
+              text: result.debtWriteMessage ?? 'sheets.activate_debt_not_recorded'.tr(),
+              duration: const Duration(seconds: 8),
+            ),
+        ],
+      ));
       if (_printReceiptChecked) {
         setState(() => _printingReceipt = true);
         final printed = await ReceiptService.printActivation(
@@ -903,6 +914,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final useCard = _cardMode;
     final railPin = useCard && _railExternal && !_railPinBad ? _railPin : null;
     setState(() => _submitting = true);
+    // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التفعيل؟» (OpWaNotice).
+    final pressedAt = DateTime.now();
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يبني الرسالة
     // ويعيدها في wa_preview بلا إرسال، ونفتح modal بعد النجاح.
     final manualMode = ManualWaPrefs.enabled.value;
@@ -945,12 +958,17 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
     if (openStock) CardsState.consumeOne();
     SubscriberEvents.notifyChange();
-    showSheetSnack(
+    // النجاح ومعه نتيجة رسالة التفعيل (أُرسلت / لم تُرسل بسببها) — يبقى بعد إغلاق الشيت.
+    unawaited(OpWaNotice.show(
       context,
-      useCard ? _cardOkText(result.card) : 'sheets.renew_ok'.tr(),
-      isError: false,
-      duration: Duration(seconds: useCard ? 5 : 3),
-    );
+      sub: widget.sub,
+      op: OpWaKind.activate,
+      okText: useCard ? _cardOkText(result.card) : 'sheets.renew_ok'.tr(),
+      okDuration: Duration(seconds: useCard ? 5 : 3),
+      pressedAt: pressedAt,
+      wa: result.wa,
+      manual: manualMode,
+    ));
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       setState(() => _printingReceipt = true);
@@ -2032,6 +2050,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final months = _isKit ? _kitMonths : 1;
     final num? expectedCost = months > 1 ? (_liveQuote?['cost'] as num?) : null;
     setState(() => _submitting = true);
+    // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التفعيل؟» (OpWaNotice).
+    final pressedAt = DateTime.now();
     final manualMode = ManualWaPrefs.enabled.value;
     final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
       idx: idx,
@@ -2100,19 +2120,31 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       return;
     }
     SubscriberEvents.notifyChange();
-    final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
-    final okShown = showSheetSnack(context, 'sheets.renew_ok'.tr(), isError: false);
-    if (result.debtWriteFailed && rootOverlay != null) {
-      final warn = result.debtWriteMessage ?? 'sheets.activate_debt_not_recorded'.tr();
-      unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, warn,
-          isError: true, duration: const Duration(seconds: 8))));
-    }
     // طُلبت أشهرٌ وقال الخادم غيرها (أو لم يقلها: خادمٌ أقدم) ⇒ يُقال لا يُخفى (كالموقع)
     final doneMonths = SubscribersApi.takeActivatedMonths(idx);
-    if (months > 1 && (doneMonths ?? 1) != months && rootOverlay != null) {
-      unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, 'تفعّل المشترك لـ${_monthsLabel(doneMonths ?? 1)} لا لـ${_monthsLabel(months)} — راجع المشترك',
-          isError: true, duration: const Duration(seconds: 12))));
-    }
+    // النجاح، ثمّ تنبيهاته («لم يُسجَّل الدين»، أشهرٌ غير المطلوبة)، ثمّ نتيجة رسالة التفعيل (أُرسلت / لم تُرسل بسببها)
+    // — كلٌّ في دوره على الطبقة العليا فيبقى بعد إغلاق الشيت.
+    unawaited(OpWaNotice.show(
+      context,
+      sub: widget.sub,
+      op: OpWaKind.activate,
+      okText: 'sheets.renew_ok'.tr(),
+      pressedAt: pressedAt,
+      wa: result.wa,
+      manual: manualMode,
+      followUps: [
+        if (result.debtWriteFailed)
+          (
+            text: result.debtWriteMessage ?? 'sheets.activate_debt_not_recorded'.tr(),
+            duration: const Duration(seconds: 8),
+          ),
+        if (months > 1 && (doneMonths ?? 1) != months)
+          (
+            text: 'تفعّل المشترك لـ${_monthsLabel(doneMonths ?? 1)} لا لـ${_monthsLabel(months)} — راجع المشترك',
+            duration: const Duration(seconds: 12),
+          ),
+      ],
+    ));
     if (_printReceiptChecked) {
       setState(() => _printingReceipt = true);
       final printed = await ReceiptService.printActivation(
