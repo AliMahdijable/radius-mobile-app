@@ -331,7 +331,7 @@ class WhatsConnectionStatus {
   }
 }
 
-/// 7 toggles لكل المسارات التلقائية في واتساب. مطابق صفّ
+/// 8 toggles لكل المسارات التلقائية في واتساب. مطابق صفّ
 /// whatsapp_features في الـDB.
 class WhatsFeatures {
   const WhatsFeatures({
@@ -342,6 +342,7 @@ class WhatsFeatures {
     this.serviceEndNotification = false,
     this.welcomeMessage = false,
     this.sendOnExtension = false,
+    this.sendOnPayment = true,
   });
 
   /// Master switch — لو معطل، كل الإشعارات تتوقف بغض النظر عن بقية toggles.
@@ -353,6 +354,10 @@ class WhatsFeatures {
   final bool welcomeMessage;
   final bool sendOnExtension;
 
+  /// «تأكيد التسديد» (١٧ نوفمبر — المالك: «تمام سويها»): رسالة المشترك بعد «تسديد دين». **مفعّل افتراضيّاً** — قبله لم يكن
+  /// له مفتاح (القالب المحفوظ كان المفتاح)، والخادم القديم لا يرسل الحقل ⇒ غيابه = مفعّل كما يفعل الخادم.
+  final bool sendOnPayment;
+
   WhatsFeatures copyWith({
     bool? notificationsEnabled,
     bool? sendOnActivation,
@@ -361,6 +366,7 @@ class WhatsFeatures {
     bool? serviceEndNotification,
     bool? welcomeMessage,
     bool? sendOnExtension,
+    bool? sendOnPayment,
   }) {
     return WhatsFeatures(
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -371,6 +377,7 @@ class WhatsFeatures {
           serviceEndNotification ?? this.serviceEndNotification,
       welcomeMessage: welcomeMessage ?? this.welcomeMessage,
       sendOnExtension: sendOnExtension ?? this.sendOnExtension,
+      sendOnPayment: sendOnPayment ?? this.sendOnPayment,
     );
   }
 
@@ -385,6 +392,7 @@ class WhatsFeatures {
       serviceEndNotification: b(j['serviceEndNotification']),
       welcomeMessage: b(j['welcomeMessage']),
       sendOnExtension: b(j['sendOnExtension']),
+      sendOnPayment: j['sendOnPayment'] == null ? true : b(j['sendOnPayment']),
     );
   }
 
@@ -396,6 +404,7 @@ class WhatsFeatures {
         'serviceEndNotification': serviceEndNotification,
         'welcomeMessage': welcomeMessage,
         'sendOnExtension': sendOnExtension,
+        'sendOnPayment': sendOnPayment,
       };
 }
 

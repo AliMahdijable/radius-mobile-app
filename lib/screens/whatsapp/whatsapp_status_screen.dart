@@ -1279,6 +1279,13 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
             enabled: masterOn,
             onChanged: (v) => _updateFeatures(f.copyWith(sendOnActivation: v)),
           ),
+          // «تأكيد التسديد» (١٧ نوفمبر): رسالة المشترك بعد «تسديد دين» — مفعّلٌ افتراضيّاً، يطفئه من لا يريده.
+          _toggle(
+            label: 'wa.payment_notif'.tr(),
+            value: f.sendOnPayment,
+            enabled: masterOn,
+            onChanged: (v) => _updateFeatures(f.copyWith(sendOnPayment: v)),
+          ),
           _toggle(
             label: 'wa.extend_notif'.tr(),
             value: f.sendOnExtension,

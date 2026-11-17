@@ -1008,6 +1008,7 @@
     "master_switch": "Enable notifications (master)",
     "welcome_msg": "Welcome message on add",
     "activation_notif": "Activation/renewal notification",
+    "payment_notif": "Payment confirmation",
     "extend_notif": "Extension notification",
     "near_expiry_notif": "Near-expiry reminder",
     "expired_notif": "Expired subscription notification",

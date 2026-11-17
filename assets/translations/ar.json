@@ -1008,6 +1008,7 @@
     "master_switch": "تفعيل الإشعارات (الرئيسي)",
     "welcome_msg": "رسالة الترحيب عند الإضافة",
     "activation_notif": "إشعار التفعيل/التجديد",
+    "payment_notif": "تأكيد التسديد",
     "extend_notif": "إشعار التمديد",
     "near_expiry_notif": "تذكير قرب الانتهاء",
     "expired_notif": "إشعار الانتهاء الفعلي",
