@@ -657,7 +657,9 @@ class TplinkClassicService {
   /// `POST login.json` بنصّ `JSONDATA: {"sign":…,"data":…}\n` ⇒ {valid, sessionId}. null ⇒ لم تُعطَ جلسة ([fail] حين السبب معروف هنا).
   static Future<({String sid, String cookie, String key, String iv})?> _rsaLogin(
       String h, String pass, void Function(TpClassicIssue issue, String trace) fail) async {
-    final rr = await _get(h, '/login/getRsa.json');
+    // POST كصفحة الجهاز (ajax نوعه الافتراضيّ POST): GET يعيد ملفّاً ثابتاً قديماً بمفتاحٍ آخر، فيُوقَّع بمفتاحٍ خطأ ويردّ login.json
+    // نصّاً فارغاً — «يستجيب بس تعذّرت قراءته» مهما كانت كلمة السرّ (WR940N v6 3.20.1، 100.66.1.230:8080، ١٧ نوفمبر).
+    final rr = await _post(h, '/login/getRsa.json', '');
     if (rr == null) {
       fail(TpClassicIssue.unreachable, 'rsa key no-reply');
       return null;
