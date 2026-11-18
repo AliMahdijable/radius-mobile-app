@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/copyable.dart';
+import 'device_ip_link.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -367,24 +368,30 @@ class DeskSectionHeader extends StatelessWidget {
   }
 }
 
-/// حقيقةٌ بعنوانها فوقها. [ltr]: قيمةٌ لاتينيّة («5535 MHz») معزولةٌ فلا تنقلب؛ [copy]: تُنسخ بضغطٍ مطوّل.
+/// حقيقةٌ بعنوانها فوقها. [ltr]: قيمةٌ لاتينيّة («5535 MHz») معزولةٌ فلا تنقلب؛ [copy]: تُنسخ بضغطٍ مطوّل؛ [link]: عنوانٌ
+/// (IP) النقر يفتح صفحته بالمتصفح والزرّ الأيمن/الضغط المطوّل ينسخه ([DeviceIpLink] — ١٨ نوفمبر).
 class DeskFact extends StatelessWidget {
-  const DeskFact(this.label, this.value, {super.key, this.ltr = false, this.copy = false, this.color});
+  const DeskFact(this.label, this.value, {super.key, this.ltr = false, this.copy = false, this.link = false, this.color});
 
   final String label;
   final String value;
   final bool ltr;
   final bool copy;
+  final bool link;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(ltr ? iso(value) : value,
-        maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: color ?? AppColors.textHi));
+    final style = AppType.rowValue(color: color ?? AppColors.textHi);
+    final text = Text(ltr ? iso(value) : value, maxLines: 2, overflow: TextOverflow.ellipsis, style: style);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Text(label, style: AppType.label(color: AppColors.textMid)),
       const SizedBox(height: 3),
-      copy ? Copyable(label: label, value: value, child: text) : text,
+      link
+          ? DeviceIpLink(value, style: style, maxLines: 2)
+          : copy
+              ? Copyable(label: label, value: value, child: text)
+              : text,
     ]);
   }
 }
@@ -830,15 +837,19 @@ class DeskRateCell extends StatelessWidget {
 
 /// نصٌّ لاتينيّ في خليّة (ماك، IP) بأرقامٍ متساوية العرض، يُنسخ بضغطٍ مطوّل أو زرٍّ أيمن.
 class DeskMonoCell extends StatelessWidget {
-  const DeskMonoCell(this.value, {super.key, required this.label, this.copy = true});
+  const DeskMonoCell(this.value, {super.key, required this.label, this.copy = true, this.link = false});
 
   final String value;
   final String label;
   final bool copy;
 
+  /// عنوانٌ (IP): النقر يفتح صفحته بالمتصفح والزرّ الأيمن/الضغط المطوّل ينسخه ([DeviceIpLink] — ١٨ نوفمبر).
+  final bool link;
+
   @override
   Widget build(BuildContext context) {
     final mono = AppType.body(color: AppColors.textMid).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    if (link) return DeviceIpLink(value, style: mono);
     final text = Text(iso(value), maxLines: 1, overflow: TextOverflow.ellipsis, style: mono);
     return copy ? Copyable(label: label, value: value, child: text) : text;
   }

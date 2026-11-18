@@ -482,7 +482,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           DeskFact('الارتباط قائمٌ منذ', deskUptimeAr(Duration(seconds: l.activeSeconds!))),
         if (p != null && !p.isEmpty) ...[
           if (p.model != null) DeskFact('طراز الطرف المقابل', p.model!, ltr: true, copy: true),
-          if (p.ip != null) DeskFact('عنوان الطرف المقابل', p.ip!, ltr: true, copy: true),
+          if (p.ip != null) DeskFact('عنوان الطرف المقابل', p.ip!, ltr: true, link: true),
           if (p.serial != null) DeskFact('تسلسليّ الطرف المقابل', p.serial!, ltr: true, copy: true),
         ],
       ]),

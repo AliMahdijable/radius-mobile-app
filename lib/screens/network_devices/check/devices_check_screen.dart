@@ -15,6 +15,7 @@ import '../../subscribers/subscriber_detail_screen.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../widgets/device_ip_link.dart';
 import '../widgets/_grade.dart';
 
 class DevicesCheckScreen extends StatefulWidget {
@@ -460,11 +461,28 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         child: Text(text, style: AppType.label(color: tone.onSoft)),
       );
 
+  /// «الدور · العنوان · طريق القراءة» (٩ نوفمبر: طريق القراءة وزمنها على السطر «SSH · 18ث» — السبب في الميدان يُرى). العنوان
+  /// رابطٌ يفتح صفحة الجهاز بالمتصفح، والزرّ الأيمن/الضغط المطوّل ينسخه (١٨ نوفمبر — المالك: «يفتح صفحة الويب مثل كارت المشترك…
+  /// وأقسام الفحص الشامل»).
+  Widget _subLine(DeviceCheckReport r) {
+    final style = AppType.micro(color: AppColors.textMid);
+    final ip = r.device.ip.trim();
+    final role = r.roleLabel;
+    final read = r.readLine ?? '';
+    if (ip.isEmpty) {
+      return Text([role, read].where((x) => x.isNotEmpty).join(' · '),
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
+    }
+    return Row(children: [
+      if (role.isNotEmpty) Text('$role · ', style: style),
+      Flexible(child: DeviceIpLink(ip, style: style)),
+      if (read.isNotEmpty) Flexible(child: Text(' · $read', maxLines: 1, overflow: TextOverflow.ellipsis, style: style)),
+    ]);
+  }
+
   Widget _card(DeviceCheckReport r) {
     // القراءة جارية ⇒ لونٌ محايد لا لون حالها المؤقّت (المراجعة)
     final tone = r.pending ? AppTone.neutral : _stateTone(r.state);
-    // ٩ نوفمبر: طريق القراءة وزمنها على السطر («SSH · 18ث») — السبب في الميدان يُرى
-    final sub = [r.roleLabel, r.device.ip, if (r.readLine != null) r.readLine!].where((x) => x.isNotEmpty).join(' · ');
     return Container(
       key: ValueKey('check-card-${r.device.id}'),
       decoration: _cardDeco(border: r.state == CheckState.ok ? null : tone.softBorder),
@@ -484,7 +502,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(r.device.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
                     const SizedBox(height: 2),
-                    Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
+                    _subLine(r),
                     // «كل الشركات»: شركة الجهاز
                     if (_merged?.companyOf[r.device.id] case final key?) ...[
                       const SizedBox(height: 3),

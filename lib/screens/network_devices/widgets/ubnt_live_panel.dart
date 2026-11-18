@@ -19,6 +19,7 @@ import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/widgets/copyable.dart';
+import 'device_ip_link.dart';
 import '../../../core/platform/desktop_layout.dart';
 import '../../../core/util/bidi.dart';
 import 'desk_device_kit.dart';
@@ -1255,13 +1256,8 @@ Widget _stationRow(UbntStation s) {
             if ((s.ip ?? '').isNotEmpty || s.mac.isNotEmpty)
               Row(children: [
                 if ((s.ip ?? '').isNotEmpty)
-                  Copyable(
-                    label: 'IP',
-                    value: s.ip,
-                    child: Text(s.ip!,
-                        textDirection: TextDirection.ltr,
-                        style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
-                  ),
+                  // النقر يفتح صفحة المحطّة بالمتصفح، والزرّ الأيمن/الضغط المطوّل ينسخ (١٨ نوفمبر)
+                  DeviceIpLink(s.ip!, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
                 if ((s.ip ?? '').isNotEmpty && s.mac.isNotEmpty)
                   Text(' • ', style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
                 if (s.mac.isNotEmpty)
