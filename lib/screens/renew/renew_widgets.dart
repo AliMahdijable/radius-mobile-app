@@ -37,10 +37,17 @@ const renewRejectReasons = <String>[
   'الباقة غير متاحة — تواصل معي',
 ];
 
-({String label, Color fg, Color bg, IconData icon}) renewStatusMeta(String status) => switch (status) {
+/// أسباب رفض طلب «تسديد ديونك» (بلا الباقة).
+const debtRejectReasons = <String>[
+  'لم يصل التحويل',
+  'المبلغ غير صحيح',
+  'صورة التحويل غير واضحة',
+];
+
+({String label, Color fg, Color bg, IconData icon}) renewStatusMeta(String status, {bool debt = false}) => switch (status) {
       'pending' => (label: 'بانتظارك', fg: AppColors.warningOnSoft, bg: AppColors.warningSoftBg, icon: LucideIcons.hourglass),
       'accepted' => (label: 'مقبول', fg: AppColors.info, bg: AppColors.infoSoftBg, icon: LucideIcons.clock),
-      'done' => (label: 'تمّ التفعيل', fg: AppColors.success, bg: AppColors.successSoftBg, icon: LucideIcons.circleCheck),
+      'done' => (label: debt ? 'تمّ التسديد' : 'تمّ التفعيل', fg: AppColors.success, bg: AppColors.successSoftBg, icon: LucideIcons.circleCheck),
       'rejected' => (label: 'مرفوض', fg: AppColors.dangerOnSoft, bg: AppColors.dangerSoftBg, icon: LucideIcons.circleX),
       'cancelled' => (label: 'ألغاه المشترك', fg: AppColors.textMid, bg: AppColors.surfaceSunken, icon: LucideIcons.x),
       _ => (label: 'انتهت مهلته', fg: AppColors.textMid, bg: AppColors.surfaceSunken, icon: LucideIcons.clock),
@@ -48,10 +55,12 @@ const renewRejectReasons = <String>[
 
 /// «Fiber 50 · ٣ أشهر · 105,000 د.ع» — كلّ مقطعٍ معزول (اسم باقةٍ لاتينيّ بجوار رقمٍ لا يلتصقان فينقلب الترتيب).
 String renewSummary(RenewRequest r) => isoJoin([
-      r.packageName ?? '',
-      renewMonthsLabel(r.months),
+      if (r.isDebt) 'تسديد دين' else ...[r.packageName ?? '', renewMonthsLabel(r.months)],
       if (r.amount != null) '${formatIQD(r.amount!)} د.ع',
     ], ' · ');
+
+/// سطر الذكاء بلا رمز الخادم في أوّله (⚠️ ✅ ℹ️) — الأيقونة تقوم مقامه.
+String renewAiText(String s) => s.replaceFirst(RegExp(r'^\s*(?:⚠️|⚠|✅|ℹ️|ℹ)\s*'), '');
 
 String _initials(String name) {
   final w = name.trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty).take(2).map((x) => x.characters.first).join();
@@ -59,12 +68,13 @@ String _initials(String name) {
 }
 
 class RenewStatusChip extends StatelessWidget {
-  const RenewStatusChip({super.key, required this.status});
+  const RenewStatusChip({super.key, required this.status, this.debt = false});
   final String status;
+  final bool debt;
 
   @override
   Widget build(BuildContext context) {
-    final m = renewStatusMeta(status);
+    final m = renewStatusMeta(status, debt: debt);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
       decoration: BoxDecoration(color: m.bg, borderRadius: BorderRadius.circular(R.pill)),
@@ -129,10 +139,18 @@ class RenewRequestTile extends StatelessWidget {
                     child: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
                   ),
                   const SizedBox(width: Sp.sm),
-                  RenewStatusChip(status: r.status),
+                  RenewStatusChip(status: r.status, debt: r.isDebt),
                 ]),
                 const SizedBox(height: 2),
-                Text(renewSummary(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+                Row(children: [
+                  if (r.ai?.isWarn == true) ...[
+                    Icon(LucideIcons.triangleAlert, key: const ValueKey('renew-tile-ai-warn'), size: 13, color: AppColors.warningOnSoft),
+                    const SizedBox(width: 3),
+                  ],
+                  Expanded(
+                    child: Text(renewSummary(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+                  ),
+                ]),
                 if (r.createdAt != null)
                   Text(timeAgoAr(r.createdAt), style: AppType.micro(color: AppColors.textLow)),
               ]),
@@ -363,19 +381,20 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
       messenger?.showSnackBar(SnackBar(content: Text(res.message ?? 'تعذّر الآن — حاول مرّة ثانية'), backgroundColor: AppColors.errorFill));
       return;
     }
+    final debt = _r.isDebt;
     messenger?.showSnackBar(SnackBar(
       content: Text(action == 'accept'
-          ? 'قُبل الطلب وأُبلغ المشترك — جدّد اشتراكه الآن'
+          ? (debt ? 'قُبل الطلب وأُبلغ المشترك — سجّل التسديد الآن' : 'قُبل الطلب وأُبلغ المشترك — جدّد اشتراكه الآن')
           : action == 'reject'
               ? 'رُفض الطلب وأُبلغ المشترك بالسبب'
-              : 'أُبلغ المشترك: «تم تفعيل اشتراكك بنجاح»'),
+              : (debt ? 'أُبلغ المشترك: «تم تسديد دينك»' : 'أُبلغ المشترك: «تم تفعيل اشتراكك بنجاح»')),
       backgroundColor: AppColors.brand,
     ));
     widget.onChanged?.call(_r, action);
   }
 
   Future<void> _reject() async {
-    final reason = await showRenewRejectSheet(context, _r.title);
+    final reason = await showRenewRejectSheet(context, _r.title, reasons: _r.isDebt ? debtRejectReasons : renewRejectReasons);
     if (reason == null || !mounted) return;
     await _act('reject', reason: reason);
   }
@@ -384,15 +403,19 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('جدّدت اشتراك ${_r.title}؟', style: AppType.sheetTitle(color: AppColors.textHi)),
-        content: Text('يصله «تم تفعيل اشتراكك بنجاح». إن جدّدت من صفحة المشترك فلا داعي — يُبلَّغ وحده خلال دقيقة.',
+        title: Text(_r.isDebt ? 'سجّلت تسديد ${_r.title}؟' : 'جدّدت اشتراك ${_r.title}؟',
+            style: AppType.sheetTitle(color: AppColors.textHi)),
+        content: Text(
+            _r.isDebt
+                ? 'يصله «تم تسديد دينك». إن سجّلت التسديد من صفحة المشترك فلا داعي — يُبلَّغ وحده خلال دقيقة بالمبلغ المسجَّل.'
+                : 'يصله «تم تفعيل اشتراكك بنجاح». إن جدّدت من صفحة المشترك فلا داعي — يُبلَّغ وحده خلال دقيقة.',
             style: AppType.body(color: AppColors.textBody)),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('إلغاء')),
           FilledButton(
             key: const ValueKey('renew-done-confirm'),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('نعم، تمّ التفعيل'),
+            child: Text(_r.isDebt ? 'نعم، تمّ التسديد' : 'نعم، تمّ التفعيل'),
           ),
         ],
       ),
@@ -432,18 +455,28 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
               Text(r.username!, textDirection: TextDirection.ltr, style: AppType.muted(color: AppColors.textMid)),
           ]),
         ),
-        RenewStatusChip(status: r.status),
+        RenewStatusChip(status: r.status, debt: r.isDebt),
       ]),
       const SizedBox(height: Sp.md),
       Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
-        _chip(LucideIcons.package, isoJoin([r.packageName ?? 'باقته', renewMonthsLabel(r.months)], ' · '),
-            fg: AppColors.brand, bg: AppColors.brandSoftBg),
+        if (r.isDebt)
+          _chip(LucideIcons.wallet, 'تسديد دين', fg: AppColors.warningOnSoft, bg: AppColors.warningSoftBg)
+        else
+          _chip(LucideIcons.package, isoJoin([r.packageName ?? 'باقته', renewMonthsLabel(r.months)], ' · '),
+              fg: AppColors.brand, bg: AppColors.brandSoftBg),
         _chip(LucideIcons.banknote, r.amount != null ? '${formatIQD(r.amount!)} د.ع' : 'المبلغ غير معروف',
             fg: r.amount != null ? AppColors.success : null, bg: r.amount != null ? AppColors.successSoftBg : null),
         if (renewPayLabel(r.payMethod).isNotEmpty)
           _chip(LucideIcons.smartphone, renewPayLabel(r.payMethod), fg: AppColors.info, bg: AppColors.infoSoftBg),
       ]),
-      if (!r.samePackage && (r.currentPackage ?? '').isNotEmpty) ...[
+      if (r.isDebt && r.debtBefore != null) ...[
+        const SizedBox(height: Sp.xs),
+        Text(
+          'دينه وقت الطلب ${iso('${formatIQD(r.debtBefore!)} د.ع')} — ${r.amount != null && r.amount! < r.debtBefore! ? 'يسدّد جزءاً منه' : 'كامل دينه'}',
+          style: AppType.muted(color: AppColors.textMid),
+        ),
+      ],
+      if (!r.isDebt && !r.samePackage && (r.currentPackage ?? '').isNotEmpty) ...[
         const SizedBox(height: Sp.xs),
         Text('يريد التغيير من باقته ${iso(r.currentPackage!)}', style: AppType.muted(color: AppColors.textMid)),
       ],
@@ -459,15 +492,74 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
         const SizedBox(height: Sp.md),
         RenewReceiptImage(key: ValueKey('receipt-${r.id}'), request: r, height: widget.imageHeight, openCompany: widget.openCompany),
       ],
+      // «فحص صورة الحوالة بالذكاء» (١٨ نوفمبر — تنبيهٌ لا رفض): سطور الخادم بلون مستواها، و«نفحص…» أثناء الفحص
+      if (r.isOpen && r.ai != null && r.ai!.status == 'pending') ...[
+        const SizedBox(height: Sp.sm),
+        Row(key: const ValueKey('renew-ai-pending'), children: [
+          const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: Sp.sm),
+          Text('نفحص صورة التحويل بالذكاء…', style: AppType.muted(color: AppColors.textMid)),
+        ]),
+      ],
+      if (r.isOpen && r.ai != null && r.ai!.status == 'done' && r.ai!.lines.isNotEmpty) ...[
+        const SizedBox(height: Sp.sm),
+        Container(
+          key: ValueKey('renew-ai-${r.ai!.level ?? 'info'}'),
+          width: double.infinity,
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            color: r.ai!.level == 'warn' ? AppColors.warningSoftBg : (r.ai!.level == 'ok' ? AppColors.successSoftBg : AppColors.surfaceSunken),
+            borderRadius: BorderRadius.circular(R.md),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(LucideIcons.sparkles, size: 14, color: AppColors.textMid),
+              const SizedBox(width: 4),
+              Text('فحص الصورة بالذكاء', style: AppType.micro(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
+            ]),
+            const SizedBox(height: 4),
+            // أيقونة التطبيق بمستوى السطر بدل رمز الخادم (⚠️/✅/ℹ️): رسمٌ واحد على كلّ جهاز — ويندوز وخطوط الاختبار بلا إيموجي
+            for (final l in r.ai!.lines)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Icon(
+                      l.level == 'warn' ? LucideIcons.triangleAlert : (l.level == 'ok' ? LucideIcons.circleCheck : LucideIcons.info),
+                      size: 14,
+                      color: l.level == 'warn' ? AppColors.warningOnSoft : (l.level == 'ok' ? AppColors.success : AppColors.textMid),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(renewAiText(l.text),
+                        style: AppType.label(
+                          color: l.level == 'warn' ? AppColors.warningOnSoft : (l.level == 'ok' ? AppColors.success : AppColors.textBody),
+                        ).copyWith(height: 1.5, fontWeight: l.level == 'warn' ? FontWeight.w600 : FontWeight.w400)),
+                  ),
+                ]),
+              ),
+          ]),
+        ),
+      ],
       if (r.status == 'accepted') ...[
         const SizedBox(height: Sp.md),
         _note(AppColors.infoSoftBg, AppColors.info,
-            'قبلته${r.decidedBy != null ? ' (${r.decidedBy})' : ''} — جدّد اشتراكه من صفحة المشترك، ويُبلَّغ تلقائيّاً «تم تفعيل اشتراكك بنجاح».'),
+            r.isDebt
+                ? 'قبلته${r.decidedBy != null ? ' (${r.decidedBy})' : ''} — سجّل التسديد من صفحة المشترك («تسديد دين»)، ويُبلَّغ تلقائيّاً «تم تسديد دينك» بالمبلغ المسجَّل.'
+                : 'قبلته${r.decidedBy != null ? ' (${r.decidedBy})' : ''} — جدّد اشتراكه من صفحة المشترك، ويُبلَّغ تلقائيّاً «تم تفعيل اشتراكك بنجاح».'),
       ],
       if (r.status == 'done') ...[
         const SizedBox(height: Sp.md),
         _note(AppColors.successSoftBg, AppColors.success,
-            r.doneSource == 'detected' ? 'فُعّل اشتراكه وأُبلغ تلقائيّاً' : 'أُبلغ بالتفعيل${r.decidedBy != null ? ' (${r.decidedBy})' : ''}'),
+            r.isDebt
+                ? (r.doneSource == 'detected'
+                    ? 'سُجّل تسديد${r.paidAmount != null ? ' ${iso('${formatIQD(r.paidAmount!)} د.ع')}' : 'ه'} وأُبلغ تلقائيّاً'
+                    : 'أُبلغ بالتسديد${r.decidedBy != null ? ' (${r.decidedBy})' : ''}')
+                : r.doneSource == 'detected'
+                    ? 'فُعّل اشتراكه وأُبلغ تلقائيّاً'
+                    : 'أُبلغ بالتفعيل${r.decidedBy != null ? ' (${r.decidedBy})' : ''}'),
       ],
       if (r.status == 'rejected') ...[
         const SizedBox(height: Sp.md),
@@ -503,7 +595,7 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
                 key: const ValueKey('renew-done'),
                 onPressed: _busy != null ? null : _done,
                 icon: const Icon(LucideIcons.circleCheck, size: 17),
-                label: const Text('تمّ التفعيل'),
+                label: Text(r.isDebt ? 'تمّ التسديد' : 'تمّ التفعيل'),
                 style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.button))),
               ),
             ),
@@ -532,7 +624,7 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
           key: const ValueKey('renew-open-subscriber'),
           onPressed: widget.onOpenSubscriber,
           icon: const Icon(LucideIcons.userRound, size: 17),
-          label: Text(r.status == 'accepted' ? 'صفحة المشترك — للتجديد' : 'صفحة المشترك'),
+          label: Text(r.status == 'accepted' ? (r.isDebt ? 'صفحة المشترك — للتسديد' : 'صفحة المشترك — للتجديد') : 'صفحة المشترك'),
         ),
       ],
     ]);
@@ -540,20 +632,21 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
 }
 
 /// سبب الرفض: أسبابٌ جاهزة أو نصّ (اختياريّ) ⇒ النصّ ('' = بلا سبب)، أو null إن أُلغي.
-Future<String?> showRenewRejectSheet(BuildContext context, String name) {
+Future<String?> showRenewRejectSheet(BuildContext context, String name, {List<String> reasons = renewRejectReasons}) {
   return showAppSheet<String>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _RejectSheet(name: name),
+    builder: (_) => _RejectSheet(name: name, reasons: reasons),
   );
 }
 
 class _RejectSheet extends StatefulWidget {
-  const _RejectSheet({required this.name});
+  const _RejectSheet({required this.name, this.reasons = renewRejectReasons});
   final String name;
+  final List<String> reasons;
 
   @override
   State<_RejectSheet> createState() => _RejectSheetState();
@@ -583,7 +676,7 @@ class _RejectSheetState extends State<_RejectSheet> {
       ),
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
-          for (final r in renewRejectReasons)
+          for (final r in widget.reasons)
             ChoiceChip(
               label: Text(r),
               selected: _preset == r && _text.text.trim().isEmpty,
@@ -636,8 +729,8 @@ Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request, {
     useSafeArea: true,
     builder: (ctx) => DesignSheet(
       header: SheetHeaderBar(
-        icon: LucideIcons.inbox,
-        title: 'طلب تجديد اشتراك',
+        icon: request.isDebt ? LucideIcons.wallet : LucideIcons.inbox,
+        title: request.isDebt ? 'طلب تسديد دين' : 'طلب تجديد اشتراك',
         subtitle: 'راجع صورة التحويل ثمّ اقبل — يُبلَّغ المشترك فوراً',
         onClose: () => Navigator.of(ctx).pop(),
       ),

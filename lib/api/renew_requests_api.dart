@@ -49,9 +49,24 @@ class RenewRequest {
     this.imageExpiresAt,
     this.decidedBy,
     this.doneSource,
+    this.kind = 'renew',
+    this.debtBefore,
+    this.paidAmount,
+    this.ai,
   });
 
+  /// «فحص صورة الحوالة بالذكاء» (١٨ نوفمبر — تنبيهٌ لا رفض): null بلا فحص.
+  final RenewAi? ai;
+
   final int id;
+
+  /// «تسديد ديونك» (١٨ نوفمبر): renew · debt — طلب التسديد بلا باقةٍ ولا أشهر.
+  final String kind;
+
+  /// التسديد: دينه وقت الطلب، والمبلغ المسجَّل فعلاً حين كُشف التسديد.
+  final int? debtBefore;
+  final int? paidAmount;
+  bool get isDebt => kind == 'debt';
 
   /// pending · accepted · rejected · done · cancelled · expired
   final String status;
@@ -122,7 +137,42 @@ class RenewRequest {
       imageExpiresAt: img is Map ? _time(img['expires_at']) : null,
       decidedBy: _str(j['decided_by']),
       doneSource: _str(j['done_source']),
+      kind: j['kind'] == 'debt' ? 'debt' : 'renew',
+      debtBefore: _int(j['debt_before']),
+      paidAmount: _int(j['paid_amount']),
+      ai: RenewAi.fromJson(j['ai']),
     );
+  }
+}
+
+/// نتيجة فحص الصورة كما يرسلها الخادم: الحال (pending · done · unavailable)، والمستوى (warn · ok · info)، وسطورٌ عربيّة جاهزة.
+class RenewAi {
+  const RenewAi({required this.status, this.level, this.verdict, this.amount, this.lines = const []});
+  final String status;
+  final String? level;
+  final String? verdict;
+  final int? amount;
+  final List<({String level, String text})> lines;
+
+  bool get isWarn => status == 'done' && level == 'warn';
+
+  static RenewAi? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final st = _str(j['status']);
+    if (st == null) return null;
+    final lines = <({String level, String text})>[];
+    final raw = j['lines'];
+    if (raw is List) {
+      for (final l in raw) {
+        if (l is! Map) continue;
+        final lv = _str(l['level']);
+        final tx = _str(l['text']);
+        if (lv == null || tx == null || !const {'warn', 'ok', 'info'}.contains(lv)) continue;
+        lines.add((level: lv, text: tx.length > 140 ? tx.substring(0, 140) : tx));
+        if (lines.length >= 6) break;
+      }
+    }
+    return RenewAi(status: st, level: _str(j['level']), verdict: _str(j['verdict']), amount: _int(j['amount']), lines: lines);
   }
 }
 
@@ -137,7 +187,13 @@ class RenewAccess {
     this.zaincash,
     this.master,
     this.note,
+    this.debtAvailable = false,
+    this.debtEnabled = true,
   });
+
+  /// «تسديد ديونك» متاحٌ لهذا الحساب (مفتاح portal_debt_pay)، وخيار الوكيل (افتراضاً مفعّل مع «طلب التجديد»).
+  final bool debtAvailable;
+  final bool debtEnabled;
 
   /// المفتاح العامّ portal_renew مفتوحٌ لهذا الحساب.
   final bool available;
@@ -164,6 +220,8 @@ class RenewAccess {
         zaincash: _str(j['zaincash']),
         master: _str(j['master']),
         note: _str(j['note']),
+        debtAvailable: j['debt_available'] == true,
+        debtEnabled: j['debt_enabled'] != false,
       );
 }
 
@@ -220,7 +278,8 @@ class RenewRequestsApi {
   static Future<({List<RenewRequest> items, int pending, int accepted})?> list({bool all = false}) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/portal/renew-requests',
-          queryParameters: {'status': all ? 'all' : 'open'});
+          // kinds: طلبات «تسديد ديونك» معها (بلاه يردّ الخادم التجديد وحده — النسخ المنشورة)
+          queryParameters: {'status': all ? 'all' : 'open', 'kinds': 'renew,debt'});
       final d = r.data;
       if (r.statusCode == 200 && d != null && d['success'] == true) {
         final items = d['items'];
@@ -278,10 +337,12 @@ class RenewRequestsApi {
     String? zaincash,
     String? master,
     String? note,
+    bool? debtEnabled,
   }) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>('/api/v2/portal/renew-settings', data: {
         if (enabled != null) 'enabled': enabled,
+        if (debtEnabled != null) 'debt_enabled': debtEnabled,
         if (zaincash != null) 'zaincash': zaincash,
         if (master != null) 'master': master,
         if (note != null) 'note': note,
