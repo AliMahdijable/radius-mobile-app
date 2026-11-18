@@ -221,6 +221,81 @@ void main() {
       await simDrain(t);
     });
 
+    // «تسديد ديونك» (١٨ نوفمبر): طلب التسديد بالنافذة نفسها — بلا باقةٍ ولا أشهر، والقائمة تطلبه بـkinds
+    testWidgets('«تسديد ديونك»: النافذة «طلب تسديد دين» (المبلغ ودينه وقت الطلب)؛ «قبول» ⇒ «صفحة المشترك — للتسديد»؛ «تمّ التسديد» بنصّه؛ وأسباب الرفض بلا الباقة', (t) async {
+      Map<String, dynamic> debt(String status) => {
+            ..._req(51, status, amount: 20000),
+            'kind': 'debt',
+            'months': null,
+            'package': null,
+            'unit_price': null,
+            'current_package': null,
+            'debt_before': 45000,
+            'paid_amount': null,
+          };
+      server.reply('GET', '/api/v2/portal/renew-settings', 200, _settings());
+      server.reply('GET', '/api/v2/portal/renew-requests', 200, _list([debt('pending')]));
+      server.reply('POST', '/api/v2/portal/renew-requests/51/accept', 200, {'success': true, 'request': debt('accepted')});
+      server.reply('POST', '/api/v2/portal/renew-requests/51/done', 200, {'success': true, 'request': debt('done')});
+      final r = RenewRequest.fromJson(debt('pending'))!;
+      expect([r.isDebt, r.months, r.packageName, r.debtBefore, r.amount], [true, null, null, 45000, 20000]);
+      expect(RenewRequest.fromJson(_req(41, 'pending'))!.isDebt, isFalse, reason: 'غياب kind = تجديد');
+      expect(renewSummary(r).replaceAll(RegExp('[\u2066-\u2069]'), ''), 'تسديد دين · 20,000 د.ع');
+      await pumpSim(t, _v, home: (_) => simLauncher((c) => showRenewRequestSheet(c, r)));
+      await simOpen(t);
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+      expect(find.text('طلب تسديد دين'), findsOneWidget);
+      expect(find.text('تسديد دين'), findsOneWidget);
+      expect(find.text('20,000 د.ع'), findsOneWidget);
+      expect(simText('دينه وقت الطلب 45,000 د.ع — يسدّد جزءاً منه'), findsOneWidget);
+      expect(find.textContaining('أشهر'), findsNothing);
+      await t.tap(find.byKey(const ValueKey('renew-accept')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('سجّل التسديد من صفحة المشترك'), findsOneWidget);
+      expect(find.text('صفحة المشترك — للتسديد'), findsOneWidget);
+      expect(find.text('تمّ التسديد'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('renew-done')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('يصله «تم تسديد دينك»'), findsOneWidget);
+      expect(find.text('نعم، تمّ التسديد'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('renew-done-confirm')));
+      await t.pumpAndSettle();
+      expect(server.calls('POST', '/api/v2/portal/renew-requests/51/done'), hasLength(1));
+      await simDrain(t);
+      // الرفض: أسباب التسديد
+      await _fresh(t);
+      final r2 = RenewRequest.fromJson(debt('pending'))!;
+      await pumpSim(t, _v, home: (_) => simLauncher((c) => showRenewRequestSheet(c, r2)));
+      await simOpen(t);
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('renew-reject')));
+      await t.pumpAndSettle();
+      expect(find.text('المبلغ غير صحيح'), findsOneWidget);
+      expect(find.text('الباقة غير متاحة — تواصل معي'), findsNothing);
+      await simDrain(t);
+    });
+
+    testWidgets('«تسديد ديونك»: القائمة تطلب kinds=renew,debt؛ وخيار «تسديد ديونك» بالإعداد لمن في مفتاحه يرسل debt_enabled', (t) async {
+      server.reply('GET', '/api/v2/portal/renew-settings', 200, {..._settings(), 'debt_available': true, 'debt_enabled': true});
+      server.reply('GET', '/api/v2/portal/renew-requests', 200, _list([]));
+      server.reply('PUT', '/api/v2/portal/renew-settings', 200, {..._settings(), 'debt_enabled': false});
+      await t.runAsync(() => RenewRequestsApi.list());
+      expect(server.calls('GET', '/api/v2/portal/renew-requests').last.queryParameters['kinds'], 'renew,debt');
+      await pumpSim(t, _v, home: (_) => const Scaffold(body: SingleChildScrollView(child: RenewSettingsCard())));
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('renew-debt-setting')), findsOneWidget);
+      expect(find.text('«تسديد ديونك» من التطبيق'), findsOneWidget);
+      await t.ensureVisible(find.byKey(const ValueKey('renew-debt-switch')));
+      await t.tap(find.byKey(const ValueKey('renew-debt-switch')));
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+      expect(server.bodies('PUT', '/api/v2/portal/renew-settings').single, {'debt_enabled': false});
+      await simDrain(t);
+    });
+
     testWidgets('الرفض: سببٌ جاهز ⇒ reason بالجسم والنافذة تُغلق؛ والحالة المتغيّرة (٤٠٩) تُقال', (t) async {
       server.reply('GET', '/api/v2/portal/renew-settings', 200, _settings());
       server.reply('GET', '/api/v2/portal/renew-requests', 200, _list([_req(41, 'pending')]));

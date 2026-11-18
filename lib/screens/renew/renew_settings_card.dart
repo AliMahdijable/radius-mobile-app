@@ -64,11 +64,13 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
     });
   }
 
-  Future<void> _save({bool? enabled}) async {
+  Future<void> _save({bool? enabled, bool? debtEnabled}) async {
     setState(() => _busy = true);
     final r = enabled != null
         ? await RenewRequestsApi.saveSettings(enabled: enabled)
-        : await RenewRequestsApi.saveSettings(zaincash: _zain.text.trim(), master: _master.text.trim(), note: _note.text.trim());
+        : debtEnabled != null
+            ? await RenewRequestsApi.saveSettings(debtEnabled: debtEnabled)
+            : await RenewRequestsApi.saveSettings(zaincash: _zain.text.trim(), master: _master.text.trim(), note: _note.text.trim());
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -82,14 +84,23 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
           zaincash: s.zaincash,
           master: s.master,
           note: s.note,
+          // الحفظ لا يردّ debt_available (للقراءة وحدها) — يبقى كما قُرئ
+          debtAvailable: _a?.debtAvailable ?? false,
+          debtEnabled: s.debtEnabled,
         );
-        if (enabled == null) _fill(_a!);
+        if (enabled == null && debtEnabled == null) _fill(_a!);
       }
     });
     final ok = r.ok;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
       content: Text(ok
-          ? (enabled == null ? 'تم الحفظ' : enabled ? 'مشتركوك يقدرون يطلبون التجديد من تطبيقهم' : 'أُوقف طلب التجديد من التطبيق')
+          ? (debtEnabled != null
+              ? (debtEnabled ? 'مشتركوك المديونون يقدرون يرسلون طلب تسديد من تطبيقهم' : 'أُوقف طلب التسديد من التطبيق')
+              : enabled == null
+                  ? 'تم الحفظ'
+                  : enabled
+                      ? 'مشتركوك يقدرون يطلبون التجديد من تطبيقهم'
+                      : 'أُوقف طلب التجديد من التطبيق')
           : (r.message ?? 'تعذّر الحفظ')),
       backgroundColor: ok ? AppColors.brand : AppColors.errorFill,
     ));
@@ -180,6 +191,45 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
               ),
             ]),
           ),
+          // «تسديد ديونك» (١٨ نوفمبر): خيارٌ تحت «طلب التجديد» يعمل معه (أرقام التحويل نفسها) — لمن فُتح له مفتاحه وحده
+          if (a.debtAvailable) ...[
+            Divider(height: 1, color: AppColors.divider),
+            Padding(
+              key: const ValueKey('renew-debt-setting'),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.md, Sp.md),
+              child: Row(children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: a.enabled && a.debtEnabled ? AppColors.warningSoftBg : AppColors.surfaceSunken,
+                    borderRadius: BorderRadius.circular(R.icon),
+                  ),
+                  child: Icon(LucideIcons.wallet, size: 20, color: a.enabled && a.debtEnabled ? AppColors.warningOnSoft : AppColors.textMid),
+                ),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('«تسديد ديونك» من التطبيق', style: AppType.bodyBold(color: AppColors.textHi)),
+                    const SizedBox(height: 2),
+                    Text(
+                      !a.enabled
+                          ? 'يعمل مع «طلب التجديد من التطبيق» — فعّله أوّلاً'
+                          : a.debtEnabled
+                              ? 'مشتركوك المديونون يرسلون مبلغ التسديد وصورة الحوالة — تصلك بإشعار'
+                              : 'موقوف — لا يظهر زرّ «تسديد ديونك» لمشتركيك',
+                      style: AppType.micro(color: AppColors.textMid),
+                    ),
+                  ]),
+                ),
+                Switch(
+                  key: const ValueKey('renew-debt-switch'),
+                  value: a.enabled && a.debtEnabled,
+                  onChanged: edit && a.enabled ? (v) => _save(debtEnabled: v) : null,
+                ),
+              ]),
+            ),
+          ],
           Divider(height: 1, color: AppColors.divider),
           Padding(
             padding: const EdgeInsets.all(Sp.lg),
