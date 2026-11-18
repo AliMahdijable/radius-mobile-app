@@ -10,7 +10,7 @@ import 'package:rad_mysvcs/api/device_config_api.dart';
 import 'package:rad_mysvcs/api/device_probe_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// «الجهاز الثاني» بـ«:منفذ» على عنوان الجهاز الأوّل (١٨ نوفمبر — المالك عن z@zz: ضوئيّ HG8342R على 100.92.63.190 وراوتر
+/// «الجهاز الثاني» بـ«:منفذ»: آيبي الساس وإلّا المثبَّت (١٨ نوفمبر — المالك عن z@zz: ضوئيّ HG8342R على 100.92.63.190 وراوتر
 /// WR940N على :8080، «ليش مجاي يعرض الاثنين»). العنوان مثبَّت ولا جلسة بالساس ⇒ كان «:8080» يُحلّ على آيبي الجلسة الفارغ ⇒ لا هدف
 /// ⇒ «لم يُتمكّن من الوصول للجهاز» والراوتر واصل.
 class _Api implements HttpClientAdapter {
@@ -29,13 +29,14 @@ class _Api implements HttpClientAdapter {
 }
 
 void main() {
-  test('«:منفذ» يُحلّ على عنوان الجهاز الأوّل (المثبَّت وإلّا الجلسة)، والعنوان الكامل كما هو', () {
-    expect(DeviceProbeApi.secondAddressOf('', '100.92.63.190', ':8080'), '100.92.63.190:8080', reason: 'مثبَّت ولا جلسة (z@zz)');
-    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '100.92.63.190', ':8080'), '100.92.63.190:8080', reason: 'مثبَّت وجلسةٌ بآيبي آخر');
-    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '', ':8080'), '10.1.1.1:8080', reason: 'لا تثبيت ⇒ الجلسة كما كان');
+  test('«:منفذ» على آيبي الساس أوّلاً، وإن لم يكن فعلى المثبَّت؛ والعنوان الكامل كما هو', () {
+    expect(DeviceProbeApi.secondAddressOf('', '100.92.63.190', ':8080'), '100.92.63.190:8080', reason: 'لا آيبي بالساس ⇒ المثبَّت (z@zz)');
+    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '100.92.63.190', ':8080'), '10.1.1.1:8080', reason: 'آيبي الساس أوّلاً — كما كان');
+    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '', ':8080'), '10.1.1.1:8080');
     expect(DeviceProbeApi.secondAddressOf('10.1.1.1', null, ':8080'), '10.1.1.1:8080');
-    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '100.9.9.9:9090', ':8080'), '100.9.9.9:8080', reason: 'الأوّل بمنفذ ⇒ مضيفه وحده');
-    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', ':9090', ':8080'), '10.1.1.1:8080', reason: 'الأوّل «:منفذ» على الجلسة');
+    expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '100.9.9.9:9090', ':8080'), '10.1.1.1:8080');
+    expect(DeviceProbeApi.secondAddressOf('', '100.9.9.9:9090', ':8080'), '100.9.9.9:8080', reason: 'المثبَّت بمنفذ ⇒ مضيفه وحده');
+    expect(DeviceProbeApi.secondAddressOf('', ':9090', ':8080'), '', reason: 'المثبَّت «:منفذ» بلا ساس ⇒ لا مضيف');
     expect(DeviceProbeApi.secondAddressOf('', '', ':8080'), '', reason: 'لا عنوان أصلاً ⇒ لا هدف');
     expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '100.9.9.9', '192.168.1.1'), '192.168.1.1');
     expect(DeviceProbeApi.secondAddressOf('10.1.1.1', '100.9.9.9', '192.168.1.1:8080'), '192.168.1.1:8080');
@@ -45,7 +46,7 @@ void main() {
     expect(DeviceProbeApi.hostOnly('100.9.9.9'), '100.9.9.9');
   });
 
-  test('الفحص يطرق الراوتر على عنوان الجهاز الأوّل المثبَّت حين لا جلسة بالساس', () async {
+  test('الفحص يطرق الراوتر على المثبَّت حين لا آيبي بالساس', () async {
     SharedPreferences.setMockInitialValues({});
     await DeviceProbeApi.clearAllCaches();
     final server = await ServerSocket.bind('127.0.0.1', 0);
