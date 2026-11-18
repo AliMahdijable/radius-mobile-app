@@ -296,6 +296,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (_has('subscribers.show_password')) {
       _loadPassword();
     }
+    // رقم مشترك الوطني طازجاً (١٨ نوفمبر): القائمة من مخبّأ الخادم (يتجدّد كلّ ٣ أيّام) — بدّله الزبون عند البوّابة ⇒ يُعرض
+    // الجديد هنا فوراً، والخادم يحدّث مخبّأه للقائمة والواتساب. «كل الشركات» خارجه (لا مدخل للمسار بجدول التوجيه).
+    if (ProviderService.phoneOnOpen && sub.companyKey == null) unawaited(_loadFreshPhone());
     // «كل الشركات»: هويّته من ساس شركته أوّل الفتح — يسكّ عليها الخادم مرجع النافذة الذي تطلبه كلّ كتابة
     if (sub.companyKey != null) MergedOps.ensureSubject(sub);
     // جلب حالة الاتّصال مرّةً عند الفتح حين يكون المشترك متّصلاً بلا
@@ -318,6 +321,15 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         }
       });
     }
+  }
+
+  /// الرقم كما تقوله البوّابة الآن — لا يتغيّر شيء حين لم يُقرأ (null) أو هو نفسه، ولا يُمسح رقمٌ بفراغ.
+  Future<void> _loadFreshPhone() async {
+    final idx = sub.idx;
+    if (idx == null || idx.isEmpty) return;
+    final p = await SubscribersApi.freshContact(idx);
+    if (!mounted || p == null || p.isEmpty || p == (sub.phone ?? '').trim()) return;
+    setState(() => sub = sub.copyWithPhone(p));
   }
 
   Future<void> _loadPassword() async {

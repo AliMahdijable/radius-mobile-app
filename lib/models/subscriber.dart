@@ -643,6 +643,55 @@ class Subscriber {
       debtKind: debtKind,
     );
   }
+
+  /// نسخةٌ برقمٍ أحدث (١٨ نوفمبر): رقم مشترك الوطني كما تقوله البوّابة الآن عند فتح لوحته
+  /// (`SubscribersApi.freshContact`) — كلّ حقلٍ آخر كما هو.
+  Subscriber copyWithPhone(String? phone) {
+    return Subscriber(
+      idx: idx,
+      username: username,
+      firstname: firstname,
+      lastname: lastname,
+      phone: phone,
+      mobile: mobile,
+      expiration: expiration,
+      lastOnline: lastOnline,
+      lastMac: lastMac,
+      remainingDays: remainingDays,
+      canChangePackage: canChangePackage,
+      packageChangeNote: packageChangeNote,
+      notes: notes,
+      hasDebtFlag: hasDebtFlag,
+      debt: debt,
+      profileName: profileName,
+      profileId: profileId,
+      parentUsername: parentUsername,
+      password: password,
+      isEnabled: isEnabled,
+      isOnlineFlag: isOnlineFlag,
+      ipAddress: ipAddress,
+      staticIp: staticIp,
+      sessionTime: sessionTime,
+      downloadBytes: downloadBytes,
+      uploadBytes: uploadBytes,
+      deviceVendor: deviceVendor,
+      discount: discount,
+      price: price,
+      dailyTrafficTotal: dailyTrafficTotal,
+      dailyUpload: dailyUpload,
+      dailyDownload: dailyDownload,
+      latitude: latitude,
+      longitude: longitude,
+      addressRaw: addressRaw,
+      isFixedPrice: isFixedPrice,
+      needsRepricing: needsRepricing,
+      basePackagePrice: basePackagePrice,
+      abandonedFlag: abandonedFlag,
+      companyKey: companyKey,
+      debtSince: debtSince,
+      debtKind: debtKind,
+    );
+  }
 }
 
 /// Package catalogue entry from /api/v2/packages — name + sale price
