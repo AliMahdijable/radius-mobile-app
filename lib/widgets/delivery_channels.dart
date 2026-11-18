@@ -104,8 +104,9 @@ String deliveryChoiceHint(DeliveryChoice v) {
   return 'يوصل بـ$joined — اللي عنده أكثر من قناة يستلمه من كل وحدة';
 }
 
-/// «قناة الإرسال»: «تلقائي» بصفٍّ كامل، وتحته القنوات الثلاث تُختار معاً أو منفردة. [reach]: كم مشتركاً يصله بكلّ قناة (التبليغات —
-/// null بالرسائل التلقائيّة). [locks]: قنواتٌ إرسالها جارٍ (مقفولة، بتقدّمها).
+/// «قناة الإرسال» (المالك: «حسن تصميمها»): صفٌّ واحد من أربع بلاطات — «تلقائي» (اختيارٌ وحده) ثمّ واتساب وتلغرام والتطبيق (تُختار معاً
+/// أو منفردة) — وتحتها سطر الشرح لما سيحدث بالضبط (وترتيب التلقائيّ فيه)، وسطرٌ للمقفولة. [reach]: كم مشتركاً يصله بكلّ قناة
+/// (التبليغات — null بالرسائل التلقائيّة). [locks]: قنواتٌ إرسالها جارٍ (مقفولة، بتقدّمها).
 class DeliveryChannelsPicker extends StatelessWidget {
   const DeliveryChannelsPicker({
     super.key,
@@ -124,25 +125,35 @@ class DeliveryChannelsPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final locked = [for (final c in DeliveryChannel.values) if (locks[c] != null) c];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _AutoRow(selected: value.auto, onTap: enabled ? () => onChanged(const DeliveryChoice.auto()) : null),
-        const SizedBox(height: Sp.sm),
-        Text('أو اختر القنوات بنفسك', style: AppType.label(color: AppColors.textMid)),
-        const SizedBox(height: 6),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Expanded(
+                child: _Tile(
+                  key: const ValueKey('channel-auto'),
+                  icon: LucideIcons.split,
+                  color: AppColors.brand,
+                  label: 'تلقائي',
+                  selected: value.auto,
+                  radio: true,
+                  onTap: enabled ? () => onChanged(const DeliveryChoice.auto()) : null,
+                ),
+              ),
               for (final c in DeliveryChannel.values) ...[
-                if (c != DeliveryChannel.whatsapp) const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
-                  child: _ChannelTile(
+                  child: _Tile(
                     key: ValueKey('channel-${c.name}'),
-                    channel: c,
+                    icon: c.icon,
+                    color: c.color,
+                    label: c.label,
                     selected: value.has(c),
-                    reach: reach?[c],
+                    count: reach?[c],
                     lock: locks[c],
                     onTap: enabled && locks[c] == null ? () => onChanged(value.toggle(c)) : null,
                   ),
@@ -154,138 +165,88 @@ class DeliveryChannelsPicker extends StatelessWidget {
         const SizedBox(height: 6),
         Text(deliveryChoiceHint(value),
             key: const ValueKey('channel-hint'), style: AppType.muted(color: AppColors.textMid).copyWith(height: 1.5)),
+        for (final c in locked)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            // التقدّم بالبلاطة نفسها (120/800) — السطر يقول السبب وحده، فلا يلتفّ على 320
+            child: Text('${c.label} مقفول لحد ما يخلص تبليغه الحالي',
+                key: ValueKey('channel-lock-${c.name}'), style: AppType.muted(color: AppColors.warning).copyWith(height: 1.5)),
+          ),
       ],
     );
   }
 }
 
-class _AutoRow extends StatelessWidget {
-  const _AutoRow({required this.selected, required this.onTap});
+/// بلاطةٌ واحدة: أيقونة القناة وعلامة الاختيار (دائرةٌ لـ«تلقائي» ومربّعٌ للقنوات) فوق الاسم، وتحته العدد أو «120/800» للمقفولة.
+class _Tile extends StatelessWidget {
+  const _Tile({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.radio = false,
+    this.count,
+    this.lock,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
   final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = AppColors.brand;
-    return Material(
-      color: selected ? AppColors.brandSoftBg : AppColors.surfaceInput,
-      borderRadius: BorderRadius.circular(R.md),
-      child: InkWell(
-        key: const ValueKey('channel-auto'),
-        borderRadius: BorderRadius.circular(R.md),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: selected ? color : AppColors.border, width: selected ? 1.2 : 0.6),
-          ),
-          child: Row(
-            children: [
-              Icon(selected ? LucideIcons.circleCheck : LucideIcons.circle,
-                  size: 18, color: selected ? color : AppColors.textLow),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('تلقائي', style: AppType.bodyBold(color: selected ? color : AppColors.textHi)),
-                    const SizedBox(height: 4),
-                    // الترتيب نفسه بأيقوناته: واتساب ← تلغرام ← التطبيق
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        for (var i = 0; i < autoChannelOrder.length; i++) ...[
-                          if (i > 0) Icon(LucideIcons.arrowLeft, size: 12, color: AppColors.textLow),
-                          _MiniChip(channel: autoChannelOrder[i]),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniChip extends StatelessWidget {
-  const _MiniChip({required this.channel});
-  final DeliveryChannel channel;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: channel.color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(R.pill),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(channel.icon, size: 11, color: channel.color),
-          const SizedBox(width: 3),
-          Text(channel.label, style: AppType.microBold(color: channel.color)),
-        ]),
-      );
-}
-
-class _ChannelTile extends StatelessWidget {
-  const _ChannelTile({super.key, required this.channel, required this.selected, required this.onTap, this.reach, this.lock});
-  final DeliveryChannel channel;
-  final bool selected;
-  final int? reach;
+  final bool radio;
+  final int? count;
   final ChannelLock? lock;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final locked = lock != null;
-    final c = channel.color;
-    final fg = locked ? AppColors.textLow : (selected ? c : AppColors.textMid);
+    final on = selected && !locked;
+    final fg = locked ? AppColors.textLow : (on ? color : AppColors.textMid);
+    final mark = locked
+        ? LucideIcons.lock
+        : radio
+            ? (on ? LucideIcons.circleCheck : LucideIcons.circle)
+            : (on ? LucideIcons.squareCheck : LucideIcons.square);
+    final sub = locked ? '${lock!.sent}/${lock!.total}' : (count != null ? '$count' : null);
     return Material(
-      color: locked ? AppColors.surfaceInput : (selected ? c.withValues(alpha: 0.12) : AppColors.surfaceInput),
+      color: on ? color.withValues(alpha: 0.12) : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
         borderRadius: BorderRadius.circular(R.md),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, Sp.sm),
+          padding: const EdgeInsets.fromLTRB(7, 7, 7, 7),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: selected && !locked ? c : AppColors.border, width: selected && !locked ? 1.2 : 0.6),
+            border: Border.all(color: on ? color : AppColors.border, width: on ? 1.2 : 0.6),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Icon(channel.icon, size: 16, color: locked ? AppColors.textLow : c),
+                Icon(icon, size: 15, color: locked ? AppColors.textLow : color),
                 const Spacer(),
-                Icon(
-                  locked ? LucideIcons.lock : (selected ? LucideIcons.squareCheck : LucideIcons.square),
-                  size: 16,
-                  color: locked ? AppColors.textLow : (selected ? c : AppColors.textLow),
-                ),
+                Icon(mark, size: 14, color: on ? color : AppColors.textLow),
               ]),
-              const SizedBox(height: 6),
-              Text(channel.label, maxLines: 1, style: AppType.labelBold(color: fg)),
-              if (locked) ...[
-                const SizedBox(height: 2),
-                Text('قيد الإرسال', maxLines: 1, style: AppType.micro(color: AppColors.warning)),
-                // «120/800» أرقاماً من اليسار — «120 من 800» كانت تُقصّ على 320 × خطّ 1.2
+              const SizedBox(height: 5),
+              // الاسم لا يُقصّ: يصغر قليلاً إن ضاق (320 × خطّ 1.2)
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(label, maxLines: 1, style: AppType.labelBold(color: fg)),
+              ),
+              if (sub != null)
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: AlignmentDirectional.centerStart,
-                  child: Text('${lock!.sent}/${lock!.total}',
-                      maxLines: 1, textDirection: TextDirection.ltr, style: AppType.micro(color: AppColors.textMid)),
+                  child: Text(sub,
+                      maxLines: 1,
+                      textDirection: TextDirection.ltr,
+                      style: AppType.micro(color: locked ? AppColors.warning : AppColors.textMid)),
                 ),
-              ] else if (reach != null) ...[
-                const SizedBox(height: 2),
-                Text('$reach مشترك', maxLines: 1, style: AppType.micro(color: AppColors.textMid)),
-              ],
             ],
           ),
         ),

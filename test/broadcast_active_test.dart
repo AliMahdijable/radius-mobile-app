@@ -218,15 +218,13 @@ void main() {
             expect(find.text('110'), findsOneWidget, reason: tag);
             expect(find.text('86'), findsOneWidget, reason: tag);
 
-            // ③ «قناة الإرسال» (١٨ نوفمبر — ثلاث قنوات + «تلقائي»): «تلقائي» صفٌّ كامل فوق، والقنوات الثلاث صفٌّ واحد بارتفاعٍ واحد تحته
-            final auto = t.getRect(find.byKey(const ValueKey('channel-auto')));
-            final tiles = [for (final c in const ['whatsapp', 'telegram', 'app']) t.getRect(find.byKey(ValueKey('channel-$c')))];
+            // ③ «قناة الإرسال» (١٨ نوفمبر — «حسن تصميمها»): البلاطات الأربع (تلقائي · واتساب · تلغرام · التطبيق) صفٌّ واحد بارتفاعٍ واحد
+            final tiles = [for (final c in const ['auto', 'whatsapp', 'telegram', 'app']) t.getRect(find.byKey(ValueKey('channel-$c')))];
             for (final r in tiles.skip(1)) {
-              expect((r.top - tiles.first.top).abs(), lessThan(0.5), reason: 'القنوات صفٌّ واحد $tag');
-              expect((r.height - tiles.first.height).abs(), lessThan(0.5), reason: 'القنوات بارتفاعٍ واحد $tag');
+              expect((r.top - tiles.first.top).abs(), lessThan(0.5), reason: 'البلاطات صفٌّ واحد $tag');
+              expect((r.height - tiles.first.height).abs(), lessThan(0.5), reason: 'البلاطات بارتفاعٍ واحد $tag');
             }
-            expect(auto.bottom, lessThan(tiles.first.top), reason: '«تلقائي» فوق القنوات $tag');
-            if (!dark) modes.add('$w×$scale قنوات ${tiles.first.height.toStringAsFixed(0)}');
+            if (!dark) modes.add('$w×$scale بلاطة ${tiles.first.height.toStringAsFixed(0)}');
 
             // ④ ما يصغر (FittedBox) لا يصغر كثيراً: البطاقات ≤ 15٪، أسماء القناة ≤ 3٪
             for (final label in [...filterLabels, '110', '86', '48', '24', '3']) {
