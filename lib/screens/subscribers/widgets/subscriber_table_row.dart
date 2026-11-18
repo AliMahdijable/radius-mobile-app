@@ -36,6 +36,7 @@ import '../../../core/widgets/print_feedback.dart';
 import '../../../services/receipt_service.dart';
 import 'usage_on_demand.dart';
 import '../../../services/merged_mode.dart';
+import '../../network_devices/widgets/device_ip_link.dart';
 
 /// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
 /// سحبه المدير). لا يسقط عمود حين يضيق الجدول: **الجدول كلّه** يتمرّر يميناً ويساراً قطعةً واحدة — لا جزءٌ ثابت ولا
@@ -866,7 +867,7 @@ Widget _dashCell() => Align(
       child: Text('—', style: AppType.muted(color: AppColors.textLow)),
     );
 
-/// قيمةٌ بسطرٍ واحد من اليسار لليمين، نقرةٌ تنسخها.
+/// قيمةٌ بسطرٍ واحد من اليسار لليمين، نقرةٌ تنسخها (الماك — العنوان رابطٌ: [DeviceIpLink]).
 Widget _copyableValue(BuildContext context, String v, TextStyle style) => Tooltip(
       message: 'desktop.copy'.tr(),
       child: InkWell(
@@ -880,7 +881,8 @@ Widget _copyableValue(BuildContext context, String v, TextStyle style) => Toolti
     );
 
 /// «IP / الإشارة» (٢٩ أكتوبر — المالك: «ما يظهر اشارات المشتركين… تكدر تحقنهن وي حقل الماك ip»): IP الجلسة
-/// للمتّصل (نقرةٌ تنسخه) وتحته قراءة جهاز المشترك من كاش الفحص — النانو: الإشارة وسرعة LAN، والـONU: الضوء
+/// للمتّصل (النقر يفتح صفحة جهازه بالمتصفح كلوحة المشترك، والزرّ الأيمن/الضغط المطوّل ينسخه — ١٨ نوفمبر، المالك: «النقر يسوي
+/// نسخ — خلّه يفتح صفحة الويب مثل كارت المشترك») وتحته قراءة جهاز المشترك من كاش الفحص — النانو: الإشارة وسرعة LAN، والـONU: الضوء
 /// والحرارة — بألوان صحّة كارت الهاتف نفسها ([SubscriberNetworkMetrics])، وتتحدّث مع موجة الفحص.
 class _IpSignalCell extends StatelessWidget {
   const _IpSignalCell({required this.sub});
@@ -900,7 +902,7 @@ class _IpSignalCell extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (ip.isNotEmpty) _copyableValue(context, ip, _monoStyle(sub.isOnline)),
+            if (ip.isNotEmpty) DeviceIpLink(ip, style: _monoStyle(sub.isOnline)),
             if (probed) ...[
               if (ip.isNotEmpty) const SizedBox(height: 3),
               SubscriberNetworkMetrics(sub: sub, wrap: true),

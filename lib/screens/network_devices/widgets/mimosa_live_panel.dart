@@ -24,6 +24,7 @@ import '../../../core/platform/desktop_layout.dart';
 import '../../../core/util/bidi.dart';
 import 'desk_device_kit.dart';
 import '../../../core/widgets/copyable.dart';
+import 'device_ip_link.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Mimosa (B5/B5c/B11/B24/A5/C5/C5c) — SNMP v2c فقط.
 ///
@@ -581,7 +582,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                 dim: !c.online,
                 copy: c.name?.trim().isNotEmpty == true,
               ),
-              if (ip) c.ip != null ? DeskMonoCell(c.ip!, label: 'IP') : deskDash(),
+              if (ip) c.ip != null ? DeskMonoCell(c.ip!, label: 'IP', link: true) : deskDash(),
               DeskMonoCell(c.mac, label: 'الماك'),
               c.rssiDbm != null
                   ? DeskDotValue(value: '${c.rssiDbm}', unit: 'dBm', color: Grade.signal(c.rssiDbm).fill)
@@ -1011,14 +1012,9 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               Row(children: [
                 Icon(LucideIcons.globe, size: 10, color: AppColors.textLow),
                 const SizedBox(width: 3),
-                Copyable(
-                  label: 'IP',
-                  value: c.ip,
-                  child: Text(c.ip!,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(
-                          fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
-                ),
+                // النقر يفتح صفحة العميل بالمتصفح، والزرّ الأيمن/الضغط المطوّل ينسخ (١٨ نوفمبر)
+                DeviceIpLink(c.ip!,
+                    style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
                 const SizedBox(width: 8),
                 Icon(LucideIcons.wifi, size: 10, color: AppColors.textLow),
                 const SizedBox(width: 3),

@@ -20,6 +20,7 @@ import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/widgets/copyable.dart';
+import 'device_ip_link.dart';
 import '../../../core/platform/desktop_layout.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
@@ -1869,12 +1870,8 @@ Widget _clientRow(MikrotikWirelessClient c) {
             // secondary line: IP (لو الـprimary اسم) + MAC دائماً بعده
             Row(children: [
               if (hasName && c.ip != null) ...[
-                Copyable(
-                  label: 'IP',
-                  value: c.ip,
-                  child: Text(c.ip!,
-                      style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textMid)),
-                ),
+                // النقر يفتح صفحة العميل بالمتصفح، والزرّ الأيمن/الضغط المطوّل ينسخ (١٨ نوفمبر)
+                DeviceIpLink(c.ip!, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textMid)),
                 const SizedBox(width: 6),
               ],
               // MAC يظهر فقط لو الـprimary مو نفس MAC
