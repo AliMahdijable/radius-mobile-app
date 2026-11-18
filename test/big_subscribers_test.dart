@@ -529,6 +529,9 @@ void main() {
       await settle(t);
       expect(find.text('الفئة كلّها — يجهّزها الخادم في الخلفيّة'), findsOneWidget);
       expect(find.text('89177 مشترك'), findsOneWidget, reason: 'العدد من ملخّص الساس لا من القائمة');
+      // ١٨ نوفمبر: بطاقة «قناة الإرسال» صارت أطول (ثلاث قنوات + «تلقائي») ⇒ حقل الرسالة تحت الشاشة — يُمرَّر إليه أوّلاً
+      await t.dragUntilVisible(find.byType(TextField), find.byType(Scrollable).first, const Offset(0, -200));
+      await t.pumpAndSettle();
       await t.enterText(find.byType(TextField).last, 'تبليغ تجربة');
       await settle(t);
       expect(find.text('إرسال للكل'), findsOneWidget);

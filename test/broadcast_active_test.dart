@@ -180,7 +180,6 @@ void main() {
         debugPrint('صغُر: ${shrunk.isEmpty ? 'لا شيء' : shrunk.join(' | ')}');
       });
       const filterLabels = ['كل المشتركين', 'الفعّالون', 'المدينون', 'منتهي الصلاحية', 'قرب الانتهاء (3 أيام)'];
-      const chanLabels = ['تلقائي', 'واتساب فقط', 'تلغرام فقط'];
       for (final w in [320.0, 340.0, 360.0, 375.0, 390.0, 412.0, 430.0, 480.0]) {
         for (final scale in [1.0, 1.1, 1.2]) {
           for (final dark in [false, true]) {
@@ -219,30 +218,21 @@ void main() {
             expect(find.text('110'), findsOneWidget, reason: tag);
             expect(find.text('86'), findsOneWidget, reason: tag);
 
-            // ③ أزرار القناة: الثلاثة بارتفاعٍ واحد وعلى سطرٍ واحد؛ سطرٌ (أيقونة بجانب الاسم) أو أيقونةٌ فوق الاسم — للثلاثة معاً
-            final chanRects = [for (final l in chanLabels) rectOf(l)];
-            final stackedEach = [
-              for (final l in chanLabels)
-                t.getRect(find.descendant(of: cardOf(l), matching: find.byType(Icon)).first).bottom <=
-                    t.getRect(find.text(l)).top + 1,
-            ];
-            for (final r in chanRects.skip(1)) {
-              expect((r.top - chanRects.first.top).abs(), lessThan(0.5), reason: 'أزرار القناة صفٌّ واحد $tag');
-              expect((r.height - chanRects.first.height).abs(), lessThan(0.5), reason: 'أزرار القناة بارتفاعٍ واحد $tag');
+            // ③ «قناة الإرسال» (١٨ نوفمبر — «حسن تصميمها»): البلاطات الأربع (تلقائي · واتساب · تلغرام · التطبيق) صفٌّ واحد بارتفاعٍ واحد
+            final tiles = [for (final c in const ['auto', 'whatsapp', 'telegram', 'app']) t.getRect(find.byKey(ValueKey('channel-$c')))];
+            for (final r in tiles.skip(1)) {
+              expect((r.top - tiles.first.top).abs(), lessThan(0.5), reason: 'البلاطات صفٌّ واحد $tag');
+              expect((r.height - tiles.first.height).abs(), lessThan(0.5), reason: 'البلاطات بارتفاعٍ واحد $tag');
             }
-            expect(stackedEach.toSet(), hasLength(1), reason: 'شكلٌ واحد للأزرار الثلاثة $tag');
-            final stacked = stackedEach.first;
-            if (w == 480) expect(stacked, isFalse, reason: 'هاتف المالك (480): كما كان — أيقونة بجانب الاسم $tag');
-            if (w == 320 && scale == 1.2) expect(stacked, isTrue, reason: 'أضيق هاتف بخطٍّ مكبّر: أيقونةٌ فوق الاسم $tag');
-            if (!dark) modes.add('$w×$scale ${stacked ? 'فوق' : 'بجانب'} ${chanRects.first.height.toStringAsFixed(0)}');
+            if (!dark) modes.add('$w×$scale بلاطة ${tiles.first.height.toStringAsFixed(0)}');
 
             // ④ ما يصغر (FittedBox) لا يصغر كثيراً: البطاقات ≤ 15٪، أسماء القناة ≤ 3٪
-            for (final label in [...filterLabels, ...chanLabels, '110', '86', '48', '24', '3']) {
+            for (final label in [...filterLabels, '110', '86', '48', '24', '3']) {
               final p = t.renderObject<RenderParagraph>(find.text(label));
               final box = find.ancestor(of: find.text(label), matching: find.byType(FittedBox));
               if (box.evaluate().isEmpty) continue;
               final k = t.getSize(box.first).width / p.size.width;
-              final floor = chanLabels.contains(label) ? 0.97 : 0.85;
+              const floor = 0.85;
               expect(k, greaterThanOrEqualTo(floor), reason: '«$label» صغُر إلى ${(k * 100).round()}٪ $tag');
               if (k < 0.999) shrunk.add('${w.toInt()}×$scale «$label» ${(k * 100).round()}٪');
             }

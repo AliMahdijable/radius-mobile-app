@@ -86,8 +86,13 @@ class WhatsAppSchedule {
           .where((n) => n >= 1 && n <= 31)
           .toList(),
       channelPreference: () {
-        final raw = (json['channel_preference'] ?? 'auto').toString();
-        return ['auto', 'whatsapp', 'telegram'].contains(raw) ? raw : 'auto';
+        final raw = (json['channel_preference'] ?? 'auto').toString().trim();
+        if (const ['auto', 'whatsapp', 'telegram', 'app'].contains(raw)) return raw;
+        // ١٨ نوفمبر (القناة الثالثة «التطبيق»): قنواتٌ بفاصلة ('whatsapp,app') بترتيبها الثابت؛ ما لا يُفهم ⇒ تلقائي
+        const order = ['whatsapp', 'telegram', 'app'];
+        final parts = raw.split(',').map((x) => x.trim()).toSet();
+        final kept = [for (final c in order) if (parts.contains(c)) c];
+        return kept.isEmpty ? 'auto' : kept.join(',');
       }(),
       debtFilter: _parseDebtFilter(json['debt_filter']),
       debtFilterInvalid: json['debt_filter_invalid'] == true,
