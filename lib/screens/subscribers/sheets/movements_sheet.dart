@@ -15,6 +15,8 @@ import '../../../theme/typography.dart';
 import '../../../core/util/server_time.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../widgets/payment_void_bits.dart';
+import '../../../services/permissions_service.dart';
+import '../../sales/sales_screen.dart' show openSaleVoidById;
 import 'op_void_sheet.dart';
 import 'payment_void_sheet.dart';
 
@@ -122,6 +124,30 @@ class _MovementsSheetState extends State<_MovementsSheet> {
       if (b != null) return b;
     }
     return null;
+  }
+
+  /// «شراء» (بيع موادّ على دين المشترك): رقم البيع من الخادم (sale_id) لزرّ «إلغاء البيع» القائم.
+  static int? _saleIdOf(Map<String, dynamic> t) {
+    final v = t['sale_id'];
+    final n = v is num ? v.toInt() : int.tryParse('${v ?? ''}');
+    return n != null && n > 0 ? n : null;
+  }
+
+  /// يوم الحركة بتوقيت بغداد (YYYY-MM-DD) — قائمة المبيعات تُقرأ لذلك اليوم.
+  static String _baghdadDay(Object? createdAt) {
+    final d = parseServerUtc(createdAt?.toString() ?? '')?.toUtc().add(const Duration(hours: 3));
+    if (d == null) return '';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)}';
+  }
+
+  Future<void> _openSaleVoid(Map<String, dynamic> txn) async {
+    final id = _saleIdOf(txn);
+    final day = _baghdadDay(txn['created_at']);
+    if (id == null || day.isEmpty || !_voidHere) return;
+    final changed = await openSaleVoidById(context, saleId: id, day: day);
+    if (!mounted) return;
+    if (changed == true) await _load();
   }
 
   Future<void> _openOpVoid(Map<String, dynamic> txn) async {
@@ -313,6 +339,10 @@ class _MovementsSheetState extends State<_MovementsSheet> {
               opVoided: _opVoids.of(oid),
               opAction: _opVoids.actionFor(oid, OpVoidsApi.opKindOf(t)),
               onOpVoid: () => _openOpVoid(t),
+              saleAction: !_voidHere || _saleIdOf(t) == null
+                  ? PaymentVoidAction.none
+                  : (Perms.has('sales.void') ? PaymentVoidAction.open : PaymentVoidAction.locked),
+              onSale: () => _openSaleVoid(t),
             );
           }
           i -= group.length;
@@ -539,7 +569,13 @@ class _MovementTile extends StatelessWidget {
     this.opVoided,
     this.opAction = PaymentVoidAction.none,
     this.onOpVoid,
+    this.saleAction = PaymentVoidAction.none,
+    this.onSale,
   });
+
+  /// «شراء»: زرّ «إلغاء البيع» القائم (يفتح نافذته) · مقفلٌ بلا sales.void · لا زرّ.
+  final PaymentVoidAction saleAction;
+  final VoidCallback? onSale;
   final Map<String, dynamic> txn;
 
   /// «إلغاء إضافة دين/رصيد» (١٧ نوفمبر): حال الإضافة في قيد الإلغاء، وزرّها، ونداؤه.
@@ -589,16 +625,19 @@ class _MovementTile extends StatelessWidget {
       isVoid: PaymentVoidsApi.isVoidRow(txn),
       negative: (_readSigned(rawAmt) ?? 0) < 0,
       opVoidKind: OpVoidsApi.isOpVoidRow(txn) ? (OpVoidsApi.voidKindOf(txn) ?? 'add_debt') : null,
+      isSale: _MovementsSheetState._saleIdOf(txn) != null,
     );
     // سطر إضافةٍ تُلغى ⇒ زرّها وشارتها؛ وإلّا زرّ التسديد كما كان.
     final isOp = opAction != PaymentVoidAction.none || opVoided != null;
+    // «شراء»: زرّ «إلغاء البيع» (بلا شارة — حاله في قسم المبيعات).
+    final isSale = !isOp && saleAction != PaymentVoidAction.none;
     final v = voided;
     final ov = opVoided;
-    final voidedDone = isOp ? (ov != null && ov.isDone) : (v != null && v.isDone);
-    final hasBadge = isOp ? ov != null : v != null;
+    final voidedDone = isOp ? (ov != null && ov.isDone) : (!isSale && v != null && v.isDone);
+    final hasBadge = isOp ? ov != null : (!isSale && v != null);
     // زرّ الفتح بلا معالجٍ لا يُعرض؛ والمقفل («لا صلاحيّة») لا يحتاج معالجاً.
-    final rawAction = isOp ? opAction : voidAction;
-    final press = isOp ? onOpVoid : onVoid;
+    final rawAction = isOp ? opAction : (isSale ? saleAction : voidAction);
+    final press = isOp ? onOpVoid : (isSale ? onSale : onVoid);
     final action = rawAction == PaymentVoidAction.open && press == null ? PaymentVoidAction.none : rawAction;
 
     // ⚠️ نفس السبب: UTC عارٍ يُقرأ محلّيّاً فيتأخّر ثلاث ساعات.
@@ -791,8 +830,8 @@ class _MovementTile extends StatelessWidget {
             action: action,
             resume: hasBadge,
             onOpen: press ?? () {},
-            tipOpen: isOp ? 'إلغاء الحركة' : null,
-            tipLocked: isOp ? 'إلغاء الحركة — لا صلاحيّة' : null,
+            tipOpen: isOp ? 'إلغاء الحركة' : (isSale ? 'إلغاء البيع' : null),
+            tipLocked: isOp ? 'إلغاء الحركة — لا صلاحيّة' : (isSale ? 'إلغاء البيع — لا صلاحيّة' : null),
             tipResume: isOp ? 'إكمال إلغاء الحركة' : null,
           ),
         ),
@@ -806,9 +845,12 @@ class _MovementTile extends StatelessWidget {
     bool isVoid = false,
     bool negative = false,
     String? opVoidKind,
+    bool isSale = false,
   }) {
     // «إلغاء إضافة دين/رصيد» (١٧ نوفمبر): السطر المقابل باسمه (الخادم يعلّمه op_void).
     if (opVoidKind != null) return (LucideIcons.undo2, AppColors.error, opVoidLabel(opVoidKind));
+    // «شراء» (١٨ نوفمبر): بيع موادّ على دين المشترك — باسمه لا «إضافة دين».
+    if (isSale && type == 'BALANCE_ADD') return (LucideIcons.shoppingCart, AppColors.warning, 'شراء');
     // «إلغاء تسديد»: تسديدٌ بمبلغٍ سالب (أو معلَّمٌ من دفتر ايرث لنك) — رجع دينه.
     if (isVoid) return (LucideIcons.undo2, AppColors.error, 'إلغاء تسديد');
     // سطر تسوية الربط (الدين كان أُعيد يدويّاً بإضافة دين — محاسبةٌ بلا أثرٍ على دين المشترك): باسمه كما في التقارير،

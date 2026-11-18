@@ -880,6 +880,26 @@ String _qty(num q) {
 /// «23 تشرين الأوّل · 18:05» لا «2026/10/23 18:05» (المالك ٢٤ أكتوبر).
 String _time(DateTime? at) => at == null ? '' : '${iqDateOf(at)} · ${DateFormat('HH:mm').format(at)}';
 
+/// «شراء» بسجلّ حركات المشترك (١٨ نوفمبر — المقترح: «الإلغاء موجود بقسم المبيعات، وأضيف زرّه بسجلّ المشترك»): يفتح «إلغاء البيع»
+/// القائم ([_VoidSheet] — بقواعده وصلاحيّته) لبيعٍ برقمه [saleId] من قائمة يومه [day] (YYYY-MM-DD بتوقيت بغداد؛ لا قراءة بيعٍ منفرد).
+/// ⇒ true حين تغيّر شيء؛ null حين لم يُفتح (لم يوجد بيومه — أُلغي أو تعذّرت القراءة: رسالةٌ تقول ذلك).
+Future<bool?> openSaleVoidById(BuildContext context, {required int saleId, required String day}) async {
+  final r = await SalesApi.list(from: day, to: day, companyKey: null);
+  if (!context.mounted) return null;
+  Sale? sale;
+  for (final s in r.page?.sales ?? const <Sale>[]) {
+    if (s.id == saleId) {
+      sale = s;
+      break;
+    }
+  }
+  if (sale == null) {
+    showSheetSnack(context, r.error ?? 'تعذّر العثور على البيع #$saleId — افتحه من قسم المبيعات', isError: true);
+    return null;
+  }
+  return _showSheet(context, _VoidSheet(sale: sale, companyKey: null));
+}
+
 Future<bool?> _showSheet(BuildContext context, Widget sheet) {
   return showAppSheet<bool>(
     context: context,

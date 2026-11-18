@@ -50,7 +50,13 @@ class _OvServer implements HttpClientAdapter {
       'id': 900, 'created_at': '2026-11-15 12:00:00', 'action_type': 'BALANCE_DEDUCT', 'description': 'تسديد دين 10000 د.ع',
       'amount': 10000, 'balance_after': -35000, 'admin_name': 'page2', 'payment_activity_id': 900,
     },
+    {
+      'id': 899, 'created_at': '2026-11-14 22:30:00', 'action_type': 'BALANCE_ADD',
+      'description': 'إضافة دين 12000 د.ع للمشترك ali.kareem - بيع #41: راوتر', 'amount': 12000, 'balance_after': -45000,
+      'admin_name': 'page2', 'sale_id': 41,
+    },
   ];
+  final salesAsks = <Map<String, dynamic>>[];
 
   static ResponseBody _json(int status, Object body) =>
       ResponseBody.fromString(jsonEncode(body), status, headers: {
@@ -80,6 +86,10 @@ class _OvServer implements HttpClientAdapter {
     if (get && p == '/api/reports/account-statement') {
       statementGets += 1;
       return _json(200, {'success': true, 'data': {'subscriber': {'username': 'ali.kareem'}, 'transactions': statement}});
+    }
+    if (get && p == '/api/v2/sales') {
+      salesAsks.add(Map<String, dynamic>.from(o.queryParameters));
+      return _json(200, {'success': true, 'enabled': true, 'data': [], 'totals': {'count': 0, 'revenue': 0, 'cost': 0, 'profit': 0, 'cash': 0}});
     }
     if (get && p == '/api/v2/payment-voids/status') {
       return _json(200, {'success': true, 'enabled': false, 'can_void': false, 'can_link': false, 'own_only': false, 'items': []});
@@ -232,6 +242,18 @@ void main() {
       await open(t, prep: (s) => s.status = {'enabled': true, 'can_void_debt': true, 'can_void_credit': false, 'own_only': true, 'items': []});
       expect(_rowButtons(PaymentVoidAction.open), findsOneWidget);
       expect(_rowButtons(PaymentVoidAction.locked), findsOneWidget);
+    });
+
+    testWidgets('«شراء»: باسمه وزرّ «إلغاء البيع»، والزرّ يقرأ مبيعات يومه بتوقيت بغداد (22:30 UTC ⇒ اليوم التالي)', (t) async {
+      final server = await open(t);
+      expect(find.text('شراء'), findsOneWidget);
+      final sale = find.byWidgetPredicate((w) => w is PaymentVoidRowButton && w.tipOpen == 'إلغاء البيع');
+      expect(sale, findsOneWidget);
+      await t.tap(sale);
+      await settle(t, seconds: 2);
+      expect(server.salesAsks.single, {'from': '2026-11-15', 'to': '2026-11-15'});
+      expect(find.textContaining('تعذّر العثور على البيع #41'), findsOneWidget, reason: 'غير موجودٍ بيومه ⇒ رسالة لا نافذة فارغة');
+      await settle(t, seconds: 4);
     });
 
     testWidgets('الميزة مطفأة ⇒ لا زرّ ولا قفل', (t) async {
