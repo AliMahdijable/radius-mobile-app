@@ -1978,6 +1978,24 @@ class SubscribersApi {
     }
   }
 
+  /// رقم مشترك الوطني طازجاً من البوّابة (١٨ نوفمبر، الخادم `6e1b55b`): `GET /api/v2/subscribers/:idx/contact` ⇒ الرقم كما هو
+  /// عند البوّابة الآن، أو null حين لم يُقرأ الآن (جدار/زحام ⇒ `fresh:false`، مزوّدٌ بلا قدرة 409، أو خطأ) — فتبقى اللوحة على
+  /// رقم القائمة كما كانت.
+  static Future<String?> freshContact(String idx) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/${Uri.encodeComponent(idx)}/contact',
+      );
+      final b = r.data ?? const {};
+      final d = b['data'];
+      if (b['success'] != true || d is! Map || d['fresh'] != true) return null;
+      return '${d['phone'] ?? ''}'.trim();
+    } catch (e) {
+      _log('contact/$idx', e);
+      return null;
+    }
+  }
+
   static Future<({bool ok, String? message})> delete(String idx) async {
     try {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(
