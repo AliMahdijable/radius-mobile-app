@@ -43,6 +43,9 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   List<int> _expiryDays = const [0, 1, 2, 3, 4, 5, 6];
   int _daysBefore = 3;
   String _expiryChannel = 'auto';
+
+  /// قناة «التطبيق» مفعّلة للحساب (من الخادم مع الجدولات) — وإلّا لا بلاطة لها، والحفظ بالقناة القديمة وحدها.
+  bool _appOn = false;
   final _daysBeforeCtrl = TextEditingController(text: '3');
   bool _savingExpiry = false;
   // Server-side row existence — نحتاجه للـtoggle. لو null → لسّة ما
@@ -96,8 +99,9 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     ]);
     if (!mounted) return;
     _adminId = results[0] as String?;
-    final bundle = results[1] as ({List<WhatsAppSchedule> schedules, DebtFilterCapability? debtCap})?;
+    final bundle = results[1] as ({List<WhatsAppSchedule> schedules, DebtFilterCapability? debtCap, bool appOn})?;
     _debtCap = bundle?.debtCap;
+    _appOn = bundle?.appOn ?? false;
     _hydrateFromSchedules(bundle?.schedules ?? const []);
     setState(() => _loading = false);
     _queueDebtPreview(now: true);
@@ -108,7 +112,10 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   Future<void> _silentReload() async {
     final bundle = await WhatsAppApi.loadSchedulesBundle();
     if (!mounted) return;
-    if (bundle != null) _debtCap = bundle.debtCap;
+    if (bundle != null) {
+      _debtCap = bundle.debtCap;
+      _appOn = bundle.appOn;
+    }
     _hydrateFromSchedules(bundle?.schedules ?? const []);
     setState(() {}); // لتحديث IDs في الـstate
     _queueDebtPreview(now: true);
@@ -231,6 +238,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       activeDays: List<int>.from(_expiryDays)..sort(),
       daysBefore: _daysBefore,
       channelPreference: _expiryChannel,
+      sendChannels: _appOn,
     );
     final r = await WhatsAppApi.saveSchedule(schedule);
     if (!mounted) return;
@@ -271,6 +279,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           ? (List<int>.from(_debtMonthDays)..sort())
           : const [],
       channelPreference: _debtChannel,
+      sendChannels: _appOn,
       // يُرسَل حين تغيّر وحده (كائنٌ أو null للمسح) — وإلّا يبقى المحفوظ على الخادم كما هو
       debtFilter: _debtFilter.toJson(),
       sendDebtFilter: _debtFilterDirty,
@@ -314,6 +323,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         activeDays: List<int>.from(_expiryDays)..sort(),
         daysBefore: _daysBefore,
         channelPreference: _expiryChannel,
+        sendChannels: _appOn,
       );
       final r = await WhatsAppApi.saveSchedule(schedule);
       if (!mounted) return;
@@ -356,6 +366,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             ? (List<int>.from(_debtMonthDays)..sort())
             : const [],
         channelPreference: _debtChannel,
+        sendChannels: _appOn,
         // أوّل تفعيلٍ ينشئ الصفّ: بالتحديد الذي على الشاشة إن كان سليماً — لا يُفعَّل تذكيرٌ لكلّ المدينين والمدير حدّد غيرهم
         debtFilter: _debtFilter.toJson(),
         sendDebtFilter: _debtCap != null &&
@@ -949,6 +960,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           DeliveryChannelsPicker(
             value: _prefToChoice(current),
             onChanged: (v) => onChanged(_choiceToPref(v)),
+            available: _appOn ? DeliveryChannel.values : const [DeliveryChannel.whatsapp, DeliveryChannel.telegram],
           ),
         ],
       ),

@@ -147,6 +147,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   /// كم مشتركاً يصله بكلّ قناة + القنوات المقفولة (إرسالٌ جارٍ) — null حتى يجيب الخادم (أو خادمٌ أقدم).
   BroadcastChannelsInfo? _channelsInfo;
 
+  /// قناة «التطبيق» مفعّلة لهذا الحساب: الاختيار الجديد يُرسل (channels) — وإلّا كما كان قبلها حرفاً (forceChannel وحده، و«تلقائي» =
+  /// تلغرام لمن ربطه والباقي واتساب).
+  bool get _appOn => _channelsInfo?.appEnabled == true;
+  DeliveryChoice? get _sendChannels => _appOn ? _choice : null;
+
   // ─── «تحديد المدينين» (٩ نوفمبر — المالك: «تحديد نطاقة جلب اليوزرية حسب اقدم مده دين وسقف من والى الدين … اما المده او
   // المبلغ او الاثنين») ─────────────────────────────────────────────────────────────────────────────────────────────
   // العمر = عمر **أقدم دينٍ لم يُسدَّد** (قراره بمثاله: ٣٥ ألفاً منذ ٩٠ يوماً + ٣٥ ألفاً قبل يومين ⇒ ٩٠ يوماً) — يحسبه الخادم وحده من
@@ -590,7 +595,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
-      channels: _choice.auto ? null : _choice,
+      channels: _sendChannels,
       includeHighRisk: _includeHighRisk,
     );
     if (!mounted) return;
@@ -684,7 +689,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
-      channels: _choice.auto ? null : _choice,
+      channels: _sendChannels,
       includeHighRisk: include,
     );
     if (!mounted) return;
@@ -736,7 +741,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
-      channels: _choice.auto ? null : _choice,
+      channels: _sendChannels,
       includeHighRisk: false,
     );
     if (!mounted) return;
@@ -1141,6 +1146,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       for (final c in info.locks.keys) {
         if (_choice.has(c)) _choice = _choice.toggle(c);
       }
+      // «التطبيق» غير مفعّل للحساب ⇒ لا يبقى مختاراً
+      if (!info.appEnabled && _choice.has(DeliveryChannel.app)) _choice = _choice.toggle(DeliveryChannel.app);
     });
   }
 
@@ -1153,6 +1160,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
         onChanged: (v) => setState(() => _choice = v),
         reach: _channelsInfo?.reach,
         locks: _channelsInfo?.locks ?? const {},
+        available: _channelsInfo?.available ?? const [DeliveryChannel.whatsapp, DeliveryChannel.telegram],
       ),
     );
   }

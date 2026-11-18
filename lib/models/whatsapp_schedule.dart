@@ -45,6 +45,10 @@ class WhatsAppSchedule {
   /// يُضبط true حين غيّر المدير التحديد وحده — فحفظُ الوقت أو الأيّام لا يمسّ التحديد أبداً.
   final bool sendDebtFilter;
 
+  /// قناة «التطبيق» مفعّلة للحساب (١٨ نوفمبر): يُرسَل الاختيار الجديد «channels» مع الحفظ ويحفظه الخادم بجدوله — وإلّا
+  /// channel_preference القديمة وحدها (بقيمةٍ يفهمها خادمٌ أقدم).
+  final bool sendChannels;
+
   const WhatsAppSchedule({
     this.id,
     required this.adminId,
@@ -61,6 +65,7 @@ class WhatsAppSchedule {
     this.debtFilter = const {},
     this.debtFilterInvalid = false,
     this.sendDebtFilter = false,
+    this.sendChannels = false,
   });
 
   factory WhatsAppSchedule.fromJson(Map<String, dynamic> json) {
@@ -86,6 +91,15 @@ class WhatsAppSchedule {
           .where((n) => n >= 1 && n <= 31)
           .toList(),
       channelPreference: () {
+        // الاختيار الجديد من الخادم (channels: 'auto' أو قائمة) قبل العمود القديم
+        final ch = json['channels'];
+        if (ch == 'auto') return 'auto';
+        if (ch is List) {
+          const order = ['whatsapp', 'telegram', 'app'];
+          final set = ch.map((x) => '$x').toSet();
+          final kept = [for (final c in order) if (set.contains(c)) c];
+          if (kept.isNotEmpty) return kept.join(',');
+        }
         final raw = (json['channel_preference'] ?? 'auto').toString().trim();
         if (const ['auto', 'whatsapp', 'telegram', 'app'].contains(raw)) return raw;
         // ١٨ نوفمبر (القناة الثالثة «التطبيق»): قنواتٌ بفاصلة ('whatsapp,app') بترتيبها الثابت؛ ما لا يُفهم ⇒ تلقائي
@@ -113,6 +127,17 @@ class WhatsAppSchedule {
   }
 
   /// Payload لـPOST /api/whatsapp/save-schedule (camelCase مثل web/v1).
+  /// قيمةٌ يفهمها عمود channel_preference القديم (auto/whatsapp/telegram) من اختيارٍ جديد: واتساب+تلغرام ⇒ auto، فيه واتساب ⇒
+  /// whatsapp، تلغرام (± التطبيق) ⇒ telegram، التطبيق وحده ⇒ whatsapp (الخادم الجديد يحفظ الاختيار نفسه بجدوله).
+  static String legacyChannelPreference(String pref) {
+    if (const ['auto', 'whatsapp', 'telegram'].contains(pref)) return pref;
+    final set = pref.split(',').map((x) => x.trim()).toSet();
+    if (set.contains('whatsapp') && set.contains('telegram')) return 'auto';
+    if (set.contains('whatsapp')) return 'whatsapp';
+    if (set.contains('telegram')) return 'telegram';
+    return set.contains('app') ? 'whatsapp' : 'auto';
+  }
+
   Map<String, dynamic> toSaveJson() {
     final parts = scheduledTime.split(':');
     final hh = parts.isNotEmpty ? parts[0].padLeft(2, '0') : '10';
@@ -127,7 +152,8 @@ class WhatsAppSchedule {
         if (daysBefore != null) 'daysBefore': daysBefore,
         'scheduleMode': scheduleMode,
         'monthDays': monthDays,
-        'channelPreference': channelPreference,
+        'channelPreference': legacyChannelPreference(channelPreference),
+        if (sendChannels) 'channels': channelPreference == 'auto' ? 'auto' : channelPreference.split(','),
         // كائنٌ بحدوده أو null للمسح — ولا يُرسَل كائنٌ فارغ (الخادم يرفضه: لا يُفهم «امسح» من جسمٍ أسقط قيمه)
         if (sendDebtFilter) 'debtFilter': debtFilter.isEmpty ? null : debtFilter,
       },
@@ -150,6 +176,7 @@ class WhatsAppSchedule {
     Map<String, int>? debtFilter,
     bool? debtFilterInvalid,
     bool? sendDebtFilter,
+    bool? sendChannels,
   }) {
     return WhatsAppSchedule(
       id: id ?? this.id,
@@ -167,6 +194,7 @@ class WhatsAppSchedule {
       debtFilter: debtFilter ?? this.debtFilter,
       debtFilterInvalid: debtFilterInvalid ?? this.debtFilterInvalid,
       sendDebtFilter: sendDebtFilter ?? this.sendDebtFilter,
+      sendChannels: sendChannels ?? this.sendChannels,
     );
   }
 

@@ -863,7 +863,7 @@ class WhatsAppApi {
 
   /// الجدولات ومعها ما يدعمه الخادم من «تحديد المدينين» لتذكير الديون (debtFilter في الردّ نفسه) — null للقدرة حين لا يعرف
   /// الخادم التحديد بعد: الشاشة كما كانت (لا لوحة، والحفظ بلا المفتاح).
-  static Future<({List<WhatsAppSchedule> schedules, DebtFilterCapability? debtCap})?> loadSchedulesBundle() async {
+  static Future<({List<WhatsAppSchedule> schedules, DebtFilterCapability? debtCap, bool appOn})?> loadSchedulesBundle() async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return null;
     try {
@@ -873,12 +873,16 @@ class WhatsAppApi {
       final data = r.data;
       List<dynamic> rows;
       DebtFilterCapability? cap;
+      // قناة «التطبيق» (١٨ نوفمبر): الخادم يقول إن كانت مفعّلة للحساب — وإلّا لا بلاطة لها والحفظ بالقناة القديمة وحدها
+      var appOn = false;
       if (data is List) {
         rows = data;
       } else if (data is Map && data['schedules'] is List) {
         rows = data['schedules'] as List;
         final c = data['debtFilter'];
         if (c is Map) cap = DebtFilterCapability.fromJson(Map<String, dynamic>.from(c));
+        final ac = data['appChannel'];
+        appOn = ac is Map && ac['enabled'] == true;
       } else {
         rows = const [];
       }
@@ -893,7 +897,7 @@ class WhatsAppApi {
           // صف تالف — نتخطّاه بدل إسقاط كل القائمة
         }
       }
-      return (schedules: list, debtCap: cap);
+      return (schedules: list, debtCap: cap, appOn: appOn);
     } catch (e) {
       _log('whatsapp/schedules GET', e);
       return null;

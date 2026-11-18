@@ -586,9 +586,16 @@ class BroadcastApi {
 /// حملة بثٍّ واحدة (صفوف طابورٍ تحمل نفس batch_id) — للعرض والتحكّم.
 /// ما يصله الوكيل بكلّ قناة + الأقفال (إرسالٌ جارٍ لكلّ قناةٍ وحدها).
 class BroadcastChannelsInfo {
-  const BroadcastChannelsInfo({required this.reach, required this.locks});
+  const BroadcastChannelsInfo({required this.reach, required this.locks, this.appEnabled = false});
   final Map<DeliveryChannel, int> reach;
   final Map<DeliveryChannel, ChannelLock> locks;
+
+  /// قناة «التطبيق» مفعّلة لهذا الحساب (المفتاح بالخادم) — وإلّا لا بلاطة لها ويبقى الإرسال كما كان قبلها حرفاً.
+  final bool appEnabled;
+
+  /// القنوات المعروضة بشاشة الإرسال.
+  List<DeliveryChannel> get available =>
+      appEnabled ? DeliveryChannel.values : const [DeliveryChannel.whatsapp, DeliveryChannel.telegram];
 
   static BroadcastChannelsInfo fromJson(Map<String, dynamic> j) {
     int? n(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}');
@@ -601,7 +608,8 @@ class BroadcastChannelsInfo {
       final x = l is Map ? l[c.name] : null;
       if (x is Map && n(x['total']) != null) locks[c] = ChannelLock(sent: n(x['sent']) ?? 0, total: n(x['total'])!);
     }
-    return BroadcastChannelsInfo(reach: reach, locks: locks);
+    final app = j['app'];
+    return BroadcastChannelsInfo(reach: reach, locks: locks, appEnabled: app is Map && app['enabled'] == true);
   }
 }
 
@@ -618,7 +626,15 @@ class BroadcastCampaign {
     required this.paused,
     required this.telegram,
     this.createdAt,
+    this.app,
+    this.appOnly = false,
   });
+
+  /// حالة الإرسال بالتطبيق لهذه الحملة (null ⇒ لا تطبيق فيها).
+  final AppCampaignStats? app;
+
+  /// حملةٌ بالتطبيق وحده (لا صفوف واتساب/تلغرام).
+  final bool appOnly;
 
   final String batchId;
 
@@ -638,8 +654,11 @@ class BroadcastCampaign {
   final int telegram;
   final DateTime? createdAt;
 
-  /// ما زالت تُرسِل (فيها معلّقٌ أو قيد المعالجة) — تُعرض لها أزرار التحكّم.
+  /// ما زالت تُرسِل (فيها معلّقٌ أو قيد المعالجة) — تُعرض لها أزرار التحكّم (الواتساب/تلغرام وحدهما).
   bool get active => pending > 0 || processing > 0;
+
+  /// التطبيق ما زال يُرسل.
+  bool get appActive => (app?.pending ?? 0) > 0;
 
   static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
 
@@ -658,6 +677,8 @@ class BroadcastCampaign {
       paused: j['paused'] == true || j['paused'] == 1,
       telegram: _int(j['telegram']),
       createdAt: DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal(),
+      app: j['app'] is Map ? AppCampaignStats.fromJson(Map<String, dynamic>.from(j['app'] as Map)) : null,
+      appOnly: j['app_only'] == true,
     );
   }
 }
@@ -927,4 +948,39 @@ class BroadcastVariables {
 
 void _log(String tag, Object e) {
   if (kDebugMode) debugPrint('[BroadcastApi] $tag: $e');
+}
+
+/// حالة حملةٍ بالتطبيق: وصل للجهاز · انفتح · بلا تطبيق · كاتم · فشل · ينتظر (المالك: «حالة الإرسال لكلّ قناة»).
+class AppCampaignStats {
+  const AppCampaignStats({
+    required this.total,
+    required this.sent,
+    required this.opened,
+    required this.noDevice,
+    required this.muted,
+    required this.failed,
+    required this.pending,
+    required this.noApp,
+  });
+  final int total;
+  final int sent;
+  final int opened;
+  final int noDevice;
+  final int muted;
+  final int failed;
+  final int pending;
+  final int noApp;
+
+  static int _i(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
+
+  factory AppCampaignStats.fromJson(Map<String, dynamic> j) => AppCampaignStats(
+        total: _i(j['total']),
+        sent: _i(j['sent']),
+        opened: _i(j['opened']),
+        noDevice: _i(j['no_device']),
+        muted: _i(j['muted']),
+        failed: _i(j['failed']),
+        pending: _i(j['pending']),
+        noApp: _i(j['no_app']),
+      );
 }

@@ -94,9 +94,11 @@ class ChannelLock {
   final int total;
 }
 
-/// سطر الشرح تحت الاختيار — ماذا سيحدث بالضبط.
-String deliveryChoiceHint(DeliveryChoice v) {
+/// سطر الشرح تحت الاختيار — ماذا سيحدث بالضبط. [app]: قناة «التطبيق» مفعّلة للحساب (وإلّا «تلقائي» القديم: تلغرام لمن ربطه والباقي
+/// واتساب — كما كان قبلها حرفاً).
+String deliveryChoiceHint(DeliveryChoice v, {bool app = true}) {
   // بلا أسهم (⇒): خطّ التطبيق لا يرسمها — مربّعٌ فارغ مكانها
+  if (v.auto && !app) return 'رسالة وحدة لكل مشترك: تلغرام للي رابطه، والباقي واتساب';
   if (v.auto) return 'رسالة وحدة لكل مشترك: واتساب، وإذا ما عنده أو فشل يروح لتلغرام، وبعدين التطبيق';
   final names = [for (final c in DeliveryChannel.values) if (v.channels.contains(c)) c.label];
   if (names.length == 1) return 'يوصل بـ${names.first} وحده — اللي ما عنده ${names.first} ما يوصله شي';
@@ -115,7 +117,11 @@ class DeliveryChannelsPicker extends StatelessWidget {
     this.reach,
     this.locks = const {},
     this.enabled = true,
+    this.available = DeliveryChannel.values,
   });
+
+  /// القنوات المعروضة — بلا «التطبيق» حين لم تُفعَّل قناته للحساب (أو خادمٌ أقدم): الاختيار كما كان قبلها.
+  final List<DeliveryChannel> available;
 
   final DeliveryChoice value;
   final ValueChanged<DeliveryChoice> onChanged;
@@ -144,7 +150,7 @@ class DeliveryChannelsPicker extends StatelessWidget {
                   onTap: enabled ? () => onChanged(const DeliveryChoice.auto()) : null,
                 ),
               ),
-              for (final c in DeliveryChannel.values) ...[
+              for (final c in available) ...[
                 const SizedBox(width: 5),
                 Expanded(
                   child: _Tile(
@@ -163,7 +169,7 @@ class DeliveryChannelsPicker extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text(deliveryChoiceHint(value),
+        Text(deliveryChoiceHint(value, app: available.contains(DeliveryChannel.app)),
             key: const ValueKey('channel-hint'), style: AppType.muted(color: AppColors.textMid).copyWith(height: 1.5)),
         for (final c in locked)
           Padding(

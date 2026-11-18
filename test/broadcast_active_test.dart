@@ -18,9 +18,12 @@ import 'visual_perm/visual_perm_harness.dart';
 /// الخادم نفسها (`broadcastAudience.isActive`، db484d5): الانتهاء بعد الآن بساعة بغداد، وبلا تاريخٍ الأيّام الباقية ≥ 0،
 /// والمجهول لا يُعدّ ولا يُرسَل له. نطاق «الكلّ» يرسل النوع `active` والخادم يختار؛ الخادم هنا وهميّ يسجّل الطلبات.
 class _Server implements HttpClientAdapter {
-  _Server(this.inner, this.rows);
+  _Server(this.inner, this.rows, {this.appEnabled = true});
   final HttpClientAdapter inner;
   final List<Map<String, Object?>> rows;
+
+  /// قناة «التطبيق» مفعّلة للحساب (GET /api/whatsapp/broadcast/channels — ١٨ نوفمبر)
+  final bool appEnabled;
   final requests = <RequestOptions>[];
 
   List<Map<String, dynamic>> sends() => [
@@ -43,6 +46,15 @@ class _Server implements HttpClientAdapter {
     }
     if (o.method == 'GET' && p.startsWith('/api/whatsapp/send-scope/')) {
       return _json(200, {'success': true, 'sendToAll': true, 'subManagers': const []});
+    }
+    if (o.method == 'GET' && p == '/api/whatsapp/broadcast/channels') {
+      return _json(200, {
+        'success': true,
+        'app': {'enabled': appEnabled},
+        // أعدادٌ لا تتكرّر بالشاشة (اختبار التخطيط يبحث عن «3» و«24»…)
+        'reach': {'telegram': 13, if (appEnabled) 'app': 17},
+        'locks': const {},
+      });
     }
     if (o.method == 'GET' && p == '/api/whatsapp/broadcast/debt-filter') {
       return _json(404, {'success': false});
@@ -168,6 +180,49 @@ void main() {
       await visualTearDown();
       BigSubscribersApi.reset();
     });
+
+    // قناة «التطبيق» (١٨ نوفمبر): الحساب المفعَّل يرى البلاطة ويُرسَل اختياره (channels)؛ غير المفعَّل كما كان حرفاً (لا بلاطة ولا channels)
+    for (final appOn in [true, false]) {
+      testWidgets('قناة «التطبيق» ${appOn ? 'مفعّلة: البلاطة بعددها والاختيار يُرسَل' : 'غير مفعّلة: لا بلاطة ولا channels (كما كان)'}', (t) async {
+        final inner = await visualSetUp(s1bSasOwner);
+        final srv = _Server(inner, [
+          _row('far@x', expiration: '2030-01-01 10:00:00'),
+          _row('soon@x', expiration: '2030-01-03 10:00:00'),
+        ], appEnabled: appOn);
+        ApiClient.dio.httpClientAdapter = srv;
+        BigSubscribersApi.reset();
+        SubscribersApi.clearAllCaches();
+        await pumpVisual(t, _p390, home: (_) => const BroadcastScreen());
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('channel-app')), appOn ? findsOneWidget : findsNothing);
+        if (appOn) {
+          expect(find.descendant(of: find.byKey(const ValueKey('channel-app')), matching: find.text('17')), findsOneWidget,
+              reason: 'كم مشتركاً عنده التطبيق');
+          await t.ensureVisible(find.byKey(const ValueKey('channel-app')));
+          await t.tap(find.byKey(const ValueKey('channel-app')));
+          await settle(t);
+        }
+        expect(find.textContaining(appOn ? 'يوصل بـالتطبيق وحده' : 'تلغرام للي رابطه'), findsOneWidget);
+        await t.enterText(find.byType(TextField).last, 'عرضٌ جديد');
+        await settle(t);
+        await t.tap(find.byKey(const ValueKey('broadcast-send')));
+        await settle(t);
+        await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('إرسال')));
+        await settle(t, seconds: 2);
+        final send = srv.sends().single;
+        if (appOn) {
+          expect(send['channels'], ['app']);
+        } else {
+          expect(send.containsKey('channels'), isFalse, reason: 'الخادم يرى ما كان يراه');
+          expect(send.containsKey('forceChannel'), isFalse, reason: '«تلقائي» القديم');
+        }
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+        await t.pump(const Duration(seconds: 1));
+        await visualTearDown();
+        BigSubscribersApi.reset();
+      });
+    }
 
     testWidgets('🚨 ٢ ثمّ ٣ (١٦ نوفمبر — «تنطي الاعداد الكبيره ٢ مساحه والصغيره ٣») + أزرار «قناة الإرسال» («صلحها هم»): '
         'لا نصّ مقصوص في الشاشة كلّها على 320–480 × الخطّ 1.0/1.1/1.2، فاتحاً وداكناً', (t) async {

@@ -122,7 +122,7 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
     final done = c.sent + c.failed + c.cancelled;
     final (String pill, AppTone tone) = c.paused
         ? ('موقوفة', AppTone.warning)
-        : c.active
+        : (c.active || c.appActive)
             ? ('ترسل الآن', AppTone.brand)
             : ('انتهت', AppTone.neutral);
     return Container(
@@ -134,7 +134,7 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          Icon(c.telegram > 0 && c.telegram >= c.total ? LucideIcons.send : LucideIcons.messageCircle,
+          Icon(c.appOnly ? LucideIcons.smartphone : (c.telegram > 0 && c.telegram >= c.total ? LucideIcons.send : LucideIcons.messageCircle),
               size: 16, color: AppColors.brandAccent),
           const SizedBox(width: Sp.sm),
           Expanded(
@@ -151,6 +151,7 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
         if (c.sample.isNotEmpty)
           Text(c.sample, style: AppType.body(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis),
         const SizedBox(height: Sp.sm),
+        if (!c.appOnly) ...[
         // أُرسل من الكلّي
         Row(children: [
           Expanded(
@@ -174,6 +175,9 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
           if (c.failed > 0) _stat('فشل', c.failed, AppColors.error),
           if (c.cancelled > 0) _stat('أُلغي', c.cancelled, AppColors.textLow),
         ]),
+        ],
+        // قناة «التطبيق» (١٨ نوفمبر): حالة الإرسال بالتطبيق لهذه الحملة
+        if (c.app != null) ..._appSection(c.app!, topGap: !c.appOnly),
         if (!widget.readOnly && (c.active || c.pending > 0)) ...[
           const SizedBox(height: Sp.md),
           Row(children: [
@@ -187,6 +191,43 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
         ],
       ]),
     );
+  }
+
+  /// «التطبيق»: وصل للجهاز · انفتح · ينتظر · بلا تطبيق · كاتم (حُفظ بصندوقه بلا إشعار) · فشل.
+  List<Widget> _appSection(AppCampaignStats a, {required bool topGap}) {
+    final done = a.sent + a.noDevice + a.muted + a.failed;
+    return [
+      SizedBox(height: topGap ? Sp.md : 0),
+      Row(children: [
+        const Icon(LucideIcons.smartphone, size: 14, color: AppColors.channelApp),
+        const SizedBox(width: 6),
+        Text('التطبيق', key: const ValueKey('campaign-app'), style: AppType.labelBold(color: AppColors.textHi)),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(R.pill),
+            child: LinearProgressIndicator(
+              value: a.total == 0 ? 0 : done / a.total,
+              minHeight: 6,
+              backgroundColor: AppColors.surfaceSunken,
+              valueColor: const AlwaysStoppedAnimation(AppColors.channelApp),
+            ),
+          ),
+        ),
+        const SizedBox(width: Sp.sm),
+        Text('$done/${a.total}', style: AppType.muted(color: AppColors.textMid)),
+      ]),
+      const SizedBox(height: Sp.sm),
+      Wrap(spacing: Sp.sm, runSpacing: 4, children: [
+        _stat('وصل', a.sent, AppColors.success),
+        _stat('انفتح', a.opened, AppColors.channelApp),
+        if (a.pending > 0) _stat('ينتظر', a.pending, AppColors.brand),
+        if (a.noApp > 0) _stat('بلا تطبيق', a.noApp, AppColors.textLow),
+        if (a.muted > 0) _stat('كاتم', a.muted, AppColors.textLow),
+        if (a.noDevice > 0) _stat('بلا جهاز', a.noDevice, AppColors.textLow),
+        if (a.failed > 0) _stat('فشل', a.failed, AppColors.error),
+      ]),
+    ];
   }
 
   Widget _stat(String label, int n, Color color) => Text.rich(TextSpan(children: [
