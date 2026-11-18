@@ -21,6 +21,7 @@ import 'broadcast_campaigns_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
+import '../../widgets/delivery_channels.dart';
 import '../../widgets/list_kit.dart';
 import '../../widgets/debt_filter_panel.dart';
 import '../../core/util/amount_input.dart';
@@ -136,7 +137,15 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
   /// 2026-08-26 (tg parity): قناة الإرسال المفروضة على البث الجماعي.
   /// 'auto' = يحترم binding المشترك، 'whatsapp' = يجبر واتساب،
   /// 'telegram' = يفلتر المربوطين بتلغرام فقط (الباقي يُتخطى).
-  String _forceChannel = 'auto';
+  // ١٨ نوفمبر (القناة الثالثة «التطبيق» — المالك: «يكدر يختار اكثر من نوع او نوعين او نوع او ثلاث او تلقائي»): «تلقائي» (واتساب ←
+  // تلغرام ← التطبيق، رسالةٌ واحدة) أو قناةٌ فأكثر. [_forceChannel] للخادم القديم: قناةٌ واحدة من الاثنتين القديمتين وإلّا 'multi'.
+  DeliveryChoice _choice = const DeliveryChoice.auto();
+  String get _forceChannel => _choice.auto
+      ? 'auto'
+      : (_choice.channels.length == 1 && !_choice.has(DeliveryChannel.app) ? _choice.channels.first.name : 'multi');
+
+  /// كم مشتركاً يصله بكلّ قناة + القنوات المقفولة (إرسالٌ جارٍ) — null حتى يجيب الخادم (أو خادمٌ أقدم).
+  BroadcastChannelsInfo? _channelsInfo;
 
   // ─── «تحديد المدينين» (٩ نوفمبر — المالك: «تحديد نطاقة جلب اليوزرية حسب اقدم مده دين وسقف من والى الدين … اما المده او
   // المبلغ او الاثنين») ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -178,6 +187,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     WidgetsBinding.instance.addObserver(this);
     _load();
     _loadScope();
+    _loadChannelsInfo();
     _loadDebtCap();
   }
 
@@ -580,6 +590,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
+      channels: _choice.auto ? null : _choice,
       includeHighRisk: _includeHighRisk,
     );
     if (!mounted) return;
@@ -673,6 +684,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
+      channels: _choice.auto ? null : _choice,
       includeHighRisk: include,
     );
     if (!mounted) return;
@@ -724,6 +736,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
+      channels: _choice.auto ? null : _choice,
       includeHighRisk: false,
     );
     if (!mounted) return;
@@ -1119,142 +1132,27 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
     );
   }
 
+  Future<void> _loadChannelsInfo() async {
+    final info = await BroadcastApi.channelsInfo();
+    if (!mounted || info == null) return;
+    setState(() {
+      _channelsInfo = info;
+      // قناةٌ مختارة صارت مقفولة (إرسالها جارٍ) تُزال من الاختيار — لا يُضغط إرسالٌ فوق إرسال
+      for (final c in info.locks.keys) {
+        if (_choice.has(c)) _choice = _choice.toggle(c);
+      }
+    });
+  }
+
   Widget _buildChannelCard() {
-    final options = [
-      (
-        value: 'auto',
-        label: 'تلقائي',
-        icon: LucideIcons.split,
-        color: AppColors.brand,
-        hint: 'يحترم ربط المشترك (تلغرام لو مربوط، وإلا واتساب)',
-      ),
-      (
-        value: 'whatsapp',
-        label: 'واتساب فقط',
-        icon: LucideIcons.messageCircle,
-        color: AppColors.channelWhatsApp,
-        hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
-      ),
-      (
-        value: 'telegram',
-        label: 'تلغرام فقط',
-        icon: LucideIcons.send,
-        color: AppColors.channelTelegram,
-        hint: 'يجبر تلغرام — يتخطّى غير المربوطين',
-      ),
-    ];
     return _sectionCard(
       icon: LucideIcons.split,
       title: 'قناة الإرسال',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ١٦ نوفمبر (المالك: «صلحها هم»): بالهاتف الضيّق (320–360) وبالخطّ المكبّر كان «واتساب فقط» و«تلغرام فقط» يُقصّان
-          // («واتسا…»). إن لم يتّسع أطول اسمٍ بجانب أيقونته صارت الأزرار الثلاثة أيقونةً فوق اسمها (كأدوات أعلى الشاشة) والاسم
-          // بعرض الزرّ كلّه؛ وما يتّسع يبقى سطراً واحداً كما كان (هاتف المالك بعرض 480 لم يتغيّر).
-          LayoutBuilder(
-            builder: (context, c) {
-              const gap = 6.0;
-              final cell = (c.maxWidth - gap * (options.length - 1)) / options.length;
-              final widest = options.fold<double>(0, (m, o) {
-                final w = _channelLabelWidth(context, o.label);
-                return w > m ? w : m;
-              });
-              final stacked = widest > cell - _chanPad * 2 - _chanIcon - _chanIconGap;
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int i = 0; i < options.length; i++) ...[
-                      if (i > 0) const SizedBox(width: gap),
-                      Expanded(
-                        child: _channelChoice(
-                          label: options[i].label,
-                          icon: options[i].icon,
-                          color: options[i].color,
-                          selected: _forceChannel == options[i].value,
-                          stacked: stacked,
-                          onTap: () => setState(() => _forceChannel = options[i].value),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 6),
-          Text(
-            options.firstWhere((o) => o.value == _forceChannel).hint,
-            style: AppType.muted().copyWith(fontSize: 10.5, height: 1.5),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static const double _chanPad = 6, _chanIcon = 14, _chanIconGap = 4;
-
-  /// عرض اسم زرّ القناة بسطرٍ واحد بخطّه ومقياس خطّ الهاتف — كما يرسمه `Text` — ليُختار الشكل قبل الرسم.
-  static double _channelLabelWidth(BuildContext context, String label) {
-    final tp = TextPainter(
-      text: TextSpan(text: label, style: DefaultTextStyle.of(context).style.merge(AppType.labelBold())),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final w = tp.width;
-    tp.dispose();
-    return w;
-  }
-
-  Widget _channelChoice({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool selected,
-    required VoidCallback onTap,
-    bool stacked = false,
-  }) {
-    final fg = selected ? color : AppColors.textMid;
-    // الاسم لا يُقصّ: يصغر قليلاً إن نقص عن عرضه كسراً من البكسل (الشكل يُختار بالقياس أعلاه).
-    final text = FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Text(label, style: AppType.labelBold(color: fg), maxLines: 1),
-    );
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(R.sm),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 40),
-        padding: EdgeInsets.symmetric(horizontal: _chanPad, vertical: stacked ? 7 : 0),
-        decoration: BoxDecoration(
-          color:
-              selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(
-            color: selected ? color : AppColors.border,
-            width: selected ? 1 : 0.5,
-          ),
-        ),
-        child: stacked
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: _chanIcon, color: fg),
-                  const SizedBox(height: 3),
-                  text,
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: _chanIcon, color: fg),
-                  const SizedBox(width: _chanIconGap),
-                  Flexible(child: text),
-                ],
-              ),
+      child: DeliveryChannelsPicker(
+        value: _choice,
+        onChanged: (v) => setState(() => _choice = v),
+        reach: _channelsInfo?.reach,
+        locks: _channelsInfo?.locks ?? const {},
       ),
     );
   }

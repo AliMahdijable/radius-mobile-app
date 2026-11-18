@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../widgets/delivery_channels.dart';
 import '../../api/broadcast_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/amount_input.dart';
@@ -921,36 +922,18 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     );
   }
 
-  // ─── Channel Preference Picker ─────────────────────────
-  // 2026-08-26: قناة الإرسال المفضّلة (auto/whatsapp/telegram).
-  // مطابق _defaultChannelPicker في whatsapp_templates_screen.
+  // ─── قناة الإرسال (١٨ نوفمبر — القناة الثالثة «التطبيق») ─────────────────────────
+  // «تلقائي» (واتساب ← تلغرام ← التطبيق، رسالةٌ واحدة) أو قناةٌ فأكثر — كالتبليغات (widgets/delivery_channels.dart). القيمة كما تُحفظ:
+  // 'auto' | 'whatsapp' | 'telegram' (القديمة كما هي) | أسماء القنوات بفاصلة ('whatsapp,app') للجديدة.
+  static DeliveryChoice _prefToChoice(String s) =>
+      DeliveryChoice.fromJson(s.contains(',') ? s.split(',').map((x) => x.trim()).toList() : s);
+  static String _choiceToPref(DeliveryChoice c) =>
+      c.auto ? 'auto' : (c.toJson() as List).join(',');
+
   Widget _channelPicker({
     required String current,
     required ValueChanged<String> onChanged,
   }) {
-    final options = [
-      (
-        value: 'auto',
-        label: 'تلقائي',
-        icon: LucideIcons.split,
-        color: AppColors.brand,
-        hint: 'يحترم ربط المشترك (تلغرام لو مربوط، وإلا واتساب)',
-      ),
-      (
-        value: 'whatsapp',
-        label: 'واتساب فقط',
-        icon: LucideIcons.messageCircle,
-        color: AppColors.channelWhatsApp,
-        hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
-      ),
-      (
-        value: 'telegram',
-        label: 'تلغرام فقط',
-        icon: LucideIcons.send,
-        color: AppColors.channelTelegram,
-        hint: 'يجبر تلغرام — يفشل للمشترك غير المربوط',
-      ),
-    ];
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -959,84 +942,15 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('قناة الإرسال', style: AppType.bodyBold()),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              for (int i = 0; i < options.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(
-                  child: _channelChip(
-                    label: options[i].label,
-                    icon: options[i].icon,
-                    color: options[i].color,
-                    selected: current == options[i].value,
-                    onTap: () => onChanged(options[i].value),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            options.firstWhere((o) => o.value == current).hint,
-            style: TextStyle(
-              fontFamily: AppType.family,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textMid,
-              height: 1.5,
-            ),
+          DeliveryChannelsPicker(
+            value: _prefToChoice(current),
+            onChanged: (v) => onChanged(_choiceToPref(v)),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _channelChip({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(R.sm),
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color:
-              selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(
-            color: selected ? color : AppColors.border,
-            width: selected ? 1 : 0.5,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 13, color: selected ? color : AppColors.textMid),
-            const SizedBox(width: 4),
-            // ⚠️ يتقلّص ولا يُقصّ: ثلاث حبّاتٍ في صفٍّ واحد لا تترك
-            // للتسمية إلّا ٤٧ نقطة عند ٣٢٠، و«واتساب فقط» تحتاج ٥٧٫٣.
-            // و«واتسا…» لا تعني شيئاً؛ الحجم الأصغر يُقرأ.
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(label,
-                    style: AppType.pillBold(
-                        color: selected ? color : AppColors.textMid),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

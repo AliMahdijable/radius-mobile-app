@@ -306,6 +306,10 @@ class AppColors {
   static const Color channelTelegram = Color(0xFF229ED9);
   static Color get channelTelegramSoftBg =>
       _isDark ? const Color(0xFF182D42) : const Color(0xFFE4F2FA);
+  /// تطبيق MyServices للمشترك (١٨ نوفمبر — قناة التبليغات الثالثة): بنفسجيٌّ يميّزها عن أخضر الواتساب وأزرق تلغرام، ثابتٌ في الوضعين.
+  static const Color channelApp = Color(0xFF7C3AED);
+  static Color get channelAppSoftBg =>
+      _isDark ? const Color(0xFF2C2147) : const Color(0xFFF1ECFB);
 
   /// اللون الأزرق الوحيد في المخطّط (قيمة «رفع» فقط) — بلا عائلة.
   static Color get info =>

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
+import '../widgets/delivery_channels.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 
@@ -177,6 +178,9 @@ class BroadcastApi {
     // 2026-08-26 (tg parity): 'auto' | 'whatsapp' | 'telegram'.
     // 'auto' = يحترم ربط المشترك، 'telegram' = يفلتر المربوطين فقط، 'whatsapp' = يجبر واتساب.
     String? forceChannel,
+    // ١٨ نوفمبر (القناة الثالثة «التطبيق»): «auto» أو قائمة القنوات (whatsapp/telegram/app) — الخادم الجديد يقرؤها، والقديم يقرأ
+    // forceChannel وحده (قناةٌ واحدة من الاثنتين القديمتين تُرسل بهما معاً).
+    DeliveryChoice? channels,
     // 2026-09-03: الخادم يستبعد الدرجة الحرجة افتراضيّاً. true يُعيدهم
     // بعد أن يكون المدير رأى عددهم في حوار التأكيد.
     bool includeHighRisk = false,
@@ -198,6 +202,7 @@ class BroadcastApi {
       if (forceChannel == 'whatsapp' || forceChannel == 'telegram') {
         body['forceChannel'] = forceChannel;
       }
+      if (channels != null) body['channels'] = channels.toJson();
       if (imageBytes != null && imageBytes.isNotEmpty) {
         if (imageBytes.length > maxImageBytes) {
           return (
@@ -267,6 +272,19 @@ class BroadcastApi {
 
   /// GET /api/whatsapp/broadcast/debt-filter — ما يدعمه الخادم من «تحديد المدينين» لهذا الحساب. null ⇒ لا لوحة (خادمٌ أقدم أو
   /// بلا صلاحيّة أو تعذّر): الشاشة كما كانت.
+  /// GET /api/whatsapp/broadcast/channels (١٨ نوفمبر) — كم مشتركاً يصله الوكيل بكلّ قناة، والقنوات المقفولة لأنّ إرسالها جارٍ.
+  /// خادمٌ أقدم أو تعذّر ⇒ null (لا أعداد ولا أقفال — الاختيار يعمل كما هو).
+  static Future<BroadcastChannelsInfo?> channelsInfo() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/whatsapp/broadcast/channels');
+      if (r.statusCode != 200 || r.data?['success'] != true) return null;
+      return BroadcastChannelsInfo.fromJson(r.data!);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BroadcastApi] channels: $e');
+      return null;
+    }
+  }
+
   static Future<DebtFilterCapability?> debtFilterCapability() async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/whatsapp/broadcast/debt-filter');
@@ -566,6 +584,27 @@ class BroadcastApi {
 }
 
 /// حملة بثٍّ واحدة (صفوف طابورٍ تحمل نفس batch_id) — للعرض والتحكّم.
+/// ما يصله الوكيل بكلّ قناة + الأقفال (إرسالٌ جارٍ لكلّ قناةٍ وحدها).
+class BroadcastChannelsInfo {
+  const BroadcastChannelsInfo({required this.reach, required this.locks});
+  final Map<DeliveryChannel, int> reach;
+  final Map<DeliveryChannel, ChannelLock> locks;
+
+  static BroadcastChannelsInfo fromJson(Map<String, dynamic> j) {
+    int? n(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}');
+    final reach = <DeliveryChannel, int>{};
+    final locks = <DeliveryChannel, ChannelLock>{};
+    final r = j['reach'];
+    final l = j['locks'];
+    for (final c in DeliveryChannel.values) {
+      if (r is Map && n(r[c.name]) != null) reach[c] = n(r[c.name])!;
+      final x = l is Map ? l[c.name] : null;
+      if (x is Map && n(x['total']) != null) locks[c] = ChannelLock(sent: n(x['sent']) ?? 0, total: n(x['total'])!);
+    }
+    return BroadcastChannelsInfo(reach: reach, locks: locks);
+  }
+}
+
 class BroadcastCampaign {
   const BroadcastCampaign({
     required this.batchId,
