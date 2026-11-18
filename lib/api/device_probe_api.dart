@@ -299,12 +299,30 @@ class DeviceProbeApi {
     return r;
   }
 
+  /// عنوان «الجهاز الثاني» الفعليّ. «:منفذ» = على **عنوان الجهاز الأوّل نفسه** (المثبَّت إن وُجد وإلّا آيبي الجلسة) — النانو/الضوئيّ
+  /// ومنفذه المحوَّل للراوتر خلفه، كما تقول خانة الإعداد. كان على آيبي الجلسة وحده ⇒ مشتركٌ عنوانه مثبَّت ولا جلسة له بالساس
+  /// (أو جلسته بآيبي آخر) يُفحص راوتره على «» أو على عنوانٍ آخر ⇒ «لم يُتمكّن من الوصول للجهاز» والراوتر واصل
+  /// (z@zz: ضوئيّ HG8342R على 100.92.63.190 وراوتر WR940N على :8080، ١٨ نوفمبر). عنوانٌ كاملٌ مكتوب ⇒ كما هو.
+  static String secondAddressOf(String sessionIp, String? customIp, String? secondRaw) {
+    final r = (secondRaw ?? '').trim();
+    if (r.isEmpty) return '';
+    if (!r.startsWith(':')) return r;
+    return addressOf(hostOnly(addressOf(sessionIp, customIp)), r);
+  }
+
+  /// «مضيف:منفذ» ⇒ المضيف وحده (لا منفذ ⇒ كما هو).
+  static String hostOnly(String address) {
+    final a = address.trim();
+    final m = RegExp(r'^([^:\s]+):\d{1,5}$').firstMatch(a);
+    return m == null ? a : m.group(1)!;
+  }
+
   /// الهدف بحسب الخانة: 1 = الجهاز الأوّل (عنوانه [DeviceConfig.customIp] وإلّا آيبي الجلسة، وإعداده كما هو)، 2 = «الجهاز الثاني»
   /// (نانو + راوتر، ١٢ نوفمبر): عنوانه [DeviceConfig.secondAddress] واعتماده من حقوله ([DeviceConfig.asSecond]) — لا جهاز ثانٍ ⇒ ''.
   static ({String ip, DeviceConfig? cfg}) _slotTarget(String sessionIp, DeviceConfig? cfg, int slot) {
     if (slot == 2) {
       if (cfg == null || !cfg.hasSecond) return (ip: '', cfg: null);
-      return (ip: addressOf(sessionIp, cfg.secondAddress), cfg: cfg.asSecond);
+      return (ip: secondAddressOf(sessionIp, cfg.customIp, cfg.secondAddress), cfg: cfg.asSecond);
     }
     return (ip: addressOf(sessionIp, cfg?.customIp), cfg: cfg);
   }
