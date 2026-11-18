@@ -139,7 +139,8 @@ class RenewRequestTile extends StatelessWidget {
                   RenewStatusChip(status: r.status, debt: r.isDebt),
                 ]),
                 const SizedBox(height: 2),
-                Text(renewSummary(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+                Text('${r.ai?.isWarn == true ? '⚠️ ' : ''}${renewSummary(r)}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
                 if (r.createdAt != null)
                   Text(timeAgoAr(r.createdAt), style: AppType.micro(color: AppColors.textLow)),
               ]),
@@ -480,6 +481,40 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
       if (r.isOpen || r.status == 'done' || r.status == 'rejected') ...[
         const SizedBox(height: Sp.md),
         RenewReceiptImage(key: ValueKey('receipt-${r.id}'), request: r, height: widget.imageHeight, openCompany: widget.openCompany),
+      ],
+      // «فحص صورة الحوالة بالذكاء» (١٨ نوفمبر — تنبيهٌ لا رفض): سطور الخادم بلون مستواها، و«نفحص…» أثناء الفحص
+      if (r.isOpen && r.ai != null && r.ai!.status == 'pending') ...[
+        const SizedBox(height: Sp.sm),
+        Row(key: const ValueKey('renew-ai-pending'), children: [
+          const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: Sp.sm),
+          Text('نفحص صورة التحويل بالذكاء…', style: AppType.muted(color: AppColors.textMid)),
+        ]),
+      ],
+      if (r.isOpen && r.ai != null && r.ai!.status == 'done' && r.ai!.lines.isNotEmpty) ...[
+        const SizedBox(height: Sp.sm),
+        Container(
+          key: ValueKey('renew-ai-${r.ai!.level ?? 'info'}'),
+          width: double.infinity,
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            color: r.ai!.level == 'warn' ? AppColors.warningSoftBg : (r.ai!.level == 'ok' ? AppColors.successSoftBg : AppColors.surfaceSunken),
+            borderRadius: BorderRadius.circular(R.md),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(LucideIcons.sparkles, size: 14, color: AppColors.textMid),
+              const SizedBox(width: 4),
+              Text('فحص الصورة بالذكاء', style: AppType.micro(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
+            ]),
+            const SizedBox(height: 4),
+            for (final l in r.ai!.lines)
+              Text(l.text,
+                  style: AppType.label(
+                    color: l.level == 'warn' ? AppColors.warningOnSoft : (l.level == 'ok' ? AppColors.success : AppColors.textBody),
+                  ).copyWith(height: 1.5, fontWeight: l.level == 'warn' ? FontWeight.w600 : FontWeight.w400)),
+          ]),
+        ),
       ],
       if (r.status == 'accepted') ...[
         const SizedBox(height: Sp.md),

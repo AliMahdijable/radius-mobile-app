@@ -52,7 +52,11 @@ class RenewRequest {
     this.kind = 'renew',
     this.debtBefore,
     this.paidAmount,
+    this.ai,
   });
+
+  /// «فحص صورة الحوالة بالذكاء» (١٨ نوفمبر — تنبيهٌ لا رفض): null بلا فحص.
+  final RenewAi? ai;
 
   final int id;
 
@@ -136,7 +140,39 @@ class RenewRequest {
       kind: j['kind'] == 'debt' ? 'debt' : 'renew',
       debtBefore: _int(j['debt_before']),
       paidAmount: _int(j['paid_amount']),
+      ai: RenewAi.fromJson(j['ai']),
     );
+  }
+}
+
+/// نتيجة فحص الصورة كما يرسلها الخادم: الحال (pending · done · unavailable)، والمستوى (warn · ok · info)، وسطورٌ عربيّة جاهزة.
+class RenewAi {
+  const RenewAi({required this.status, this.level, this.verdict, this.amount, this.lines = const []});
+  final String status;
+  final String? level;
+  final String? verdict;
+  final int? amount;
+  final List<({String level, String text})> lines;
+
+  bool get isWarn => status == 'done' && level == 'warn';
+
+  static RenewAi? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final st = _str(j['status']);
+    if (st == null) return null;
+    final lines = <({String level, String text})>[];
+    final raw = j['lines'];
+    if (raw is List) {
+      for (final l in raw) {
+        if (l is! Map) continue;
+        final lv = _str(l['level']);
+        final tx = _str(l['text']);
+        if (lv == null || tx == null || !const {'warn', 'ok', 'info'}.contains(lv)) continue;
+        lines.add((level: lv, text: tx.length > 140 ? tx.substring(0, 140) : tx));
+        if (lines.length >= 6) break;
+      }
+    }
+    return RenewAi(status: st, level: _str(j['level']), verdict: _str(j['verdict']), amount: _int(j['amount']), lines: lines);
   }
 }
 

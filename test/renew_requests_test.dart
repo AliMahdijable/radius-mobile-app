@@ -277,6 +277,48 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('«فحص الصورة بالذكاء»: صندوقٌ بسطور الخادم ولونه، «نفحص…» أثناء الفحص، و⚠️ بالصفّ — وبلا فحص لا شيء', (t) async {
+      Map<String, dynamic> withAi(Map<String, dynamic>? ai) => {..._req(41, 'pending'), if (ai != null) 'ai': ai};
+      final warn = {'status': 'done', 'verdict': 'less', 'level': 'warn', 'amount': 90000, 'lines': [
+        {'level': 'warn', 'text': '⚠️ الصورة بيها 90,000 مو 105,000'},
+        {'level': 'evil', 'text': 'x'},
+        {'level': 'info', 'text': 'ℹ️ المستلم بالصورة (…4567) مو رقمك المسجَّل'},
+      ]};
+      final r = RenewRequest.fromJson(withAi(warn))!;
+      expect([r.ai!.isWarn, r.ai!.lines.length, r.ai!.amount], [true, 2, 90000], reason: 'السطر المعطوب يسقط');
+      expect(RenewRequest.fromJson(withAi(null))!.ai, isNull);
+      server.reply('GET', '/api/v2/portal/renew-settings', 200, _settings());
+      server.reply('GET', '/api/v2/portal/renew-requests', 200, _list([withAi(warn)]));
+      await pumpSim(t, _v, home: (_) => simLauncher((c) => showRenewRequestSheet(c, r)));
+      await simOpen(t);
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('renew-ai-warn')), findsOneWidget);
+      expect(find.text('فحص الصورة بالذكاء'), findsOneWidget);
+      expect(find.text('⚠️ الصورة بيها 90,000 مو 105,000'), findsOneWidget);
+      await simDrain(t);
+      await _fresh(t);
+      final p = RenewRequest.fromJson(withAi({'status': 'pending', 'lines': []}))!;
+      // «نفحص…» يدور بلا توقّف ⇒ إطاراتٌ معدودة لا pumpAndSettle
+      await t.pumpWidget(MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(body: SingleChildScrollView(child: RenewRequestDetails(request: p))),
+        ),
+      ));
+      for (var i = 0; i < 5; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byKey(const ValueKey('renew-ai-pending')), findsOneWidget);
+      expect(find.text('نفحص صورة التحويل بالذكاء…'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 1));
+      await _fresh(t);
+      await pumpSim(t, _v, home: (_) => Scaffold(body: RenewRequestTile(request: r, onTap: () {})));
+      expect(find.textContaining('⚠️ '), findsOneWidget);
+      await simDrain(t);
+    });
+
     testWidgets('«تسديد ديونك»: القائمة تطلب kinds=renew,debt؛ وخيار «تسديد ديونك» بالإعداد لمن في مفتاحه يرسل debt_enabled', (t) async {
       server.reply('GET', '/api/v2/portal/renew-settings', 200, {..._settings(), 'debt_available': true, 'debt_enabled': true});
       server.reply('GET', '/api/v2/portal/renew-requests', 200, _list([]));
