@@ -295,7 +295,9 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('renew-ai-warn')), findsOneWidget);
       expect(find.text('فحص الصورة بالذكاء'), findsOneWidget);
-      expect(find.text('⚠️ الصورة بيها 90,000 مو 105,000'), findsOneWidget);
+      expect(find.text('الصورة بيها 90,000 مو 105,000'), findsOneWidget, reason: 'الأيقونة بدل رمز الخادم');
+      expect(renewAiText('✅ المبلغ مطابق'), 'المبلغ مطابق');
+      expect(renewAiText('ℹ️ معلومة'), 'معلومة');
       await simDrain(t);
       await _fresh(t);
       final p = RenewRequest.fromJson(withAi({'status': 'pending', 'lines': []}))!;
@@ -315,7 +317,7 @@ void main() {
       await t.pump(const Duration(seconds: 1));
       await _fresh(t);
       await pumpSim(t, _v, home: (_) => Scaffold(body: RenewRequestTile(request: r, onTap: () {})));
-      expect(find.textContaining('⚠️ '), findsOneWidget);
+      expect(find.byKey(const ValueKey('renew-tile-ai-warn')), findsOneWidget);
       await simDrain(t);
     });
 

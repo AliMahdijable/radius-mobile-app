@@ -59,6 +59,9 @@ String renewSummary(RenewRequest r) => isoJoin([
       if (r.amount != null) '${formatIQD(r.amount!)} د.ع',
     ], ' · ');
 
+/// سطر الذكاء بلا رمز الخادم في أوّله (⚠️ ✅ ℹ️) — الأيقونة تقوم مقامه.
+String renewAiText(String s) => s.replaceFirst(RegExp(r'^\s*(?:⚠️|⚠|✅|ℹ️|ℹ)\s*'), '');
+
 String _initials(String name) {
   final w = name.trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty).take(2).map((x) => x.characters.first).join();
   return w.isEmpty ? '؟' : w;
@@ -139,8 +142,15 @@ class RenewRequestTile extends StatelessWidget {
                   RenewStatusChip(status: r.status, debt: r.isDebt),
                 ]),
                 const SizedBox(height: 2),
-                Text('${r.ai?.isWarn == true ? '⚠️ ' : ''}${renewSummary(r)}',
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+                Row(children: [
+                  if (r.ai?.isWarn == true) ...[
+                    Icon(LucideIcons.triangleAlert, key: const ValueKey('renew-tile-ai-warn'), size: 13, color: AppColors.warningOnSoft),
+                    const SizedBox(width: 3),
+                  ],
+                  Expanded(
+                    child: Text(renewSummary(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+                  ),
+                ]),
                 if (r.createdAt != null)
                   Text(timeAgoAr(r.createdAt), style: AppType.micro(color: AppColors.textLow)),
               ]),
@@ -508,11 +518,28 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
               Text('فحص الصورة بالذكاء', style: AppType.micro(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
             ]),
             const SizedBox(height: 4),
+            // أيقونة التطبيق بمستوى السطر بدل رمز الخادم (⚠️/✅/ℹ️): رسمٌ واحد على كلّ جهاز — ويندوز وخطوط الاختبار بلا إيموجي
             for (final l in r.ai!.lines)
-              Text(l.text,
-                  style: AppType.label(
-                    color: l.level == 'warn' ? AppColors.warningOnSoft : (l.level == 'ok' ? AppColors.success : AppColors.textBody),
-                  ).copyWith(height: 1.5, fontWeight: l.level == 'warn' ? FontWeight.w600 : FontWeight.w400)),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Icon(
+                      l.level == 'warn' ? LucideIcons.triangleAlert : (l.level == 'ok' ? LucideIcons.circleCheck : LucideIcons.info),
+                      size: 14,
+                      color: l.level == 'warn' ? AppColors.warningOnSoft : (l.level == 'ok' ? AppColors.success : AppColors.textMid),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(renewAiText(l.text),
+                        style: AppType.label(
+                          color: l.level == 'warn' ? AppColors.warningOnSoft : (l.level == 'ok' ? AppColors.success : AppColors.textBody),
+                        ).copyWith(height: 1.5, fontWeight: l.level == 'warn' ? FontWeight.w600 : FontWeight.w400)),
+                  ),
+                ]),
+              ),
           ]),
         ),
       ],
