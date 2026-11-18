@@ -173,12 +173,14 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     if (cfg.customIp != null && cfg.customIp!.isNotEmpty) {
       DeviceProbeApi.invalidateIp(DeviceProbeApi.addressOf(widget.sessionIp, cfg.customIp));
     }
-    // الجهاز الثاني: نتيجته القديمة لا تُعرض لجهازٍ آخر، وعنوانه القديم والجديد (بعد حلّ «:منفذ» على آيبي الجلسة) — اعتمادٌ جديد
-    // يُجرَّب ولو رُفض قبله.
-    if (_originalSecond != cfg.secondAddress) DeviceProbeApi.forgetUser(widget.username, slot: 2);
+    // الجهاز الثاني: نتيجته القديمة لا تُعرض لجهازٍ آخر، وعنوانه القديم والجديد (بعد حلّ «:منفذ» على عنوان الجهاز الأوّل —
+    // القديم والجديد) — اعتمادٌ جديد يُجرَّب ولو رُفض قبله.
+    if (_originalSecond != cfg.secondAddress || _originalIp != cfg.customIp) DeviceProbeApi.forgetUser(widget.username, slot: 2);
     for (final a in {_originalSecond, cfg.secondAddress}) {
-      final eff = a == null || a.isEmpty ? '' : DeviceProbeApi.addressOf(widget.sessionIp, a);
-      if (eff.isNotEmpty) DeviceProbeApi.invalidateIp(eff);
+      for (final first in {_originalIp, cfg.customIp}) {
+        final eff = DeviceProbeApi.secondAddressOf(widget.sessionIp, first, a);
+        if (eff.isNotEmpty) DeviceProbeApi.invalidateIp(eff);
+      }
     }
     Navigator.of(context).pop(true);
   }
