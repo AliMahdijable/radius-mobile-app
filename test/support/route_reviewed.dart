@@ -232,6 +232,9 @@ const reviewedMoneyLiteral = {
   'lib/screens/main_shell.dart showAddExpenseSheet': 'null',
   // «بيع مادّة» من صفحة المشترك: شركة صفّه
   'lib/screens/subscribers/subscriber_detail_screen.dart showSellToSubscriber': 'sub.companyKey',
+  // «شراء» بسجلّ حركات المشترك (١٨ نوفمبر — openSaleVoidById): زرّه لا يظهر إلّا لصفٍّ بلا مفتاح شركة (movements_sheet `_voidHere`
+  // = sub.companyKey == null) ⇒ بيعه بيع المفتوحة، فـ«إلغاء البيع» لها صراحةً (و«كل الشركات» لا زرّ — الخادم لا يوجّه الإلغاء).
+  'lib/screens/sales/sales_screen.dart _VoidSheet': 'null',
 };
 
 /// كلّ نداء كتابة مالٍ/شيت مالٍ خارج lib/api بمصدر شركته.
@@ -271,6 +274,7 @@ const reviewedMoneyKeys = <String, int>{
   'lib/screens/sales/sales_screen.dart _ResolveSheet companyKey: _co': 1,
   'lib/screens/sales/sales_screen.dart _StockSheet companyKey: _co': 1,
   'lib/screens/sales/sales_screen.dart _VoidSheet companyKey: _co': 1,
+  'lib/screens/sales/sales_screen.dart _VoidSheet companyKey: null': 1,
   'lib/screens/settlements/settlements_screen.dart SettlementsApi.open companyKey: _companyKey': 1,
   'lib/screens/settlements/settlements_screen.dart showSettleSheet companyKey: _companyKey': 1,
   'lib/screens/settlements/settlements_screen.dart showSettlementDetailSheet companyKey: _companyKey': 1,

@@ -380,7 +380,7 @@ class _BalanceLine extends StatelessWidget {
           Text('رصيد المشترك:', style: AppType.muted()),
           Text(opBalanceText(now), style: AppType.rowValue(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
           Icon(LucideIcons.arrowLeft, size: 14, color: AppColors.textLow),
-          Text(opBalanceText(after), style: AppType.rowValue(color: afterColor).copyWith(fontWeight: FontWeight.w800)),
+          Text(opBalanceText(after), style: AppType.rowValue(color: afterColor).copyWith(fontWeight: FontWeight.w700)),
         ],
       ),
     );
