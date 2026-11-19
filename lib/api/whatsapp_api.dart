@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import '../core/util/error_text.dart';
 import '../core/util/format.dart';
@@ -436,6 +436,9 @@ class WhatsSendResult {
         return 'تلغرام';
       case 'whatsapp':
         return 'واتساب';
+      // قناة «التطبيق» (١٩ نوفمبر): الخادم أوصلها لتطبيق المشترك (بلا رقم/ليس على واتساب/واتساب الصفحة مفصول)
+      case 'app':
+        return 'التطبيق';
       default:
         return null;
     }
@@ -1078,7 +1081,8 @@ class WhatsAppApi {
           (body['data'] is Map
               ? (body['data'] as Map)['channel']?.toString()
               : null);
-      final channel = (rawChannel == 'whatsapp' || rawChannel == 'telegram')
+      // «app» (١٩ نوفمبر): الخادم أوصلها لتطبيق المشترك
+      final channel = (rawChannel == 'whatsapp' || rawChannel == 'telegram' || rawChannel == 'app')
           ? rawChannel
           : null;
       return WhatsSendResult(
@@ -1176,7 +1180,10 @@ class WhatsAppApi {
     required String templateType,
   }) async {
     final phone = sub.displayPhone;
-    if (phone.isEmpty) {
+    // قناة «التطبيق» (١٩ نوفمبر — المالك: «إذا نقر إرسال رسالة مباشرة من داخل الكارت… ما عنده لا واتساب ولا تلي، فالخيار الأخير يروح
+    // للتطبيق»): مشتركٌ بلا رقم يُكمَل له القالب ويُرسل للخادم بلا رقم — الخادم يوصله لتطبيقه إن كان عنده، وإلّا يقول السبب.
+    final noPhone = phone.isEmpty;
+    if (noPhone && (sub.idx == null || sub.idx!.isEmpty)) {
       return const WhatsSendResult(
         ok: false,
         reason: 'no_phone',
@@ -1226,6 +1233,29 @@ class WhatsAppApi {
         reason: 'network',
         message: 'الشاشة أُغلقت',
       );
+    }
+    if (noPhone) {
+      // بلا رقم: لا واتساب يدويّ — تأكيدٌ ثمّ الخادم (التطبيق، أو «بلا رقم ولا تلغرام ولا تطبيق»)
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          key: const ValueKey('no-phone-app-confirm'),
+          title: Text(_arabicForTemplate(templateType)),
+          content: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              const Text('المشترك بلا رقم واتساب — تُرسل الرسالة لتطبيق MyServices إن كان عنده'),
+              const SizedBox(height: 10),
+              Text(rendered, style: const TextStyle(fontSize: 13, height: 1.5)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            FilledButton(key: const ValueKey('no-phone-app-send'), onPressed: () => Navigator.pop(ctx, true), child: const Text('إرسال')),
+          ],
+        ),
+      );
+      if (go != true) return const WhatsSendResult(ok: false, reason: 'cancelled');
+      return sendMessage(to: '', message: base, intent: templateType, sas4Idx: sub.idx);
     }
     final choice = await showManualWaPreviewSheet(
       context,
