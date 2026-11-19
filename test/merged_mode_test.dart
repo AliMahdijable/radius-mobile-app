@@ -59,6 +59,12 @@ class _RouteServer implements HttpClientAdapter {
   final Map<String, Object> lists = {};
   final Map<String, int> totals = {};
 
+  /// ردّ سؤال الحجم (‎?page=1&size=1‎) لشركة: [الحالة، الجسم] — غيابه = الجواب المعتاد (paged + المجموع).
+  final Map<String, List<Object>> probes = {};
+
+  /// ردّ القائمة الكاملة لشركة: [الحالة، الجسم] — يسبق [lists].
+  final Map<String, List<Object>> fulls = {};
+
   /// جلسات online-users لكلّ شركة.
   final Map<String, List<Map<String, Object>>> sessions = {};
 
@@ -78,8 +84,12 @@ class _RouteServer implements HttpClientAdapter {
     final path = o.uri.path;
     if (o.method == 'GET' && path == '/api/v2/subscribers') {
       if (o.queryParameters['page'] != null) {
+        final p = probes[key];
+        if (p != null) return _json(p[0] as int, p[1], headers: h);
         return _json(200, {'success': true, 'paged': true, 'total': totals[key] ?? 3, 'data': const []}, headers: h);
       }
+      final f = fulls[key];
+      if (f != null) return _json(f[0] as int, f[1], headers: h);
       final l = lists[key];
       if (l is int) return _json(l, {'success': false, 'message': 'تعذّر جلب بيانات الشركة الآن', 'code': 'COMPANY_UPSTREAM_UNAVAILABLE'}, headers: h);
       return _json(200, {'success': true, 'data': l ?? const []}, headers: h);
@@ -304,6 +314,71 @@ void main() {
       expect(fulls.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB}, reason: 'الكبيرة: صفٌّ واحد لا القائمة');
       MergedMode.reset();
       await down();
+    });
+
+    // ١٩ نوفمبر ٢٠٢٦ (بلاغ المالك: «شمس تليكوم · تعذّرت» في «كل الشركات» وقائمتها سليمة): صفحةٌ بـ«نطاق العرض» يرفض الخادم سؤال حجمها
+    // (409 PAGED_SCOPE)؛ الرفض من معالج القائمة لا يحكم على الشركة — القائمة الكاملة تحكم، كالوضع العاديّ والويب.
+    testWidgets('رفضُ سؤال الحجم من معالج القائمة لا يُسقط الشركة: قائمتها الكاملة تُجلب؛ ورفضُ التوجيه والصلاحيّة تعذّرٌ بلا طلبٍ ثانٍ', (t) async {
+      await up();
+      const kD = 'c0000000000dd';
+      const kE = 'c0000000000ee';
+      MergedMode.fetchRaw = () async => {
+            'routing': true,
+            'writes': true,
+            'companies': [
+              {'key': _kA, 'code': 'shams-tele', 'username': 'admin@a', 'name': 'شمس', 'status': 'ok', 'admin_id': 'shams-tele:1', 'ns': 'nA'},
+              {'key': _kB, 'code': 'jt', 'username': 'admin@b', 'name': 'B', 'status': 'ok', 'admin_id': 'jt:2', 'ns': 'nB'},
+              {'key': _kC, 'code': 'full', 'username': 'admin@full', 'name': 'C', 'status': 'ok', 'admin_id': '3', 'ns': 'nC'},
+              {'key': kD, 'code': 'd', 'username': 'admin@d', 'name': 'D', 'status': 'ok', 'admin_id': 'd:4', 'ns': 'nD'},
+              {'key': kE, 'code': 'e', 'username': 'admin@e', 'name': 'E', 'status': 'ok', 'admin_id': 'e:5', 'ns': 'nE'},
+            ],
+          };
+      // شمس: نطاق العرض ⇒ سؤال الحجم مرفوض، والقائمة الكاملة سليمة
+      srv.probes[_kA] = [409, {'success': false, 'code': 'PAGED_SCOPE', 'message': 'نطاق العرض مفعّلٌ لهذا الحساب — تُعرض القائمة الكاملة'}];
+      srv.lists[_kA] = [
+        {'idx': 1, 'username': 'a1', 'firstname': 'x', 'lastname': 'y', 'parent_username': 'admin@a'},
+        {'idx': 2, 'username': 'a2', 'firstname': 'x', 'lastname': 'y', 'parent_username': 'admin@a'},
+      ];
+      // B: جلسة الشركة منتهية — رفضُ التوجيه نفسه
+      srv.probes[_kB] = [409, {'success': false, 'code': 'COMPANY_SESSION_EXPIRED', 'message': 'انتهت جلسة هذه الشركة'}];
+      // C: سؤال الحجم مرفوض وهي كبيرة — الخادم يرفض قائمتها الكاملة الموجَّهة بمجموعها
+      srv.probes[_kC] = [409, {'success': false, 'code': 'PAGED_SCOPE', 'message': 'نطاق العرض مفعّلٌ لهذا الحساب — تُعرض القائمة الكاملة'}];
+      srv.fulls[_kC] = [409, {'success': false, 'code': 'BIG_LIST', 'total': 89217, 'message': 'قائمة هذه الشركة كبيرة (89,217 مشترك) — افتحها وحدها لعرض مشتركيها'}];
+      // D: لا صلاحيّة
+      srv.probes[kD] = [403, {'success': false, 'code': 'PERMISSION_DENIED', 'message': 'لا صلاحيّة'}];
+      // E: جوابٌ ناجح بلا paged (الخادم منذ ١٩ نوفمبر لصفحةٍ بنطاق عرض) ⇒ القائمة الكاملة
+      srv.probes[kE] = [200, {'success': true, 'paged': false, 'view_scope': true, 'data': const []}];
+      srv.lists[kE] = [
+        {'idx': 9, 'username': 'e9', 'firstname': 'x', 'lastname': 'y', 'parent_username': 'admin@e'},
+      ];
+      final r = await t.runAsync(() => MergedSubscribers.load(fresh: true));
+      expect(r!.rows.map((s) => '${s.companyKey}:${s.username}').toSet(), {'$_kA:a1', '$_kA:a2', '$kE:e9'});
+      expect(r.failed.map((p) => p.company.key).toSet(), {_kB, kD}, reason: 'شمس ليست متعذّرة');
+      expect(r.failed.firstWhere((p) => p.company.key == _kB).error, contains('انتهت جلسة'));
+      expect(r.big.single.company.key, _kC, reason: 'كبيرةٌ بمجموعها لا متعذّرة');
+      expect(r.big.single.bigTotal, 89217);
+      final fulls = srv.requests.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['page'] == null);
+      expect(fulls.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kC, kE}, reason: 'رفضُ التوجيه والصلاحيّة: لا طلب قائمةٍ ثانٍ');
+      MergedMode.reset();
+      await down();
+    });
+
+    test('probeUndecided: رفضُ المعالج (4xx برمزه) لم يحسم؛ التوجيه والهويّة والصلاحيّة والعطل تعذّر', () {
+      bool u(int? st, [String? code]) => MergedSubscribers.probeUndecided(st, code == null ? const {} : {'code': code});
+      expect(u(409, 'PAGED_SCOPE'), isTrue);
+      expect(u(400, 'BAD_PAGE_PARAMS'), isTrue);
+      expect(u(409, 'TAB_UNSUPPORTED'), isTrue);
+      expect(u(200), isTrue, reason: 'success:false بلا رمز توجيه');
+      for (final c in ['COMPANY_SESSION_EXPIRED', 'COMPANY_UPSTREAM_UNAVAILABLE', 'COMPANY_ROUTE_ECHO', 'COMPANY_ROUTE_DISABLED', 'OWNER_ONLY',
+        'PAGE_UNSUPPORTED', 'EMPLOYEE_DISABLED', 'PERMISSION_DENIED']) {
+        expect(u(409, c), isFalse, reason: c);
+      }
+      expect(u(401), isFalse);
+      expect(u(403), isFalse);
+      expect(u(500), isFalse);
+      expect(u(503, 'SAS_UNREACHABLE'), isFalse);
+      expect(u(null), isFalse, reason: 'بلا ردّ');
+      expect(MergedSubscribers.probeUndecided(409, 'نصّ'), isTrue);
     });
 
     testWidgets('جلسات كلّ شركة (٢٢ أكتوبر): عنوان الجلسة من online-users شركته موجَّهاً، واليوزر نفسه في شركتين لا يلتبس، والقائمة التالية لا تُسقطه',

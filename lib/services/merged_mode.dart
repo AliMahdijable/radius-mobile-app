@@ -641,23 +641,57 @@ class MergedSubscribers {
         missing: missing,
       );
 
+  /// رفضُ سؤال الحجم ليس حكماً على الشركة حين يأتي من معالج القائمة نفسه (١٩ نوفمبر ٢٠٢٦ — صفحةٌ بـ«نطاق العرض» ردّها
+  /// 409 PAGED_SCOPE فظهرت «تعذّرت» وقائمتها الكاملة سليمة): السؤال لم يُجَب فقط ⇒ القائمة الكاملة تحكم، كالوضع العاديّ
+  /// ([BigSubscribersApi.probe]: «فشلٌ = ليس كبيراً») والويب. أمّا رفض التوجيه (جلسة الشركة، الإيقاف، بلا صدى، صفحة الموظّف)،
+  /// والهويّة والصلاحيّة (401/403)، وعطل الخادم أو الشركة (5xx / بلا ردّ) فتعذّرٌ فوريّ كما كان — القائمة كانت ستلقى الردّ نفسه
+  /// بطلبٍ أثقل.
+  @visibleForTesting
+  static bool probeUndecided(int? status, Object? body) {
+    final code = body is Map ? body['code'] : null;
+    if (CompanyRouteCodes.isEmployeeRouteCode(code) || code == 'PERMISSION_DENIED') return false;
+    if (status == null || status == 401 || status == 403 || status >= 500) return false;
+    return true;
+  }
+
+  /// الخادم نفسه يرفض القائمة الكاملة الموجَّهة لشركةٍ كبيرة (409 BIG_LIST بمجموعها) — كبيرةٌ لا متعذّرة حين لم يُحسم سؤال حجمها.
+  /// ⇒ المجموع، أو null لأيّ ردٍّ آخر.
+  static int? _bigListTotal(Object? body) {
+    if (body is! Map || body['code'] != 'BIG_LIST') return null;
+    final n = body['total'] is num ? (body['total'] as num).toInt() : int.tryParse('${body['total']}');
+    return n != null && n > 0 ? n : null;
+  }
+
   static Future<MergedCompanyList> _fetch(MergedCompany c) async {
     try {
-      final probe = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/v2/subscribers',
-        queryParameters: const {'page': 1, 'size': 1},
-      );
-      final pb = probe.data ?? const {};
-      if (pb['success'] == false) {
-        return MergedCompanyList(company: c, error: _err(c, pb, 'تعذّر جلب مشتركي «${c.name}» الآن', probe.statusCode));
+      // سؤال الحجم: صفٌّ واحد يحسم «كبير؟» قبل القائمة الكاملة. جوابٌ برفض المعالج ⇒ لم يُحسم ([probeUndecided]).
+      var pb = const <String, dynamic>{};
+      var decided = true;
+      try {
+        final probe = await ApiClient.dio.get<Map<String, dynamic>>(
+          '/api/v2/subscribers',
+          queryParameters: const {'page': 1, 'size': 1},
+        );
+        pb = probe.data ?? const {};
+        if (pb['success'] == false) {
+          if (!probeUndecided(probe.statusCode, pb)) {
+            return MergedCompanyList(company: c, error: _err(c, pb, 'تعذّر جلب مشتركي «${c.name}» الآن', probe.statusCode));
+          }
+          decided = false;
+        }
+      } on DioException catch (e) {
+        if (!probeUndecided(e.response?.statusCode, e.response?.data)) rethrow;
+        decided = false;
       }
       final total = pb['total'] is num ? (pb['total'] as num).toInt() : int.tryParse('${pb['total']}') ?? 0;
-      if (pb['paged'] == true && total >= BigSubscribersApi.threshold) {
+      if (decided && pb['paged'] == true && total >= BigSubscribersApi.threshold) {
         return MergedCompanyList(company: c, bigTotal: total);
       }
       final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/subscribers');
       final b = r.data ?? const {};
       if (b['success'] != true) {
+        final big = _bigListTotal(b);
+        if (big != null) return MergedCompanyList(company: c, bigTotal: big);
         return MergedCompanyList(company: c, error: _err(c, b, 'تعذّر جلب مشتركي «${c.name}» الآن', r.statusCode));
       }
       final rows = <Subscriber>[
@@ -667,8 +701,11 @@ class MergedSubscribers {
       return MergedCompanyList(
           company: c, rows: rows, partial: b['partial'] == true, debtsUnavailable: b['debts_unavailable'] == true);
     } on DioException catch (e) {
+      final body = e.response?.data;
+      final big = _bigListTotal(body);
+      if (big != null) return MergedCompanyList(company: c, bigTotal: big);
       return MergedCompanyList(
-          company: c, error: _err(c, e.response?.data, 'تعذّر الوصول لمشتركي «${c.name}» الآن', e.response?.statusCode));
+          company: c, error: _err(c, body, 'تعذّر الوصول لمشتركي «${c.name}» الآن', e.response?.statusCode));
     } catch (_) {
       return MergedCompanyList(company: c, error: 'تعذّر جلب مشتركي «${c.name}» الآن');
     }
