@@ -316,8 +316,9 @@ const reviewedSideWriters = <String, (String, String, String)>{
   'lib/services/manager_notice.dart#notify WhatsAppApi.sendMessage': ('manager', '', 'إشعار مديرٍ بعد عمليّة رصيدٍ له'),
   'lib/screens/subscribers/connection_alert_flow.dart#showConnectionAlertFlow WhatsAppApi.sendMessage':
       ('guard', '', '«تنبيه المشترك» للشركة وحدها (MergedOps.unsupported) — قوالبها وواتسابها'),
-  'lib/screens/subscribers/sheets/qr_login_sheet.dart#_sendWhatsApp WhatsAppApi.sendMessage':
-      ('guard', '', 'إرسال رمز الدخول من واتسابٍ للشركة وحدها'),
+  // ١٩ نوفمبر: الرمز يُرسَل صورةً (send-media) لا رابطاً نصّيّاً (send-message) — الحارس نفسه قبله
+  'lib/screens/subscribers/sheets/qr_login_sheet.dart#_sendWhatsApp WhatsAppApi.sendMedia':
+      ('guard', '', 'إرسال صورة رمز الدخول من واتسابٍ للشركة وحدها'),
   'lib/screens/subscribers/subscriber_detail_screen.dart#_sendTemplate WhatsAppApi.sendTemplateWithPreview':
       ('guard', '', 'قوالب واتساب (المعاينة ثمّ الإرسال) للشركة وحدها'),
   'lib/screens/subscribers/subscribers_screen.dart#_sendDebtReminderFromList WhatsAppApi.sendTemplateWithPreview':

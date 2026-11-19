@@ -157,8 +157,10 @@ void main() {
       await settle(t, seconds: 2);
 
       final card = find.ancestor(of: find.text('الفعّالون'), matching: find.byType(InkWell)).first;
-      expect(find.descendant(of: card, matching: find.text('2')), findsOneWidget,
-          reason: 'far + soon — لا المنتهي ولا المجهول ولا من بلا رقم');
+      // ١٩ نوفمبر: القناة مفعّلة و«تلقائي» يمرّ بالتطبيق ⇒ من بلا رقم مرشّحٌ أيضاً (يصله بالتطبيق) — كان ٢ (ذوو الأرقام وحدهم؛
+      // وهو الباقي حين لا يمرّ الاختيار بالتطبيق: test/broadcast_app_all_subs_test.dart)
+      expect(find.descendant(of: card, matching: find.text('3')), findsOneWidget,
+          reason: 'far + soon + nophone — لا المنتهي ولا المجهول');
       // الترتيب: «كل المشتركين» ثمّ «الفعّالون» في الصفّ الأوّل
       final allX = t.getCenter(find.text('كل المشتركين')).dy;
       expect(t.getCenter(find.text('الفعّالون')).dy, closeTo(allX, 2));

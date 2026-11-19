@@ -278,14 +278,20 @@
     "valid_30d": "Valid for 30 days",
     "valid_for_days": "Valid for {d} days",
     "expired": "Expired",
-    "share_or_save": "Save / Share",
+    "save": "Save image",
+    "share": "Share",
+    "saved": "Image saved",
+    "save_failed": "Could not save the image",
+    "save_denied": "Allow the app to add photos in the phone settings, then try again",
+    "save_use_share": "This phone cannot save directly — choose \"Save\" in the share sheet",
+    "manual_share_hint": "Choose WhatsApp in the share sheet, then the subscriber",
+    "image_caption": "MyServices app login code",
     "send_wa": "Send via WhatsApp",
     "wa_sent": "QR sent via WhatsApp",
     "wa_send_failed": "Failed to send WhatsApp",
     "share_failed": "Share failed",
     "capture_failed": "Failed to capture QR image",
-    "permission_required": "Storage access permission is required — please enable it",
-    "scan_in_app": "Scan it inside the MyServices app.\nThe phone camera opens an info card, not the portal."
+    "scan_in_app": "Scan it inside the MyServices app (\"Login with QR from your agent\").\nThe phone camera only shows instructions."
   },
   "portal": {
     "title": "Subscriber Portal",

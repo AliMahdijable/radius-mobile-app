@@ -1,10 +1,14 @@
 package com.mysvcs.rad_mysvcs
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,6 +31,37 @@ class MainActivity : FlutterFragmentActivity() {
         } catch (_: Exception) {
         }
         beepTone = null
+    }
+
+    // «حفظ الصورة» (١٩ نوفمبر — رمز دخول المشترك؛ المالك: «نخلي إمكانية حفظ الكيو آر، مو بس مشاركة»): إلى صور الهاتف
+    // (Pictures/MyServices) عبر MediaStore بلا أيّ إذن — أندرويد 10 فأحدث (الملفّ ملك التطبيق). الأقدم ⇒ "unsupported" والتطبيق
+    // يفتح نافذة المشاركة (لا إذن تخزين: سياسة Play — انظر AndroidManifest). lib/services/image_saver.dart.
+    private fun saveImageToPictures(bytes: ByteArray, name: String): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return "unsupported"
+        val resolver = applicationContext.contentResolver
+        val values = ContentValues()
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/MyServices")
+        values.put(MediaStore.Images.Media.IS_PENDING, 1)
+        var uri: Uri? = null
+        try {
+            uri = resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+            val target = uri ?: return "failed"
+            val out = resolver.openOutputStream(target) ?: throw java.io.IOException("no output stream")
+            out.use { it.write(bytes) }
+            val done = ContentValues()
+            done.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(target, done, null, null)
+            return "saved"
+        } catch (_: Exception) {
+            // صفٌّ بدأ ولم يكتمل لا يبقى في المعرض
+            try {
+                uri?.let { resolver.delete(it, null, null) }
+            } catch (_: Exception) {
+            }
+            return "failed"
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -68,6 +103,26 @@ class MainActivity : FlutterFragmentActivity() {
                     } catch (_: Exception) {
                     }
                     result.success(null)
+                }
+
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.mysvcs.rad_mysvcs/media"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "saveImage" -> {
+                    val bytes = call.argument<ByteArray>("bytes")
+                    val raw = call.argument<String>("name") ?: "image"
+                    val name = raw.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80).ifEmpty { "image" }
+                    if (bytes == null || bytes.isEmpty()) {
+                        result.success("failed")
+                    } else {
+                        result.success(saveImageToPictures(bytes, name))
+                    }
                 }
 
                 else -> result.notImplemented()

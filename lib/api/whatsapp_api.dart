@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1107,6 +1109,54 @@ class WhatsAppApi {
         reason: 'network',
         message: 'تعذّر الإرسال',
       );
+    }
+  }
+
+  /// POST /api/whatsapp/send-media — صورةٌ بتعليقها من واتساب الصفحة لمشتركٍ واحد (١٩ نوفمبر — رمز دخول التطبيق يُرسَل صورةً
+  /// لا رابطاً). الخادم يسأل «المستثنون من الرسائل» ويردّ سببه بالعربيّة. محلّل الجسم العامّ بالخادم 100KB ⇒ المستدعي يبقي
+  /// الصورة صغيرة (≤ ~70KB قبل الترميز).
+  static Future<WhatsSendResult> sendMedia({
+    required String to,
+    required Uint8List bytes,
+    required String filename,
+    String mimetype = 'image/png',
+    String caption = '',
+    String? sas4Idx,
+  }) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) {
+      return const WhatsSendResult(ok: false, reason: 'no_auth', message: 'يجب تسجيل الدخول');
+    }
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/send-media',
+        data: {
+          'adminId': adminId,
+          'to': to,
+          'data': base64Encode(bytes),
+          'mimetype': mimetype,
+          'filename': filename,
+          'caption': caption,
+          if (sas4Idx != null) 'sas4Idx': sas4Idx,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      final rawChannel = body['channel']?.toString();
+      return WhatsSendResult(
+        ok: ok,
+        message: body['message']?.toString(),
+        reason: ok ? null : 'send_failed',
+        channel: (rawChannel == 'whatsapp' || rawChannel == 'telegram') ? rawChannel : null,
+      );
+    } on DioException catch (e) {
+      _log('send-media', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return WhatsSendResult(ok: false, reason: 'network', message: msg ?? 'تعذّر الإرسال — تحقق من الاتصال');
+    } catch (e) {
+      _log('send-media', e);
+      return const WhatsSendResult(ok: false, reason: 'network', message: 'تعذّر الإرسال');
     }
   }
 

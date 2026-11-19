@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import Photos
 import UIKit
 import UserNotifications
 
@@ -107,6 +108,33 @@ final class TechBeep {
           result(nil)
         default:
           result(FlutterMethodNotImplemented)
+        }
+      }
+    }
+    // «حفظ الصورة» (١٩ نوفمبر — رمز دخول المشترك؛ المالك: «نخلي إمكانية حفظ الكيو آر، مو بس مشاركة»): إلى صور الهاتف بإذن
+    // «الإضافة فقط» (NSPhotoLibraryAddUsageDescription) — القناة نفسها التي يكلّمها أندرويد. lib/services/image_saver.dart.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "MediaSaver") {
+      let media = FlutterMethodChannel(name: "com.mysvcs.rad_mysvcs/media", binaryMessenger: registrar.messenger())
+      media.setMethodCallHandler { call, result in
+        guard call.method == "saveImage" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        let args = call.arguments as? [String: Any]
+        guard let bytes = (args?["bytes"] as? FlutterStandardTypedData)?.data, let image = UIImage(data: bytes) else {
+          result("failed")
+          return
+        }
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+          guard status == .authorized || status == .limited else {
+            DispatchQueue.main.async { result("denied") }
+            return
+          }
+          PHPhotoLibrary.shared().performChanges({
+            _ = PHAssetChangeRequest.creationRequestForAsset(from: image)
+          }, completionHandler: { ok, _ in
+            DispatchQueue.main.async { result(ok ? "saved" : "failed") }
+          })
         }
       }
     }

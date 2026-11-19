@@ -1897,8 +1897,8 @@ class SubscribersApi {
 
   /// POST /api/v2/subscribers/:idx/portal-qr-token
   /// يولّد token طويل الأمد (30 يوم، multi-use) لدخول المشترك عبر QR.
-  /// الرابط بشكل: https://rad.mysvcs.net/user-info/<token> — يُشفَّر
-  /// كـQR code.
+  /// `linkUrl` (https://pro.mysvcs.net/v2/user-info/<token>) محتوى الرمز وحده — يُشفَّر كـQR code ولا يُعرض
+  /// رابطاً (١٩ نوفمبر: فتحه بالمتصفّح صفحة تعليمات لا معلومات).
   static Future<({bool ok, String? linkUrl, int? expiresAt, String? message})>
       generatePortalQrToken({required String idx}) async {
     try {
@@ -1958,9 +1958,12 @@ class SubscribersApi {
     }
   }
 
-  /// POST /api/v2/subscribers/:idx/generate-link — رابط «معلومات المشترك» (ساعة) لرمز QR على
-  /// الوصل، كما يطبعه الموقع. الساس وحده (ايرث لنك بلا مسار)، وبصلاحيّة `subscribers.generate_link`.
-  /// null على أيّ فشل: الوصل يُطبع بلا رمز.
+  /// POST /api/v2/subscribers/:idx/generate-link — رمز QR على الوصل، كما يطبعه الموقع. الساس وحده (ايرث لنك بلا مسار)،
+  /// وبصلاحيّة `subscribers.generate_link`. null على أيّ فشل: الوصل يُطبع بلا رمز.
+  ///
+  /// ١٩ نوفمبر (الخادم `c4a6e68` — المالك: «الكيو ار اللي يطلع بالطابع… نفسه اللي يمسح به البرنامج، مو اللي يشوفه
+  /// الموقع»): الرمز صار **رمز دخول تطبيق المشترك** (30 يوماً، كرمز نافذة «رمز دخول المشترك») لا رابط «معلومات المشترك»
+  /// لساعة — المسار والشكل كما هما، فكلّ النسخ المنشورة تطبعه بلا تحديث.
   static Future<String?> receiptLink(String idx) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(

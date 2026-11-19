@@ -154,6 +154,15 @@ void main() {
           append('lib/screens/subscribers/subscriber_detail_screen.dart',
               "Future<void> _planted(Subscriber s) => WhatsAppApi.sendMessage(to: '1', message: 'x', sas4Idx: s.idx);"),
           'غير مراجَع');
+      // صورةٌ لمشترك (send-media — ١٩ نوفمبر) كاتبٌ كالنصّ: موضعٌ جديد بلا مراجعة يُرفض، وحارس نافذة الرمز إن أُزيل يُكشف
+      proves(sideVerdict,
+          append('lib/screens/subscribers/subscriber_detail_screen.dart',
+              "Future<void> _plantedMedia(Subscriber s) => WhatsAppApi.sendMedia(to: '1', bytes: Uint8List(1), filename: 'x.png', sas4Idx: s.idx);"),
+          'غير مراجَع');
+      proves(sideVerdict,
+          plant('lib/screens/subscribers/sheets/qr_login_sheet.dart', 'final blocked = MergedOps.unsupported(widget.sub);',
+              'final String? blocked = null;'),
+          'بلا حارس');
       proves(sideVerdict,
           plant('lib/screens/subscribers/subscribers_screen.dart', 'onSendDebtReminder: !_mergedOn &&', 'onSendDebtReminder: true &&'),
           'بلا البوّابة');

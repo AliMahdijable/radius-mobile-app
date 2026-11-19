@@ -3,19 +3,18 @@ import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/image_saver.dart';
 import '../../../services/merged_mode.dart';
-import '../../../services/manual_wa_sender.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../widgets/manual_wa_chip.dart';
@@ -32,31 +31,27 @@ const _portalApp = 'MyServices';
 /// «تسجيل الدخول بواسطة QR» في نسخته القديمة (باسم MySub).
 const _portalQrButton = 'الدخول برمز QR من وكيلك';
 
-/// نصّ «حفظ / مشاركة» — يرافق صورة الرمز.
+/// نصّ المشاركة وتعليق الصورة المرسلة بواتساب — يرافق صورة الرمز.
 ///
-/// 🐛 تدقيق البوّابة ٢٠٢٦-١٠-١٧ (§2.3): الرمز والرابط يفتحان في المتصفّح
-/// (كاميرا الهاتف، نقرة الرابط) **بطاقة معلومات** من الساس وحدها لا البوّابة،
-/// والنصّ كان يقول «رمز QR لتسجيل دخولك» — فيُمسح بالكاميرا ويُظنّ أنّ البوّابة
-/// لا تعكس تعديلات المدير. الدخول من ماسح التطبيق وحده.
-String qrShareText({required String greet, required String link}) =>
+/// ١٩ نوفمبر (المالك: «رابط معرفة الاشتراك… نريد نلغيه بالتطبيق وبالويب»): لا رابط في أيّ نصّ — الرمز صورةٌ تُمسح من داخل
+/// تطبيق المشترك (كاميرا الهاتف تفتح صفحة تعليماتٍ وحدها). قبله (تدقيق البوّابة ٢٠٢٦-١٠-١٧ §2.3) كان الرابط «معلومات اشتراكك».
+String qrShareText({required String greet}) =>
     'مرحباً $greet 👋\n\n'
     'للدخول إلى تطبيق $_portalApp: افتح التطبيق واختر «$_portalQrButton»'
     '، ثمّ امسح هذا الرمز أو ارفع صورته من المعرض.\n\n'
-    'ومعلومات اشتراكك على الرابط:\n$link\n\n'
     'الرمز صالح لمدة 30 يوم.';
-
-/// نصّ «إرسال بواتساب» — رابطٌ بلا صورة، فلا يقول «هذا رمز دخولك».
-String qrWhatsAppText({required String greet, required String link}) =>
-    'مرحباً $greet 👋\n\n'
-    'معلومات اشتراكك على الرابط:\n$link\n\n'
-    'وللدخول إلى تطبيق $_portalApp امسح رمز QR من داخل التطبيق '
-    '(«$_portalQrButton») لا بكاميرا الهاتف.\n\n'
-    'الرابط صالح لمدة 30 يوم. لو انتهى، اطلب واحد جديد من الأدمن.\n\n'
-    'شكراً 🙏';
 
 /// Bottom sheet لتوليد رمز QR دخول المشترك (30 يوم). المشترك يمسحه
 /// من **داخل** تطبيق MyServices فيسجّل دخول تلقائياً بلا كتابة username/password
-/// (كاميرا الهاتف تفتح بطاقة المعلومات وحدها).
+/// (كاميرا الهاتف تفتح صفحة تعليماتٍ وحدها). الرمز يُحفظ صورةً، يُشارَك، أو يُرسَل للمشترك بواتساب — بلا رابط.
+/// التقاط صورة الرمز — يُستبدل في الاختبارات (لا رسم حقيقيّاً هناك): يأخذ الدقّة ويعيد بايتات PNG.
+@visibleForTesting
+Future<Uint8List?> Function(double pixelRatio)? debugQrCapture;
+
+/// نافذة المشاركة — تُستبدل في الاختبارات (لا قناة منصّة هناك).
+@visibleForTesting
+Future<void> Function(Uint8List bytes, String text)? debugQrShare;
+
 Future<void> showQrLoginSheet(BuildContext context, Subscriber sub) {
   return showAppSheet(
     context: context,
@@ -81,8 +76,17 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
   String? _linkUrl;
   int? _expiresAt;
   bool _sharing = false;
+  bool _saving = false;
   bool _sendingWa = false;
   final GlobalKey _qrKey = GlobalKey();
+
+  /// أقصى حجمٍ لصورةٍ تمرّ بالخادم (محلّل الجسم العامّ هناك 100KB، والترميز يزيد الثلث).
+  static const int _maxSendBytes = 70 * 1024;
+
+  String get _greet => widget.sub.fullName.trim().isNotEmpty ? widget.sub.fullName.trim() : widget.sub.username;
+
+  /// اسم ملفّ الصورة (لاتينيّ آمن) — باسم المشترك حتى تُعرف بين الصور.
+  String get _fileStem => 'myservices_qr_${ImageSaver.safeName(widget.sub.username)}';
 
   @override
   void initState() {
@@ -116,13 +120,15 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     });
   }
 
-  Future<Uint8List?> _captureQr() async {
+  Future<Uint8List?> _captureQr({double pixelRatio = 3.5}) async {
+    final fake = debugQrCapture;
+    if (fake != null) return fake(pixelRatio);
     try {
       final ctx = _qrKey.currentContext;
       if (ctx == null) return null;
       final boundary = ctx.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
-      final image = await boundary.toImage(pixelRatio: 3.5);
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (_) {
@@ -130,18 +136,20 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     }
   }
 
-  Future<void> _shareQr() async {
-    if (_sharing || _linkUrl == null) return;
-    // 2026-07-13: crash تقارير على Android+iOS. السبب:
-    //   1) Share.shareXFiles القديم deprecated في share_plus 10+ ويسبب
-    //      native crashes على Android 14+ و iOS 17+.
-    //   2) على iPad، عدم تمرير sharePositionOrigin = crash فوري.
-    //   3) toImage قد يفشل لو الـwidget ما اترسم بعد.
-    // الحلّ: SharePlus.instance.share(ShareParams(...)) الحديث +
-    // sharePositionOrigin مبني من الـcontext + انتظار frame واحد قبل
-    // التقاط الصورة لضمان الرسم.
-    setState(() => _sharing = true);
-    // انتظار frame واحد لضمان أن الـRepaintBoundary أُنشئ + رُسِم
+  /// صورةٌ تمرّ بالخادم: تُخفَّض الدقّة حتى ≤ [_maxSendBytes] (الرمز يبقى مقروءاً)؛ null إن لم تصغر كفايةً أو تعذّر الالتقاط.
+  Future<Uint8List?> _captureForSend() async {
+    for (final ratio in const [2.5, 1.8, 1.3]) {
+      final bytes = await _captureQr(pixelRatio: ratio);
+      if (bytes == null) return null;
+      if (bytes.length <= _maxSendBytes) return bytes;
+    }
+    return null;
+  }
+
+  /// «حفظ الصورة»: بالهاتف إلى الصور، وبالحاسبة حيث يختار. هاتفٌ بلا حفظٍ مباشر (أندرويد أقدم من 10) ⇒ نافذة المشاركة.
+  Future<void> _saveQr() async {
+    if (_saving || _linkUrl == null) return;
+    setState(() => _saving = true);
     await WidgetsBinding.instance.endOfFrame;
     try {
       final bytes = await _captureQr();
@@ -149,36 +157,73 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         _snack('qr_login.capture_failed'.tr(), isError: true);
         return;
       }
-      final dir = await getTemporaryDirectory();
-      final file = File(
-        '${dir.path}/portal_qr_${widget.sub.username}_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-      await file.writeAsBytes(bytes);
-      final greet = widget.sub.fullName.trim().isNotEmpty
-          ? widget.sub.fullName.trim()
-          : widget.sub.username;
-
-      // sharePositionOrigin: مطلوب لـiPad — بدونه UIActivityViewController
-      // يرمي NSInvalidArgumentException. على iPhone/Android مُتجاهَل.
-      Rect origin = Rect.zero;
-      if (mounted) {
-        final box = context.findRenderObject() as RenderBox?;
-        if (box != null && box.hasSize) {
-          origin = box.localToGlobal(Offset.zero) & box.size;
-        }
+      final r = await ImageSaver.savePng(bytes, name: _fileStem);
+      if (!mounted) return;
+      switch (r) {
+        case ImageSaveResult.saved:
+          _snack('qr_login.saved'.tr(), isError: false);
+        case ImageSaveResult.cancelled:
+          break;
+        case ImageSaveResult.denied:
+          _snack('qr_login.save_denied'.tr(), isError: true);
+        case ImageSaveResult.unsupported:
+          _snack('qr_login.save_use_share'.tr(), isError: false);
+          await _shareBytes(bytes);
+        case ImageSaveResult.failed:
+          _snack('qr_login.save_failed'.tr(), isError: true);
       }
+    } catch (e) {
+      if (mounted) _snack('qr_login.save_failed'.tr(), isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
-      // 2026-07-14: رجعنا لـShare.shareXFiles (deprecated في 10.x بس يشتغل)
-      // بعد فشل build على Mac رغم share_plus 10.1.4 مثبَّت. الـAPI الجديد
-      // (SharePlus.instance.share + ShareParams) كان يعطي "getter isn't
-      // defined" في kernel snapshot بسبب Flutter tools cache stale.
-      // الـAPI القديم يشتغل على كل الإصدارات (7.x → 10.x).
-      // ignore: deprecated_member_use
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: qrShareText(greet: greet, link: _linkUrl!),
-        sharePositionOrigin: origin,
-      );
+  /// نافذة المشاركة بصورة الرمز ونصّه (بلا رابط).
+  Future<void> _shareBytes(Uint8List bytes) async {
+    final text = qrShareText(greet: _greet);
+    final fake = debugQrShare;
+    if (fake != null) return fake(bytes, text);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/${_fileStem}_${DateTime.now().millisecondsSinceEpoch}.png');
+    await file.writeAsBytes(bytes);
+
+    // sharePositionOrigin: مطلوب لـiPad — بدونه UIActivityViewController
+    // يرمي NSInvalidArgumentException. على iPhone/Android مُتجاهَل.
+    Rect origin = Rect.zero;
+    if (mounted) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        origin = box.localToGlobal(Offset.zero) & box.size;
+      }
+    }
+
+    // 2026-07-14: رجعنا لـShare.shareXFiles (deprecated في 10.x بس يشتغل)
+    // بعد فشل build على Mac رغم share_plus 10.1.4 مثبَّت. الـAPI الجديد
+    // (SharePlus.instance.share + ShareParams) كان يعطي "getter isn't
+    // defined" في kernel snapshot بسبب Flutter tools cache stale.
+    // الـAPI القديم يشتغل على كل الإصدارات (7.x → 10.x).
+    // ignore: deprecated_member_use
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: text,
+      sharePositionOrigin: origin,
+    );
+  }
+
+  Future<void> _shareQr() async {
+    if (_sharing || _linkUrl == null) return;
+    // 2026-07-13: crash تقارير على Android+iOS (toImage قبل الرسم، وiPad بلا sharePositionOrigin) ⇒ انتظار frame واحد قبل
+    // الالتقاط، والموضع من الـcontext (_shareBytes).
+    setState(() => _sharing = true);
+    await WidgetsBinding.instance.endOfFrame;
+    try {
+      final bytes = await _captureQr();
+      if (bytes == null) {
+        _snack('qr_login.capture_failed'.tr(), isError: true);
+        return;
+      }
+      await _shareBytes(bytes);
     } catch (e) {
       if (mounted) {
         _snack('${'qr_login.share_failed'.tr()}: $e', isError: true);
@@ -188,6 +233,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     }
   }
 
+  /// «إرسال بواتساب»: صورة الرمز بتعليقها من واتساب الصفحة (الخادم) — أو «واتسابي» ⇒ نافذة المشاركة (رابط wa.me لا يحمل صورة).
   Future<void> _sendWhatsApp() async {
     if (_sendingWa || _linkUrl == null) return;
     final phone = widget.sub.displayPhone;
@@ -197,17 +243,14 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     }
     setState(() => _sendingWa = true);
     try {
-      final greet = widget.sub.fullName.trim().isNotEmpty
-          ? widget.sub.fullName.trim()
-          : widget.sub.username;
-      final message = qrWhatsAppText(greet: greet, link: _linkUrl!);
+      final caption = qrShareText(greet: _greet);
       // 2026-08-26: preview sheet مع chip auto/manual لهذه العمليّة أيضاً.
       if (!mounted) return;
       final choice = await showManualWaPreviewSheet(
         context,
         title: 'رمز QR دخول',
         phone: phone,
-        messagePreview: message,
+        messagePreview: caption,
         accent: const Color(0xFF7C3AED),
         // «كل الشركات»: التلقائيّ يخرج من واتساب المفتوحة ⇒ مشترك شركةٍ أخرى «افتح واتسابي» وحده، والسبب قبل التأكيد لا بعده
         // (مراجعة 179) — والحارس قبل الإرسال أدناه يبقى.
@@ -216,17 +259,14 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       if (!mounted || choice == null || !choice.confirmed) return;
 
       if (choice.manualMode) {
-        final ok = await openManualWa(
-          phone: phone,
-          message: message,
-          context: context,
-        );
+        final bytes = await _captureQr();
         if (!mounted) return;
-        if (ok) {
-          _snack('افتح واتساب واضغط "إرسال" لإتمام العمليّة', isError: false);
-        } else {
-          _snack('تعذّر فتح واتساب', isError: true);
+        if (bytes == null) {
+          _snack('qr_login.capture_failed'.tr(), isError: true);
+          return;
         }
+        _snack('qr_login.manual_share_hint'.tr(), isError: false);
+        await _shareBytes(bytes);
         return;
       }
 
@@ -236,9 +276,17 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         _snack(blocked, isError: true);
         return;
       }
-      final result = await WhatsAppApi.sendMessage(
+      final bytes = await _captureForSend();
+      if (!mounted) return;
+      if (bytes == null) {
+        _snack('qr_login.capture_failed'.tr(), isError: true);
+        return;
+      }
+      final result = await WhatsAppApi.sendMedia(
         to: phone,
-        message: message,
+        bytes: bytes,
+        filename: '$_fileStem.png',
+        caption: caption,
         sas4Idx: widget.sub.idx,
       );
       if (!mounted) return;
@@ -256,20 +304,6 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       _snack('${'qr_login.wa_send_failed'.tr()}: $e', isError: true);
     } finally {
       if (mounted) setState(() => _sendingWa = false);
-    }
-  }
-
-  Future<void> _copyLink() async {
-    if (_linkUrl == null) return;
-    await Clipboard.setData(ClipboardData(text: _linkUrl!));
-    _snack('common.copied'.tr(), isError: false);
-  }
-
-  Future<void> _openLink() async {
-    if (_linkUrl == null) return;
-    final uri = Uri.tryParse(_linkUrl!);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -349,24 +383,52 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         Center(
           child: RepaintBoundary(
             key: _qrKey,
+            // ما يُحفظ ويُرسَل: الرمز وتحته اسم المشترك وما هو — صورةٌ تُعرف بين الصور، بيضاء في الوضعين
             child: Container(
               padding: const EdgeInsets.all(Sp.md),
               color: Colors.white,
-              child: QrImageView(
-                data: _linkUrl!,
-                version: QrVersions.auto,
-                size: 230,
-                gapless: false,
-                backgroundColor: Colors.white,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: Colors.black,
-                ),
-                dataModuleStyle: const QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: Colors.black,
-                ),
-                errorCorrectionLevel: QrErrorCorrectLevel.M,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  QrImageView(
+                    data: _linkUrl!,
+                    version: QrVersions.auto,
+                    size: 230,
+                    gapless: false,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Colors.black,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Colors.black,
+                    ),
+                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: 230,
+                    child: Text(
+                      _greet,
+                      key: const ValueKey('qr-image-name'),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.title(color: Colors.black).copyWith(fontSize: 13),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 230,
+                    child: Text(
+                      'qr_login.image_caption'.tr(),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.muted(color: Colors.black54).copyWith(fontSize: 10.5),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -393,8 +455,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
           ),
         ),
         const SizedBox(height: Sp.sm),
-        // أين يُمسح: من يفحص بكاميرا هاتفه يرى بطاقة معلومات من الساس لا
-        // البوّابة، فيظنّ تعديلاته لا تظهر (تدقيق البوّابة ٢٠٢٦-١٠-١٧ §2.3).
+        // أين يُمسح: من داخل تطبيق المشترك وحده (كاميرا الهاتف تفتح صفحة تعليمات).
         Text(
           'qr_login.scan_in_app'.tr(),
           textAlign: TextAlign.center,
@@ -404,106 +465,90 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
               .copyWith(fontSize: 11.5, height: 1.5),
         ),
         const SizedBox(height: Sp.md),
-        // Link preview
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceInput,
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(R.sm),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Directionality(
-                  textDirection: ui.TextDirection.ltr,
-                  child: Text(
-                    _linkUrl!,
-                    style: AppType.subtitle(color: AppColors.textMid)
-                        .copyWith(fontSize: 10.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              InkWell(
-                onTap: _copyLink,
-                borderRadius: BorderRadius.circular(R.sm),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child:
-                      Icon(LucideIcons.copy, size: 14, color: AppColors.brand),
-                ),
-              ),
-              const SizedBox(width: 4),
-              InkWell(
-                onTap: _openLink,
-                borderRadius: BorderRadius.circular(R.sm),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(LucideIcons.externalLink,
-                      size: 14, color: AppColors.brand),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: Sp.md),
-        // Actions
+        // Actions — حفظ · مشاركة ثمّ إرسال للمشترك
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _sharing ? null : _shareQr,
-                icon: _sharing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(LucideIcons.share2, size: 14),
-                label: Text(
-                  'qr_login.share_or_save'.tr(),
-                  style: AppType.button(color: AppColors.brand)
-                      .copyWith(fontSize: 12.5),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: BorderSide(color: AppColors.brandSoftBorder),
-                  foregroundColor: AppColors.brand,
-                ),
+              child: _outlineAction(
+                key: const ValueKey('qr-save'),
+                busy: _saving,
+                icon: LucideIcons.download,
+                label: 'qr_login.save'.tr(),
+                onPressed: _saveQr,
               ),
             ),
             const SizedBox(width: Sp.sm),
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _sendingWa ? null : _sendWhatsApp,
-                icon: _sendingWa
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      )
-                    : const Icon(LucideIcons.messageCircle, size: 14),
-                label: Text(
-                  'qr_login.send_wa'.tr(),
-                  style: AppType.button(color: Colors.white)
-                      .copyWith(fontSize: 12.5),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.channelWhatsApp,
-                  foregroundColor: AppColors.onBrand,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
+              child: _outlineAction(
+                key: const ValueKey('qr-share'),
+                busy: _sharing,
+                icon: LucideIcons.share2,
+                label: 'qr_login.share'.tr(),
+                onPressed: _shareQr,
               ),
             ),
           ],
         ),
+        const SizedBox(height: Sp.sm),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            key: const ValueKey('qr-send-wa'),
+            onPressed: _sendingWa ? null : _sendWhatsApp,
+            icon: _sendingWa
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                : const Icon(LucideIcons.messageCircle, size: 14),
+            label: Text(
+              'qr_login.send_wa'.tr(),
+              style: AppType.button(color: Colors.white)
+                  .copyWith(fontSize: 12.5),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.channelWhatsApp,
+              foregroundColor: AppColors.onBrand,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _outlineAction({
+    required Key key,
+    required bool busy,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return OutlinedButton.icon(
+      key: key,
+      onPressed: busy ? null : onPressed,
+      icon: busy
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(icon, size: 14),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.button(color: AppColors.brand).copyWith(fontSize: 12.5),
+      ),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        side: BorderSide(color: AppColors.brandSoftBorder),
+        foregroundColor: AppColors.brand,
+      ),
     );
   }
 

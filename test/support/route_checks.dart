@@ -471,6 +471,7 @@ List<String> focusInWrappers(Lib lib, {required Set<String> stripFiles}) => [
 /// ضمنيّها في «كل الشركات».
 const sideWriters = [
   'WhatsAppApi.sendMessage', 'WhatsAppApi.sendTemplateForSubscriber', 'WhatsAppApi.sendTemplateWithPreview',
+  'WhatsAppApi.sendMedia', // صورةٌ لمشترك من واتساب الصفحة (رمز دخول التطبيق — ١٩ نوفمبر)
   'DeviceConfigApi.saveConfig', 'DeviceConfigApi.resetConfig', 'PrintedReceiptsApi.archive',
   'TelegramApi.unbind', 'TelegramApi.sendLinkViaWa', 'SubscribersApi.fiberxExtendNotice',
 ];

@@ -269,10 +269,15 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   // ─── فلاتر ─────────────────────────────────────
 
-  List<Subscriber> get _withPhone => _subs
-      .where(
-          (s) => (s.phone?.length ?? 0) >= 10 || (s.mobile?.length ?? 0) >= 10)
-      .toList();
+  /// الاختيار يمرّ بالتطبيق («التطبيق» أو «تلقائي» — آخر محطّاته التطبيق) والقناة مفعّلة للحساب ⇒ كلّ المشتركين مرشّحون: من لا
+  /// رقم له يصله بالتطبيق إن كان عنده، والخادم يعدّ «بلا تطبيق» في النتيجة (١٩ نوفمبر — المالك: «بالقناة مال التطبيق… مسموح
+  /// لكل المشتركين»). واتساب/تلغرام وحدهما، أو حسابٌ بلا القناة: ذوو الأرقام وحدهم كما كان.
+  bool get _allSubs => _appOn && (_choice.auto || _choice.has(DeliveryChannel.app));
+
+  static bool _hasPhone(Subscriber s) => (s.phone?.length ?? 0) >= 10 || (s.mobile?.length ?? 0) >= 10;
+
+  /// مرشّحو التبليغ قبل فلتر الفئة: ذوو الأرقام — أو الكلّ حين يمرّ الاختيار بالتطبيق ([_allSubs]).
+  List<Subscriber> get _withPhone => _allSubs ? List.of(_subs) : _subs.where(_hasPhone).toList();
 
   /// المشتركون بعد فلتر الفئة (all/debtors/expired/expiring).
   List<Subscriber> get _byCategory {
@@ -1786,11 +1791,22 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        s.phone ?? s.mobile ?? '',
-                        style: AppType.muted().copyWith(fontSize: 10.5),
-                        textDirection: TextDirection.ltr,
-                      ),
+                      if (_hasPhone(s))
+                        Text(
+                          s.phone ?? s.mobile ?? '',
+                          style: AppType.muted().copyWith(fontSize: 10.5),
+                          textDirection: TextDirection.ltr,
+                        )
+                      else
+                        // بلا رقم واتساب: ظهر في القائمة لأنّ الاختيار يمرّ بالتطبيق
+                        Flexible(
+                          child: Text(
+                            'بلا رقم — بالتطبيق',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.muted().copyWith(fontSize: 10.5),
+                          ),
+                        ),
                     ],
                   ),
                 ],
