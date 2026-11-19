@@ -832,4 +832,69 @@ void main() {
       await simDrain(t);
     });
   });
+  group('إظهار الآيبي ومدّة الاتصال (١٩ نوفمبر — ظاهران افتراضاً، تحت «حالة الاتصال»)', () {
+    const ip = 'إظهار الآيبي';
+    const dur = 'إظهار مدّة الاتصال';
+    const all = {
+      'connection': true, 'usage': true, 'device': false, 'finance': true, 'wifi': false,
+      'conn_ip': true, 'conn_duration': true,
+    };
+
+    test('العقد: غائبٌ = لا يعرفه الخادم (null، ظاهرٌ عند المشترك) · false يطفئه · toJson بما يعرفه', () {
+      final d = PortalSections.fromJson(const {'connection': true});
+      expect(d.connIp, isNull);
+      expect(d.knows(PortalSection.connIp), isFalse);
+      expect(d.knows(PortalSection.connDuration), isFalse);
+      expect(d.of(PortalSection.connIp), isTrue, reason: 'الافتراض: ظاهر');
+      expect(d.toJson().containsKey('conn_ip'), isFalse);
+      final w = PortalSections.fromJson(const {'conn_ip': false, 'conn_duration': true});
+      expect(w.connIp, isFalse);
+      expect(w.connDuration, isTrue);
+      expect(PortalSections.fromJson(const {'conn_ip': 'x'}).connIp, isTrue, reason: 'حاضرٌ غير مفهوم ⇒ افتراضه (ظاهر)');
+      expect(w.withValue(PortalSection.connIp, true).connIp, isTrue);
+      expect(d.withValue(PortalSection.usage, false).connIp, isNull, reason: 'نقرةٌ على غيرها لا تجعلها معروفة');
+      expect(PortalSection.connIp.isConnectionDetail, isTrue);
+      expect(PortalSection.wifi.isConnectionDetail, isFalse);
+    });
+
+    testWidgets('🚨 المالك: المفتاحان تحت «حالة الاتصال» ظاهران، والنقرة تطفئ الآيبي بمفتاحه وحده', (t) async {
+      settings(sections: all);
+      final stored = mergingServer(Map<String, bool>.from(all));
+      await open(t);
+      expect(find.byType(Switch), findsNWidgets(7), reason: 'البوّابة + الأقسام الأربعة + التفصيلان');
+      expect(valueOf(t, ip), isTrue);
+      expect(valueOf(t, dur), isTrue);
+      double y(String s) => t.getTopLeft(find.text(s)).dy;
+      expect(y('حالة الاتصال'), lessThan(y(ip)));
+      expect(y(ip), lessThan(y(dur)));
+      expect(y(dur), lessThan(y(_usage)), reason: 'تحت «حالة الاتصال» قبل «الاستهلاك»');
+      await t.tap(switchOf(ip));
+      await t.pumpAndSettle();
+      expect(sentSections(), [
+        {'conn_ip': false},
+      ]);
+      expect(stored['conn_ip'], isFalse);
+      expect(valueOf(t, ip), isFalse);
+      expect(valueOf(t, dur), isTrue);
+    });
+
+    testWidgets('🚨 «حالة الاتصال» مخفيّة ⇒ لا تفاصيل لها؛ وخادمٌ لا يرسلهما ⇒ لا مفتاح', (t) async {
+      settings(sections: {...all, 'connection': false});
+      mergingServer(Map<String, bool>.from({...all, 'connection': false}));
+      await open(t);
+      expect(find.text(ip), findsNothing);
+      expect(find.text(dur), findsNothing);
+      await t.tap(switchOf('حالة الاتصال'));
+      await t.pumpAndSettle();
+      expect(find.text(ip), findsOneWidget, reason: 'أُظهرت ⇒ تفاصيلها تحتها');
+    });
+
+    testWidgets('خادمٌ قبل الهجرة 115: لا مفتاح لهما — والبقيّة كما كانت', (t) async {
+      settings(sections: const {'connection': true, 'usage': true, 'device': false, 'finance': true, 'wifi': false});
+      await open(t);
+      expect(find.text(ip), findsNothing);
+      expect(find.text(dur), findsNothing);
+      expect(find.byType(Switch), findsNWidgets(5));
+    });
+  });
 }

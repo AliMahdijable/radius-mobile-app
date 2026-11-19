@@ -462,7 +462,11 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
               icon: LucideIcons.eye,
             ),
             const SizedBox(height: Sp.sm),
-            for (final (i, s) in _SectionSwitchRow.shownFor(sections).indexed) ...[
+            // «إظهار الآيبي» و«إظهار مدّة الاتصال» تحت «حالة الاتصال» وما دامت ظاهرة (مخفيّةً لا معنى لتفاصيلها)
+            for (final (i, s) in _SectionSwitchRow.shownFor(sections,
+                    connectionOn: _pendingSections[PortalSection.connection] ??
+                        sections.of(PortalSection.connection))
+                .indexed) ...[
               if (i > 0) const SizedBox(height: Sp.sm),
               _SectionSwitchRow(
                 section: s,
@@ -1029,6 +1033,16 @@ class _SectionSwitchRow extends StatelessWidget {
       hint: 'portal.section_connection_on',
       icon: LucideIcons.wifi,
     ),
+    PortalSection.connIp: (
+      title: 'portal.section_conn_ip',
+      hint: 'portal.section_conn_ip_on',
+      icon: LucideIcons.globe,
+    ),
+    PortalSection.connDuration: (
+      title: 'portal.section_conn_duration',
+      hint: 'portal.section_conn_duration_on',
+      icon: LucideIcons.timer,
+    ),
     PortalSection.usage: (
       title: 'portal.section_usage',
       hint: 'portal.section_usage_on',
@@ -1048,9 +1062,11 @@ class _SectionSwitchRow extends StatelessWidget {
 
   static Iterable<PortalSection> get shown => _copy.keys;
 
-  /// ما يُرسم لهذا الردّ: قسمٌ لا يعرفه الخادم بعد لا مفتاح له.
-  static List<PortalSection> shownFor(PortalSections sections) =>
-      shown.where(sections.knows).toList();
+  /// ما يُرسم لهذا الردّ: قسمٌ لا يعرفه الخادم بعد لا مفتاح له، وتفاصيل «حالة الاتصال» ما دامت ظاهرة ([connectionOn]).
+  static List<PortalSection> shownFor(PortalSections sections, {bool connectionOn = true}) => shown
+      .where(sections.knows)
+      .where((s) => connectionOn || !s.isConnectionDetail)
+      .toList();
 
   final PortalSection section;
   final bool value;
@@ -1064,7 +1080,7 @@ class _SectionSwitchRow extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final copy = _copy[section];
     if (copy == null) return const SizedBox.shrink();
-    return PortalSwitchTile(
+    final tile = PortalSwitchTile(
       title: copy.title.tr(),
       hint: (value ? copy.hint : 'portal.section_off_hint').tr(),
       icon: value ? copy.icon : LucideIcons.eyeOff,
@@ -1077,6 +1093,10 @@ class _SectionSwitchRow extends StatelessWidget {
       onChanged: onChanged,
       onLockedTap: onLockedTap,
     );
+    // تفصيلٌ داخل «حالة الاتصال»: مزاحٌ قليلاً تحتها (لا قسمٌ وحده)
+    return section.isConnectionDetail
+        ? Padding(padding: const EdgeInsetsDirectional.only(start: Sp.lg), child: tile)
+        : tile;
   }
 }
 

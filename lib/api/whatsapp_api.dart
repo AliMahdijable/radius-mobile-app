@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -1325,6 +1326,13 @@ class WhatsAppApi {
         // `openManualWa` تقبل null وتتخطّى الـsnack عندها.
         context: context.mounted ? context : null,
       );
+      // قناة «التطبيق» (١٩ نوفمبر — المالك: «تذكير الدين الزر من كارت المشترك… يرسل للتطبيق ايضا»): الوكيل يرسل من واتسابه،
+      // ونسخةٌ لتطبيق المشترك من الخادم إن كان عنده (القالب نفسه بلا كلمة سرّ — [base]). بلا انتظار ولا رسالة: مشتركٌ بلا تطبيق
+      // يردّ الخادم «بلا قناة» فيُهمَل.
+      if (ok && (sub.idx ?? '').isNotEmpty) {
+        unawaited(sendMessage(to: '', message: base, intent: templateType, sas4Idx: sub.idx)
+            .then((_) {}, onError: (_) {}));
+      }
       return WhatsSendResult(
         ok: ok,
         channel: 'whatsapp',

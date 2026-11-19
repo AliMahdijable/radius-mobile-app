@@ -187,12 +187,22 @@ enum PortalSection {
   /// وخليها الافتراضي طافي»): عرض كلمة واي فاي راوتر البيت وتغييرها من «فحص
   /// شبكتي» بتطبيق المشترك — **مطفأةٌ افتراضاً**، ومفتاحها يُرسم حين يرسلها
   /// الخادم وحده (الهجرة 101).
-  wifi('wifi');
+  wifi('wifi'),
+
+  /// «إظهار الآيبي» داخل «حالة الاتصال» (١٩ نوفمبر — المالك: «زر اخفي الايبي وزر يخفي مده الاتصال يكونان مفعلات والوكيل
+  /// يطفيهن»): **ظاهرٌ افتراضاً**، والمطفأ لا يرسله الخادم للمشترك أصلاً (الهجرة 115). مفتاحه يُرسم حين يرسله الخادم وحده.
+  connIp('conn_ip'),
+
+  /// «إظهار مدّة الاتصال» (متصل منذ… ومدّة الجلسة) داخل «حالة الاتصال» — كالآيبي.
+  connDuration('conn_duration');
 
   const PortalSection(this.key);
 
   /// اسمه في JSON.
   final String key;
+
+  /// تفصيلٌ داخل «حالة الاتصال» (لا قسمٌ وحده): يُرسم تحتها وما دامت ظاهرة.
+  bool get isConnectionDetail => this == connIp || this == connDuration;
 }
 
 /// ما يظهر لمشتركي الوكيل في تطبيقهم. الافتراض (لا صفّ، أو مفتاحٌ ناقص):
@@ -206,6 +216,8 @@ class PortalSections {
     this.device = false,
     this.finance,
     this.wifi,
+    this.connIp,
+    this.connDuration,
   });
 
   final bool connection;
@@ -220,10 +232,16 @@ class PortalSections {
   /// لا مفتاح لها في الشاشة، وهي عند المشترك مطفأة.
   final bool? wifi;
 
+  /// «إظهار الآيبي» / «إظهار مدّة الاتصال» — `null` = خادمٌ لا يرسلهما (قبل الهجرة 115): لا مفتاح لهما، وهما عند المشترك ظاهران.
+  final bool? connIp;
+  final bool? connDuration;
+
   /// يعرف الخادم هذا القسم؟ (لا يُرسم مفتاحٌ لا يُحفظ.)
   bool knows(PortalSection s) => switch (s) {
         PortalSection.finance => finance != null,
         PortalSection.wifi => wifi != null,
+        PortalSection.connIp => connIp != null,
+        PortalSection.connDuration => connDuration != null,
         _ => true,
       };
 
@@ -233,6 +251,8 @@ class PortalSections {
         PortalSection.device => device,
         PortalSection.finance => finance ?? true,
         PortalSection.wifi => wifi ?? false,
+        PortalSection.connIp => connIp ?? true,
+        PortalSection.connDuration => connDuration ?? true,
       };
 
   PortalSections withValue(PortalSection s, bool value) => PortalSections(
@@ -241,6 +261,8 @@ class PortalSections {
         device: s == PortalSection.device ? value : device,
         finance: s == PortalSection.finance ? value : finance,
         wifi: s == PortalSection.wifi ? value : wifi,
+        connIp: s == PortalSection.connIp ? value : connIp,
+        connDuration: s == PortalSection.connDuration ? value : connDuration,
       );
 
   /// مفتاحٌ غائبٌ أو غير مفهوم يأخذ قيمته من [fallback]: الافتراض عند
@@ -260,6 +282,12 @@ class PortalSections {
         wifi: j.containsKey(PortalSection.wifi.key)
             ? _flag(j[PortalSection.wifi.key], fallback.wifi ?? false)
             : fallback.wifi,
+        connIp: j.containsKey(PortalSection.connIp.key)
+            ? _flag(j[PortalSection.connIp.key], fallback.connIp ?? true)
+            : fallback.connIp,
+        connDuration: j.containsKey(PortalSection.connDuration.key)
+            ? _flag(j[PortalSection.connDuration.key], fallback.connDuration ?? true)
+            : fallback.connDuration,
       );
 
   Map<String, bool> toJson() => {
@@ -274,10 +302,12 @@ class PortalSections {
       other.usage == usage &&
       other.device == device &&
       other.finance == finance &&
-      other.wifi == wifi;
+      other.wifi == wifi &&
+      other.connIp == connIp &&
+      other.connDuration == connDuration;
 
   @override
-  int get hashCode => Object.hash(connection, usage, device, finance, wifi);
+  int get hashCode => Object.hash(connection, usage, device, finance, wifi, connIp, connDuration);
 
   @override
   String toString() => 'PortalSections(${toJson()})';

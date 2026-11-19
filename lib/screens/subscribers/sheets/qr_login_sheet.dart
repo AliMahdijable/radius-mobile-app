@@ -444,7 +444,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.clock, size: 12, color: AppColors.brand),
+              Icon(_expired ? LucideIcons.clock : LucideIcons.infinity, size: 12, color: AppColors.brand),
               const SizedBox(width: 6),
               Text(
                 _expiresLabel(),
@@ -552,14 +552,13 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     );
   }
 
-  String _expiresLabel() {
-    if (_expiresAt == null) {
-      return 'qr_login.valid_30d'.tr();
-    }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final remainMs = _expiresAt! - now;
-    if (remainMs <= 0) return 'qr_login.expired'.tr();
-    final days = (remainMs / (24 * 3600 * 1000)).floor();
-    return 'qr_login.valid_for_days'.tr(namedArgs: {'d': days.toString()});
+  /// رمزٌ انتهى فعلاً (قديمٌ عُرض قبل تحديث الخادم).
+  bool get _expired {
+    final exp = _expiresAt;
+    return exp != null && exp <= DateTime.now().millisecondsSinceEpoch;
   }
+
+  /// (١٩ نوفمبر — المالك: «الوكيل جاي يرتبك من يشوف تحت qr من يولده ٢٩ يووم»): بعد المسح يبقى المشترك مسجّلاً على هاتفه (جلسته
+  /// تتجدّد وحدها، والرمز نفسه سنة) — فلا عدّاد أيّام يُفهم أنّ الدخول ينتهي بعده.
+  String _expiresLabel() => (_expired ? 'qr_login.expired' : 'qr_login.stays_signed_in').tr();
 }
