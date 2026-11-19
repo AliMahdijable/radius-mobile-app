@@ -39,6 +39,12 @@ class KitFiberInfo {
     this.address,
     this.nearest,
     this.zone,
+    this.optics,
+    this.vendor,
+    this.mac,
+    this.ip,
+    this.lockedMac,
+    this.plan,
   });
 
   /// قدرة الضوء المستلمة (dBm) — null بلا قياس (لا 0).
@@ -60,6 +66,18 @@ class KitFiberInfo {
   final String? address;
   final String? nearest;
   final String? zone;
+
+  /// ساسات FTTH (١٩ نوفمبر — الوطني البصرة/الناصريّة، الخادم `server/sasFtthInfo.js`): false ⇒ لا قياس ضوءٍ لدى الشركة فلا حبّة
+  /// «لا قياس» ولا سطر إشارة؛ null (الشركات المُضافة) ⇒ كما كان. والحقول بعده من جهاز المشترك في المشروع الوطنيّ.
+  final bool? optics;
+  final String? vendor;
+  final String? mac;
+  final String? ip;
+  final String? lockedMac;
+  final String? plan;
+
+  /// لا قياس ضوءٍ لدى الشركة أصلاً (لا «لا قياس» لقراءةٍ لم تُطلب).
+  bool get noOptics => optics == false;
 
   static String? _str(Object? v) {
     final s = v?.toString().trim() ?? '';
@@ -85,8 +103,15 @@ class KitFiberInfo {
       address: _str(loc['text']),
       nearest: _str(loc['nearestPoint']),
       zone: _str(loc['zone']),
+      optics: m['optics'] is bool ? m['optics'] as bool : null,
+      vendor: _str(m['vendor']),
+      mac: _str(m['mac']),
+      ip: _str(m['ip']),
+      lockedMac: _str(m['lockedMac']),
+      plan: _str(m['plan']),
     );
   }
+
 
   /// المسار كما في الموقع: FDT ← FAT (منفذ N).
   String get path => [
@@ -149,12 +174,17 @@ class KitFiberCard extends StatefulWidget {
   }
 
   /// يظهر لشركةٍ مُضافة خارج «كل الشركات»: لصاحب الحساب بقدرة شركته (`subscribers.fiber_info` من الخادم)، ولموظّفنا بعرض المشتركين
-  /// (والكرت يختفي إن قالت الشركة إنّها لا تقرؤها).
+  /// (والكرت يختفي إن قالت الشركة إنّها لا تقرؤها). وساس فور (١٩ نوفمبر — ساسات FTTH: الوطني البصرة/الناصريّة): المدير بصلاحيّة
+  /// ساسه `prm_ftth_device` (⇐ `subscribers.fiber_info`)، والموظّف بعرض المشتركين — وساسٌ بلا حقول FTTH يردّ 409 فلا كرت.
   static bool shownFor(Subscriber sub) =>
-      ProviderService.isKit &&
+      (ProviderService.isKit || _sas4) &&
       sub.companyKey == null &&
       (sub.idx ?? '').isNotEmpty &&
       (Perms.isEmployee ? Perms.has('subscribers.view') : Perms.has('subscribers.fiber_info'));
+
+  /// ساس فور عاديّ: لا ايرث لنك ولا المشروع الوطنيّ القديم ولا فايبر اكس ولا شركةٌ مُضافة.
+  static bool get _sas4 =>
+      !ProviderService.isKit && !ProviderService.isEarthlink && !ProviderService.isFtth && !ProviderService.isFiberx;
 
   @override
   State<KitFiberCard> createState() => _KitFiberCardState();
@@ -241,7 +271,8 @@ class _KitFiberCardState extends State<KitFiberCard> {
     }
   }
 
-  Widget _row(IconData icon, String label, String value, {bool ltr = false}) {
+  /// token: قيمةٌ لا تنكسر (ماك، آيبي، سيريال) — سطرٌ واحد يصغر حين يضيق بدل أن ينشطر رقمها (٣٢٠ بخطّ ١٫٢).
+  Widget _row(IconData icon, String label, String value, {bool ltr = false, bool token = false}) {
     return Padding(
       padding: const EdgeInsets.only(top: Sp.sm),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -250,16 +281,63 @@ class _KitFiberCardState extends State<KitFiberCard> {
         Text(label, style: AppType.muted(color: AppColors.textMid), maxLines: 1),
         const SizedBox(width: Sp.sm),
         Expanded(
-          child: Text(
-            ltr ? iso(value) : value,
-            style: AppType.rowValue(),
-            textAlign: TextAlign.end,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: token
+              ? Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Text(iso(value), style: AppType.rowValue(), maxLines: 1, softWrap: false),
+                  ),
+                )
+              : Text(
+                  ltr ? iso(value) : value,
+                  style: AppType.rowValue(),
+                  textAlign: TextAlign.end,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
         ),
       ]),
     );
+  }
+
+  /// «نسخ الإحداثيّات» و«إرسال الموقع» متجاوران إن اتّسع السطر لنصّيهما بخطّ الجهاز، وإلّا كلٌّ بسطرٍ كاملاً — لا كلمةٌ تنكسر
+  /// (٣٢٠ بخطّ ١٫٢ كانت «نسخ / الإحداثيّا / ت»). القياس بنمط زرّ Material نفسه (labelLarge) ومقياس الخطّ والخطّ العريض.
+  Widget _mapButtons(KitFiberInfo d) {
+    return LayoutBuilder(builder: (context, box) {
+      final base = Theme.of(context).textTheme.labelLarge ?? AppType.bodyStrong();
+      final style = MediaQuery.boldTextOf(context) ? base.copyWith(fontWeight: FontWeight.bold) : base;
+      final scaler = MediaQuery.textScalerOf(context);
+      double width(String s) {
+        final tp = TextPainter(text: TextSpan(text: s, style: style), textDirection: TextDirection.rtl, textScaler: scaler, maxLines: 1)
+          ..layout();
+        final w = tp.width;
+        tp.dispose();
+        return w;
+      }
+
+      const chrome = 72.0; // الأيقونة (١٦) ومسافتها وحشوة الزرّ وحدّه
+      final half = (box.maxWidth - Sp.sm) / 2;
+      final side = width('نسخ الإحداثيّات') + chrome <= half && width('إرسال الموقع') + chrome <= half;
+      final copy = OutlinedButton.icon(
+        onPressed: () => _copyCoords(d),
+        icon: const Icon(LucideIcons.copy, size: 16),
+        label: const Text('نسخ الإحداثيّات', maxLines: 1, softWrap: false),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+      );
+      final share = Builder(
+        builder: (btn) => OutlinedButton.icon(
+          onPressed: () => _share(btn, d),
+          icon: const Icon(LucideIcons.share2, size: 16),
+          label: const Text('إرسال الموقع', maxLines: 1, softWrap: false),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+        ),
+      );
+      return side
+          ? Row(children: [Expanded(child: copy), const SizedBox(width: Sp.sm), Expanded(child: share)])
+          : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [copy, const SizedBox(height: Sp.sm), share]);
+    });
   }
 
   @override
@@ -269,8 +347,15 @@ class _KitFiberCardState extends State<KitFiberCard> {
     if (!_loading && d == null && !_editOn) return const SizedBox.shrink();
     final rx = d?.rx;
     final band = FiberBands.of(rx);
-    final Widget pill = _loading
+    final Widget? pill = _loading
         ? const FiberPill('يقرأ…', tone: AppTone.neutral)
+        : d != null && d.noOptics
+            // لا قياس ضوءٍ لدى الشركة: الباقة بدل «لا قياس»، أو سبب تعذّر قراءة الجهاز
+            ? (d.ontError != null
+                ? FiberPill(d.ontError == 'busy' ? 'البوّابة مشغولة' : 'تعذّرت قراءة الجهاز', tone: AppTone.neutral)
+                : d.plan != null
+                    ? FiberPill(d.plan!, tone: AppTone.neutral)
+                    : null)
         : rx != null
             ? FiberPill('${iso('${rx.toStringAsFixed(1)} dBm')}${band != null ? ' · ${FiberBands.label(band)}' : ''}',
                 tone: FiberBands.tone(rx))
@@ -297,7 +382,9 @@ class _KitFiberCardState extends State<KitFiberCard> {
                 Icon(LucideIcons.cable, size: 18, color: AppColors.brandAccent),
                 const SizedBox(width: Sp.sm),
                 Expanded(child: Text('الليف والموقع', style: AppType.cardTitle(), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                Flexible(child: pill),
+                // الحبّة تصغر حين يضيق السطر (٣٢٠ بخطّ ١٫٢) — FiberPill المشتركة لا تقصّ نصّها بنفسها فكانت تفيض
+                if (pill != null)
+                  Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: AlignmentDirectional.centerEnd, child: pill)),
                 const SizedBox(width: Sp.xs),
                 AnimatedRotation(
                   turns: _open ? 0.5 : 0,
@@ -316,8 +403,16 @@ class _KitFiberCardState extends State<KitFiberCard> {
                     padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.lg),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       if (d.down) _row(LucideIcons.signal, 'الإشارة', 'لا ضوء — الجهاز مفصول'),
+                      if (d.noOptics && d.ontError != null)
+                        _row(LucideIcons.cpu, 'الجهاز',
+                            d.ontError == 'busy' ? 'البوّابة مشغولة — أعد فتح البطاقة بعد قليل' : 'تعذّرت قراءة الجهاز من المشروع'),
+                      if (d.plan != null) _row(LucideIcons.package, 'الباقة', d.plan!),
                       if (d.path.isNotEmpty) _row(LucideIcons.cable, 'المسار', d.path, ltr: true),
-                      if (d.serial != null) _row(LucideIcons.cpu, 'جهاز الـONT', d.serial!, ltr: true),
+                      if (d.serial != null) _row(LucideIcons.cpu, 'جهاز الـONT', d.serial!, token: true),
+                      if (d.vendor != null) _row(LucideIcons.router, 'نوع الجهاز', d.vendor!),
+                      if (d.mac != null) _row(LucideIcons.network, 'الماك', d.mac!, token: true),
+                      if (d.lockedMac != null) _row(LucideIcons.lock, 'الماك المقفول', d.lockedMac!, token: true),
+                      if (d.ip != null) _row(LucideIcons.globe, 'الآيبي', d.ip!, token: true),
                       if (d.zone != null) _row(LucideIcons.mapPin, 'المنطقة', d.zone!),
                       if (d.place.isNotEmpty) _row(LucideIcons.mapPin, 'العنوان', d.place),
                       if (rx != null && d.opticsAt != null) _row(LucideIcons.clock, 'وقت القياس', d.opticsAt!, ltr: true),
@@ -331,27 +426,7 @@ class _KitFiberCardState extends State<KitFiberCard> {
                         ),
                         // نسخ الإحداثيّات أو إرسالها رابطاً (المالك ٢ نوفمبر: «امكانيه نسخ الاحداثيات او ارساله كرابط احداثي»)
                         const SizedBox(height: Sp.sm),
-                        Row(children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () => _copyCoords(d),
-                              icon: const Icon(LucideIcons.copy, size: 16),
-                              label: const Text('نسخ الإحداثيّات'),
-                              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-                            ),
-                          ),
-                          const SizedBox(width: Sp.sm),
-                          Expanded(
-                            child: Builder(
-                              builder: (btn) => OutlinedButton.icon(
-                                onPressed: () => _share(btn, d),
-                                icon: const Icon(LucideIcons.share2, size: 16),
-                                label: const Text('إرسال الموقع'),
-                                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-                              ),
-                            ),
-                          ),
-                        ]),
+                        _mapButtons(d),
                       ],
                     ]),
                   ),
