@@ -18,15 +18,14 @@ import '../services/provider_limits.dart';
 import '../models/merged_company.dart';
 import '../services/provider_service.dart';
 import '../theme/colors.dart';
-import 'broadcast/broadcast_screen.dart';
 import 'cards/cards_screen.dart';
+import 'comms/comms_screen.dart';
 import 'discounts/discounts_screen.dart';
 import 'el/required_cards_screen.dart';
 import 'el/transfer_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
-import 'message_logs/message_logs_screen.dart';
 import 'national/national_money_screen.dart';
 import 'national/national_notes_screen.dart';
 import 'national/national_reports_screen.dart';
@@ -44,7 +43,6 @@ import 'reports_screen.dart';
 import 'sales/sales_screen.dart';
 import 'settlements/settlements_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
-import 'telegram/telegram_screen.dart';
 import 'tickets/ticket_widgets.dart';
 import 'tickets/tickets_screen.dart';
 import 'topup/fiberx_topup_screen.dart';
@@ -135,13 +133,9 @@ List<AppModule> buildAppModules() {
     'reports.activity_log',
   ];
   const cardKeys = ['subscribers.activate', 'subscribers.extend'];
-  const tgKeys = ['whatsapp.broadcast', 'whatsapp.send', 'settings.edit'];
-  // موظّف ايرث لنك: تلغرام (البوت والربط والبثّ) لصاحب الحساب ما لم يوجد مفتاحٌ صريح — كالويب
-  // (`/telegram` ownerOnly). `whatsapp.send` عنده ضمنيٌّ يتبع «إرسال واتساب» لا مفتاحٌ صريح.
-  final tgGate = ProviderService.isEarthlink && Perms.isEmployee
-      ? const ['whatsapp.broadcast', 'settings.edit']
-      : tgKeys;
-  const logKeys = ['whatsapp.broadcast', 'whatsapp.send'];
+  // «التواصل» (٢٠ نوفمبر): التبليغات وحالة الرسائل وتلغرام — وما كان بقسم الواتساب في الإعدادات — بطاقةٌ واحدة؛ بنودها وأقفالها
+  // وشروطها كما كانت لكلٍّ منها ([buildCommsEntries]).
+  final comms = buildCommsEntries();
   const pkgKeys = ['packages.view', 'packages.edit_prices'];
   final cardsLocked = !Perms.hasAny(cardKeys);
   // المشروع الوطنيّ على providerKit (watani، ٣١ أكتوبر — المالك: «الطلبات التذاكر هاي مهمه مموجوده كذلك المواضع الي متعلقة
@@ -394,49 +388,18 @@ List<AppModule> buildAppModules() {
             lockTitle: 'cards.title'.tr(),
             child: const CardsScreen()),
       ),
-    // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. محكوم بنفس صلاحيّة إعدادات الواتساب.
-    if (permShown(tgGate))
+    // «التواصل» (٢٠ نوفمبر — المالك: «القوائم صايره هوسه… اي شي يخص قوالب اعدادات واتساب حالات الارسال الجدولة ننقلاه بقسم
+    // واحد»): بطاقةٌ تفتح بنوده — مقفلةٌ بمكانها إن قُفل كلّ بندٍ فيها، وتختفي إن لم يكن فيها بندٌ لهذا الدور.
+    if (comms.isNotEmpty)
       AppModule(
-        id: 'telegram',
+        id: 'comms',
         group: AppModuleGroup.comms,
-        locked: !Perms.hasAny(tgGate),
-        icon: LucideIcons.send,
+        locked: comms.every((e) => e.module.isLocked),
+        icon: LucideIcons.messagesSquare,
         tone: AppTone.brand,
-        brandGlyph: AppColors.channelTelegram,
-        title: 'تلغرام',
-        subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
-        page: () => MergedSection(
-            readOnly: true, prefixes: const ['/api/telegram'], perms: tgGate, lockTitle: 'تلغرام', child: const TelegramScreen()),
-      ),
-    // التبليغات (broadcast) — إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء. موظّف ايرث لنك لا يراها.
-    if (permShown(const ['whatsapp.broadcast']))
-      AppModule(
-        id: 'broadcast',
-        group: AppModuleGroup.comms,
-        locked: !Perms.has('whatsapp.broadcast'),
-        icon: LucideIcons.bell,
-        tone: AppTone.brand,
-        brandGlyph: AppColors.channelWhatsApp,
-        title: 'more.broadcast'.tr(),
-        subtitle: 'more.broadcast_hint'.tr(),
-        page: () => MergedSection(
-            readOnly: true,
-            prefixes: const ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
-            perms: const ['whatsapp.broadcast'],
-            lockTitle: 'more.broadcast'.tr(),
-            child: const BroadcastScreen()),
-      ),
-    // حالة الرسائل — كل رسائل WhatsApp بأنواعها مع فلاتر + بحث + retry.
-    if (permShown(logKeys))
-      AppModule(
-        id: 'message_logs',
-        group: AppModuleGroup.comms,
-        locked: !Perms.hasAny(logKeys),
-        icon: LucideIcons.messageSquare,
-        tone: AppTone.brand,
-        title: 'more.message_logs'.tr(),
-        subtitle: 'more.message_logs_hint'.tr(),
-        page: MessageLogsScreen.mergedPage,
+        title: kCommsCardTitle,
+        subtitle: kCommsCardHint,
+        page: () => const CommsScreen(),
       ),
     // «التذاكر» (٩ نوفمبر — المالك: «للشركات كلها ما عدا الوطني»): تذاكر المشتركين من تطبيقهم — حين يُفتح المفتاح العامّ للحساب،
     // ومقفلٌ بمكانه لموظّفٍ بلا «التذاكر — العرض»، والمقيَّد بمديرٍ فرعيّ بسببه. الرقم **رقم الجرس نفسه** (مصدرٌ واحد —

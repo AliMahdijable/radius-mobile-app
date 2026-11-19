@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/archive_info.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
+import 'package:rad_mysvcs/screens/comms/comms_screen.dart';
 import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/widgets/archive_bar.dart';
@@ -187,7 +188,13 @@ void main() {
   // العدّ بالنوع: البطاقتان خاصّتان بملفّيهما، فتُعرفان باسم نوعهما.
   Finder byTypeName(String name) =>
       find.byWidgetPredicate((w) => w.runtimeType.toString() == name);
-  final moduleCards = byTypeName('_ModuleCard');
+  final moduleCards = byTypeName('ModuleCard');
+
+  /// بطاقة «واتساب وتلغرام» في «قوائم أخرى» (٢٠ نوفمبر): التبليغات وحالة الرسائل وتلغرام بنودٌ داخل «التواصل».
+  Finder commsTile() => find.ancestor(of: find.byIcon(LucideIcons.messagesSquare), matching: moduleCards);
+
+  /// بنود «التواصل» بأقفالها: id ⇒ مقفل؟
+  Map<String, bool> commsLocks() => {for (final e in buildCommsEntries()) e.module.id: e.module.isLocked};
   final reportCards = byTypeName('_ReportCard');
 
   /// المسارات المدفوعة بعد الأوّل — النقر المقفل يجب ألّا يزيدها.
@@ -219,11 +226,14 @@ void main() {
         permissions: const {'reports.expenses': true},
       );
       await showScreen(t, const MoreModulesScreen());
-      // كلّ بطاقات المدير الـ12 حاضرة (ساس: كلّ مفتاحٍ يُمنح)…
-      expect(moduleCards, findsNWidgets(12));
+      // كلّ بطاقات المدير الـ10 حاضرة (ساس: كلّ مفتاحٍ يُمنح؛ «التواصل» بطاقةٌ واحدة مكان ثلاث — ٢٠ نوفمبر)…
+      expect(moduleCards, findsNWidgets(10));
       // …مفتوحٌ منها «التقارير» (expenses مفتاح تقرير) و«الصرفيات»، و«بوابة
       // المشترك» لكلّ موظّف (رمز الوكيل — ١٨ أكتوبر).
-      expect(find.byType(PermLockIcon), findsNWidgets(12 - 3));
+      expect(find.byType(PermLockIcon), findsNWidgets(10 - 3));
+      // و«واتساب وتلغرام» مقفلةٌ بمكانها: كلّ بنودها مقفلة بلا مفاتيحها.
+      expect(find.descendant(of: commsTile(), matching: find.byType(PermLockIcon)), findsOneWidget);
+      expect(commsLocks().values, everyElement(isTrue));
       // ولا «لا صلاحيّات» فارغة.
       expect(find.text('more.empty_perms'), findsNothing);
     });
@@ -232,7 +242,7 @@ void main() {
       PermissionsService.debugSet(isEmployee: true);
       final pushed = await showScreen(t, const MoreModulesScreen());
       // كلّها مقفلة إلّا «بوابة المشترك» (رمز الوكيل لكلّ موظّف).
-      expect(find.byType(PermLockIcon), findsNWidgets(11));
+      expect(find.byType(PermLockIcon), findsNWidgets(9));
       await t.tap(moduleCards.first);
       await t.pump();
       expect(pushed, isEmpty, reason: 'المقفل لا يتنقّل ولا يطلب شيئاً');
@@ -242,12 +252,14 @@ void main() {
     testWidgets('المدير: لا قفل، والبطاقات نفسها كما كانت', (t) async {
       PermissionsService.debugSet(isEmployee: false);
       await showScreen(t, const MoreModulesScreen());
-      expect(moduleCards, findsNWidgets(12));
+      expect(moduleCards, findsNWidgets(10));
       expect(find.byType(PermLockIcon), findsNothing);
+      expect(commsTile(), findsOneWidget);
+      expect(commsLocks().values, everyElement(isFalse));
       // والكارتات حين يقول الخادم enabled.
       CardsState.badge.value = const CardsBadge(enabled: true, remaining: 4);
       await t.pump();
-      expect(moduleCards, findsNWidgets(13));
+      expect(moduleCards, findsNWidgets(11));
       expect(find.byType(PermLockIcon), findsNothing);
     });
 
@@ -274,9 +286,10 @@ void main() {
       expect(find.byIcon(LucideIcons.users), findsNothing); // الموظّفون
       // وتحويل الرصيد لصاحب الحساب، والتبليغات (البثّ لا يُمنح له).
       expect(find.byIcon(LucideIcons.arrowRightLeft), findsNothing);
-      expect(find.byIcon(LucideIcons.bell), findsNothing);
-      // وتلغرام لصاحب الحساب كالويب (لا مفتاح صريح له — الدفعة ① ١٨ أكتوبر).
-      expect(find.byIcon(LucideIcons.send), findsNothing);
+      expect(commsLocks().containsKey('broadcast'), isFalse);
+      // وتلغرام لصاحب الحساب كالويب (لا مفتاح صريح له — الدفعة ① ١٨ أكتوبر)، ولا قسم الواتساب (مفتاحاه لا يُمنحان).
+      expect(commsLocks().keys, isNot(contains('telegram')));
+      expect(commsLocks().keys, isNot(contains('wa_templates')));
       // و«بوابة المشترك» مفتوحةٌ له (رمز الوكيل — وسيط البوّابة ١٨ أكتوبر)…
       final portal = find.ancestor(
           of: find.byIcon(LucideIcons.smartphone), matching: moduleCards);
@@ -299,20 +312,24 @@ void main() {
         'whatsapp.send': true,
       });
       await showScreen(t, const MoreModulesScreen());
-      expect(find.byIcon(LucideIcons.send), findsNothing);
-      // «حالة الرسائل» تبقى له — رسائله هو.
-      expect(find.byIcon(LucideIcons.messageSquare), findsOneWidget);
+      expect(commsLocks().keys, isNot(contains('telegram')));
+      // «حالة الرسائل» تبقى له — رسائله هو: بندٌ مفتوح، فبطاقة «واتساب وتلغرام» مفتوحة.
+      expect(commsLocks()['message_logs'], isFalse);
+      expect(commsTile(), findsOneWidget);
+      expect(find.descendant(of: commsTile(), matching: find.byType(PermLockIcon)), findsNothing);
     });
 
-    testWidgets('موظّف ساس: تلغرام بمكانه (مقفلاً بلا مفاتيحه) كما كان',
+    testWidgets('موظّف ساس: تلغرام بمكانه في «التواصل» (مقفلاً بلا مفاتيحه) كما كان',
         (t) async {
+      _offline();
       PermissionsService.debugSet(isEmployee: true);
-      await showScreen(t, const MoreModulesScreen());
+      await showScreen(t, const CommsScreen());
       final tile = find.ancestor(
           of: find.byIcon(LucideIcons.send), matching: moduleCards);
       expect(tile, findsOneWidget);
       expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
           findsOneWidget);
+      await t.pump(const Duration(seconds: 3)); // ردود الخادم الوهميّ (المستثنون)
     });
 
     // الدفعة ①: «التبليغات» لايرث لنك كباقي الشركات — كانت مخفيّة (١٤ أكتوبر).
@@ -324,15 +341,15 @@ void main() {
         managerRestricted: true,
         managerCaps: const {'whatsapp.broadcast': true},
       );
-      await showScreen(t, const MoreModulesScreen());
+      _offline();
+      await showScreen(t, const CommsScreen());
       final tile =
-          find.ancestor(of: find.byIcon(LucideIcons.bell), matching: moduleCards);
+          find.ancestor(of: find.byIcon(LucideIcons.megaphone), matching: moduleCards);
       expect(tile, findsOneWidget, reason: 'لا مخفيّة');
       expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
           findsNothing, reason: 'مفتوحة — لا قفل');
-      expect(
-          find.descendant(of: tile, matching: find.text('more.broadcast_hint')),
-          findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text('more.broadcast')), findsOneWidget);
+      await t.pump(const Duration(seconds: 3)); // ردود الخادم الوهميّ (القنوات والمستثنون)
     });
 
     testWidgets('مالك ايرث لنك وخادمٌ لم يمنح البثّ بعد: بمكانها مقفلة',
@@ -343,9 +360,10 @@ void main() {
         managerRestricted: true,
         managerCaps: const {'whatsapp.broadcast': false},
       );
-      await showScreen(t, const MoreModulesScreen());
+      _offline();
+      await showScreen(t, const CommsScreen());
       final tile =
-          find.ancestor(of: find.byIcon(LucideIcons.bell), matching: moduleCards);
+          find.ancestor(of: find.byIcon(LucideIcons.megaphone), matching: moduleCards);
       expect(tile, findsOneWidget);
       expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
           findsOneWidget);

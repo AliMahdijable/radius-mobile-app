@@ -28,15 +28,11 @@ import 'account/account_settings_card.dart';
 import 'account/account_widgets.dart' show openPrivacyPolicy, openSupportPage;
 import 'account/employee_login_screen.dart';
 import '../services/employee_session.dart';
+import 'comms/comms_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
-import 'whatsapp/connection_alerts_screen.dart';
-import 'whatsapp/whatsapp_schedules_screen.dart';
-import 'whatsapp/message_exclusions_screen.dart';
 import '../api/message_exclusions_api.dart';
 import '../services/merged_mode.dart';
-import 'whatsapp/whatsapp_status_screen.dart';
-import 'whatsapp/whatsapp_templates_screen.dart';
 import 'view_scope_screen.dart';
 import '../core/widgets/app_sheet.dart';
 import 'desktop/desk_widgets.dart';
@@ -225,92 +221,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // قوالبه، طباعة + قوالبها، المظهر، البصمة، الصلاحيات،
             // الإشعارات، السكون. حالياً كل واحد stub يفتح snack
             // 'قيد التطوير' حتى نبني كل قسم على حدة.
-            // مطلب 2026-06-12 + بلاغ ٢٠٢٦-١٠-١٤: قسم الواتساب وصفوفه الأربعة
-            // تبقى بمكانها، وكلّ صفٍّ بلا مفتاحه **مقفلٌ** (قفلٌ مكان السهم،
-            // والنقر رسالةٌ لا شاشةٌ تُرفض). ويختفي القسم كلّه فقط إن لم
-            // يكن مفتاحاه ممّا يُمنح لهذا الدور ([permShown] — موظّف ايرث لنك).
-            if (permShown(
-                const ['whatsapp.connect', 'whatsapp.templates'])) ...[
-              _SectionLabel('settings.whatsapp'.tr()),
-              _Row(
-                icon: Icons.chat_bubble_outline_rounded,
-                label: 'settings.whatsapp_status'.tr(),
-                locked: !Perms.has('whatsapp.connect'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const WhatsAppStatusScreen(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: Sp.xs),
-              _Row(
-                icon: Icons.message_outlined,
-                label: 'settings.whatsapp_templates'.tr(),
-                locked: !Perms.has('whatsapp.templates'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const WhatsAppTemplatesScreen(),
-                  ),
-                ),
-              ),
-              // مطلب 2026-XX: قائمة الجدولة (أوقات + أيام تبليغات)
-              // منقولة من v1 — الآن متاحة تحت whatsapp.templates.
-              const SizedBox(height: Sp.xs),
-              _Row(
-                icon: Icons.schedule_outlined,
-                label: 'settings.whatsapp_schedules'.tr(),
-                locked: !Perms.has('whatsapp.templates'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const WhatsAppSchedulesScreen(),
-                  ),
-                ),
-              ),
-              // «تنبيه المشترك» بمشكلة الاتصال — تفعيله وحدوده ونصوصه.
-              // كان مدخله الوحيد بطاقةً في آخر قائمة القوالب، فسأل
-              // المستخدم «الميزة منين يفعّلها المدير؟». هنا مكانه بين
-              // إعدادات الواتساب الأخرى.
-              const SizedBox(height: Sp.xs),
-              _Row(
-                icon: Icons.notifications_active_outlined,
-                label: 'conn_alerts.title'.tr(),
-                locked: !Perms.has('whatsapp.templates'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ConnectionAlertsScreen(),
-                  ),
-                ),
-              ),
-              // «المستثنون من الرسائل» (المالك ١٤ نوفمبر): قائمة من أُوقفت رسائل النظام عنهم — تظهر حين تُفتح الميزة للحساب؛ من لا
-              // يُدير (موظّفٌ بلا صلاحيّتها — يقوله الخادم) يراها بمكانها مقفلة. «كل الشركات» (١٥ نوفمبر): مجموع شركاته — تظهر إن
-              // فُتحت الميزة لأيٍّ منها، وتُدار إن كان يُدير في أيٍّ منها (والصفحة تقفل صفوف ما لا يُدير).
-              ListenableBuilder(
-                listenable: Listenable.merge([MessageExclusionsState.changes, MergedMode.active, MergedMode.data]),
-                builder: (context, _) {
-                  final view = MessageExclusionsState.viewFor(
-                      MergedMode.active.value ? [for (final c in MergedMode.usable) c.key] : null);
-                  if (!view.any((v) => v.snap.enabled)) return const SizedBox.shrink();
-                  final count = view.fold<int>(0, (n, v) => n + (v.snap.enabled ? v.snap.count : 0));
-                  final canManage = view.any((v) => v.snap.enabled && v.snap.canManage);
-                  return Padding(
-                    key: const ValueKey('settings-mx'),
-                    padding: const EdgeInsets.only(top: Sp.xs),
-                    child: _Row(
-                      icon: LucideIcons.bellOff,
-                      label: 'المستثنون من الرسائل',
-                      trailing: count > 0 ? '$count' : null,
-                      locked: !canManage,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MessageExclusionsScreen(),
+            // «التواصل والإشعارات» (٢٠ نوفمبر — المالك: «ننقل اله كل من تلي والواتساب والقوالب والضبط»): قسم الواتساب وصفوفه
+            // الخمسة صارت بنوداً في «التواصل» (حالة الواتساب، القوالب، الجدولة، «تنبيه المشترك»، «المستثنون من الرسائل») بأقفالها
+            // نفسها ([buildCommsEntries]) — وهنا صفّه، و«إشعاراتي» (ما يصل الوكيلَ نفسه) تحته.
+            ListenableBuilder(
+              listenable: commsListenable(),
+              builder: (context, _) {
+                final comms = buildCommsEntries();
+                final notifs = permShown(const ['settings.edit']);
+                if (comms.isEmpty && !notifs) return const SizedBox.shrink();
+                return Column(
+                  key: const ValueKey('settings-comms'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _SectionLabel('التواصل والإشعارات'),
+                    if (comms.isNotEmpty)
+                      _Row(
+                        key: const ValueKey('settings-comms-row'),
+                        icon: LucideIcons.messagesSquare,
+                        label: kCommsCardTitle,
+                        trailing: 'القوالب · الجدولة',
+                        locked: comms.every((e) => e.module.isLocked),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const CommsScreen()),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: Sp.md),
-            ],
+                    // موظّف ايرث لنك: الخادم يرفض حفظ التفضيلات بلا settings.edit، وهو مفتاحٌ لا يُمنح لدوره — فالصفّ مخفيّ له
+                    // ([permShown])، بدل «لا تملك صلاحية» حمراء عند كلّ مفتاح. المالك وموظّف الساس كما كانا.
+                    if (notifs) ...[
+                      if (comms.isNotEmpty) const SizedBox(height: Sp.xs),
+                      _Row(
+                        key: const ValueKey('settings-my-alerts'),
+                        icon: Icons.notifications_none_rounded,
+                        label: kMyAlertsTitle,
+                        trailing: 'المال · الأجهزة',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const NotificationsSettingsScreen()),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: Sp.md),
+                  ],
+                );
+              },
+            ),
             // ايرث لنك: باسورد الإيداع محفوظاً مشفّراً — فلا يُطلب في كلّ تفعيل
             // (طلب المستخدم ١٦ أكتوبر). صاحب الحساب وحده؛ موظّفوه يفعّلون به
             // دون أن يروه.
@@ -466,20 +420,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: Sp.xs),
-            // موظّف ايرث لنك: الخادم يرفض حفظ التفضيلات بلا settings.edit، وهو مفتاحٌ
-            // لا يُمنح لدوره — فالصفّ مخفيّ له ([permShown])، بدل «لا تملك صلاحية»
-            // حمراء عند كلّ مفتاح. المالك وموظّف الساس كما كانا.
-            if (permShown(const ['settings.edit']))
-              _Row(
-                icon: Icons.notifications_none_rounded,
-                label: 'settings.notifications'.tr(),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const NotificationsSettingsScreen(),
-                  ),
-                ),
-              ),
             const SizedBox(height: Sp.md),
             _SectionLabel('settings.about'.tr()),
             _Row(
@@ -1043,6 +983,7 @@ class _ThemeOptionTile extends StatelessWidget {
 
 class _Row extends StatelessWidget {
   const _Row({
+    super.key,
     required this.icon,
     required this.label,
     this.trailing,
