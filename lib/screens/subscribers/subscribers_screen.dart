@@ -53,6 +53,7 @@ import 'sheets/pay_debt_sheet.dart';
 import 'connection_alert_flow.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
+import 'widgets/fiber_filters.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
 import 'widgets/debt_age.dart';
@@ -1360,6 +1361,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// فلتر الباقة (٢١ أكتوبر، كالويب): اسم الباقة — يُرشّح القائمة والعدّادات معاً كفلتر المدير. الكبير: معرّفها للساس.
   String? _packageFilter;
 
+  /// ساس الوطني: «المنطقة / FDT / FAT» (١٩ نوفمبر — كالموقع)، للقائمة الكاملة وحدها (الكبير صفحاتٌ من الساس بلا هذه الحقول،
+  /// و«كل الشركات» شركاتٌ شتّى) وحين تحمل الصفوف الحقول — وإلّا لا قوائم ولا أثر لاختيارٍ قديم.
+  FiberFilter _fiber = FiberFilter.none;
+  bool get _fiberShown => !_big && !_mergedOn && FiberOptions.available(_all);
+
   /// أسماء الباقات المتاحة للفلتر: من القائمة المحمَّلة، والكبير من كتالوج الباقات (الصفحة لا تكفي لمعرفتها).
   List<String> get _availablePackages {
     if (_big) {
@@ -1377,11 +1383,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// Pre-filter source — apply the manager filter first so chip counts
   /// AND the main filter pipeline both work off the same subset.
   List<Subscriber> get _managerScoped {
-    if (_managerFilter == null && _packageFilter == null) return _all;
+    final fiber = _fiber.isActive && _fiberShown ? _fiber : null;
+    if (_managerFilter == null && _packageFilter == null && fiber == null) return _all;
     return _all
         .where((s) =>
             (_managerFilter == null || s.parentUsername == _managerFilter) &&
-            (_packageFilter == null || s.profileName == _packageFilter))
+            (_packageFilter == null || s.profileName == _packageFilter) &&
+            (fiber == null || fiber.matches(s)))
         .toList();
   }
 
@@ -1902,7 +1910,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// عنوان 16/w700 مع «إعادة تعيين» في الطرف، شرائح، ثمّ زرّ «تطبيق».
   /// يستبدل صفّ `_ManagerFilterBar` المسطّح الذي كان تحت البحث.
   Future<void> _openManagerFilterSheet() async {
-    final picked = await showAppSheet<({String? manager, String? package})>(
+    final picked = await showAppSheet<({String? manager, String? package, FiberFilter? fiber})>(
       barrierColor: AppColors.scrim,
       context: context,
       backgroundColor: Colors.transparent,
@@ -1915,17 +1923,20 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         managers: _availableManagers,
         currentPackage: _packageFilter,
         packages: _availablePackages,
+        fiberRows: _fiberShown ? [for (final s in _all) if (!s.isAbandoned) s] : const [],
+        currentFiber: _fiber,
       ),
     );
     if (picked == null) return; // أُغلق بلا «تطبيق»
-    _applyFilters(picked.manager, picked.package);
+    _applyFilters(picked.manager, picked.package, fiber: picked.fiber);
   }
 
   /// المدير والباقة — من ورقة التصفية (الهاتف) أو القائمتين المنسدلتين (الحاسبة).
-  void _applyFilters(String? manager, String? package) {
+  void _applyFilters(String? manager, String? package, {FiberFilter? fiber}) {
     setState(() {
       _managerFilter = normalizeManagerFilter(manager);
       _packageFilter = normalizeManagerFilter(package);
+      if (fiber != null) _fiber = fiber;
       _visibleCount = _kPageStep;
       if (_big) {
         _bigParentId = _bigManagerId(_managerFilter);
@@ -2304,10 +2315,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           sortActive: _sortField !=
                                                   SortField.remainingDays ||
                                               _sortDir != SortDirection.desc,
-                                          filterActive: _managerFilter != null || _packageFilter != null,
+                                          filterActive: _managerFilter != null || _packageFilter != null || (_fiber.isActive && _fiberShown),
                                           sortLabel: _sortLabel(),
                                           onSort: _openSortSheet,
-                                          onFilter: managers.isEmpty && packages.isEmpty
+                                          onFilter: managers.isEmpty && packages.isEmpty && !_fiberShown
                                               ? null
                                               : _openManagerFilterSheet,
                                           // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
@@ -2351,8 +2362,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               compact: _compactHeader,
                               compactChild: _CompactSearchBar(
                                 controller: _searchCtrl,
-                                filterActive: _managerFilter != null || _packageFilter != null,
-                                onFilter: managers.isEmpty && packages.isEmpty
+                                filterActive: _managerFilter != null || _packageFilter != null || (_fiber.isActive && _fiberShown),
+                                onFilter: managers.isEmpty && packages.isEmpty && !_fiberShown
                                     ? null
                                     : _openManagerFilterSheet,
                                 onBackToTop: () => _scrollCtrl.animateTo(
@@ -2814,6 +2825,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       packages: packages,
       package: _packageFilter,
       onPackage: (p) => _applyFilters(_managerFilter, p),
+      fiber: _fiberShown
+          ? DesktopFiberFilters(
+              options: FiberOptions.of([for (final s in _all) if (!s.isAbandoned) s], _fiber),
+              value: _fiber,
+              onChanged: (f) => _applyFilters(_managerFilter, _packageFilter, fiber: f),
+            )
+          : null,
       sortField: _sortField,
       descending: _sortDir == SortDirection.desc,
       onSortField: (f) => _setSort(f, toggle: false),
@@ -3314,6 +3332,8 @@ class _ManagerFilterSheet extends StatefulWidget {
     required this.managers,
     this.currentPackage,
     this.packages = const [],
+    this.fiberRows = const [],
+    this.currentFiber = FiberFilter.none,
   });
   final String? current;
   final List<String> managers;
@@ -3322,6 +3342,10 @@ class _ManagerFilterSheet extends StatefulWidget {
   final String? currentPackage;
   final List<String> packages;
 
+  /// ساس الوطني: صفوف القائمة (بلا المهمَلين) لخيارات «المنطقة / FDT / FAT» المتسلسلة — فارغةٌ لغيره (لا أقسام).
+  final List<Subscriber> fiberRows;
+  final FiberFilter currentFiber;
+
   @override
   State<_ManagerFilterSheet> createState() => _ManagerFilterSheetState();
 }
@@ -3329,6 +3353,7 @@ class _ManagerFilterSheet extends StatefulWidget {
 class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
   late String? _picked = widget.current;
   late String? _pickedPkg = widget.currentPackage;
+  late FiberFilter _fiber = widget.currentFiber;
 
   @override
   Widget build(BuildContext context) {
@@ -3343,11 +3368,12 @@ class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
       footer: SheetFooterBar(
         label: 'تطبيق',
         icon: Icons.check_rounded,
-        onPressed: () => Navigator.pop(context, (manager: _picked ?? '', package: _pickedPkg ?? '')),
+        onPressed: () => Navigator.pop(context, (manager: _picked ?? '', package: _pickedPkg ?? '', fiber: _fiber)),
         leading: _ResetFilterButton(
           onTap: () => setState(() {
             _picked = null;
             _pickedPkg = null;
+            _fiber = FiberFilter.none;
           }),
         ),
       ),
@@ -3381,7 +3407,58 @@ class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
               ],
             ),
           ],
+          if (widget.fiberRows.isNotEmpty) ..._fiberGroups(),
         ],
+      ),
+    );
+  }
+
+  /// «المنطقة» ثمّ «FDT» ثمّ «FAT» — كلٌّ بخياراته تحت ما اختير فوقه، وبعدد مشتركيه.
+  List<Widget> _fiberGroups() {
+    final o = FiberOptions.of(widget.fiberRows, _fiber);
+    final f = _fiber;
+    List<Widget> group(String title, List<(String, int)> items, String? current, FiberFilter Function(String?) pick) => [
+          const SizedBox(height: Sp.lg),
+          Text(title, style: AppType.pillLabel()),
+          const SizedBox(height: Sp.sm),
+          Wrap(
+            spacing: Sp.sm,
+            runSpacing: Sp.sm,
+            children: [
+              _fiberChip(label: 'الكل', on: current == null, onTap: () => setState(() => _fiber = pick(null))),
+              for (final (v, n) in items)
+                _fiberChip(label: '$v ($n)', ltr: true, on: current == v, onTap: () => setState(() => _fiber = pick(v))),
+            ],
+          ),
+        ];
+    return [
+      ...group('المنطقة', o.zones, f.zone, f.withZone),
+      if (o.fdts.isNotEmpty) ...group('FDT', o.fdts, f.fdt, f.withFdt),
+      if (o.fats.isNotEmpty) ...group('FAT', o.fats, f.fat, f.withFat),
+    ];
+  }
+
+  Widget _fiberChip({required String label, required bool on, required VoidCallback onTap, bool ltr = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(R.chip),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: on ? AppColors.brand : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.chip),
+          border: Border.all(
+            color: on ? AppColors.brand : AppColors.border,
+            width: on ? BW.selected : BW.normal,
+          ),
+        ),
+        child: Text(
+          label,
+          textDirection: ltr ? ui.TextDirection.ltr : null,
+          style: AppType.bodyStrong(
+            color: on ? AppColors.onBrand : AppColors.textBody,
+          ),
+        ),
       ),
     );
   }

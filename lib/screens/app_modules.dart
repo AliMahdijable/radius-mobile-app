@@ -8,6 +8,7 @@ import '../api/national_more_api.dart';
 import '../api/receipts_archive_api.dart';
 import '../api/renew_requests_api.dart';
 import '../api/sales_api.dart';
+import '../api/sas_ftth_api.dart';
 import '../api/self_deposit_api.dart';
 import '../api/tickets_api.dart';
 import '../core/util/format.dart';
@@ -42,6 +43,7 @@ import 'receipts/receipts_archive_screen.dart';
 import 'renew/renew_requests_screen.dart';
 import 'reports_screen.dart';
 import 'sales/sales_screen.dart';
+import 'sas_ftth/sas_ftth_screen.dart';
 import 'settlements/settlements_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'telegram/telegram_screen.dart';
@@ -109,6 +111,8 @@ Listenable appModulesListenable() => Listenable.merge([
       ReceiptsArchiveState.gate,
       // «شحن من pay الجزيرة» — لشركات الجزيرة وحدها (لا سؤال لغيرها).
       JtpayState.gate,
+      // «المشروع الوطني» داخل ساس الوطني — أقسام إضافة الساس (لا سؤال لغير ساس فور).
+      SasFtthState.gate,
       // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
       AppResumedSignal.tick,
       // المشروع الوطنيّ: المفتاح التجريبيّ وقدرات مستخدم البوّابة — الاستماع يطلبها للوطنيّ وحده (لا نداء لغيره).
@@ -156,6 +160,21 @@ List<AppModule> buildAppModules() {
   // تقرير جلسات الساس العامّ لحساب شركةٍ مُضافة) وهي لا تخصّ «الجلسات» هنا (مراجعة ١ نوفمبر: كان المالك يرى «الجلسات» مقفلة).
   bool natLocked(List<String> keys) => Perms.isEmployee && !Perms.hasAny(keys);
   return [
+    // «المشروع الوطني» داخل ساس الوطني (١٩ نوفمبر — البصرة/الناصريّة؛ كالموقع /v2/national): أقسام إضافة الساس نفسها — التذاكر،
+    // الطلبات، عروض الاشتراك، تفاصيل الاشتراك — بإطارٍ معزول عبر خادمنا. حين يحمل ساس الشركة أقسامها وحده (SasFtthState)، والموظّف
+    // بلا «عرض المشتركين» يراه بمكانه مقفلاً (الخادم يعطيه الأقسام لهذا). «كل الشركات»: للمفتوحة وحدها.
+    if (SasFtthState.visible && permShown(const ['subscribers.view']))
+      AppModule(
+        id: 'sas_ftth',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has('subscribers.view'),
+        icon: LucideIcons.landmark,
+        tone: AppTone.info,
+        title: 'المشروع الوطني',
+        subtitle: 'التذاكر والطلبات وعروض الاشتراك وتفاصيل الاشتراك — من ساس الشركة',
+        page: () => const MergedSection.openOnly(
+            title: 'المشروع الوطني', reason: 'أقسام ساس الشركة المفتوحة وحدها', child: SasFtthScreen()),
+      ),
     if (national && permShown(const ['subscribers.view']))
       AppModule(
         id: 'national_work',

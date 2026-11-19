@@ -35,6 +35,12 @@ class Subscriber {
   final int? profileId;
   final String? parentUsername;
 
+  /// ساس الوطني (FTTH — البصرة/الناصريّة، ١٩ نوفمبر): المنطقة والـFDT والـFAT من صفّ القائمة (`ftth_zone/fdt/fat` — صفوف ساسات
+  /// الوطني وحدها) لفلاتر «تصفية القائمة». null لغيرها.
+  final String? ftthZone;
+  final String? ftthFdt;
+  final String? ftthFat;
+
   /// SAS4-stored password — used to pre-fill the edit sheet so the
   /// admin can reveal/copy the current password before deciding to
   /// change it. null when the backend response didn't include it.
@@ -136,6 +142,9 @@ class Subscriber {
     this.profileName,
     this.profileId,
     this.parentUsername,
+    this.ftthZone,
+    this.ftthFdt,
+    this.ftthFat,
     this.password,
     this.isEnabled = true,
     this.isOnlineFlag = false,
@@ -371,6 +380,9 @@ class Subscriber {
       profileId: toInt(pdId ?? j['profile_id'] ?? j['profileId']),
       parentUsername:
           j['parent_username']?.toString() ?? j['parentUsername']?.toString(),
+      ftthZone: _ftthStr(j['ftth_zone']),
+      ftthFdt: _ftthStr(j['ftth_fdt']),
+      ftthFat: _ftthStr(j['ftth_fat']),
       password: j['password']?.toString(),
       isEnabled: toBool(j['enabled'] ?? j['isEnabled'], dflt: true),
       // Mirror v1's exact online-flag read (subscribers_provider.dart:455-458):
@@ -457,6 +469,9 @@ class Subscriber {
           profileName: profileName,
           profileId: profileId,
           parentUsername: parentUsername,
+          ftthZone: ftthZone,
+          ftthFdt: ftthFdt,
+          ftthFat: ftthFat,
           password: password,
           isEnabled: isEnabled,
           isOnlineFlag: isOnlineFlag,
@@ -511,6 +526,9 @@ class Subscriber {
       profileName: newName,
       profileId: profileId,
       parentUsername: parentUsername,
+      ftthZone: ftthZone,
+      ftthFdt: ftthFdt,
+      ftthFat: ftthFat,
       password: password,
       isEnabled: isEnabled,
       isOnlineFlag: isOnlineFlag,
@@ -566,6 +584,9 @@ class Subscriber {
       profileName: profileName,
       profileId: profileId,
       parentUsername: parentUsername,
+      ftthZone: ftthZone,
+      ftthFdt: ftthFdt,
+      ftthFat: ftthFat,
       password: password,
       isEnabled: isEnabled,
       isOnlineFlag: online,
@@ -617,6 +638,9 @@ class Subscriber {
       profileName: profileName,
       profileId: profileId,
       parentUsername: parentUsername,
+      ftthZone: ftthZone,
+      ftthFdt: ftthFdt,
+      ftthFat: ftthFat,
       password: password,
       isEnabled: isEnabled,
       isOnlineFlag: isOnlineFlag,
@@ -666,6 +690,9 @@ class Subscriber {
       profileName: profileName,
       profileId: profileId,
       parentUsername: parentUsername,
+      ftthZone: ftthZone,
+      ftthFdt: ftthFdt,
+      ftthFat: ftthFat,
       password: password,
       isEnabled: isEnabled,
       isOnlineFlag: isOnlineFlag,
@@ -701,4 +728,10 @@ class PackageInfo {
   const PackageInfo({required this.name, this.price});
   final String name;
   final num? price;
+}
+
+/// حقل الوطني نصّاً مقصوصاً، أو null (فارغٌ/غائب).
+String? _ftthStr(Object? v) {
+  final t = v?.toString().trim();
+  return t == null || t.isEmpty ? null : t;
 }

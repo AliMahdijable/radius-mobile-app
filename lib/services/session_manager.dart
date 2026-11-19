@@ -12,6 +12,7 @@ import '../api/el_deposit_password.dart';
 import '../api/employee_ledger_api.dart';
 import '../api/employee_presence_api.dart';
 import '../api/jtpay_api.dart';
+import '../api/sas_ftth_api.dart';
 import '../api/national_more_api.dart';
 import '../api/national_sheet_api.dart';
 import '../api/renew_requests_api.dart';
@@ -108,6 +109,8 @@ class SessionManager {
     _guardSync('SelfDepositState.reset', () => SelfDepositState.reset());
     // «شحن من pay الجزيرة» — حالة المفتاح لحساب المدير السابق (روابط الرجوع المعلّقة تبقى لصاحبها وحده).
     _guardSync('JtpayState.reset', () => JtpayState.reset());
+    // «المشروع الوطني» — أقسام ساس المدير السابق.
+    _guardSync('SasFtthState.reset', () => SasFtthState.reset());
     // «المبيعات» — حالة المفتاح لحساب المدير السابق.
     _guardSync('SalesState.reset', () => SalesState.reset());
     // «حركات الموظف» — حال المفتاح وصلاحيّة الرواتب لحساب المدير السابق.

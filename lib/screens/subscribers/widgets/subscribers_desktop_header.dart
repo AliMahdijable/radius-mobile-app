@@ -6,6 +6,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
+import 'fiber_filters.dart';
 import 'sort_sheet.dart';
 import 'subscriber_columns_menu.dart';
 
@@ -35,6 +36,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
     required this.onAdd,
     required this.addLocked,
     this.addLabel,
+    this.fiber,
   });
 
   final String title;
@@ -66,6 +68,9 @@ class SubscribersDesktopHeader extends StatelessWidget {
 
   /// نصّ زرّ الإضافة — بـ«كل الشركات» يسمّي الشركة التي يُضاف إليها (المفتوحة)؛ null ⇒ «مشترك جديد».
   final String? addLabel;
+
+  /// ساس الوطني: «المنطقة / FDT / FAT» بصفٍّ تحت الفلاتر — null لغيره (لا صفّ).
+  final DesktopFiberFilters? fiber;
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +176,10 @@ class SubscribersDesktopHeader extends StatelessWidget {
             ],
           );
         }),
+        if (fiber != null) ...[
+          const SizedBox(height: Sp.sm),
+          _FiberRow(fiber: fiber!),
+        ],
       ],
     );
   }
@@ -310,6 +319,48 @@ class _Dropdown<T> extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// ساس الوطني: الخيارات والقيمة وما يُستدعى عند التغيير (الشاشة تملك الحال).
+class DesktopFiberFilters {
+  const DesktopFiberFilters({required this.options, required this.value, required this.onChanged});
+
+  final FiberOptions options;
+  final FiberFilter value;
+  final ValueChanged<FiberFilter> onChanged;
+}
+
+/// «المنطقة» و«FDT» و«FAT» — قوائم منسدلة كالمدير والباقة، كلٌّ بخياراته تحت ما اختير فوقه.
+class _FiberRow extends StatelessWidget {
+  const _FiberRow({required this.fiber});
+
+  final DesktopFiberFilters fiber;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = fiber.options;
+    final v = fiber.value;
+    Widget drop(IconData icon, String all, List<(String, int)> items, String? current, FiberFilter Function(String?) pick) =>
+        Expanded(
+          child: _Dropdown<String?>(
+            icon: icon,
+            label: current ?? all,
+            active: current != null,
+            value: current,
+            items: [(null, all), for (final (k, n) in items) (k, '$k ($n)')],
+            onSelected: (x) => fiber.onChanged(pick(x)),
+          ),
+        );
+    return Row(
+      children: [
+        drop(LucideIcons.mapPin, 'كل المناطق', o.zones, v.zone, v.withZone),
+        const SizedBox(width: Sp.sm),
+        drop(LucideIcons.network, 'كل FDT', o.fdts, v.fdt, v.withFdt),
+        const SizedBox(width: Sp.sm),
+        drop(LucideIcons.box, 'كل FAT', o.fats, v.fat, v.withFat),
+      ],
     );
   }
 }
