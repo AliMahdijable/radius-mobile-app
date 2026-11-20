@@ -42,7 +42,7 @@ Map<String, Object?> _full({bool online = true}) => {
       'phone': '9647701234567',
       'profile_name': '10M-Unlimited',
       'profile_id': 7,
-      'expiration': '2026-11-20 14:30:00',
+      'expiration': '2099-11-20 14:30:00',
       'online_status': online ? 1 : 0,
       'enabled': 1,
       'notes': '-35000',
@@ -53,7 +53,7 @@ Map<String, Object?> _full({bool online = true}) => {
       if (online) 'session_time': 93784, // 1 يوم 2س 3د
       if (online) 'download': 5261334938, // 4.9 GB
       if (online) 'upload': 1288490188, // 1.2 GB
-      if (!online) 'last_online': '2026-10-17 21:05:00',
+      if (!online) 'last_online': '2099-10-17 21:05:00',
       'latitude': 32.5,
       'longitude': 44.4,
       'address_raw': 'gps:32.5,44.4',
@@ -62,7 +62,9 @@ Map<String, Object?> _full({bool online = true}) => {
 Subscriber _sub(Map<String, Object?> j) =>
     Subscriber.fromJson(Map<String, dynamic>.from(j));
 
-final _now = DateTime(2026, 10, 18, 12, 0);
+// تواريخٌ بعيدة بالفروق نفسها: «الحالة» تُحسب بساعة الجهاز الحقيقيّة (لا بـ_now)، فتاريخٌ قريبٌ ثابت ينقلب «منتهي» يوم يمرّ
+// (٢٠ نوفمبر ٢٠٢٦ ١٤:٣٠ — سقط الاختباران على كلّ فرع).
+final _now = DateTime(2099, 10, 18, 12, 0);
 
 const _ont = DeviceHealthSnapshot(
   kind: DeviceKind.ont,
@@ -184,7 +186,7 @@ void main() {
           'الهاتف: 07701234567',
           'الباقة: 10M-Unlimited',
           'السعر: 25,000 د.ع',
-          'تاريخ الانتهاء: 2026/11/20 14:30',
+          'تاريخ الانتهاء: 2099/11/20 14:30',
           'المتبقي: 33 يوم 2س 30د',
           'الدين: 35,000 د.ع',
           'الحالة: متصل',
@@ -215,7 +217,7 @@ void main() {
 
     test('غير متّصل: آخر اتّصالٍ بوقته المطلق، ولا أرقام جلسة', () {
       final text = _text(_sub(_full(online: false)));
-      expect(text, contains('آخر اتصال: 2026/10/17 21:05'));
+      expect(text, contains('آخر اتصال: 2099/10/17 21:05'));
       expect(text, contains('الحالة: غير متصل'));
       expect(text, isNot(contains('IP الجلسة')));
       expect(text, isNot(contains('subscribers.label_download'.tr())));
@@ -774,8 +776,8 @@ void main() {
           (simText('9647701234567'), '07701234567', 'تمّ نسخ الرقم'),
           (simText('تابع إلى najaf650'), 'najaf650', 'تمّ نسخ اسم المدير'),
           (
-            simText('2026/11/20 14:30'),
-            '2026/11/20 14:30',
+            simText('2099/11/20 14:30'),
+            '2099/11/20 14:30',
             'تمّ نسخ تاريخ الانتهاء'
           ),
           (simText('35,000 د.ع'), '35,000 د.ع', 'تمّ نسخ الدين'),
