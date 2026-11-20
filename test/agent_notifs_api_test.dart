@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/agent_notifs_api.dart';
 import 'package:rad_mysvcs/screens/my_alerts/money_alerts_section.dart';
@@ -79,5 +80,35 @@ void main() {
   test('خادمٌ أقدم بلا percent ⇒ النسبة تُحسب بالتقريب للأسفل كإشعاره', () {
     final c = DebtCapAlert.fromJson({'enabled': true, 'cap': 3000000, 'now': 2999999});
     expect(c.percent, 99);
+  });
+
+  testWidgets('تشغيل «سقف الديون» بلا سقف ⇒ نافذة المبلغ أوّلاً ويُحفظان معاً؛ الإلغاء يبقيه مطفأً', (t) async {
+    // شاشة هاتف (الافتراضيّ 800×600 يُخرج شريط «حفظ» عن الشاشة)
+    t.view.physicalSize = const Size(1290, 2796);
+    t.view.devicePixelRatio = 3;
+    addTearDown(t.view.reset);
+    final patches = <Map<String, Object?>>[];
+    final data = AgentNotifs.fromJson(reply(cap: {'enabled': false, 'cap': null, 'now': 4150000, 'percent': null}))!;
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: MoneyAlertsSection(data: data, onPatch: (p) async { patches.add(p); return true; }),
+        ),
+      ),
+    ));
+    final toggle = find.descendant(of: find.byKey(const ValueKey('ma-debtcap')), matching: find.byType(Switch));
+    await t.ensureVisible(toggle);
+    await t.tap(toggle);
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ma-amount-field')), findsOneWidget, reason: 'نافذة المبلغ');
+    expect(patches, isEmpty, reason: 'لا حفظ قبل المبلغ');
+    await t.enterText(find.byKey(const ValueKey('ma-amount-field')), '5000000');
+    await t.pump();
+    await t.tap(find.text('حفظ').last);
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ma-amount-field')), findsNothing, reason: 'أُغلقت النافذة');
+    expect(patches, [
+      {'debt_cap': {'enabled': true, 'cap': 5000000}}
+    ]);
   });
 }
