@@ -1,0 +1,474 @@
+{
+ "meta": {
+  "generated_at": "2026-11-20T18:46:57.299Z",
+  "tree": "/home/ali/MyServices-Pro",
+  "note": "من الوحدة الحيّة على MySQL مؤقّتة — لا بيانات إنتاج"
+ },
+ "me": {
+  "success": true,
+  "data": {
+   "feature_enabled": true,
+   "can_manage": true,
+   "is_employee": false
+  }
+ },
+ "overview": {
+  "success": true,
+  "data": {
+   "feature_enabled": true,
+   "can_manage": true,
+   "now_ms": 1795200417299,
+   "managers_included": true,
+   "periods": [
+    {
+     "id": 1,
+     "started_at_ms": 1795027617000,
+     "ends_at_ms": null,
+     "amount": 1000000,
+     "note": null,
+     "state": "running",
+     "closed_at_ms": null,
+     "sales": 0,
+     "cash_now": 0,
+     "paid_in": 0,
+     "collected": 51000,
+     "adjustments_sum": 0,
+     "covered": 51000,
+     "remaining": 949000,
+     "progress": 0.051,
+     "can_close": false,
+     "debts_created": 127500,
+     "debts_open": 126500,
+     "late_profit": 0,
+     "net": -949000,
+     "profit": 0,
+     "pocket_outstanding": 0,
+     "written_off": 0,
+     "untracked": 0,
+     "income_in_window": 0,
+     "counts": {
+      "cash": 0,
+      "credit": 0,
+      "partial": 0,
+      "payments": 0,
+      "activations": 0
+     },
+     "adjustments": [],
+     "transfers": {
+      "count": 0,
+      "sum": 0
+     },
+     "managers": {
+      "cash": 50000,
+      "withdrawn": 0,
+      "loans": 125000,
+      "paid_in": 1000,
+      "open": 126500,
+      "late": 0,
+      "count": 6,
+      "fees": 2500
+     }
+    }
+   ],
+   "totals": {
+    "old_paid": 0,
+    "manual_paid": 0,
+    "other_paid": 0,
+    "advance": 0,
+    "closed_net": 0,
+    "debts_open": 126500,
+    "managers_old_paid": 0
+   },
+   "quality": {
+    "rows": 0,
+    "no_price": 0,
+    "no_amount": 0,
+    "no_snapshot": 0,
+    "drift": 0,
+    "transfers_unknown": false
+   }
+  }
+ },
+ "detail_managers": {
+  "success": true,
+  "data": {
+   "feature_enabled": true,
+   "period": {
+    "id": 1,
+    "started_at_ms": 1795027617000,
+    "ends_at_ms": null,
+    "amount": 1000000,
+    "note": null,
+    "state": "running",
+    "closed_at_ms": null,
+    "sales": 0,
+    "cash_now": 0,
+    "paid_in": 0,
+    "collected": 51000,
+    "adjustments_sum": 0,
+    "covered": 51000,
+    "remaining": 949000,
+    "progress": 0.051,
+    "can_close": false,
+    "debts_created": 127500,
+    "debts_open": 126500,
+    "late_profit": 0,
+    "net": -949000,
+    "profit": 0,
+    "pocket_outstanding": 0,
+    "written_off": 0,
+    "untracked": 0,
+    "income_in_window": 0,
+    "counts": {
+     "cash": 0,
+     "credit": 0,
+     "partial": 0,
+     "payments": 0,
+     "activations": 0
+    },
+    "adjustments": [],
+    "transfers": {
+     "count": 0,
+     "sum": 0
+    },
+    "managers": {
+     "cash": 50000,
+     "withdrawn": 0,
+     "loans": 125000,
+     "paid_in": 1000,
+     "open": 126500,
+     "late": 0,
+     "count": 6,
+     "fees": 2500
+    }
+   },
+   "filter": "managers",
+   "q": "",
+   "counts": {
+    "all": 6,
+    "cash": 0,
+    "credit": 0,
+    "partial": 0,
+    "open": 4,
+    "paid": 0,
+    "payments": 1,
+    "managers": 6
+   },
+   "movements": {
+    "items": [
+     {
+      "key": "m3",
+      "kind": "manager",
+      "op": "loan",
+      "at_ms": 1795200417000,
+      "sub": "42",
+      "username": "mgr.south",
+      "amount": 25000,
+      "remaining": 25000,
+      "debt_state": "open",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "m2",
+      "kind": "manager",
+      "op": "loan",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 100000,
+      "remaining": 100000,
+      "debt_state": "open",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "m1",
+      "kind": "manager",
+      "op": "cash",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 50000,
+      "remaining": 0,
+      "debt_state": "none",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "g1p",
+      "kind": "manager",
+      "op": "pay",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 1000,
+      "remaining": 0,
+      "debt_state": "none",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "f2",
+      "kind": "manager",
+      "op": "fee",
+      "at_ms": 1795200417000,
+      "sub": "42",
+      "username": "mgr.south",
+      "amount": 500,
+      "remaining": 500,
+      "debt_state": "open",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": "admin@x",
+      "note": null,
+      "fee": {
+       "kind": "fixed",
+       "value": 500,
+       "base": 25000
+      }
+     },
+     {
+      "key": "f1",
+      "kind": "manager",
+      "op": "fee",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 2000,
+      "remaining": 1000,
+      "debt_state": "partly",
+      "turned": "cash",
+      "paid_in": 1000,
+      "paid_late": 0,
+      "last_paid_at_ms": 1795200417000,
+      "after_close": false,
+      "by": "admin@x",
+      "note": null,
+      "fee": {
+       "kind": "percent",
+       "value": 2,
+       "base": 100000
+      }
+     }
+    ],
+    "total": 6,
+    "offset": 0
+   }
+  }
+ },
+ "detail_all": {
+  "success": true,
+  "data": {
+   "feature_enabled": true,
+   "period": {
+    "id": 1,
+    "started_at_ms": 1795027617000,
+    "ends_at_ms": null,
+    "amount": 1000000,
+    "note": null,
+    "state": "running",
+    "closed_at_ms": null,
+    "sales": 0,
+    "cash_now": 0,
+    "paid_in": 0,
+    "collected": 51000,
+    "adjustments_sum": 0,
+    "covered": 51000,
+    "remaining": 949000,
+    "progress": 0.051,
+    "can_close": false,
+    "debts_created": 127500,
+    "debts_open": 126500,
+    "late_profit": 0,
+    "net": -949000,
+    "profit": 0,
+    "pocket_outstanding": 0,
+    "written_off": 0,
+    "untracked": 0,
+    "income_in_window": 0,
+    "counts": {
+     "cash": 0,
+     "credit": 0,
+     "partial": 0,
+     "payments": 0,
+     "activations": 0
+    },
+    "adjustments": [],
+    "transfers": {
+     "count": 0,
+     "sum": 0
+    },
+    "managers": {
+     "cash": 50000,
+     "withdrawn": 0,
+     "loans": 125000,
+     "paid_in": 1000,
+     "open": 126500,
+     "late": 0,
+     "count": 6,
+     "fees": 2500
+    }
+   },
+   "filter": "all",
+   "q": "",
+   "counts": {
+    "all": 6,
+    "cash": 0,
+    "credit": 0,
+    "partial": 0,
+    "open": 4,
+    "paid": 0,
+    "payments": 1,
+    "managers": 6
+   },
+   "movements": {
+    "items": [
+     {
+      "key": "m3",
+      "kind": "manager",
+      "op": "loan",
+      "at_ms": 1795200417000,
+      "sub": "42",
+      "username": "mgr.south",
+      "amount": 25000,
+      "remaining": 25000,
+      "debt_state": "open",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "m2",
+      "kind": "manager",
+      "op": "loan",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 100000,
+      "remaining": 100000,
+      "debt_state": "open",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "m1",
+      "kind": "manager",
+      "op": "cash",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 50000,
+      "remaining": 0,
+      "debt_state": "none",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "g1p",
+      "kind": "manager",
+      "op": "pay",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 1000,
+      "remaining": 0,
+      "debt_state": "none",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": null,
+      "note": null
+     },
+     {
+      "key": "f2",
+      "kind": "manager",
+      "op": "fee",
+      "at_ms": 1795200417000,
+      "sub": "42",
+      "username": "mgr.south",
+      "amount": 500,
+      "remaining": 500,
+      "debt_state": "open",
+      "turned": null,
+      "paid_in": 0,
+      "paid_late": 0,
+      "last_paid_at_ms": null,
+      "after_close": false,
+      "by": "admin@x",
+      "note": null,
+      "fee": {
+       "kind": "fixed",
+       "value": 500,
+       "base": 25000
+      }
+     },
+     {
+      "key": "f1",
+      "kind": "manager",
+      "op": "fee",
+      "at_ms": 1795200417000,
+      "sub": "41",
+      "username": "mgr.north",
+      "amount": 2000,
+      "remaining": 1000,
+      "debt_state": "partly",
+      "turned": "cash",
+      "paid_in": 1000,
+      "paid_late": 0,
+      "last_paid_at_ms": 1795200417000,
+      "after_close": false,
+      "by": "admin@x",
+      "note": null,
+      "fee": {
+       "kind": "percent",
+       "value": 2,
+       "base": 100000
+      }
+     }
+    ],
+    "total": 6,
+    "offset": 0
+   }
+  }
+ }
+}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/el_managers_api.dart';
+import '../../../api/topup_fee_api.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/app_sheet.dart';
@@ -13,6 +14,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/el_deposit_password_field.dart';
+import 'topup_fee_field.dart';
 
 /// «شحن رصيد» لمديرٍ تابع في ايرث لنك (٢٠ نوفمبر ٢٠٢٦): تحويلٌ من رصيد إيداع الوكيل عبر ايرث لنك نفسها — نقداً (استلام كاش الآن) أو
 /// آجلاً (يُسجَّل المبلغ ديناً عليه في «ديون أخرى» بالعمليّة نفسها). أدنى مبلغ ٥٬٠٠٠ (شرط ايرث لنك)، وكلمة مرور الإيداع المحفوظة أو
@@ -66,9 +68,38 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
   bool _confirmedRepeat = false;
   final bool _employee = Perms.isEmployee;
 
+  /// «الفائدة» على الآجل (٢٠ نوفمبر — server/managerTopupFees.js): حين يفتحها الخادم للصفحة، ومقترحها آخر فائدةٍ لهذا المدير.
+  TopupFeeConfig _feeCfg = TopupFeeConfig.off;
+  TopupFeeKind _feeKind = TopupFeeKind.none;
+  final _feeCtrl = TextEditingController();
+  bool _feeTouched = false;
+
+  Future<void> _loadFeeConfig() async {
+    final cfg = await TopupFeeApi.config(earthlink: true, manager: '${widget.manager.index}');
+    if (!mounted) return;
+    setState(() {
+      _feeCfg = cfg;
+      if (cfg.enabled && cfg.lastKind != null && cfg.lastValue != null && !_feeTouched) {
+        _feeKind = cfg.lastKind!;
+        _feeCtrl.text = TopupFee.valueText(cfg.lastKind!, cfg.lastValue!);
+      }
+    });
+  }
+
+  bool get _feeOn => _asDebt && _feeCfg.enabled && _feeKind != TopupFeeKind.none;
+  String? get _feeProblem => _feeOn ? TopupFee.problem(_feeKind, _feeCtrl.text, _amount) : null;
+
+  /// الفائدة بالدينار كما ستُرسل (0 بلا فائدة أو مع خطئها).
+  int get _feeAmount =>
+      _feeOn && _feeProblem == null ? (TopupFee.amount(_feeKind, TopupFee.parseValue(_feeCtrl.text), _amount) ?? 0) : 0;
+
   @override
   void initState() {
     super.initState();
+    _loadFeeConfig();
+    _feeCtrl.addListener(() {
+      if (mounted) setState(() => _feeTouched = true);
+    });
     _amountCtrl.addListener(() {
       final v = int.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
       if (v != _amount) setState(() => _amount = v);
@@ -83,6 +114,7 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
     _amountCtrl.dispose();
     _noteCtrl.dispose();
     _deposit.dispose();
+    _feeCtrl.dispose();
     super.dispose();
   }
 
@@ -93,7 +125,8 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
   bool get _overBalance => widget.balance != null && _amount > widget.balance!;
   bool get _locked => _submitting || _uncertain;
   bool get _canSubmit =>
-      !_submitting && (_uncertain || (_amount >= ElManagersApi.minTopup && (_employee || _deposit.ready)));
+      !_submitting &&
+      (_uncertain || (_amount >= ElManagersApi.minTopup && (_employee || _deposit.ready) && _feeProblem == null));
 
   /// [skipConfirm]: إعادةٌ بعد «نعم، اشحن ثانيةً» (سؤال التكرار) — أكّد للتوّ، فلا تأكيدٌ ثانٍ.
   Future<void> _submit({bool skipConfirm = false}) async {
@@ -113,6 +146,7 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
       rememberDepositPassword: !_employee && _deposit.rememberToSend,
       note: _noteCtrl.text,
       confirmRepeat: _confirmedRepeat,
+      fee: _feeOn ? TopupFee.body(_feeKind, _feeCtrl.text, _amount) : null,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -163,13 +197,19 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
       );
 
   Future<bool> _confirm(String name) async {
+    final feeAmt = _feeAmount;
+    final feeValue = TopupFee.parseValue(_feeCtrl.text) ?? 0;
+    final debtLine = feeAmt > 0
+        ? '\n\nآجل: يُسجَّل ${formatIQD(_amount)} د.ع ديناً عليه + ${TopupFee.label(_feeKind, feeValue, feeAmt)} في «ديون أخرى»'
+            ' — المجموع ${formatIQD(_amount + feeAmt)} د.ع.'
+        : '\n\nآجل: يُسجَّل ${formatIQD(_amount)} د.ع ديناً عليه في «ديون أخرى».';
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('تأكيد الشحن'),
         content: Text(
           'تحويل ${formatIQD(_amount)} د.ع من رصيد إيداعك إلى «$name».'
-          '${_asDebt ? '\n\nآجل: يُسجَّل ${formatIQD(_amount)} د.ع ديناً عليه في «ديون أخرى».' : '\n\nنقداً: استلمتَ المبلغ منه الآن.'}'
+          '${_asDebt ? debtLine : '\n\nنقداً: استلمتَ المبلغ منه الآن.'}'
           '${_willApp || _willWa ? '\n\nيصله ${[if (_willApp) 'إشعارٌ بالتطبيق', if (_willWa) 'رسالة واتساب'].join(' و')}.' : ''}',
           style: const TextStyle(height: 1.6),
         ),
@@ -287,6 +327,19 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
                 : 'أدنى مبلغ ${formatIQD(ElManagersApi.minTopup)} د.ع — شرط ايرث لنك',
             style: AppType.muted(color: _overBalance ? AppColors.warning : AppColors.textMid).copyWith(fontSize: 11),
           ),
+          if (_asDebt && _feeCfg.enabled) ...[
+            const SizedBox(height: Sp.md),
+            TopupFeeField(
+              base: _amount,
+              kind: _feeKind,
+              controller: _feeCtrl,
+              enabled: !_locked,
+              onKind: (k) => setState(() {
+                _feeTouched = true;
+                _feeKind = k;
+              }),
+            ),
+          ],
           const SizedBox(height: Sp.md),
           _label('إشعار المدير'),
           _notifyBox(),
@@ -332,7 +385,7 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
                   if (_asDebt) ...[
                     const SizedBox(height: 6),
                     _sumRow('ديون أخرى عليه بعدها',
-                        '${formatIQD(widget.manager.otherDebt + _amount)} د.ع',
+                        '${formatIQD(widget.manager.otherDebt + _amount + _feeAmount)} د.ع',
                         color: AppColors.warning),
                   ],
                 ],

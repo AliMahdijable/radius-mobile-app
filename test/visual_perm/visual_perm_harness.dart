@@ -308,6 +308,8 @@ Future<void> pumpVisual(
   VisualDevice d, {
   required WidgetBuilder home,
   GlobalKey<NavigatorState>? navigatorKey,
+  // يلفّ الـNavigator فوق حدّ الخطّ كما في main.dart (مثلاً DisplaySizeScope — «حجم العرض»).
+  Widget Function(Widget child)? wrap,
 }) async {
   t.view.physicalSize = d.size * d.dpr;
   t.view.devicePixelRatio = d.dpr;
@@ -341,11 +343,14 @@ Future<void> pumpVisual(
           locale: ctx.locale,
           supportedLocales: ctx.supportedLocales,
           localizationsDelegates: ctx.localizationDelegates,
-          builder: (context, child) => MediaQuery.withClampedTextScaling(
-            minScaleFactor: 0.9,
-            maxScaleFactor: 1.2,
-            child: child ?? const SizedBox.shrink(),
-          ),
+          builder: (context, child) {
+            final clamped = MediaQuery.withClampedTextScaling(
+              minScaleFactor: 0.9,
+              maxScaleFactor: 1.2,
+              child: child ?? const SizedBox.shrink(),
+            );
+            return wrap == null ? clamped : wrap(clamped);
+          },
           home: Builder(builder: home),
         ),
       ),

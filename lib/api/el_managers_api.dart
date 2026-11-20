@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'api_client.dart';
 import 'el_deposit_password.dart';
+import 'topup_fee_api.dart';
 
 /// «المدراء» لموزّع ايرث لنك (٢٠ نوفمبر ٢٠٢٦ — المالك: «قسم ايرثلنك نكدر نفتحله قسم المدراء بس خاص بس ديون اخرى وشحن رصيد للمدراء
 /// يعني ماكو لا نقاط ولا سحب ولا تغيير معلومات»؛ الخادم server/earthlink/elManagers.js).
@@ -99,6 +100,7 @@ class ElTopupResult {
     this.noticeWhatsapp,
     this.noticeWhatsappMessage,
     this.noResponse = false,
+    this.fee,
   });
   final bool ok;
   final String? code;
@@ -113,6 +115,16 @@ class ElTopupResult {
 
   /// لا ردّ من الخادم (انقطاع/مهلة) — قد يكون الشحن تمّ.
   final bool noResponse;
+
+  /// «الفائدة» على الآجل كما سجّلها الخادم (٢٠ نوفمبر). تعذّر دينها تقوله رسالة الخادم نفسها («⚠️ لم تُسجَّل الفائدة…»).
+  final TopupFeeOutcome? fee;
+
+  /// سطرٌ تحت رسالة النجاح: «مع فائدة 2% (2,000 د.ع) في «ديون أخرى»».
+  String? get feeLine {
+    final f = fee;
+    if (f == null || !f.recorded) return null;
+    return 'مع ${f.label ?? 'فائدة ${f.amount}'} في «ديون أخرى»';
+  }
 
   bool get uncertain => !ok && (noResponse || code == 'OUTCOME_UNKNOWN' || code == 'IN_PROGRESS');
   bool get repeatPrompt => !ok && code == 'RECENT_DUPLICATE';
@@ -143,6 +155,7 @@ class ElTopupResult {
       noticeAppMessage: s(n['app_message']),
       noticeWhatsapp: b(n['whatsapp']),
       noticeWhatsappMessage: s(n['whatsapp_message']),
+      fee: TopupFeeOutcome.fromJson(body['fee']),
     );
   }
 }
@@ -191,6 +204,7 @@ class ElManagersApi {
     bool rememberDepositPassword = false,
     String? note,
     bool confirmRepeat = false,
+    Map<String, Object>? fee,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/el/managers/$index/topup', data: {
@@ -203,6 +217,8 @@ class ElManagersApi {
         if (rememberDepositPassword) 'rememberDepositPassword': true,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         if (confirmRepeat) 'confirmRepeat': true,
+        // الفائدة جزءٌ من الطلب: «تحقّق» بالمفتاح نفسه يعيدها كما هي (الحقول مقفلة) — الخادم يرفض المفتاح بفائدةٍ أخرى
+        if (fee != null) 'fee': fee,
       });
       final body = r.data ?? const {};
       ElDepositPassword.observe(body); // حُفظت كلمة الإيداع الآن، أو مُسحت لأنّ ايرث لنك رفضتها

@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'core/platform/app_platform.dart';
 import 'core/platform/desktop_layout.dart';
 import 'core/platform/desk_ui_scale.dart';
+import 'core/platform/display_size.dart';
 import 'core/platform/desk_nav_guard.dart';
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
@@ -85,6 +86,8 @@ void main() async {
   await Future.wait([
     // Theme — يحمّل تفضيل المستخدم قبل أول frame (يمنع light-flash → dark).
     ThemeService.load(),
+    // «حجم العرض» على الهاتف (٢٠ نوفمبر) — قبل أوّل إطار فلا تقفز الواجهة. الحاسبة لها حجمها (DeskUiScale أعلاه).
+    if (!AppPlatform.isDesktop) DisplaySizePref.load(),
     // Print prefs — نوع القالب الافتراضي (a4/pos) لأزرار طباعة الوصل.
     PrintPrefs.load(),
     // Version — من manifest حتى الشاشات تعرض synchronously.
@@ -404,7 +407,8 @@ class _MyServicesAppState extends State<MyServicesApp>
           // الحاسبة: الواجهة كلّها بحجمٍ يناسب الشاشة (DeskUiScaleScope) — فوق الـNavigator فتصغر النوافذ معها.
           // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard): النقر يُمتصّ أثناء فتح صفحةٍ أو نافذة.
           navigatorObservers: AppPlatform.isDesktop ? [_deskRootGuard] : const <NavigatorObserver>[],
-          builder: (context, child) => DeskUiScaleScope(child: DeskNavGuardScope(child: MediaQuery.withClampedTextScaling(
+          // الهاتف: «حجم العرض» (DisplaySizeScope) يكبّر الواجهة كلّها بالاختيار، ولا ينزل العرض المنطقيّ تحت 320.
+          builder: (context, child) => DeskUiScaleScope(child: DisplaySizeScope(child: DeskNavGuardScope(child: MediaQuery.withClampedTextScaling(
             minScaleFactor: 0.9,
             maxScaleFactor: 1.2,
             // 🐛 بلاغ 2026-08-31: «كل المودلات الي بيها الكيبورد رقم ما
@@ -432,7 +436,7 @@ class _MyServicesAppState extends State<MyServicesApp>
                 builder: (_, __, ___) => UpdateGateOverlay(child: _TabletFrame(child: child ?? const SizedBox.shrink())),
               ),
             ),
-          ))),
+          )))),
           home: const SplashScreen(),
           navigatorKey: _appNavigatorKey,
         );

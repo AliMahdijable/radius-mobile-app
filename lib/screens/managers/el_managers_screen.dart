@@ -87,7 +87,8 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
     if (r == null || !mounted) return;
     final line = r.noticeLine;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text([r.message ?? 'تمّ الشحن', if (line != null) line].join('\n'), style: const TextStyle(height: 1.5)),
+      content: Text([r.message ?? 'تمّ الشحن', if (r.feeLine != null) r.feeLine!, if (line != null) line].join('\n'),
+          style: const TextStyle(height: 1.5)),
       backgroundColor: AppColors.brand,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 6),

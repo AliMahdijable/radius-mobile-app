@@ -320,12 +320,14 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             rule(),
             BalanceLine(label: 'ديون الفترة', value: balanceIqd(p.debtsCreated)),
             BalanceLine(
-              label: mg != null && mg.loans > 0 ? 'الباقي منها بذمّة المشتركين والمدراء' : 'الباقي منها بذمّة المشتركين',
+              label: mg != null && (mg.loans > 0 || mg.fees > 0) ? 'الباقي منها بذمّة المشتركين والمدراء' : 'الباقي منها بذمّة المشتركين',
               value: balanceIqd(p.debtsOpen),
               valueColor: p.debtsOpen > 0 ? AppTone.danger.onSoft : null,
             ),
             if (mg != null && mg.loans > 0) BalanceLine(key: const ValueKey('bal-sum-mgr-loans'), label: 'منها شحن آجل للمدراء', value: balanceIqd(mg.loans)),
-            if (mg != null && mg.loans > 0)
+            // فوائد الشحن الآجل (٢٠ نوفمبر): ديونٌ في «ديون أخرى» فوق الشحنات، داخلةٌ في ديون الفترة وباقيها في «الباقي على المدراء»
+            if (mg != null && mg.fees > 0) BalanceLine(key: const ValueKey('bal-sum-mgr-fees'), label: 'منها فوائد الشحن الآجل', value: balanceIqd(mg.fees)),
+            if (mg != null && (mg.loans > 0 || mg.fees > 0))
               BalanceLine(key: const ValueKey('bal-sum-mgr-open'), label: 'الباقي على المدراء', value: balanceIqd(mg.open), valueColor: mg.open > 0 ? AppTone.danger.onSoft : null),
             if (p.writtenOff > 0) BalanceLine(label: 'نقص منها بلا تسديد (تعديل دين)', value: balanceIqd(p.writtenOff)),
             if (p.untracked > 0) BalanceLine(label: 'آجل لم يُسجَّل دينه على المشترك', value: balanceIqd(p.untracked)),
@@ -500,20 +502,25 @@ class BalanceMoveRow extends StatelessWidget {
         details = [balanceDayTime(m.atMs, nowMs: nowMs), if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
         status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
       case BalanceMgrMove():
-        // شحنٌ نقديّ وتسديد دين: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل: دينٌ بحاله كدين التفعيل.
-        tone = switch (m.op) { BalanceMgrOp.loan => AppTone.warning, BalanceMgrOp.withdraw => AppTone.danger, _ => AppTone.success };
-        icon = switch (m.op) { BalanceMgrOp.pay => LucideIcons.handCoins, BalanceMgrOp.withdraw => LucideIcons.undo2, _ => LucideIcons.users };
-        title = m.username;
-        tags = [(text: m.op.label, tone: tone), if (m.op == BalanceMgrOp.loan && m.afterClose) (text: 'بعد الإغلاق', tone: AppTone.brand)];
-        amount = switch (m.op) {
-          BalanceMgrOp.loan => balanceIqd(m.amount),
-          BalanceMgrOp.withdraw => balanceSigned(m.amount, sign: '−'),
-          _ => balanceSigned(m.amount, sign: '+'),
+        // شحنٌ نقديّ وتسديد دين: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل وفائدته: دينٌ بحاله كدين التفعيل.
+        tone = m.op.debtLike ? AppTone.warning : (m.op == BalanceMgrOp.withdraw ? AppTone.danger : AppTone.success);
+        icon = switch (m.op) {
+          BalanceMgrOp.pay => LucideIcons.handCoins,
+          BalanceMgrOp.withdraw => LucideIcons.undo2,
+          BalanceMgrOp.fee => LucideIcons.percent,
+          _ => LucideIcons.users,
         };
-        amountColor = switch (m.op) { BalanceMgrOp.withdraw => AppTone.danger.onSoft, BalanceMgrOp.loan => AppColors.textHi, _ => AppTone.success.onSoft };
-        details = [balanceDayTime(m.atMs, nowMs: nowMs), 'مدير فرعيّ', if (m.by != null) 'نفّذها ${m.by}'];
+        title = m.username;
+        tags = [(text: m.op.label, tone: tone), if (m.op.debtLike && m.afterClose) (text: 'بعد الإغلاق', tone: AppTone.brand)];
+        amount = m.op.debtLike
+            ? balanceIqd(m.amount)
+            : (m.op == BalanceMgrOp.withdraw ? balanceSigned(m.amount, sign: '−') : balanceSigned(m.amount, sign: '+'));
+        amountColor = m.op.debtLike
+            ? AppColors.textHi
+            : (m.op == BalanceMgrOp.withdraw ? AppTone.danger.onSoft : AppTone.success.onSoft);
+        details = [balanceDayTime(m.atMs, nowMs: nowMs), 'مدير فرعيّ', balanceMgrFeeDetail(m), if (m.by != null) 'نفّذها ${m.by}'];
         note = m.note;
-        if (m.op == BalanceMgrOp.loan) {
+        if (m.op.debtLike) {
           final n = balanceMgrDebtNote(m, nowMs: nowMs);
           status = n == null ? null : (text: n.text, tone: balanceToneOf(n.tone));
         } else if (m.op == BalanceMgrOp.withdraw) {

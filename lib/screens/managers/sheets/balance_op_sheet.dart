@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
+import '../../../api/topup_fee_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
 import '../../../services/manager_notice_prefs.dart';
@@ -17,6 +18,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/app_sheet.dart';
+import 'topup_fee_field.dart';
 
 /// نوع العملية الافتراضي (لو actions sheet مرّر نوعاً محدّداً).
 enum BalanceOpKind { deposit, withdraw, addPoints }
@@ -120,6 +122,31 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   /// استعلاما قاعدة بلا قرعِ ساس (`/telegram-status`).
   late bool _tgLinked = widget.manager.telegramLinked;
 
+  /// «الفائدة» على الآجل (٢٠ نوفمبر — server/managerTopupFees.js): تظهر مع «آجل» حين يفتحها الخادم للصفحة، ومقترحها آخر
+  /// فائدةٍ لهذا المدير. تعذّر الإعداد ⇒ مطفأة (لا حقل).
+  TopupFeeConfig _feeCfg = TopupFeeConfig.off;
+  TopupFeeKind _feeKind = TopupFeeKind.none;
+  final _feeCtrl = TextEditingController();
+  bool _feeTouched = false;
+
+  Future<void> _loadFeeConfig() async {
+    final cfg = await TopupFeeApi.config(earthlink: false, manager: '${widget.manager.id}');
+    if (!mounted) return;
+    setState(() {
+      _feeCfg = cfg;
+      // لمسها قبل وصول الإعداد؟ لا يُكتب المقترح فوق اختياره
+      if (cfg.enabled && cfg.lastKind != null && cfg.lastValue != null && !_feeTouched) {
+        _feeKind = cfg.lastKind!;
+        _feeCtrl.text = TopupFee.valueText(cfg.lastKind!, cfg.lastValue!);
+      }
+    });
+  }
+
+  /// تُرسل الفائدة؟ شحنٌ آجل والميزة مفتوحة ونوعها ليس «بدون».
+  bool get _useFee =>
+      _op == _BalanceOp.deposit && _isLoan && !sessionIsKit && _feeCfg.enabled && _feeKind != TopupFeeKind.none;
+  String? get _feeProblem => _useFee ? TopupFee.problem(_feeKind, _feeCtrl.text, _amount) : null;
+
   Future<void> _refreshTgStatus() async {
     final st = await ManagersApi.telegramStatus(widget.manager.id);
     if (!mounted) return;
@@ -132,7 +159,10 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   void initState() {
     super.initState();
     _amountCtrl.addListener(_onAmount);
+    _feeCtrl.addListener(_onFee);
     if (!_tgLinked) _refreshTgStatus();
+    // الشركة المُضافة: لا آجل عند مزوّدها فلا فائدة — لا سؤال
+    if (!sessionIsKit) _loadFeeConfig();
     // الاختيار المحفوظ (آخر عمليّةٍ نجحت) — المالك ٢٨ أكتوبر: «يحفظهن مره وحده ويبقن ثابتات».
     ManagerNoticePrefs.load().then((p) {
       if (!mounted || _noticeTouched) return;
@@ -148,7 +178,12 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   void dispose() {
     _amountCtrl.dispose();
     _noteCtrl.dispose();
+    _feeCtrl.dispose();
     super.dispose();
+  }
+
+  void _onFee() {
+    if (mounted) setState(() => _feeTouched = true);
   }
 
   void _onAmount() {
@@ -180,6 +215,13 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
 
   Future<void> _submit() async {
     if (_submitting || _amount <= 0) return;
+    // خطأ الفائدة يُقال قبل الإرسال (والخادم يعيد الحساب ويرفض ما يخالف — لا يُشحن شيءٌ مع رفضها)
+    final feeProblem = _feeProblem;
+    if (feeProblem != null) {
+      showSheetSnack(context, feeProblem, isError: true);
+      return;
+    }
+    final fee = _useFee ? TopupFee.body(_feeKind, _feeCtrl.text, _amount) : null;
     setState(() => _submitting = true);
     final id = widget.manager.id;
     final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
@@ -187,10 +229,15 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     final previousCredit = widget.manager.balance;
     final previousDebt = widget.manager.debt;
     late ({bool ok, String? message}) r;
+    TopupFeeOutcome? feeOut;
+    String? warning;
     switch (_op) {
       case _BalanceOp.deposit:
-        r = await ManagersApi.deposit(
-            id: id, amount: _amount, note: note, isLoan: _isLoan);
+        final d = await ManagersApi.deposit(
+            id: id, amount: _amount, note: note, isLoan: _isLoan, fee: fee);
+        r = (ok: d.ok, message: d.message);
+        feeOut = d.fee;
+        warning = d.warning;
       case _BalanceOp.withdraw:
         r = await ManagersApi.withdraw(id: id, amount: _amount, note: note);
       case _BalanceOp.addPoints:
@@ -204,7 +251,20 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     }
     // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد
     // نجاح العملية في الـsnackbar الأساسي.
-    showSheetSnack(context, 'تمت العملية', isError: false);
+    // الفائدة المسجّلة باسمها («فائدة 2% (2,000 د.ع)»)؛ وتعذّر دينها يُقال صريحاً (الشحن تمّ — أضفها من «ديون أخرى»)
+    final feeText = feeOut != null && feeOut.recorded
+        ? (feeOut.label ??
+            (fee == null ? '' : TopupFee.label(_feeKind, fee['value'] as num, feeOut.amount)))
+        : '';
+    showSheetSnack(context, feeText.isEmpty ? 'تمت العملية' : 'تمت العملية — $feeText', isError: false);
+    if (warning != null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(warning, style: const TextStyle(height: 1.5)),
+        backgroundColor: AppColors.warning,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 9),
+      ));
+    }
     // الاختيار يبقى للعمليّة القادمة (قناةٌ معطّلة لهذا المدير لم تُمسّ فتبقى كما حُفظت).
     unawaited(ManagerNoticePrefs.save(whatsApp: _sendWhatsApp, push: _sendPush, telegram: _sendTelegram));
     // حساب أرصدة ما بعد العملية (تقديرية — السيرفر قد يدور بـSAS4
@@ -237,6 +297,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       currentDebt: currentDebt,
       actionKind: actionKind,
       notes: note,
+      fee: feeText,
     ));
     if (mounted) Navigator.of(context).pop(true);
   }
@@ -255,6 +316,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     required num currentDebt,
     required String actionKind,
     String? notes,
+    String fee = '',
   }) async {
     // القناة المعطّلة لهذا المدير (بلا رقم/غير مربوط) لا تُرسَل وإن حُفظ اختيارها من مديرٍ آخر.
     final sendWa = _sendWhatsApp && widget.manager.mobile.trim().isNotEmpty;
@@ -278,6 +340,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       otherDebts: other,
       actionKind: actionKind,
       notes: notes,
+      fee: fee,
       sendWhatsApp: sendWa,
       sendPush: sendPush,
       sendTelegram: sendTg,
@@ -330,7 +393,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
         label: _submitting ? 'جارٍ التنفيذ...' : _op.label,
         icon: _op.icon,
         color: _op.color,
-        enabled: _amount > 0 && !_submitting,
+        enabled: _amount > 0 && !_submitting && _feeProblem == null,
         busy: _submitting,
         onPressed: _submit,
       ),
@@ -470,6 +533,19 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 _quickChip(v),
             ],
           ),
+          if (_op == _BalanceOp.deposit && _isLoan && !sessionIsKit && _feeCfg.enabled) ...[
+            const SizedBox(height: Sp.md),
+            TopupFeeField(
+              base: _amount,
+              kind: _feeKind,
+              controller: _feeCtrl,
+              enabled: !_submitting,
+              onKind: (k) => setState(() {
+                _feeTouched = true;
+                _feeKind = k;
+              }),
+            ),
+          ],
           const SizedBox(height: Sp.md),
           // مطلب 2026-06-12: toggles إشعار للمدير. مطابق v1
           // _NotifyToggles. الـWA يقفل تلقائياً لو ما عنده

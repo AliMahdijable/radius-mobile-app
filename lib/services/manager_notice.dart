@@ -55,7 +55,12 @@ class ManagerNoticeService {
     /// تلقائياً يعني رسالتين لكلّ مديرٍ مربوط في كلّ عمليّة. المُستدعي
     /// يقرّر — والواجهة تعرض المفتاح فقط لمن يستطيع استقباله.
     bool sendTelegram = false,
+
+    /// «الفائدة» على الشحن الآجل كما سجّلها الخادم («فائدة 2% (2,000 د.ع)») — null/فارغ: لا فائدة أو لم يُسجَّل دينها.
+    /// تصل في الإشعار (مع الملاحظة) وفي الرسالة: سطرٌ بالافتراضيّة، و`{fee}` بالقالب (وسطره يُحذف كلّه بلا فائدة).
+    String? fee,
   }) async {
+    final feeText = (fee ?? '').trim();
     bool whatsAppOk = false;
     bool pushOk = false;
     bool telegramOk = false;
@@ -95,6 +100,7 @@ class ManagerNoticeService {
               otherDebts: otherDebts,
               actionKind: actionKind,
               notes: notes,
+              fee: feeText,
             )
           : _defaultMessage(
               manager: manager,
@@ -108,6 +114,7 @@ class ManagerNoticeService {
               otherDebts: otherDebts,
               actionKind: actionKind,
               notes: notes,
+              fee: feeText,
             );
     }
 
@@ -156,7 +163,10 @@ class ManagerNoticeService {
         currentCredit: currentCredit,
         currentDebt: currentDebt,
         actionKind: actionKind,
-        notes: notes,
+        // الفائدة مع الملاحظة (كالموقع): الخادم يبني نصّ الإشعار من الملاحظة
+        notes: feeText.isEmpty
+            ? notes
+            : [if ((notes ?? '').trim().isNotEmpty) notes!.trim(), feeText].join(' — '),
       );
       pushOk = r.ok;
       pushMessage = r.message;
@@ -197,6 +207,7 @@ class ManagerNoticeService {
     required num otherDebts,
     required String actionKind,
     String? notes,
+    String fee = '',
   }) {
     final actionTypeLabel = _actionTypeLabel(actionKind, isLoan: isLoan);
     final movementDescription = _movementDescription(
@@ -221,8 +232,12 @@ class ManagerNoticeService {
       '{total_debts}': _fmt(sasDebts + otherDebts),
       '{movement_description}': movementDescription,
       '{notes}': (notes ?? '').trim(),
+      '{fee}': fee,
     };
-    var result = template;
+    // سطر {fee} بلا فائدة يُحذف كلّه (لا «الفائدة:» فارغة) — كقالب ايرث لنك بالخادم والموقع
+    var result = fee.isNotEmpty
+        ? template
+        : template.split('\n').where((l) => !l.contains('{fee}')).join('\n');
     replacements.forEach((k, v) {
       result = result.replaceAll(k, v);
     });
@@ -244,6 +259,7 @@ class ManagerNoticeService {
     required num otherDebts,
     required String actionKind,
     String? notes,
+    String fee = '',
   }) {
     final name =
         manager.fullName.isNotEmpty ? manager.fullName : manager.username;
@@ -259,6 +275,7 @@ class ManagerNoticeService {
       '💳 رصيدك الحالي: ${_fmt(currentCredit)} د.ع',
       if (previousDebt > 0) '↩️ الدين السابق: ${_fmt(previousDebt)} د.ع',
       if (totalDebt > 0) '📊 الدين الحالي: ${_fmt(totalDebt)} د.ع',
+      if (fee.isNotEmpty) '➕ $fee — تُضاف على دينك',
       if ((notes ?? '').trim().isNotEmpty) '📝 ملاحظة: ${notes!.trim()}',
     ];
     return lines.join('\n');

@@ -101,16 +101,39 @@ enum BalanceFilter {
   final String label;
 }
 
-/// عمليّة الرصيد مع مديرٍ فرعيّ: شحنٌ نقديّ («طبّلك»)، شحنٌ آجل (دينٌ من ديون الفترة)، تسديدٌ من دينه، أو سحب رصيدٍ منه (ينقص «طبّلك»).
+/// عمليّة الرصيد مع مديرٍ فرعيّ: شحنٌ نقديّ («طبّلك»)، شحنٌ آجل (دينٌ من ديون الفترة)، تسديدٌ من دينه، أو سحب رصيدٍ منه (ينقص «طبّلك»)،
+/// أو «فائدة» شحنٍ آجل (٢٠ نوفمبر — server/managerTopupFees.js): دينٌ في «ديون أخرى» فوق الشحنة، من ديون الفترة كالآجل.
 enum BalanceMgrOp {
   cash('شحن مدير نقدي'),
   loan('شحن مدير آجل'),
   pay('تسديد دين مدير'),
-  withdraw('سحب رصيد من مدير');
+  withdraw('سحب رصيد من مدير'),
+  fee('فائدة شحن آجل');
 
   const BalanceMgrOp(this.label);
   final String label;
-  static BalanceMgrOp? of(Object? v) => switch ('$v') { 'cash' => cash, 'loan' => loan, 'pay' => pay, 'withdraw' => withdraw, _ => null };
+
+  /// دينٌ بحاله (آجلٌ أو فائدته): مبلغه بلا إشارة، وحاله «كان دين وتسدّد» أو ما بقي منه.
+  bool get debtLike => this == loan || this == fee;
+
+  static BalanceMgrOp? of(Object? v) =>
+      switch ('$v') { 'cash' => cash, 'loan' => loan, 'pay' => pay, 'withdraw' => withdraw, 'fee' => fee, _ => null };
+}
+
+/// مواصفة «الفائدة» على حركة [BalanceMgrOp.fee]: نسبةٌ ([value]٪) أو مبلغٌ ثابت، على شحنةٍ مبلغها [base].
+class BalanceMgrFee {
+  const BalanceMgrFee({required this.percent, required this.value, this.base});
+  final bool percent;
+  final double value;
+  final double? base;
+
+  static BalanceMgrFee? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final k = '${j['kind']}';
+    if (k != 'percent' && k != 'fixed') return null;
+    final b = j['base'];
+    return BalanceMgrFee(percent: k == 'percent', value: _n(j['value']), base: b == null ? null : _n(b));
+  }
 }
 
 /// حال دين التفعيل (أو الشحن الآجل للمدير).
@@ -162,6 +185,7 @@ class BalanceManagers {
     required this.open,
     required this.afterClose,
     required this.count,
+    this.fees = 0,
   });
   final double cash;
   final double withdrawn;
@@ -170,6 +194,9 @@ class BalanceManagers {
   final double open;
   final double afterClose;
   final int count;
+
+  /// فوائد الشحن الآجل التي أُنشئت في الفترة (داخلةٌ في ديونها؛ [open] يحمل الباقي منها). غائبٌ من الخادم ⇒ 0.
+  final double fees;
 
   static BalanceManagers? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -181,6 +208,7 @@ class BalanceManagers {
       open: _n(j['open']),
       afterClose: _n(j['late']),
       count: _i(j['count']),
+      fees: _n(j['fees']),
     );
   }
 }
@@ -511,6 +539,7 @@ sealed class BalanceMove {
           afterClose: j['after_close'] == true,
           by: _s(j['by']),
           note: _s(j['note']),
+          fee: op == BalanceMgrOp.fee ? BalanceMgrFee.fromJson(j['fee']) : null,
         );
     }
     return null;
@@ -574,7 +603,7 @@ class BalanceAdjustMove extends BalanceMove {
   final String? note;
 }
 
-/// حركة رصيدٍ مع مديرٍ فرعيّ ([username] اسمه). حقول الدين للشحن الآجل ([BalanceMgrOp.loan]) وحده.
+/// حركة رصيدٍ مع مديرٍ فرعيّ ([username] اسمه). حقول الدين للشحن الآجل وفائدته ([BalanceMgrOp.debtLike]) وحدهما.
 class BalanceMgrMove extends BalanceMove {
   const BalanceMgrMove({
     required super.key,
@@ -591,6 +620,7 @@ class BalanceMgrMove extends BalanceMove {
     required this.afterClose,
     this.by,
     this.note,
+    this.fee,
   });
   final String username;
   final BalanceMgrOp op;
@@ -604,6 +634,9 @@ class BalanceMgrMove extends BalanceMove {
   final bool afterClose;
   final String? by;
   final String? note;
+
+  /// مواصفة الفائدة ([BalanceMgrOp.fee] وحده).
+  final BalanceMgrFee? fee;
 }
 
 /// صفحةٌ من حركات فترة، مع الفترة نفسها وأعداد الفلاتر.
@@ -698,10 +731,21 @@ String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
       nowMs: nowMs,
     );
 
-/// حال دين الشحن الآجل لمديرٍ فرعيّ — بالكلام نفسه (null لغير الآجل).
-({String text, BalanceTone tone})? balanceMgrDebtNote(BalanceMgrMove m, {int? nowMs}) => m.op != BalanceMgrOp.loan
+/// حال دين الشحن الآجل (أو فائدته) لمديرٍ فرعيّ — بالكلام نفسه (null لغيرهما).
+({String text, BalanceTone tone})? balanceMgrDebtNote(BalanceMgrMove m, {int? nowMs}) => !m.op.debtLike
     ? null
     : balanceDebtNoteOf(state: m.debtState, turnedProfit: m.turnedProfit, paid: m.paidIn + m.paidLate, remaining: m.remaining, lastPaidAtMs: m.lastPaidAtMs, nowMs: nowMs);
+
+/// «2% على 100,000» أو «مبلغ ثابت على 25,000» — تفاصيل حركة الفائدة (كالموقع: feeDetail). null لغيرها.
+String? balanceMgrFeeDetail(BalanceMgrMove m) {
+  final f = m.fee;
+  if (m.op != BalanceMgrOp.fee || f == null) return null;
+  final on = f.base == null ? '' : ' على ${formatIQD(f.base!)}';
+  if (!f.percent) return 'مبلغ ثابت$on';
+  final v = (f.value * 100).round() / 100;
+  final pct = v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '');
+  return '$pct%$on';
+}
 
 /// حال دينٍ بكلامٍ يُقرأ: «كان دين وتسدّد» (نقداً قبل الإغلاق، أو ربحاً بعده) أو ما بقي منه.
 ({String text, BalanceTone tone})? balanceDebtNoteOf({

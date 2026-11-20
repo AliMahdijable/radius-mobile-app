@@ -39,6 +39,7 @@ import '../core/widgets/app_sheet.dart';
 import 'desktop/desk_widgets.dart';
 import '../core/platform/desktop_layout.dart';
 import '../core/platform/desk_ui_scale.dart';
+import '../core/platform/display_size.dart';
 import '../core/platform/app_platform.dart';
 import 'print_templates/direct_printer_sheet.dart';
 import 'print_templates/receipt_printer_sheet.dart';
@@ -416,6 +417,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _openThemePicker(context),
               ),
             ),
+            // «حجم العرض» (المالك ٢٠ نوفمبر: «نكبر بي خط للعالم مجاي تشوف») — الهاتف وحده؛ الحاسبة لها «حجم الواجهة» أعلاه.
+            if (!AppPlatform.isDesktop) ...[
+              const SizedBox(height: Sp.xs),
+              ValueListenableBuilder<DisplaySize>(
+                valueListenable: DisplaySizePref.choice,
+                builder: (_, size, __) => _Row(
+                  key: const ValueKey('settings-display-size'),
+                  icon: Icons.format_size_rounded,
+                  label: 'settings.display_size'.tr(),
+                  trailing: _displaySizeLabel(size),
+                  onTap: () => _openDisplaySizePicker(context),
+                ),
+              ),
+            ],
             const SizedBox(height: Sp.xs),
             // مطلب 2026-07-12: صف اللغة يفتح picker (عربي / English).
             _Row(
@@ -612,6 +627,22 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+String _displaySizeLabel(DisplaySize s) => switch (s) {
+      DisplaySize.normal => 'settings.display_size_normal'.tr(),
+      DisplaySize.large => 'settings.display_size_large'.tr(),
+      DisplaySize.xlarge => 'settings.display_size_xlarge'.tr(),
+    };
+
+void _openDisplaySizePicker(BuildContext ctx) {
+  showAppSheet<void>(
+    barrierColor: AppColors.scrim,
+    context: ctx,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => const _DisplaySizePickerSheet(),
+  );
+}
+
 void _openThemePicker(BuildContext ctx) {
   showAppSheet<void>(
     barrierColor: AppColors.scrim,
@@ -730,6 +761,99 @@ class _LanguagePickerSheet extends StatelessWidget {
                   if (context.mounted) Navigator.of(context).pop();
                 },
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «حجم العرض»: عادي · كبير · كبير جداً — وبجانب كلٍّ نسبته على هذه الشاشة. الاختيار يُطبَّق فوراً على التطبيق كلّه (والورقة معه).
+class _DisplaySizePickerSheet extends StatelessWidget {
+  const _DisplaySizePickerSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    // الشاشة الحقيقيّة (لا المقاس داخل التكبير): النسب تُحسب منها
+    final view = View.of(context);
+    final screen = view.physicalSize / view.devicePixelRatio;
+    final narrow = DisplaySizePref.maxFor(screen) <= 1.0;
+    String pct(DisplaySize s) => DisplaySizePref.percent(DisplaySizePref.scaleFor(s, screen));
+    return Material(
+      color: AppColors.surfaceSheet,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.sheet)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: H.grabber,
+                  decoration: BoxDecoration(
+                    color: AppColors.grabber,
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+              Text(
+                'settings.display_size'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 17),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'settings.display_size_desc'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.subtitle(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
+              ),
+              const SizedBox(height: Sp.lg),
+              ValueListenableBuilder<DisplaySize>(
+                valueListenable: DisplaySizePref.choice,
+                builder: (_, current, __) => Column(
+                  children: [
+                    for (final s in DisplaySize.values) ...[
+                      if (s != DisplaySize.normal) const SizedBox(height: Sp.xs),
+                      _ThemeOptionTile(
+                        key: ValueKey('display-size-${s.name}'),
+                        icon: switch (s) {
+                          DisplaySize.normal => Icons.text_fields_rounded,
+                          DisplaySize.large => Icons.format_size_rounded,
+                          DisplaySize.xlarge => Icons.zoom_in_rounded,
+                        },
+                        label: _displaySizeLabel(s),
+                        subtitle: switch (s) {
+                          DisplaySize.normal => 'settings.display_size_normal_desc'.tr(),
+                          DisplaySize.large => 'settings.display_size_large_desc'.tr(args: [pct(s)]),
+                          DisplaySize.xlarge => 'settings.display_size_xlarge_desc'.tr(args: [pct(s)]),
+                        },
+                        selected: current == s,
+                        onTap: () async {
+                          await DisplaySizePref.set(s);
+                          if (context.mounted) Navigator.of(context).pop();
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (narrow) ...[
+                const SizedBox(height: Sp.md),
+                Text(
+                  'settings.display_size_narrow'.tr(),
+                  key: const ValueKey('display-size-narrow'),
+                  textAlign: TextAlign.center,
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+                ),
+              ],
             ],
           ),
         ),
@@ -911,6 +1035,7 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
 
 class _ThemeOptionTile extends StatelessWidget {
   const _ThemeOptionTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.subtitle,

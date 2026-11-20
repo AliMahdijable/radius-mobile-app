@@ -330,7 +330,9 @@ void main() {
           ops.add(m.op);
         }
       }
-      expect(ops, BalanceMgrOp.values.toSet(), reason: 'العقد يغطّي العمليّات الأربع');
+      // «الفائدة» (op 'fee') بعقدها الخاصّ: balance_reports_fee_contract_test.dart
+      expect(ops, {BalanceMgrOp.cash, BalanceMgrOp.loan, BalanceMgrOp.pay, BalanceMgrOp.withdraw}, reason: 'العقد يغطّي العمليّات الأربع');
+      expect(BalanceMgrOp.values.toSet().difference(ops), {BalanceMgrOp.fee}, reason: 'عمليّةٌ جديدة بلا عقد');
       expect(n, 9);
       expect(BalanceMove.fromJson({'key': 'm1', 'kind': 'manager', 'op': 'bonus', 'at_ms': 1}), isNull, reason: 'عمليّةٌ لا نعرفها لا تُعرض خطأً');
     });

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'topup_fee_api.dart';
 
 /// Manager (sub-admin) model. Mirrors v1 mobile-app/lib/models/
 /// manager_model.dart so the same fields, fallbacks and computed
@@ -267,6 +268,9 @@ typedef ManagerLite = ({int id, String username, String displayName});
 /// success snack or the Arabic error from SAS4 / our backend.
 typedef ApiResult = ({bool ok, String? message});
 typedef ApiResultWithId = ({bool ok, String? message, int? id});
+
+/// شحن المدير: النتيجة + «الفائدة» على الآجل كما سجّلها الخادم (٢٠ نوفمبر) + تحذيره حين تمّ الشحن ولم يُسجَّل دينها.
+typedef DepositResult = ({bool ok, String? message, TopupFeeOutcome? fee, String? warning});
 
 int _toInt(dynamic v) {
   if (v is int) return v;
@@ -597,11 +601,15 @@ class ManagersApi {
   /// `isLoan=true` flags it as a loan (debt added on the sub-manager
   /// side, balance still incremented). Mirrors v1
   /// managers_provider.dart:502 (addBalance).
-  static Future<ApiResult> deposit({
+  ///
+  /// [fee]: «الفائدة» على الآجل (`TopupFee.body`: kind/value/amount كما رآها الوكيل) — الخادم يعيد حسابها ويرفض ما يخالف
+  /// (FEE_CHANGED) أو ما لا يجوز (FEE_LOAN_ONLY، FEE_OFF…) قبل أيّ نداءٍ للساس، فلا يُشحن شيءٌ مع رفضها.
+  static Future<DepositResult> deposit({
     required int id,
     required num amount,
     String? note,
     bool isLoan = false,
+    Map<String, Object>? fee,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -610,21 +618,25 @@ class ManagersApi {
           'amount': amount,
           if (note != null && note.isNotEmpty) 'comment': note,
           'isLoan': isLoan,
+          if (fee != null) 'fee': fee,
         },
       );
       final body = r.data ?? const {};
+      final w = body['warning']?.toString().trim();
       return (
         ok: body['success'] == true,
-        message: body['message']?.toString()
+        message: body['message']?.toString(),
+        fee: TopupFeeOutcome.fromJson(body['fee']),
+        warning: w == null || w.isEmpty ? null : w,
       );
     } on DioException catch (e) {
       _log('v2/managers/$id/deposit', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'فشلت العملية');
+      return (ok: false, message: msg ?? 'فشلت العملية', fee: null, warning: null);
     } catch (e) {
       _log('v2/managers/$id/deposit', e);
-      return (ok: false, message: 'فشلت العملية');
+      return (ok: false, message: 'فشلت العملية', fee: null, warning: null);
     }
   }
 
