@@ -468,7 +468,8 @@ class FinanceLog {
       actionType: at,
       actionDescription: j['action_description']?.toString(),
       amount: FinanceKPIs._n(j['amount']),
-      adminUsername: j['admin_username']?.toString(),
+      // «اسمك في السجلات» (٢٠ نوفمبر): admin_name = اسم المدير المستعار لسطوره هو (الخادم يضعه)، وإلّا يوزر الصفحة كما كان.
+      adminUsername: (j['admin_name'] ?? j['admin_username'])?.toString(),
       actingEmployeeFullName: byManager ? null : j['acting_employee_full_name']?.toString(),
       actingEmployeeUsername: byManager ? null : j['acting_employee_username']?.toString(),
       userUsername: j['user_username']?.toString(),
@@ -596,7 +597,8 @@ class ActivityRow {
       actionType: at,
       actionDescription: j['action_description']?.toString(),
       amount: FinanceKPIs._n(j['amount']),
-      adminUsername: j['admin_username']?.toString(),
+      // «اسمك في السجلات» (٢٠ نوفمبر): admin_name = اسم المدير المستعار لسطوره هو (الخادم يضعه)، وإلّا يوزر الصفحة كما كان.
+      adminUsername: (j['admin_name'] ?? j['admin_username'])?.toString(),
       actingEmployeeFullName: voidedByManager(j) ? null : j['acting_employee_full_name']?.toString(),
       userUsername: j['user_username']?.toString(),
       userFirstname: j['user_firstname']?.toString(),

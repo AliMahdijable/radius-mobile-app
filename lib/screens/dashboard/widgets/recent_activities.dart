@@ -130,7 +130,8 @@ class _Row extends StatelessWidget {
     // ما يتطابق هنا لأن المدير ممكن يشوف نشاطات موظفه فيحتاج اسم محدد).
     final empName = (m['acting_employee_full_name'] ?? '').toString().trim();
     final empUser = (m['acting_employee_username'] ?? '').toString().trim();
-    final adminUser = (m['admin_username'] ?? '').toString().trim();
+    // «اسمك في السجلات» (٢٠ نوفمبر): اسم المدير المستعار لسطوره هو (admin_name من الخادم) قبل يوزر الصفحة.
+    final adminUser = (m['admin_name'] ?? m['admin_username'] ?? '').toString().trim();
     String? actor;
     var isEmployee = false;
     if (isVoid && m['voided_by_employee_id'] == null) {

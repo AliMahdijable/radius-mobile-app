@@ -1,0 +1,278 @@
+{
+ "source_sha256_16": "25b06d438e785609",
+ "owner": {
+  "success": true,
+  "data": [
+   {
+    "id": 902,
+    "at": 1795209000000,
+    "kind": "edit",
+    "title": "تعديل المعلومات",
+    "by": {
+     "employee": true,
+     "name": "محمّد عبد الأمير جبّار الموسويّ — موظّف الصندوق الرئيسيّ بالفرع الثاني"
+    },
+    "diff": [
+     {
+      "f": "name",
+      "label": "الاسم",
+      "from": "",
+      "to": "عبد الرحمن محمّد عبد الكريم الحسينيّ"
+     },
+     {
+      "f": "lastname",
+      "label": "اسم العائلة",
+      "from": "قديم",
+      "to": ""
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 901,
+    "at": 1795181700000,
+    "kind": "edit",
+    "title": "تعديل المعلومات",
+    "by": {
+     "employee": false,
+     "name": "admin@demo"
+    },
+    "diff": [
+     {
+      "f": "phone",
+      "label": "رقم الهاتف",
+      "from": "07701112233",
+      "to": "07709998877"
+     },
+     {
+      "f": "expiration",
+      "label": "تاريخ الانتهاء",
+      "from": "2026-12-01 00:00:00",
+      "to": "2027-01-01 00:00:00"
+     },
+     {
+      "f": "password",
+      "label": "كلمة المرور",
+      "secret": true
+     },
+     {
+      "f": "profile",
+      "label": "الباقة",
+      "from": "باقة 35 ألف",
+      "to": "باقة 50 ألف",
+      "at_expiry": true
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 903,
+    "at": 1795075200000,
+    "kind": "device",
+    "title": "إعداد الجهاز",
+    "by": {
+     "employee": false,
+     "name": "admin@demo"
+    },
+    "diff": [
+     {
+      "f": "device_ip",
+      "label": "عنوان الجهاز",
+      "from": "10.0.0.5",
+      "to": "10.0.0.9"
+     },
+     {
+      "f": "device_pass",
+      "label": "كلمة مرور الجهاز",
+      "secret": true
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 904,
+    "at": 1794996000000,
+    "kind": "note",
+    "title": "الملاحظة الخاصّة",
+    "by": {
+     "employee": false,
+     "name": "admin@demo"
+    },
+    "diff": [
+     {
+      "f": "note",
+      "label": "الملاحظة الخاصّة",
+      "change": "added",
+      "text": "أُضيفت"
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 905,
+    "at": 1794304800000,
+    "kind": "edit",
+    "title": "تعديل المعلومات",
+    "by": {
+     "employee": false,
+     "name": "admin@demo"
+    },
+    "diff": [],
+    "fields": [
+     "رقم الهاتف",
+     "الاسم الأوّل"
+    ]
+   },
+   {
+    "id": 906,
+    "at": 1794218400000,
+    "kind": "exclusion",
+    "title": "الاستثناء من الرسائل",
+    "by": {
+     "employee": false,
+     "name": "admin@demo"
+    },
+    "diff": [],
+    "fields": [],
+    "note": "استُثني من الرسائل"
+   }
+  ]
+ },
+ "employee_no_device_alias": {
+  "success": true,
+  "data": [
+   {
+    "id": 902,
+    "at": 1795209000000,
+    "kind": "edit",
+    "title": "تعديل المعلومات",
+    "by": {
+     "employee": true,
+     "name": "محمّد عبد الأمير جبّار الموسويّ — موظّف الصندوق الرئيسيّ بالفرع الثاني"
+    },
+    "diff": [
+     {
+      "f": "name",
+      "label": "الاسم",
+      "from": "",
+      "to": "عبد الرحمن محمّد عبد الكريم الحسينيّ"
+     },
+     {
+      "f": "lastname",
+      "label": "اسم العائلة",
+      "from": "قديم",
+      "to": ""
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 901,
+    "at": 1795181700000,
+    "kind": "edit",
+    "title": "تعديل المعلومات",
+    "by": {
+     "employee": false,
+     "name": "أبو علي"
+    },
+    "diff": [
+     {
+      "f": "phone",
+      "label": "رقم الهاتف",
+      "from": "07701112233",
+      "to": "07709998877"
+     },
+     {
+      "f": "expiration",
+      "label": "تاريخ الانتهاء",
+      "from": "2026-12-01 00:00:00",
+      "to": "2027-01-01 00:00:00"
+     },
+     {
+      "f": "password",
+      "label": "كلمة المرور",
+      "secret": true
+     },
+     {
+      "f": "profile",
+      "label": "الباقة",
+      "from": "باقة 35 ألف",
+      "to": "باقة 50 ألف",
+      "at_expiry": true
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 903,
+    "at": 1795075200000,
+    "kind": "device",
+    "title": "إعداد الجهاز",
+    "by": {
+     "employee": false,
+     "name": "أبو علي"
+    },
+    "diff": [
+     {
+      "f": "device_ip",
+      "label": "عنوان الجهاز",
+      "hidden": true
+     },
+     {
+      "f": "device_pass",
+      "label": "كلمة مرور الجهاز",
+      "hidden": true
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 904,
+    "at": 1794996000000,
+    "kind": "note",
+    "title": "الملاحظة الخاصّة",
+    "by": {
+     "employee": false,
+     "name": "أبو علي"
+    },
+    "diff": [
+     {
+      "f": "note",
+      "label": "الملاحظة الخاصّة",
+      "change": "added",
+      "text": "أُضيفت"
+     }
+    ],
+    "fields": []
+   },
+   {
+    "id": 905,
+    "at": 1794304800000,
+    "kind": "edit",
+    "title": "تعديل المعلومات",
+    "by": {
+     "employee": false,
+     "name": "أبو علي"
+    },
+    "diff": [],
+    "fields": [
+     "رقم الهاتف",
+     "الاسم الأوّل"
+    ]
+   },
+   {
+    "id": 906,
+    "at": 1794218400000,
+    "kind": "exclusion",
+    "title": "الاستثناء من الرسائل",
+    "by": {
+     "employee": false,
+     "name": "أبو علي"
+    },
+    "diff": [],
+    "fields": [],
+    "note": "استُثني من الرسائل"
+   }
+  ]
+ }
+}

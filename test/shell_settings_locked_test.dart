@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
 import 'package:rad_mysvcs/screens/comms/comms_screen.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
+import 'package:rad_mysvcs/screens/manager_alias_sheet.dart';
 import 'package:rad_mysvcs/screens/settings_screen.dart';
 import 'package:rad_mysvcs/screens/view_scope_screen.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
@@ -73,8 +74,11 @@ void main() {
         sasEmpNone, (t) async {
       await openSettings(t);
       // ١ («واتساب وتلغرام» — صفوف الواتساب الأربعة صارت بنوداً في «التواصل»، ٢٠ نوفمبر) + ١ (نطاق العرض)
-      // + ١ (بيانات دخول الأجهزة) + ١ («قوالب الطباعة»: تُفتح للعرض وتعديلها مقفل).
-      expect(find.byType(PermLockIcon), findsNWidgets(4));
+      // + ١ (بيانات دخول الأجهزة) + ١ («قوالب الطباعة»: تُفتح للعرض وتعديلها مقفل)
+      // + ١ («اسم المدير في السجلات» — ٢٠ نوفمبر: لصاحب الصفحة، والموظّف يراه بمكانه مقفلاً).
+      expect(find.byType(PermLockIcon), findsNWidgets(5));
+      final logName = find.byKey(const ValueKey('settings-log-name'));
+      expect(find.descendant(of: logName, matching: find.text('اسم المدير في السجلات')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('settings-comms-row')), matching: find.byType(PermLockIcon)),
           findsOneWidget);
       // «إشعاراتي» تفضيلاته هو — بلا قفل كما كان صفّ «الإشعارات».
@@ -85,13 +89,19 @@ void main() {
 
     lockedCase('النقر على صفٍّ مقفل لا يفتح شاشته', sasEmpNone, (t) async {
       await openSettings(t);
+      // الأوّل «اسم المدير في السجلات» (تحت بطاقة الحساب): لا نافذة
       await t.ensureVisible(find.byType(PermLockIcon).first);
       await t.tap(find.byType(PermLockIcon).first);
+      await t.pump(const Duration(seconds: 3));
+      expect(find.byType(ManagerAliasSheet), findsNothing);
+
+      await t.ensureVisible(find.byType(PermLockIcon).at(1));
+      await t.tap(find.byType(PermLockIcon).at(1));
       await t.pump(const Duration(seconds: 3));
       expect(find.byType(CommsScreen), findsNothing);
       expect(find.byType(SettingsScreen), findsOneWidget);
 
-      await t.tap(find.byType(PermLockIcon).at(1));
+      await t.tap(find.byType(PermLockIcon).at(2));
       await t.pump(const Duration(seconds: 3));
       expect(find.byType(ViewScopeScreen), findsNothing);
     });
@@ -101,8 +111,11 @@ void main() {
       await openSettings(t);
       // «واتساب وتلغرام» وحدها مقفلة بمكانها: فيها «حالة الرسائل» (مفتاحها يُمنح له) كبطاقتها في «قوائم أخرى» —
       // لا حالة الواتساب ولا قوالبه ولا جدولته ولا تلغرام (لا تُمنح لدوره)، ولا عرض ولا أجهزة.
-      expect(find.byType(PermLockIcon), findsOneWidget);
+      // + «اسم المدير في السجلات» مقفلاً (لصاحب الحساب — كالموقع للموظّف).
+      expect(find.byType(PermLockIcon), findsNWidgets(2));
       expect(find.descendant(of: find.byKey(const ValueKey('settings-comms-row')), matching: find.byType(PermLockIcon)),
+          findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('settings-log-name')), matching: find.byType(PermLockIcon)),
           findsOneWidget);
       expect(buildCommsEntries().map((e) => e.module.id), ['message_logs']);
       expect(find.byType(SettingsScreen), findsOneWidget);
@@ -111,6 +124,8 @@ void main() {
     lockedCase('المالك: لا قفل', s1bSasOwner, (t) async {
       await openSettings(t);
       expect(find.byType(PermLockIcon), findsNothing);
+      expect(find.descendant(of: find.byKey(const ValueKey('settings-log-name')), matching: find.text('اسمك في السجلات')),
+          findsOneWidget);
     });
   });
 

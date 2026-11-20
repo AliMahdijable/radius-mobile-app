@@ -41,6 +41,7 @@ import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
 import 'sheets/fiberx_extend_flow.dart';
 import 'sheets/movements_sheet.dart';
+import 'sheets/edits_sheet.dart';
 import 'sheets/consumption_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/qr_login_sheet.dart';
@@ -1705,6 +1706,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             onTap: _locked('subscribers.view_activity')
                 ? null
                 : () => showMovementsSheet(context, sub),
+          ),
+        // «سجلّ التعديلات» (المالك ٢٠ نوفمبر): من غيّر ماذا ومتى «من … إلى …» — يُقرأ حين يُفتح، بصلاحيّة عرض المشترك نفسها
+        // (لا قفل). بلا FTTH القديم، ولا فايبر اكس في «كل الشركات» ([subscriberEditsAvailable]).
+        if (subscriberEditsAvailable(sub))
+          SubAction(
+            icon: LucideIcons.fileDiff,
+            label: 'سجلّ التعديلات',
+            onTap: () => showSubscriberEditsSheet(context, sub),
           ),
         // «سجلّ الجلسات» — تقرير الجلسات مبحوثاً باسم دخوله (كلّ الجلسات):
         // SAS4 من UserSessions، وايرث لنك سجلّ هذا المشترك (usersession/user).

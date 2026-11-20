@@ -29,6 +29,7 @@ import 'account/account_widgets.dart' show openPrivacyPolicy, openSupportPage;
 import 'account/employee_login_screen.dart';
 import '../services/employee_session.dart';
 import 'comms/comms_screen.dart';
+import 'manager_alias_sheet.dart';
 import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
 import '../api/message_exclusions_api.dart';
@@ -215,6 +216,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // الموظّف المباشر بلا حسابٍ ولا اشتراك — لا صفّ له (وخروجه منه يقود لدخول الحساب).
             if (!EmployeeSession.isActive) ...[
               const AccountSettingsCard(),
+              const SizedBox(height: Sp.lg),
+            ],
+            // «اسمك في السجلات» (المالك ٢٠ نوفمبر: «اسم مستعار للمدير بدل admin@»): حين ينفّذ صاحب الصفحة بنفسه تظهر العمليّة بهذا
+            // الاسم بدل يوزر الصفحة. لصاحب الصفحة؛ الموظّف يراه بمكانه مقفلاً (يضعه المدير، والموظّف يظهر باسمه). FTTH القديم بلا:
+            // بوّابته لا تمرّر المسار (كالموقع حين تتعذّر قراءته).
+            if (!ProviderService.isFtth) ...[
+              _Row(
+                key: const ValueKey('settings-log-name'),
+                icon: LucideIcons.userPen,
+                label: EmployeeSession.isActive ? 'اسم المدير في السجلات' : 'اسمك في السجلات',
+                locked: EmployeeSession.isActive,
+                onTap: () => showManagerAliasSheet(context),
+              ),
               const SizedBox(height: Sp.lg),
             ],
             // مطلب 2026-06-10: شاشة الإعدادات تضم أقسام: واتساب +

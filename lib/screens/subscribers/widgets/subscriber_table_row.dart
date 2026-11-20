@@ -23,6 +23,7 @@ import '../sheets/add_credit_sheet.dart';
 import '../sheets/consumption_sheet.dart';
 import '../sheets/edit_subscriber_sheet.dart';
 import '../sheets/extend_sheet.dart';
+import '../sheets/edits_sheet.dart';
 import '../sheets/movements_sheet.dart';
 import '../sheets/pay_debt_sheet.dart';
 import '../sheets/quick_discount_sheet.dart';
@@ -718,6 +719,9 @@ Future<void> showSubscriberRowMenu(
         () => showConsumptionSheet(context, s)),
     _gate('subscribers.view_activity', LucideIcons.history, 'subscribers.op_movements'.tr(),
         () => showMovementsSheet(context, s), company: s.companyKey),
+    // «سجلّ التعديلات» (٢٠ نوفمبر) — كصفحة المشترك.
+    if (subscriberEditsAvailable(s))
+      _MenuEntry(LucideIcons.fileDiff, 'سجلّ التعديلات', () => showSubscriberEditsSheet(context, s)),
     _MenuEntry(LucideIcons.printer, 'printer.receipt'.tr(), () async {
       await printSubscriberReceipt(context, s);
       return null;
