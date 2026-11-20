@@ -524,6 +524,13 @@ bool _guardedBefore(String code, int bodyOpen, int at) {
             if (wr == null || !rowWrapper(wr.prefix) || wr.deferred) bad.add('$where: ليس بشركة صفّه (${wr?.prefix})');
           case 'guard':
             if (fn == null || !_guardedBefore(code, fn.bodyOpen, m.start)) bad.add('$where: بلا حارس «للشركة وحدها» قبله في دالّته');
+          case 'row-arg':
+            // الواجهة تُوجّه بنفسها بشركة الصفّ المُمرَّر (٢١ نوفمبر — sendTemplateWithPreview: قوالبه CompanyRoute.pin(sub.companyKey
+            // وإرساله MergedOps.write(sub — يثبّتهما test/merged_card_messages_test.dart): الوسيط [r.$2] هو الصفّ نفسه — معرّفٌ بسيط
+            // (`s`، `sub`، `widget.sub`)، لا null ولا صفٌّ يُبنى هنا.
+            final named = argsOf(code, m.end - 1).where((x) => x.name == r.$2).toList();
+            final v = named.isEmpty ? '' : code.substring(named.first.at, argEnd(code, named.first.at)).trim();
+            if (!RegExp(r'^(?:widget\.)?[a-z]\w*$').hasMatch(v) || v == 'null') bad.add('$where: ليس بصفّه (${r.$2}: $v)');
           case 'entry':
             final (entryRef, cls) = (r.$2.split(' ').first, r.$2.split(' ').last);
             final (entryFile, entryFn) = (entryRef.split('#').first, entryRef.split('#').last);

@@ -1310,6 +1310,7 @@
     "sent_via_telegram": "تم إرسال التنبيه · عبر تلغرام",
     "sent_via_whatsapp": "تم إرسال التنبيه · عبر واتساب",
     "send_failed": "تعذّر إرسال التنبيه",
+    "company_thresholds_failed": "تعذّرت قراءة حدود «تنبيه المشترك» لشركة المشترك — أعد المحاولة",
     "p_lan_unplugged": "LAN غير مربوط",
     "p_lan_10": "LAN 10 ميغا",
     "p_signal": "إشارة {}",

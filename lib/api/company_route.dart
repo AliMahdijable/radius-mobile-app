@@ -97,6 +97,10 @@ class CompanyRoute {
     '/api/v2/connection-alerts/readings',
     // «المبيعات» (٨ نوفمبر): حالة تسديد البيع على الدين قراءةٌ بـPOST — لا تُسقط قائمة الشركة كلّما فُتح القسم
     '/api/v2/sales/debt-status',
+    // رسائل كارت المشترك (٢١ نوفمبر — companyRoutingAllow whatsapp-send-message/whatsapp-send-media): إرسالٌ لا يغيّر قائمة
+    // الشركة — عشرة تذكيراتٍ من القائمة لا تعيد جلبها عشر مرّات
+    '/api/whatsapp/send-message',
+    '/api/whatsapp/send-media',
   };
 
   /// قراءاتٌ بـPOST — تُعامَل قراءةً في [decide] (تتبع القسم كالـGET). الخادم: last-macs وdevice-batch وsales-debt-status
@@ -436,6 +440,8 @@ class CompanyRefs {
     'private-note',
     // «المستثنون من الرسائل» (١٥ نوفمبر): إيقاف رسائل مشترك الصفّ في شركته والسماح بها (message-exclusion-set/remove).
     'message-exclusion',
+    // ٢١ نوفمبر (الخادم 1af5be0): «إضافة رصيد» (add-credit) و«موقع المشترك» PATCH (subscriber-location) بمرجع النافذة.
+    'add-credit', 'location',
   };
 
   /// «تعبئة محفظة المشترك» للوطنيّ من «كل الشركات» (١٥ نوفمبر — companyRoutingAllow kit-wallet-transfer/kit-wallet-card): التحويل
@@ -467,8 +473,17 @@ class CompanyRefs {
 
   /// البيع من «المبيعات» (٨ نوفمبر — companyRoutingAllow sales-sell bodySubject): المشترك في الجسم — customer.kind ==
   /// 'subscriber' (تفسير الخادم حرفاً) ⇒ مرجع نافذته لـ customer.idx المقصوص؛ الزبون العابر بلا مرجع.
+  ///
+  /// رسالة كارت المشترك (٢١ نوفمبر — whatsapp-send-message bodySubject 'sas4Idx'): sas4Idx الجسم المقصوص، أرقامٌ ١–١٢ ⇒ مرجع
+  /// نافذته — فلا تخرج رسالة مشتركٍ من واتساب شركةٍ ليست شركته. غيابه ⇒ بلا مرجع (الخادم يرفض الموجَّه برسالته).
   static String? _bodySubject(String method, String path, Object? data) {
-    if (method != 'POST' || path != '/api/v2/sales' || data is! Map) return null;
+    if (method != 'POST' || data is! Map) return null;
+    if (path == '/api/whatsapp/send-message') {
+      final raw = data['sas4Idx'];
+      final idx = (raw is String || raw is num) ? '$raw'.trim() : '';
+      return RegExp(r'^\d{1,12}$').hasMatch(idx) ? idx : null;
+    }
+    if (path != '/api/v2/sales') return null;
     final c = data['customer'];
     if (c is! Map || c['kind'] != 'subscriber') return null;
     final raw = c['idx'];

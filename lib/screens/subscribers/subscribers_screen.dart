@@ -2588,8 +2588,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // الصلاحيّة: مبوّبٌ بـ`subscribers.send_whatsapp`
                                     // كشقيقه onPayDebt أدناه — بدونها كان يظهر
                                     // لمديرٍ مُنِع المراسلة (تدقيق ٢٠٢٦-١٠-٠٨).
-                                    onSendDebtReminder: !_mergedOn &&
-                                        Perms.has('subscribers.send_whatsapp') &&
+                                    // «كل الشركات» (٢١ نوفمبر): بقوالب شركة الصفّ وواتسابها (sendTemplateWithPreview موجَّه) —
+                                    // بصلاحيّة الصفّ في صفحته، ولا لصفحة موظّفٍ كتابتها مقفلةٌ من هنا (كشقيقه onPayDebt).
+                                    onSendDebtReminder: MergedMode.can(s.companyKey, 'subscribers.send_whatsapp') &&
+                                                MergedOps.writeLock(s) == null &&
                                                 s.hasDebt &&
                                                 !_selectionMode &&
                                                 s.idx != null
@@ -2617,11 +2619,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // إلّا حين يكشف آخر فحصٍ مشكلة. والإرسال
                                     // محكومٌ بصلاحيّة «إرسال رسالة لمشترك»
                                     // التي يفحصها الخادم على send-message.
-                                    // «كل الشركات»: الإرسال للشركة وحدها ⇒ لا شريط ينتهي برفض؛
-                                    // قراءة الجهاز نفسها تبقى على البطاقة.
+                                    // «كل الشركات» (٢١ نوفمبر): بحدود شركة الصفّ وقوالبها وواتسابها (موجَّه) — بصلاحيّة الصفّ في
+                                    // صفحته، ولا لصفحة موظّفٍ كتابتها مقفلةٌ من هنا (لا شريط ينتهي برفض).
                                     onAlertConnection: !_selectionMode &&
-                                            s.companyKey == null &&
-                                            Perms.has('whatsapp.send') &&
+                                            MergedMode.can(s.companyKey, 'whatsapp.send') &&
+                                            MergedOps.writeLock(s) == null &&
                                             s.displayPhone.isNotEmpty
                                         ? () => showConnectionAlertFlow(
                                             context, s)

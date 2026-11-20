@@ -11,6 +11,7 @@ import '../models/subscriber.dart';
 import '../models/whatsapp_schedule.dart';
 import '../services/auth_storage.dart';
 import '../services/manual_wa_sender.dart';
+import '../services/merged_mode.dart';
 import '../widgets/manual_wa_chip.dart';
 import 'api_client.dart';
 import 'broadcast_api.dart';
@@ -466,8 +467,9 @@ class WhatsAppApi {
   // Process-wide template cache — admins rarely change templates
   // during a session and the list is small. TTL keeps recently-edited
   // templates from going stale forever.
-  static List<WhatsTemplate>? _templates;
-  static DateTime? _templatesAt;
+  //
+  // «كل الشركات» (٢١ نوفمبر): المخبأ لكلّ معرّف مدير — قوالب شركة المشترك لمشترك شركةٍ أخرى، لا قوالب المفتوحة.
+  static final Map<String, ({List<WhatsTemplate> list, DateTime at})> _templatesBy = {};
   static const _ttl = Duration(minutes: 10);
 
   /// 2026-08-28 (Google 2027 audit CRITICAL fix): يُستدعى من
@@ -475,26 +477,39 @@ class WhatsAppApi {
   /// القوالب حتى المدير التالي على نفس الجهاز لا يرى/يعدّل قوالب
   /// المدير السابق (تسريب PII استمرّ حتى 10 دقائق).
   static void clearCaches() {
-    _templates = null;
-    _templatesAt = null;
+    _templatesBy.clear();
   }
+
+  /// معرّف مدير الشركة لمسار `/:adminId` أو حقل `adminId` في الجسم: داخل نطاق شركة صفٍّ ([CompanyRoute.pin]/[CompanyRoute.run])
+  /// ⇒ مدير تلك الشركة وحدها (الخادم يطابقه: adminParam / bodyAdmin) — مجهولٌ ⇒ null فلا يُرسل شيء (لا معرّف الجلسة لطلبٍ يذهب
+  /// لشركةٍ أخرى)؛ وإلّا ([CompanyRoute.adminIdFor]: قسمٌ أو المفتوحة) معرّف الجلسة كما كان حرفاً.
+  static Future<String?> _scopedAdminId(String path) async {
+    final key = CompanyRoute.currentKey;
+    if (key != null) return CompanyRoute.adminIdOf?.call(key);
+    return CompanyRoute.adminIdFor(path) ?? await AuthStorage.readAdminId();
+  }
+
+  /// سبب [WhatsSendResult] حين لا معرّف: نطاق شركة صفٍّ لم يُعرف مديرها ⇒ يقول ذلك، وإلّا «يجب تسجيل الدخول» كما كان.
+  static String _noAdminText() =>
+      CompanyRoute.currentKey != null ? 'تعذّر التعرّف على شركة المشترك — لم يُرسل شيء' : 'يجب تسجيل الدخول';
 
   /// GET /api/whatsapp/templates/:adminId — returns the cached list
   /// when warm, else round-trips. Null on auth / network failure;
   /// callers fall back to a snackbar.
+  ///
+  /// «كل الشركات» (٢١ نوفمبر): داخل نطاق شركة صفٍّ ⇒ قوالب تلك الشركة بمعرّف مديرها (whatsapp-templates موجَّه) — كان مشترك شركةٍ
+  /// أخرى سيأخذ قوالب المفتوحة. خارجه كما كان.
   static Future<List<WhatsTemplate>?> loadTemplates({
     bool refresh = false,
   }) async {
-    if (!refresh &&
-        _templates != null &&
-        _templatesAt != null &&
-        DateTime.now().difference(_templatesAt!) < _ttl) {
-      return _templates;
-    }
-    final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) {
+    final adminId = await _scopedAdminId('/api/whatsapp/templates');
+    if (adminId == null || adminId.isEmpty) {
       _log('templates', 'missing adminId');
       return null;
+    }
+    final hit = _templatesBy[adminId];
+    if (!refresh && hit != null && DateTime.now().difference(hit.at) < _ttl) {
+      return hit.list;
     }
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -526,8 +541,7 @@ class WhatsAppApi {
           defaultChannel: ch,
         ));
       }
-      _templates = out;
-      _templatesAt = DateTime.now();
+      _templatesBy[adminId] = (list: out, at: DateTime.now());
       return out;
     } on DioException catch (e) {
       _log('templates', e);
@@ -1055,12 +1069,14 @@ class WhatsAppApi {
     String? sas4Idx,
     String? forceChannel,
   }) async {
-    final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) {
-      return const WhatsSendResult(
+    // «كل الشركات» (٢١ نوفمبر): داخل نطاق شركة الصفّ ⇒ مدير تلك الشركة — الخادم يطابقه (bodyAdmin) ويطلب مرجع نافذة sas4Idx
+    // (CompanyRefs._bodySubject) فتخرج الرسالة من واتساب شركة المشترك نفسها. خارجه معرّف الجلسة كما كان.
+    final adminId = await _scopedAdminId('/api/whatsapp/send-message');
+    if (adminId == null || adminId.isEmpty) {
+      return WhatsSendResult(
         ok: false,
         reason: 'no_auth',
-        message: 'يجب تسجيل الدخول',
+        message: _noAdminText(),
       );
     }
     try {
@@ -1124,9 +1140,10 @@ class WhatsAppApi {
     String caption = '',
     String? sas4Idx,
   }) async {
-    final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) {
-      return const WhatsSendResult(ok: false, reason: 'no_auth', message: 'يجب تسجيل الدخول');
+    // «كل الشركات» (٢١ نوفمبر): داخل نطاق شركة الصفّ ⇒ مدير تلك الشركة (الخادم whatsapp-send-media bodyAdmin)، وإلّا كما كان.
+    final adminId = await _scopedAdminId('/api/whatsapp/send-media');
+    if (adminId == null || adminId.isEmpty) {
+      return WhatsSendResult(ok: false, reason: 'no_auth', message: _noAdminText());
     }
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -1241,7 +1258,9 @@ class WhatsAppApi {
         message: 'لا يوجد رقم هاتف للمشترك',
       );
     }
-    final templates = await loadTemplates();
+    // «كل الشركات» (٢١ نوفمبر — المالك: «ابدي حبي الي تنصحه يبقى ع شركه بقي»): قوالب **شركة المشترك** (بلا مفتاح ⇒ المفتوحة
+    // صراحةً)، والإرسال أدناه موجَّهٌ لها بمرجع نافذته ([MergedOps.write]) — فتخرج الرسالة من واتسابها هي. الوضع العاديّ كما كان.
+    final templates = await CompanyRoute.pin(sub.companyKey, () => loadTemplates());
     if (templates == null) {
       return const WhatsSendResult(
         ok: false,
@@ -1256,7 +1275,7 @@ class WhatsAppApi {
       return WhatsSendResult(
         ok: false,
         reason: 'no_template',
-        message: 'لا يوجد قالب "$arabic" — أضفه من إعدادات الواتساب',
+        message: MergedOps.withCompany('لا يوجد قالب "$arabic" — أضفه من إعدادات الواتساب', sub.companyKey),
       );
     }
     final active = matches.where((t) => t.isActive).toList();
@@ -1265,7 +1284,7 @@ class WhatsAppApi {
       return WhatsSendResult(
         ok: false,
         reason: 'inactive',
-        message: 'قالب "$arabic" مُعطَّل — فعّله من إعدادات الواتساب',
+        message: MergedOps.withCompany('قالب "$arabic" مُعطَّل — فعّله من إعدادات الواتساب', sub.companyKey),
       );
     }
     // {agent_code}: يُملأ هنا لا في الخادم وحده — اليدويّ يخرج من واتساب المدير
@@ -1306,7 +1325,7 @@ class WhatsAppApi {
         ),
       );
       if (go != true) return const WhatsSendResult(ok: false, reason: 'cancelled');
-      return sendMessage(to: '', message: base, intent: templateType, sas4Idx: sub.idx);
+      return MergedOps.write(sub, () => sendMessage(to: '', message: base, intent: templateType, sas4Idx: sub.idx));
     }
     final choice = await showManualWaPreviewSheet(
       context,
@@ -1330,7 +1349,7 @@ class WhatsAppApi {
       // ونسخةٌ لتطبيق المشترك من الخادم إن كان عنده (القالب نفسه بلا كلمة سرّ — [base]). بلا انتظار ولا رسالة: مشتركٌ بلا تطبيق
       // يردّ الخادم «بلا قناة» فيُهمَل.
       if (ok && (sub.idx ?? '').isNotEmpty) {
-        unawaited(sendMessage(to: '', message: base, intent: templateType, sas4Idx: sub.idx)
+        unawaited(MergedOps.write(sub, () => sendMessage(to: '', message: base, intent: templateType, sas4Idx: sub.idx))
             .then((_) {}, onError: (_) {}));
       }
       return WhatsSendResult(
@@ -1342,11 +1361,14 @@ class WhatsAppApi {
             : 'تعذّر فتح واتساب',
       );
     }
-    return sendMessage(
-      to: phone,
-      message: base,
-      intent: templateType,
-      sas4Idx: sub.idx,
+    return MergedOps.write(
+      sub,
+      () => sendMessage(
+        to: phone,
+        message: base,
+        intent: templateType,
+        sas4Idx: sub.idx,
+      ),
     );
   }
 

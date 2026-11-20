@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../api/company_route.dart';
 import 'auth_storage.dart';
 import '../core/util/bidi.dart';
 import '../models/device_health.dart';
@@ -185,6 +188,80 @@ class ConnectionAlertSettings {
       if (!kReleaseMode) debugPrint('🔴 connection-alerts/settings: $e');
     }
     return current.value;
+  }
+
+  // ── «كل الشركات» (٢١ نوفمبر): حدود شركة الصفّ ───────────────────────
+  //
+  // المالك: «ابدي حبي الي تنصحه يبقى ع شركه بقي» — «تنبيه المشترك» لمشترك شركةٍ أخرى يُكشف ويُفعَّل ويُكتب بحدود **شركته**
+  // (قراءةٌ موجَّهة لها: companyRoutingAllow network-subscriber-thresholds)، لا حدود المفتوحة ([current]).
+
+  /// يتغيّر كلّما وصلت حدود شركةٍ — شريط القائمة وبلاطة الصفحة يُرسمان معه.
+  static final ValueNotifier<int> companyTick = ValueNotifier<int>(0);
+  static final Map<String, ({ConnectionAlertThresholds? t, DateTime at})> _byCompany = {};
+  static final Map<String, Future<ConnectionAlertThresholds?>> _companyInFlight = {};
+
+  /// التعذّر يُعاد بعد دقيقتين لا مع كلّ رسم.
+  static const _companyRetry = Duration(minutes: 2);
+
+  /// المعروف الآن لشركة [key] (null = لم تُقرأ بعد أو تعذّرت) — للرسم، بلا طلب.
+  static ConnectionAlertThresholds? peekCompany(String key) => _byCompany[key]?.t;
+
+  /// حدود صفٍّ للرسم (شريط القائمة وبلاطة الصفحة): بلا مفتاح ⇒ [current] كما كان؛ وبمفتاح شركة ⇒ حدودها إن وصلت، وإلّا تُطلب
+  /// (مرّةً — [loadCompany]) ويُعاد الرسم مع [companyTick]، وnull حتى تصل (لا شريط بحدود شركةٍ أخرى).
+  static ConnectionAlertThresholds? forRow(String? key) {
+    if (key == null) return current.value;
+    final t = peekCompany(key);
+    if (t == null) unawaited(loadCompany(key));
+    return t;
+  }
+
+  /// حدود شركة [key] — من المخبأ إن كانت طازجة (١٠ د)، وإلّا قراءةٌ موجَّهة واحدة (طلبٌ جارٍ واحد لكلّ شركة). null = تعذّرت
+  /// (لا حدود شركةٍ أخرى بدلها). مفتاحٌ غير صالح ⇒ null بلا طلب (لا يذهب للمفتوحة).
+  static Future<ConnectionAlertThresholds?> loadCompany(String key, {bool force = false}) {
+    if (!CompanyRoute.keyRe.hasMatch(key)) return Future.value(null);
+    final e = _byCompany[key];
+    if (!force && e != null && DateTime.now().difference(e.at) < (e.t == null ? _companyRetry : _ttl)) {
+      return Future.value(e.t);
+    }
+    final running = _companyInFlight[key];
+    if (running != null) return running;
+    final f = _fetchCompany(key);
+    _companyInFlight[key] = f;
+    f.whenComplete(() {
+      _companyInFlight.remove(key);
+    });
+    return f;
+  }
+
+  static int _companyGen = 0;
+
+  static Future<ConnectionAlertThresholds?> _fetchCompany(String key) async {
+    final gen = _companyGen;
+    ConnectionAlertThresholds? t;
+    try {
+      final r = await CompanyRoute.run(
+          key, () => ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/settings'));
+      final data = r.data?['data'];
+      if (r.data?['success'] == true && data is Map) {
+        t = ConnectionAlertThresholds.fromJson(Map<String, dynamic>.from(data));
+      }
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 connection-alerts/settings [$key]: $e');
+    }
+    // جلسةٌ تبدّلت أثناء الطلب ⇒ لا يُحفظ لمن بعدها.
+    if (gen != _companyGen) return null;
+    // التعذّر يُبقي آخر حدودٍ معروفة لهذه الشركة نفسها (كـ[current]) — لا حدود غيرها.
+    final out = t ?? _byCompany[key]?.t;
+    _byCompany[key] = (t: out, at: DateTime.now());
+    companyTick.value++;
+    return out;
+  }
+
+  /// مع الجلسة: لا يرث أحدٌ حدود شركات سابقه.
+  static void resetCompanies() {
+    _companyGen++;
+    _byCompany.clear();
+    _companyInFlight.clear();
   }
 
   static Future<({bool ok, String? message})> save(

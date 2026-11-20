@@ -1310,6 +1310,7 @@
     "sent_via_telegram": "Alert sent · via Telegram",
     "sent_via_whatsapp": "Alert sent · via WhatsApp",
     "send_failed": "Couldn't send the alert",
+    "company_thresholds_failed": "Couldn't read the alert limits of this subscriber's company — try again",
     "p_lan_unplugged": "LAN unplugged",
     "p_lan_10": "LAN 10 Mbps",
     "p_signal": "Signal {}",

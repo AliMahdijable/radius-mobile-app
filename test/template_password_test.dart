@@ -52,7 +52,11 @@ void main() {
     final api = File('lib/api/whatsapp_api.dart').readAsStringSync();
     // sendTemplateWithPreview: المعاينة واليدويّ من rendered (fillPassword)، والتلقائيّ من base
     expect(api.contains('final rendered = await fillPassword(base, sub);'), isTrue);
-    expect(RegExp(r'return sendMessage\(\s*to: phone,\s*message: base,\s*intent: templateType,').hasMatch(api), isTrue);
+    // (٢١ نوفمبر) التلقائيّ موجَّهٌ لشركة الصفّ (MergedOps.write(sub, …)) — والجسم نفسه: base لا rendered
+    expect(
+        RegExp(r'return MergedOps\.write\(\s*sub,\s*\(\) => sendMessage\(\s*to: phone,\s*message: base,\s*intent: templateType,')
+            .hasMatch(api),
+        isTrue);
     final flow = File('lib/screens/subscribers/connection_alert_flow.dart').readAsStringSync();
     expect(flow.contains('final message = await WhatsAppApi.fillPassword(base, sub);'), isTrue);
     expect(RegExp(r"message: base,\s*intent: 'connection_alert'").hasMatch(flow), isTrue);

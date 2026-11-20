@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/provider_service.dart';
 import '../../../api/traffic_api.dart';
@@ -116,8 +117,13 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
   bool _loading = true;
 
   /// شركةٌ مُضافة (نبض، AccessGate…): مزوّدها يعطي مجاميع لا تفصيلاً يوميّاً — الشهر (واليوم وأمس للشهر الجاري) بلا أعمدة.
-  /// «كل الشركات» خارجها (مشترك شركةٍ أخرى = ساس).
-  bool get _totalsOnly => ProviderService.isKit && widget.sub.companyKey == null;
+  /// «كل الشركات» (٢١ نوفمبر): بمزوّد **شركة الصفّ** لا الجلسة — مجاميع المُضافة موجَّهةٌ لها (subscribers-usage)، والتفصيل
+  /// لساسٍ وايرث لنك (subscriber-traffic، الخادم 1af5be0).
+  bool get _totalsOnly {
+    final c = MergedMode.companyOf(widget.sub.companyKey);
+    if (c != null) return c.provider == MergedProvider.kit;
+    return ProviderService.isKit && widget.sub.companyKey == null;
+  }
   ({int? today, int? month, int? yesterday})? _totals;
 
   @override
@@ -135,21 +141,14 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
       });
       return;
     }
-    // مسار الاستهلاك خارج جدول التوجيه — في «كل الشركات» كان سيقرأ الشركة المفتوحة لا شركة المشترك
-    final blocked = MergedOps.unsupported(widget.sub);
-    if (blocked != null) {
-      setState(() {
-        _loading = false;
-        _error = blocked;
-      });
-      return;
-    }
+    // «كل الشركات» (٢١ نوفمبر): الاستهلاك موجَّهٌ لشركة المشترك ([MergedOps.run]) — بلا مفتاح كما كان.
     setState(() {
       _loading = true;
       _error = null;
     });
     if (_totalsOnly) {
-      final t = await TrafficApi.usageTotals(subscriberId: id, month: _month, year: _year);
+      final t = await MergedOps.run(
+          widget.sub, () => TrafficApi.usageTotals(subscriberId: id, month: _month, year: _year));
       if (!mounted) return;
       setState(() {
         _totals = t.error == null ? (today: t.today, month: t.month, yesterday: t.yesterday) : null;
@@ -158,11 +157,14 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
       });
       return;
     }
-    final r = await TrafficApi.fetch(
-      subscriberId: id,
-      type: _type,
-      month: _month,
-      year: _year,
+    final r = await MergedOps.run(
+      widget.sub,
+      () => TrafficApi.fetch(
+        subscriberId: id,
+        type: _type,
+        month: _month,
+        year: _year,
+      ),
     );
     if (!mounted) return;
     setState(() {

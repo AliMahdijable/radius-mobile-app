@@ -17,6 +17,7 @@ import '../models/subscriber.dart';
 import 'account_service.dart';
 import 'active_company.dart';
 import 'auth_storage.dart';
+import 'connection_alerts.dart';
 import 'employee_session.dart';
 import 'merged_rows.dart';
 import 'permissions_service.dart';
@@ -385,6 +386,7 @@ class MergedMode {
     stopped.value = null;
     CompanyRefs.reset();
     MergedSubscribers.reset();
+    ConnectionAlertSettings.resetCompanies();
   }
 }
 

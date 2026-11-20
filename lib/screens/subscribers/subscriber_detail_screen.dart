@@ -551,7 +551,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     AnimatedBuilder(
                       animation: Listenable.merge([
                         DeviceProbeBus.tick,
-                        ConnectionAlertSettings.current
+                        ConnectionAlertSettings.current,
+                        // «كل الشركات»: حدود شركة الصفّ وصلت
+                        ConnectionAlertSettings.companyTick,
                       ]),
                       builder: (context, _) =>
                           SubscriberActionTiles(actions: _quickActions()),
@@ -1177,12 +1179,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   Future<void> _sendTemplate(String templateType) async {
     if (_sendingTemplate != null) return; // single flight per screen
-    // قوالب واتساب (المعاينة ثمّ الإرسال) خارج جدول التوجيه — في «كل الشركات» للشركة وحدها
-    final blocked = MergedOps.unsupported(sub);
-    if (blocked != null) {
-      showSheetSnack(context, blocked, isError: true);
-      return;
-    }
+    // «كل الشركات» (٢١ نوفمبر): قوالب شركة المشترك وإرسالها موجَّهان لها (sendTemplateWithPreview) — لا حجب. قفل صفحة الموظّف
+    // يحكم الزرّ قبل هنا ([_pageLock])، والمعترض لا يرسل كتابةً على صفحةٍ مقفلة ولو وصلت.
     setState(() => _sendingTemplate = templateType);
     // 2026-08-26: sendTemplateWithPreview يعرض preview + chip قبل الإرسال.
     // يقرأ ManualWaPrefs الافتراضي ويسمح للمدير بتبديل الوضع لهذه العمليّة.
@@ -1439,13 +1437,15 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (!_has('whatsapp.send') || sub.displayPhone.isEmpty) {
       return const [];
     }
-    // «كل الشركات»: التنبيه (قوالب الشركة وإرسالها) للشركة وحدها — لا بلاطة تنتهي برفض. القراءة نفسها على كارت الجهاز.
-    if (sub.companyKey != null) return const [];
-    final settings = ConnectionAlertSettings.current.value;
-    if (!settings.enabled) return const [];
+    // «كل الشركات» (٢١ نوفمبر): التنبيه بحدود شركة المشترك وقوالبها وواتسابها (showConnectionAlertFlow موجَّه) — حدودها لم تصل
+    // بعد ⇒ لا بلاطة حتى تصل؛ وصفحة موظّفٍ كتابتها مقفلةٌ ⇒ لا بلاطة تنتهي برفض. القراءة نفسها على كارت الجهاز.
+    if (sub.companyKey != null && _pageLock != null) return const [];
+    final settings = ConnectionAlertSettings.forRow(sub.companyKey);
+    if (settings == null || !settings.enabled) return const [];
     final ip = sub.ipAddress?.trim() ?? '';
-    final snap = DeviceProbeApi.cachedForUser(sub.username) ??
-        (ip.isEmpty ? null : DeviceProbeApi.cached(ip));
+    // قراءة الجهاز من مخبأ شركة الصفّ (كشريط القائمة) — بلا مفتاح كما كان
+    final snap = DeviceProbeApi.cachedForUser(sub.username, company: sub.companyKey) ??
+        (ip.isEmpty ? null : DeviceProbeApi.cached(ip, company: sub.companyKey));
     if (snap == null) return const [];
     return ConnectionAlerts.detect(snap, settings);
   }

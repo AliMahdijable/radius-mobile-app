@@ -8,7 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/device_probe_api.dart';
 import 'package:rad_mysvcs/api/receipt_settings_api.dart';
+import 'package:rad_mysvcs/api/whatsapp_api.dart';
+import 'package:rad_mysvcs/models/device_health.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/connection_alert_flow.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/qr_login_sheet.dart';
@@ -29,10 +32,14 @@ import 'visual_perm/visual_perm_harness.dart';
 ///   ٨. فصلٌ فرديّ يعود في ملفّ الجماعيّ (الاستثناء بالدالّة لا بالملفّ)، وحارسٌ أُزيل من دالّته، وشيتٌ جماعيّ يُبنى خارج دالّة عرضه.
 ///   ٩. «المفتوحة» بغلافٍ يتبع الشريط، و«الصفّ» بـpin(null.
 ///   ١١. pipe و_d وكتابةٌ بمسارٍ لا يُحلّ ودالّةٌ تمرّر مسار مشترك.
-/// والسلوك (٧): صفّ شركةٍ أخرى — «تنبيه المشترك» وقوالب واتساب صفحته ورمز QR — لا يخرج منها send-message، والتلقائيّ في رمز QR
-/// ممنوعٌ بسببه قبل التأكيد.
+/// والسلوك (٧، منذ ٢١ نوفمبر — المالك: «ابدي حبي الي تنصحه يبقى ع شركه بقي»؛ الخادم 1af5be0): صفّ شركةٍ أخرى — «تنبيه المشترك»
+/// وقوالب واتساب صفحته ورمز QR — يخرج من واتساب **شركته**: قوالبها وحدودها بمعرّف مديرها، والإرسال موجَّهٌ لها بمرجع نافذته.
+/// (قبله كان «للشركة وحدها»: لا يخرج منها شيء.)
 const _kOpen = 'c0000000000a1';
 const _kB = 'c0000000000b2';
+
+/// مرجع نافذة مشترك JTSHOP كما يسكّه الخادم.
+final _refB = 'r_${'b' * 22}';
 
 ResponseBody _json(int status, Object body, {Map<String, List<String>> headers = const {}}) =>
     ResponseBody.fromString(jsonEncode(body), status, headers: {
@@ -46,12 +53,20 @@ class _Srv implements HttpClientAdapter {
   final HttpClientAdapter fallback;
   final asked = <String>[];
 
+  /// آخر جسمٍ ومرجع نافذةٍ لكلّ كتابة (`POST /path`).
+  final bodies = <String, Object?>{};
+  final refs = <String, String?>{};
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
     final key = o.headers['x-company-key'] as String?;
     final path = o.uri.path;
     final m = o.method.toUpperCase();
     asked.add('$m $path ${key ?? '-'}');
+    if (m != 'GET') {
+      bodies['$m $path'] = o.data;
+      refs['$m $path'] = o.headers['x-company-ref'] as String?;
+    }
     final h = key == null ? const <String, List<String>>{} : {'x-company-key': [key]};
     ResponseBody j(Object body) => _json(200, body, headers: h);
     if (path == '/api/v2/subscribers' && m == 'GET') {
@@ -59,12 +74,31 @@ class _Srv implements HttpClientAdapter {
       return j({'success': true, 'data': const []});
     }
     if (m == 'GET' && RegExp(r'^/api/v2/subscribers/\d+$').hasMatch(path)) {
-      return j({'success': true, 'data': {'idx': path.split('/').last}});
+      // نافذة المشترك الموجَّهة تسكّ مرجعها (كالخادم — companyRouting mint)
+      return _json(200, {'success': true, 'data': {'idx': path.split('/').last}}, headers: {
+        ...h,
+        if (key != null) 'x-company-ref': [key == _kB ? _refB : 'r_${'a' * 22}'],
+      });
     }
     if (m == 'POST' && path.endsWith('/portal-qr-token')) {
       return j({'success': true, 'data': {'linkUrl': 'https://pro.example/mysub/q/abc', 'expiresAt': '2026-11-10T10:00:00Z'}});
     }
+    // قوالب الشركة بمعرّف مديرها في نصّها — فيُعرف من أيّ شركةٍ جاء النصّ المُرسَل
+    if (m == 'GET' && path.startsWith('/api/whatsapp/templates/')) {
+      final admin = Uri.decodeComponent(path.split('/').last);
+      return j({
+        'success': true,
+        'templates': [
+          for (final t in ['debt_reminder', 'expiry_warning', 'subscriber_info'])
+            {'template_type': t, 'is_active': 1, 'message_content': 'قالب $admin $t {subscriber_name}', 'default_channel': 'auto'},
+        ],
+      });
+    }
+    if (m == 'GET' && path == '/api/v2/connection-alerts/settings') {
+      return j({'success': true, 'data': {'enabled': true, 'fiber_rx_dbm': -27, 'name_mode': 'name'}});
+    }
     if (path == '/api/whatsapp/send-message') return j({'success': true, 'channel': 'whatsapp'});
+    if (path == '/api/whatsapp/send-media') return j({'success': true, 'channel': 'whatsapp'});
     if (path == '/api/v2/receipt-settings') return j({'success': true, 'data': {}});
     final r = await fallback.fetch(o, rs, cf);
     if (key == null) return r;
@@ -145,11 +179,13 @@ void main() {
           'مؤجَّل');
     });
 
-    test('٧: حارس «للشركة وحدها» أُزيل، وإرسالٌ جديد غير مراجَع، وبوّابةٌ أُزيلت، وشيت إعداد الجهاز يُبنى بلا حارسه', () {
+    test('٧: رسالة الصفّ بغير شركته، وإرسالٌ جديد غير مراجَع، وشيت إعداد الجهاز يُبنى بلا حارسه', () {
+      // ٢١ نوفمبر: رسائل الكارت بشركة الصفّ (لم تعد «للشركة وحدها») — غلافها للمفتوحة أو صفٌّ غيره يُكشف
       proves(sideVerdict,
-          plant('lib/screens/subscribers/connection_alert_flow.dart', 'final blocked = MergedOps.unsupported(sub);',
-              'final String? blocked = null;'),
-          'بلا حارس');
+          plant('lib/screens/subscribers/connection_alert_flow.dart',
+              'final result = await MergedOps.write(\n    sub,\n    () => WhatsAppApi.sendMessage(',
+              'final result = await CompanyRoute.runOpen(\n    () => WhatsAppApi.sendMessage('),
+          'ليس بشركة صفّه');
       proves(sideVerdict,
           append('lib/screens/subscribers/subscriber_detail_screen.dart',
               "Future<void> _planted(Subscriber s) => WhatsAppApi.sendMessage(to: '1', message: 'x', sas4Idx: s.idx);"),
@@ -160,12 +196,21 @@ void main() {
               "Future<void> _plantedMedia(Subscriber s) => WhatsAppApi.sendMedia(to: '1', bytes: Uint8List(1), filename: 'x.png', sas4Idx: s.idx);"),
           'غير مراجَع');
       proves(sideVerdict,
-          plant('lib/screens/subscribers/sheets/qr_login_sheet.dart', 'final blocked = MergedOps.unsupported(widget.sub);',
-              'final String? blocked = null;'),
-          'بلا حارس');
+          plant('lib/screens/subscribers/sheets/qr_login_sheet.dart',
+              'final result = await MergedOps.run(\n        widget.sub,\n        () => WhatsAppApi.sendMedia(',
+              'final result = await CompanyRoute.runOpen(\n        () => WhatsAppApi.sendMedia('),
+          'ليس بشركة صفّه');
+      // الواجهة التي تُوجّه بنفسها (sendTemplateWithPreview) تأخذ الصفّ نفسه — لا صفّاً يُبنى ولا null
       proves(sideVerdict,
-          plant('lib/screens/subscribers/subscribers_screen.dart', 'onSendDebtReminder: !_mergedOn &&', 'onSendDebtReminder: true &&'),
-          'بلا البوّابة');
+          plant('lib/screens/subscribers/subscribers_screen.dart',
+              "context: context,\n        sub: s,\n        templateType: 'debt_reminder',",
+              "context: context,\n        sub: Subscriber(username: 'x'),\n        templateType: 'debt_reminder',"),
+          'ليس بصفّه');
+      proves(sideVerdict,
+          plant('lib/screens/subscribers/subscriber_detail_screen.dart',
+              'context: context,\n      sub: sub,\n      templateType: templateType,',
+              'context: context,\n      sub: null,\n      templateType: templateType,'),
+          'ليس بصفّه');
       proves(sideVerdict,
           append('lib/screens/subscribers/subscriber_detail_screen.dart',
               "Future<void> _planted(BuildContext c) => showAppSheet<bool>(context: c, builder: (_) => const DeviceConfigSheet(username: 'u'));"),
@@ -189,8 +234,11 @@ void main() {
           plant('lib/screens/reports/activity_log_report_screen.dart', 'CompanyRoute.runOpen(() => ExpensesApi.list(',
               'CompanyRoute.pin(MergedMode.focus.value, () => ExpensesApi.list('),
           'ليس داخل CompanyRoute.runOpen');
+      // رمز وكيل الرسالة (لا أوّل pin في الملفّ — قوالب شركة الصفّ قبله منذ ٢١ نوفمبر)
       proves(sectionVerdict,
-          plant('lib/api/whatsapp_api.dart', 'CompanyRoute.pin(sub.companyKey,', 'CompanyRoute.pin(null,'), 'ليس بشركة صفّه');
+          plant('lib/api/whatsapp_api.dart', 'final base = await CompanyRoute.pin(sub.companyKey,',
+              'final base = await CompanyRoute.pin(null,'),
+          'ليس بشركة صفّه');
     });
 
     test('١١: pipe و_d وكتابةٌ بمسارٍ لا يُحلّ ودالّةٌ تمرّر مسار مشترك', () {
@@ -211,7 +259,7 @@ void main() {
     });
   });
 
-  group('السلوك: صفّ شركةٍ أخرى لا يُرسَل له من واتساب المفتوحة (البند ٧)', () {
+  group('السلوك: رسائل كارت صفّ شركةٍ أخرى تخرج من واتسابها هي — بقالبها وحدودها ومعرّف مديرها ومرجع نافذته (البند ٧، ٢١ نوفمبر)', () {
     setUpAll(() async {
       await visualSetUpAll();
       WidgetController.hitTestWarningShouldBeFatal = true;
@@ -224,6 +272,7 @@ void main() {
       ApiClient.dio.httpClientAdapter = srv;
       AccountApi.tokenSource = ({bool force = false}) async => 'acct';
       ReceiptSettingsApi.clearCache();
+      WhatsAppApi.clearCaches();
       MergedMode.reset();
       MergedMode.fetchRaw = () async => Map<String, dynamic>.from(_companies());
       expect(await t.runAsync(() => MergedMode.enter()), isTrue);
@@ -232,6 +281,7 @@ void main() {
     Future<void> down(WidgetTester t) async {
       await t.pumpWidget(const SizedBox());
       await t.pump(const Duration(seconds: 6));
+      DeviceProbeApi.debugRunProbe = null;
       MergedMode.reset();
       await visualTearDown();
     }
@@ -246,12 +296,36 @@ void main() {
     Subscriber bRow() => Subscriber(
         idx: '9', username: 'b.nine', firstname: 'باء', lastname: 'تسعة', phone: '07701234567', notes: '-2500', companyKey: _kB);
 
-    List<String> sends() => srv.asked.where((a) => a.startsWith('POST /api/whatsapp/send-message')).toList();
-    final refusal = find.textContaining('يعمل من الشركة وحدها');
+    List<String> sends(String path) => srv.asked.where((a) => a.startsWith('POST $path ')).toList();
 
-    testWidgets('«تنبيه المشترك» لصفّ JTSHOP: يُرفض بسببه ولا send-message', (t) async {
+    /// الإرسال خرج لشركة الصفّ وحدها: موجَّهٌ بمفتاحها، بمعرّف مديرها، وبمرجع نافذة مشتركه — ولا شيء للمفتوحة.
+    void sentFromB(String path, {bool subject = true}) {
+      expect(sends(path), ['POST $path $_kB'], reason: 'إرسالٌ واحد موجَّه لـJTSHOP لا للمفتوحة');
+      final body = srv.bodies['POST $path'] as Map;
+      expect(body['adminId'], 'jt:6836', reason: 'معرّف مدير JTSHOP — لا معرّف الجلسة (supernet:12)');
+      expect(body['sas4Idx'], '9');
+      if (subject) expect(srv.refs['POST $path'], _refB, reason: 'مرجع نافذة المشترك (الخادم يطلبه — bodySubject sas4Idx)');
+    }
+
+    Future<void> confirmAuto(WidgetTester t) async {
+      final go = find.text('إرسال تلقائي');
+      expect(go, findsOneWidget, reason: 'التلقائيّ متاح لمشترك شركةٍ أخرى (لم يعد «للشركة وحدها»)');
+      expect(find.byKey(const ValueKey('wa-auto-blocked')), findsNothing);
+      await t.ensureVisible(go);
+      await t.pump();
+      await t.tap(go);
+      await settleReal(t, rounds: 8);
+    }
+
+    testWidgets('«تنبيه المشترك» لصفّ JTSHOP: حدود JTSHOP وقوالبها ثمّ send-message منها بمرجع نافذته', (t) async {
       await up(t);
       try {
+        DeviceProbeApi.debugRunProbe = (ip) async => DeviceHealthSnapshot(
+              kind: DeviceKind.ont,
+              ip: ip,
+              ont: const OntOpticalInfo(
+                  txPower: '2.0', rxPower: '-30.5', voltage: '3300', temperature: '48', bias: '10', sendStatus: ''),
+            );
         late BuildContext ctx;
         await pumpVisual(t, phone, home: (_) => Scaffold(body: Builder(builder: (c) {
               ctx = c;
@@ -259,10 +333,14 @@ void main() {
             })));
         await settleReal(t);
         srv.asked.clear();
-        unawaited(showConnectionAlertFlow(ctx, bRow()));
-        await settleReal(t);
-        expect(refusal, findsWidgets);
-        expect(sends(), isEmpty, reason: 'رسالةٌ من واتساب المفتوحة لمشترك JTSHOP');
+        unawaited(showConnectionAlertFlow(ctx, bRow().copyWithOnline(online: true, ip: '10.9.0.9')));
+        await settleReal(t, rounds: 10);
+        expect(srv.asked, contains('GET /api/v2/connection-alerts/settings $_kB'), reason: 'حدود JTSHOP لا حدود المفتوحة');
+        expect(srv.asked, contains('GET /api/whatsapp/templates/jt:6836 $_kB'), reason: 'قوالب JTSHOP بمعرّف مديرها');
+        expect(srv.asked.where((a) => a.contains('/api/whatsapp/templates/supernet')), isEmpty, reason: 'ولا قوالب المفتوحة');
+        await confirmAuto(t);
+        sentFromB('/api/whatsapp/send-message');
+        expect((srv.bodies['POST /api/whatsapp/send-message'] as Map)['forceChannel'], 'whatsapp');
         expect(t.takeException(), isNull);
       } finally {
         await down(t);
@@ -270,14 +348,23 @@ void main() {
     });
 
     for (final a in [SubscriberAutoAction.debtReminder, SubscriberAutoAction.expiryWarning, SubscriberAutoAction.sendInfo]) {
-      testWidgets('قالب واتساب من صفحة مشترك JTSHOP (${a.name}): يُرفض بسببه ولا send-message', (t) async {
+      testWidgets('قالب واتساب من صفحة مشترك JTSHOP (${a.name}): قالب JTSHOP نفسه ثمّ send-message منها بمرجع نافذته', (t) async {
         await up(t);
         try {
           await pumpVisual(t, phone, home: (_) => SubscriberDetailScreen(sub: bRow(), autoAction: a));
           await settleReal(t, rounds: 10);
-          expect(refusal, findsWidgets);
-          expect(sends(), isEmpty, reason: 'قالبٌ من واتساب المفتوحة لمشترك JTSHOP');
-          expect(srv.asked.where((x) => x.contains('/api/whatsapp/templates')), isEmpty, reason: 'ولا قوالب المفتوحة');
+          expect(srv.asked, contains('GET /api/whatsapp/templates/jt:6836 $_kB'), reason: 'قوالب JTSHOP بمعرّف مديرها');
+          expect(srv.asked.where((x) => x.contains('/api/whatsapp/templates/supernet')), isEmpty, reason: 'ولا قوالب المفتوحة');
+          await confirmAuto(t);
+          sentFromB('/api/whatsapp/send-message');
+          final type = switch (a) {
+            SubscriberAutoAction.debtReminder => 'debt_reminder',
+            SubscriberAutoAction.expiryWarning => 'expiry_warning',
+            _ => 'subscriber_info',
+          };
+          final body = srv.bodies['POST /api/whatsapp/send-message'] as Map;
+          expect(body['intent'], type);
+          expect('${body['message']}', contains('قالب jt:6836 $type'), reason: 'نصّ قالب JTSHOP لا المفتوحة');
           expect(t.takeException(), isNull);
         } finally {
           await down(t);
@@ -285,8 +372,7 @@ void main() {
       });
     }
 
-    testWidgets('رمز QR لمشترك JTSHOP: معاينة الإرسال يدويّةٌ وحدها بسببها قبل التأكيد — لا «تلقائي» يُختار ثمّ يُرفض، ولا send-message',
-        (t) async {
+    testWidgets('رمز QR لمشترك JTSHOP: التلقائيّ متاحٌ، وsend-media من واتسابها بمعرّف مديرها', (t) async {
       await up(t);
       try {
         late BuildContext ctx;
@@ -304,9 +390,11 @@ void main() {
         await t.pump();
         await t.tap(send);
         await settleReal(t);
-        expect(find.byKey(const ValueKey('wa-auto-blocked')), findsOneWidget,
-            reason: 'المعاينة تعرض «تلقائي» لمشترك شركةٍ أخرى — يُختار ثمّ يُرفض بعد التأكيد');
-        expect(sends(), isEmpty);
+        await confirmAuto(t);
+        await settleReal(t, rounds: 10);
+        // send-media بلا مرجع نافذة (الخادم: bodyAdmin وحده) — مدير JTSHOP وموجَّهٌ لها
+        sentFromB('/api/whatsapp/send-media', subject: false);
+        expect(sends('/api/whatsapp/send-message'), isEmpty);
         expect(t.takeException(), isNull);
       } finally {
         await down(t);

@@ -30,11 +30,13 @@ import 'widgets/device_chip_micro.dart';
 ///    «والمشتركين واتساب لازم يكون») — والخادم يفرضه للنسخ الأقدم أيضاً.
 Future<void> showConnectionAlertFlow(
     BuildContext context, Subscriber sub) async {
-  // «كل الشركات»: القوالب والإرسال (send-message) خارج جدول التوجيه — كانت الرسالة ستخرج من واتساب الشركة المفتوحة
-  // وبقوالبها لا من شركة المشترك. حالة الاتصال نفسها تظهر على الكارت؛ التنبيه من الشركة وحدها.
-  final blocked = MergedOps.unsupported(sub);
-  if (blocked != null) {
-    showSheetSnack(context, blocked, isError: true);
+  // «كل الشركات» (٢١ نوفمبر — المالك: «ابدي حبي الي تنصحه يبقى ع شركه بقي»): لمشترك شركةٍ أخرى حدود **شركته** وقوالبها
+  // وواتسابها — قراءاتٌ موجَّهة لها، والإرسال بمرجع نافذته (send-message موجَّه بالخادم 1af5be0). صفحة موظّفٍ كتابتها مقفلةٌ
+  // من هنا ⇒ سببها ولا شيء.
+  final key = sub.companyKey;
+  final lock = MergedOps.writeLock(sub);
+  if (lock != null) {
+    showSheetSnack(context, lock, isError: true);
     return;
   }
   final phone = sub.displayPhone;
@@ -45,7 +47,8 @@ Future<void> showConnectionAlertFlow(
 
   // ── ١. لقطة طازجة ─────────────────────────────────────────────
   final ip = sub.ipAddress?.trim() ?? '';
-  final hit = DeviceProbeApi.peek(username: sub.username, ip: ip);
+  // مخبأ شركة الصفّ (كالكارت والشريط) — بلا مفتاح كما كان
+  final hit = DeviceProbeApi.peek(username: sub.username, ip: ip, company: key);
   DeviceHealthSnapshot? snap = (hit != null && !hit.stale) ? hit.snap : null;
   if (snap == null) {
     snap = await _probeWithProgress(context, sub);
@@ -57,12 +60,19 @@ Future<void> showConnectionAlertFlow(
   }
 
   // ── ٢. الكشف ─────────────────────────────────────────────────
-  final thresholds = await ConnectionAlertSettings.ensureLoaded();
+  // حدود شركة المشترك ([ConnectionAlertSettings.loadCompany]) — تعذّرها ⇒ لا تنبيه (لا حدود شركةٍ أخرى بدلها).
+  final thresholds = key == null
+      ? await ConnectionAlertSettings.ensureLoaded()
+      : await ConnectionAlertSettings.loadCompany(key);
   if (!context.mounted) return;
+  if (thresholds == null) {
+    showSheetSnack(context, MergedOps.withCompany('conn_alerts.company_thresholds_failed'.tr(), key), isError: true);
+    return;
+  }
   // الزرّ والشريط لا يظهران أصلاً والميزة متوقّفة — هذا حارسٌ لمن ضغط
   // قبل أن يُطفئها مديرٌ آخر على الحساب نفسه.
   if (!thresholds.enabled) {
-    showSheetSnack(context, 'conn_alerts.disabled'.tr(), isError: true);
+    showSheetSnack(context, MergedOps.withCompany('conn_alerts.disabled'.tr(), key), isError: true);
     return;
   }
   final problems = ConnectionAlerts.detect(snap, thresholds);
@@ -72,7 +82,8 @@ Future<void> showConnectionAlertFlow(
   }
 
   // ── ٣. الرسالة ───────────────────────────────────────────────
-  final templates = await WhatsAppApi.loadTemplates();
+  // قوالب شركة المشترك (بلا مفتاح ⇒ المفتوحة صراحةً) — لا قوالب المفتوحة لمشترك غيرها
+  final templates = await MergedOps.run(sub, () => WhatsAppApi.loadTemplates());
   if (!context.mounted) return;
   WhatsTemplate? own(String type) {
     for (final t in templates ?? const <WhatsTemplate>[]) {
@@ -141,12 +152,16 @@ Future<void> showConnectionAlertFlow(
     );
     return;
   }
-  final result = await WhatsAppApi.sendMessage(
-    to: phone,
-    message: base,
-    intent: 'connection_alert',
-    sas4Idx: sub.idx,
-    forceChannel: 'whatsapp',
+  // واتساب شركة المشترك بمرجع نافذته ([MergedOps.write]) — الوضع العاديّ كما كان
+  final result = await MergedOps.write(
+    sub,
+    () => WhatsAppApi.sendMessage(
+      to: phone,
+      message: base,
+      intent: 'connection_alert',
+      sas4Idx: sub.idx,
+      forceChannel: 'whatsapp',
+    ),
   );
   if (!context.mounted) return;
   // اسم القناة من مفتاحه لا من `channelArabic`: تلك عربيّةٌ دائماً،
@@ -182,6 +197,8 @@ Future<DeviceHealthSnapshot?> _probeWithProgress(
     snap = await DeviceProbeApi.probe(
       fallbackIp: sub.ipAddress ?? '',
       subscriberUsername: sub.username,
+      // «كل الشركات»: إعداد جهاز المشترك واعتماداته من شركته، ومخبؤها — بلا مفتاح كما كان
+      company: sub.companyKey,
     );
     // القائمة والكارت يقرآن الكاش نفسه — نوقظهما على القراءة الجديدة.
     DeviceProbeBus.bump();

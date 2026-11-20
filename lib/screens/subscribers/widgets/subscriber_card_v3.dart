@@ -1153,12 +1153,16 @@ class _ConnectionIssueBar extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return AnimatedBuilder(
-      animation: Listenable.merge(
-          [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
+      animation: Listenable.merge([
+        DeviceProbeBus.tick,
+        ConnectionAlertSettings.current,
+        ConnectionAlertSettings.companyTick,
+      ]),
       builder: (context, _) {
-        final settings = ConnectionAlertSettings.current.value;
+        // «كل الشركات» (٢١ نوفمبر): حدود شركة الصفّ — لم تصل بعد ⇒ لا شريط حتى تصل ([ConnectionAlertSettings.forRow]).
+        final settings = ConnectionAlertSettings.forRow(sub.companyKey);
         // متوقّفة حتّى يفعّلها المدير.
-        if (!settings.enabled) return const SizedBox.shrink();
+        if (settings == null || !settings.enabled) return const SizedBox.shrink();
         final ip = sub.ipAddress?.trim() ?? '';
         final snap = DeviceProbeApi.cachedForUser(sub.username,
                 company: sub.companyKey) ??

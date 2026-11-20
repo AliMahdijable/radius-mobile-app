@@ -315,15 +315,17 @@ const reviewedSideWriters = <String, (String, String, String)>{
   'lib/screens/managers/sheets/telegram_link_sheet.dart#_sendViaWhatsApp WhatsAppApi.sendMessage':
       ('manager', '', 'رابط تلغرام لمدير — كسابقه'),
   'lib/services/manager_notice.dart#notify WhatsAppApi.sendMessage': ('manager', '', 'إشعار مديرٍ بعد عمليّة رصيدٍ له'),
+  // ٢١ نوفمبر (المالك: «ابدي حبي الي تنصحه يبقى ع شركه بقي»، الخادم 1af5be0 — send-message/templates/send-media موجَّهة): رسائل
+  // كارت المشترك تخرج من واتساب **شركته** بقوالبها وحدودها — لم تعد «للشركة وحدها».
   'lib/screens/subscribers/connection_alert_flow.dart#showConnectionAlertFlow WhatsAppApi.sendMessage':
-      ('guard', '', '«تنبيه المشترك» للشركة وحدها (MergedOps.unsupported) — قوالبها وواتسابها'),
-  // ١٩ نوفمبر: الرمز يُرسَل صورةً (send-media) لا رابطاً نصّيّاً (send-message) — الحارس نفسه قبله
+      ('row', '', '«تنبيه المشترك» بشركة الصفّ: حدودها وقوالبها وواتسابها بمرجع نافذته — MergedOps.write(sub'),
+  // ١٩ نوفمبر: الرمز يُرسَل صورةً (send-media) لا رابطاً نصّيّاً (send-message)
   'lib/screens/subscribers/sheets/qr_login_sheet.dart#_sendWhatsApp WhatsAppApi.sendMedia':
-      ('guard', '', 'إرسال صورة رمز الدخول من واتسابٍ للشركة وحدها'),
+      ('row', '', 'صورة رمز الدخول من واتساب شركة الصفّ بمعرّف مديرها — MergedOps.run(widget.sub'),
   'lib/screens/subscribers/subscriber_detail_screen.dart#_sendTemplate WhatsAppApi.sendTemplateWithPreview':
-      ('guard', '', 'قوالب واتساب (المعاينة ثمّ الإرسال) للشركة وحدها'),
+      ('row-arg', 'sub', 'قوالب شركة الصفّ وإرسالها موجَّهان داخل sendTemplateWithPreview بالصفّ نفسه'),
   'lib/screens/subscribers/subscribers_screen.dart#_sendDebtReminderFromList WhatsAppApi.sendTemplateWithPreview':
-      ('gate', r'!_mergedOn\b', 'تذكير الدين من القائمة لا يُعرض في «كل الشركات»'),
+      ('row-arg', 'sub', 'تذكير الدين من القائمة — كسابقه، بشركة الصفّ'),
   'lib/services/manual_wa_sender.dart#handleWaPreviewAfterOp WhatsAppApi.sendMessage':
       ('open-guard', '', 'التلقائيّ من واتساب المفتوحة صراحةً، وصفّ غيرها يُرفض قبله (autoWaBlockedFor)'),
   'lib/screens/subscribers/sheets/device_config_sheet.dart#_save DeviceConfigApi.saveConfig': (

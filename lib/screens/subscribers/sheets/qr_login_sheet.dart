@@ -252,9 +252,9 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         phone: phone,
         messagePreview: caption,
         accent: const Color(0xFF7C3AED),
-        // «كل الشركات»: التلقائيّ يخرج من واتساب المفتوحة ⇒ مشترك شركةٍ أخرى «افتح واتسابي» وحده، والسبب قبل التأكيد لا بعده
-        // (مراجعة 179) — والحارس قبل الإرسال أدناه يبقى.
-        autoBlockedReason: MergedOps.unsupported(widget.sub),
+        // «كل الشركات» (٢١ نوفمبر): التلقائيّ يخرج من واتساب شركة المشترك نفسها (send-media موجَّه بمدير شركته أدناه) — صفحة
+        // موظّفٍ كتابتها مقفلةٌ من هنا ⇒ «افتح واتسابي» وحده وسببها قبل التأكيد.
+        autoBlockedReason: MergedOps.writeLock(widget.sub),
       );
       if (!mounted || choice == null || !choice.confirmed) return;
 
@@ -270,10 +270,9 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         return;
       }
 
-      // رسائل واتساب المباشرة خارج جدول التوجيه — في «كل الشركات» للشركة وحدها
-      final blocked = MergedOps.unsupported(widget.sub);
-      if (blocked != null) {
-        _snack(blocked, isError: true);
+      final locked = MergedOps.writeLock(widget.sub);
+      if (locked != null) {
+        _snack(locked, isError: true);
         return;
       }
       final bytes = await _captureForSend();
@@ -282,12 +281,17 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         _snack('qr_login.capture_failed'.tr(), isError: true);
         return;
       }
-      final result = await WhatsAppApi.sendMedia(
-        to: phone,
-        bytes: bytes,
-        filename: '$_fileStem.png',
-        caption: caption,
-        sas4Idx: widget.sub.idx,
+      // «كل الشركات» (٢١ نوفمبر): من واتساب شركة المشترك — موجَّهٌ لها بمعرّف مديرها (الخادم whatsapp-send-media bodyAdmin)؛
+      // بلا مفتاح كما كان.
+      final result = await MergedOps.run(
+        widget.sub,
+        () => WhatsAppApi.sendMedia(
+          to: phone,
+          bytes: bytes,
+          filename: '$_fileStem.png',
+          caption: caption,
+          sas4Idx: widget.sub.idx,
+        ),
       );
       if (!mounted) return;
       if (result.ok) {
