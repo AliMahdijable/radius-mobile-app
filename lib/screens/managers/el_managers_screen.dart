@@ -283,7 +283,7 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
               textAlign: TextAlign.center, style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 14)),
           const SizedBox(height: 4),
           Text('يُفتح قريباً — شحن رصيد حساباتك التابعة وديونها الأخرى من هنا',
-              textAlign: TextAlign.center, style: AppType.muted().copyWith(fontSize: 12)),
+              textAlign: TextAlign.center, style: AppType.muted().copyWith(fontSize: 12.5)),
           if (!Perms.isEmployee) ...[
             const SizedBox(height: Sp.md),
             OutlinedButton.icon(

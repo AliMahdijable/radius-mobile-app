@@ -85,7 +85,7 @@ class _ElWaPhoneSheetState extends State<_ElWaPhoneSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('يصله عليه إشعار الشحن من واتسابك المربوط',
-                style: AppType.muted().copyWith(fontSize: 12)),
+                style: AppType.muted().copyWith(fontSize: 12.5)),
             const SizedBox(height: Sp.md),
             TextField(
               controller: _ctrl,

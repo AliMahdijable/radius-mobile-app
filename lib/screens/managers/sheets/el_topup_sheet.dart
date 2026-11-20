@@ -374,10 +374,12 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
 
   Widget _sumRow(String k, String v, {Color? color}) => Row(
         children: [
-          Expanded(child: Text(k, style: AppType.muted().copyWith(fontSize: 12))),
+          // التسمية سطران عند الحاجة (لا «…» تقصّ نصّاً — 320 بخطٍّ مكبَّر)
+          Expanded(child: Text(k, maxLines: 2, style: AppType.muted().copyWith(fontSize: 12.5))),
           Text(v,
               style: TextStyle(
                   fontSize: 13,
+                  height: 1.35,
                   fontWeight: FontWeight.w700,
                   color: color ?? AppColors.textHi,
                   fontFeatures: const [FontFeature.tabularFigures()])),
