@@ -57,3 +57,33 @@ String localPhone(String raw, {String countryCode = '964'}) {
 
   return trimmed;
 }
+
+/// أرقامٌ عربيّة (٠-٩) وفارسيّة (۰-۹) ⇒ لاتينيّة؛ والباقي كما هو.
+String latinDigits(String s) => s
+    .replaceAllMapped(RegExp('[\u0660-\u0669]'), (m) => '${m[0]!.codeUnitAt(0) - 0x0660}')
+    .replaceAllMapped(RegExp('[\u06f0-\u06f9]'), (m) => '${m[0]!.codeUnitAt(0) - 0x06f0}');
+
+/// رقم الهاتف ⇒ أرقام الواتساب الدوليّة — **لكلّ رابط واتساب** (`whatsapp://send` و`wa.me`).
+///
+/// 🐛 المالك ٢١ نوفمبر (بصورة وكيل: «Couldn't look up phone number 07812180744 … missing a country code»): «٠٧x / 0096 …
+/// الدالة العدنا تسوي هيج نوع تصحيح، تأكّد من تعميمها بالعمليات اليدوي والجداول والتلقائي». وكلاءٌ كثيرون يكتبون أرقام
+/// مشتركيهم بلا مفتاح الدولة، والقائمة لا تصل دائماً مطبَّعةً من الخادم (الحساب الكبير، ايرث لنك، الشركات المُضافة…)،
+/// وواتساب لا يفتح محادثةً لرقمٍ بلا مفتاح.
+///
+/// | المدخل | المخرج |
+/// |---|---|
+/// | `07812180744` · `٠٧٨١٢١٨٠٧٤٤` · `7812180744` | `9647812180744` |
+/// | `009647812180744` · `+964 781 218 0744` · `964 0781 218 0744` | `9647812180744` |
+/// | `+44 7911 123456` · `00447911123456` | `447911123456` (أجنبيّ: كما هو بلا + ولا 00) |
+/// | `0781218074` (ناقص) | كما هو أرقاماً — لا يُخترع له رقم |
+///
+/// القواعد نفسها في الخادم (`whatsapp/phoneNorm.js` waDigits) والموقع (`lib/wa-phone.ts` waPhone).
+String waPhone(String raw) {
+  var d = latinDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
+  if (d.isEmpty) return '';
+  if (d.startsWith('00')) d = d.substring(2);
+  if (RegExp(r'^96407\d{9}$').hasMatch(d)) d = '964${d.substring(4)}';
+  if (RegExp(r'^07\d{9}$').hasMatch(d)) return '964${d.substring(1)}';
+  if (RegExp(r'^7\d{9}$').hasMatch(d)) return '964$d';
+  return d;
+}

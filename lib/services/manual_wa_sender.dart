@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/company_route.dart';
 import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
+import '../core/util/phone.dart';
 import '../core/widgets/sheet_scaffold.dart';
 import '../models/subscriber.dart';
 import '../widgets/manual_wa_chip.dart';
@@ -18,7 +19,8 @@ import '../theme/typography.dart';
 /// يفتح `https://wa.me/...` في المتصفّح → web.whatsapp.com. حسب اختيار
 /// المستخدم في السؤال، هذا الـfallback الافتراضي.
 ///
-/// [phone] رقم دولي بلا `+` أو `00` (مثال: `9647701234567`).
+/// [phone] أيّ صيغة: `07…` و`7…` و`00964…` و`+964 …` وأرقامٌ عربيّة ⇒ دوليّة بـ[waPhone] (٢١ نوفمبر — كان يُمرَّر كما هو،
+/// فرقمٌ بلا مفتاح الدولة يفتح واتساب على «Couldn't look up phone number … missing a country code»).
 /// [message] نصّ خام — نُشفّره URL-safe داخلياً.
 ///
 /// يرجع true لو النظام قبل الـintent (لا يعني بالضرورة أن المدير أرسل).
@@ -27,7 +29,7 @@ Future<bool> openManualWa({
   required String message,
   BuildContext? context,
 }) async {
-  final digits = phone.replaceAll(RegExp(r'\D'), '');
+  final digits = waPhone(phone);
   if (digits.isEmpty) {
     _snack(context, 'رقم هاتف غير صالح');
     return false;

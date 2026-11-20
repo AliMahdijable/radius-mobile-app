@@ -1803,7 +1803,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     ];
   }
 
-  static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
+  /// رابط واتساب بالصيغة الدوليّة (٢١ نوفمبر): [waPhone] — كان يحذف ما ليس رقماً وحده فيفتح «07…» بلا مفتاح الدولة.
+  static String _digits(String phone) => waPhone(phone);
 
   /// ⚠️ **بلا `canLaunchUrl` على `tel:`** — انظر `_call`.
   ///
@@ -2943,7 +2944,7 @@ class _SubscriberHero extends StatelessWidget {
             onTap: () => _openUri(
               context,
               Uri.parse(
-                  'https://wa.me/${phone.replaceAll(RegExp(r"[^0-9]"), "")}'),
+                  'https://wa.me/${waPhone(phone)}'),
             ),
           ),
         ],
@@ -2964,13 +2965,7 @@ class _SubscriberHero extends StatelessWidget {
   static bool _tgIsPhone(String tg) => RegExp(r'^\+?\d[\d\s-]{6,}$').hasMatch(tg.trim());
 
   /// أرقام الرابط الدوليّة (wa.me / t.me/+) من أيّ صيغة: ‎07…‎ ⇒ ‎9647…‎، ‎00964…‎ ⇒ ‎964…‎؛ غير المفهوم كما هو.
-  static String _intlDigits(String raw) {
-    var d = raw.replaceAll(RegExp(r'[^0-9]'), '');
-    if (d.startsWith('00')) d = d.substring(2);
-    if (d.length == 11 && d.startsWith('07')) d = '964${d.substring(1)}';
-    if (d.length == 10 && d.startsWith('7')) d = '964$d';
-    return d;
-  }
+  static String _intlDigits(String raw) => waPhone(raw);
 
   static Uri _tgUri(String tg) => _tgIsPhone(tg)
       ? Uri.parse('https://t.me/+${_intlDigits(tg)}')

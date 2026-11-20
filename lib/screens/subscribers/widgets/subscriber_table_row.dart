@@ -1092,7 +1092,8 @@ class _PhoneCell extends StatelessWidget {
       );
     }
     final local = localPhone(phone);
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    // رابط واتساب بالصيغة الدوليّة (٢١ نوفمبر) — 07… / 00964… / أرقامٌ عربيّة كانت تُمرَّر كما هي
+    final digits = waPhone(phone);
     return Row(
       children: [
         Flexible(

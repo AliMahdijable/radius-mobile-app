@@ -7,6 +7,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import '../core/widgets/app_sheet.dart';
+import '../core/util/phone.dart';
 
 /// Pro البند ٤: «تواصل معنا» — تيليجرام/واتساب كما يضبطهما المالك.
 ///
@@ -17,7 +18,7 @@ class SupportContact {
   static Uri? _telegram(SupportInfo s) =>
       (s.telegram ?? '').isEmpty ? null : Uri.parse('https://t.me/${s.telegram}');
   static Uri? _whatsapp(SupportInfo s) =>
-      (s.whatsapp ?? '').isEmpty ? null : Uri.parse('https://wa.me/${s.whatsapp}');
+      (s.whatsapp ?? '').isEmpty ? null : Uri.parse('https://wa.me/${waPhone(s.whatsapp!)}');
 
   /// وسيلةٌ واحدة ← تُفتح مباشرةً؛ اثنتان ← اختيار.
   static Future<void> open(BuildContext context, SupportInfo s) async {

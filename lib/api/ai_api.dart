@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../core/platform/app_platform.dart';
 import '../core/platform/store_policy.dart';
 import '../core/util/error_text.dart';
+import '../core/util/phone.dart';
 import '../services/account_service.dart';
 import '../services/auth_storage.dart';
 import '../services/device_id.dart';
@@ -344,9 +345,8 @@ class AiSupport {
 
   /// رقم واتساب دوليّ: ٨–١٥ رقماً بعد نزع المسافات و+ و- والأقواس و00
   /// (ورقمٌ عراقيّ محلّيّ 07xxxxxxxxx ⇒ 9647xxxxxxxxx).
-  static final _waNoise = RegExp(r'[\s()+-]');
+  static final _waNumberish = RegExp('^[\\s()+\\-0-9\u0660-\u0669\u06f0-\u06f9]+\$');
   static final _waDigits = RegExp(r'^[1-9]\d{7,14}$');
-  static final _iqLocal = RegExp(r'^07\d{9}$');
 
   /// «t.me/x» بلا مخطّط ⇒ https.
   static final _bareHost =
@@ -375,9 +375,8 @@ class AiSupport {
   static Uri? _whatsapp(Object? v) {
     final s = _str(v);
     if (s == null) return null;
-    var d = s.replaceAll(_waNoise, '');
-    if (d.startsWith('00')) d = d.substring(2);
-    if (_iqLocal.hasMatch(d)) d = '964${d.substring(1)}';
+    // رقمٌ (ولو بأرقامٍ عربيّة أو 00964/07/7…) ⇒ [waPhone] (٢١ نوفمبر)؛ غيره رابطٌ يُقبل من مضيفي واتساب وحدهما
+    final d = _waNumberish.hasMatch(s) ? waPhone(s) : '';
     if (_waDigits.hasMatch(d)) return Uri.https('wa.me', '/$d');
     return _safe(s, _waHosts);
   }
