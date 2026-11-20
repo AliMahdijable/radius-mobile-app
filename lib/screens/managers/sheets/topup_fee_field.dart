@@ -77,7 +77,7 @@ class TopupFeeField extends StatelessWidget {
               controller: controller,
               enabled: enabled,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              textDirection: TextDirection.ltr,
+              // كحقل المبلغ فوقه: الرقم يمين الخانة والوحدة (٪ أو د.ع) يسارها — لا «د.ع5,000» ملتصقة
               style: AppType.input(color: AppColors.textHi),
               decoration: InputDecoration(
                 hintText: kind == TopupFeeKind.percent ? 'مثلاً 2' : 'مثلاً 5,000',
