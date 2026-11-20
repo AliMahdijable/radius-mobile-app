@@ -80,7 +80,7 @@ class MoneyAlertsSection extends StatelessWidget {
             ),
           ],
           status: b.now == null
-              ? const _Status('تعذّرت قراءة رصيدك الآن', tone: AppTone.neutral, icon: LucideIcons.circleHelp)
+              ? _Status(balanceWhy(b), tone: AppTone.neutral, icon: b.pending ? LucideIcons.loader : LucideIcons.circleHelp)
               : _Status(
                   'رصيدك الآن ${formatIQDSigned(b.now!)} $cur${b.daysLeft == null ? '' : ' — يكفي تقريباً ${daysText(b.daysLeft!)}'}',
                   tone: low ? AppTone.warning : AppTone.neutral,
@@ -132,7 +132,7 @@ class MoneyAlertsSection extends StatelessWidget {
           ],
           extra: pct == null ? null : _CapMeter(percent: pct),
           status: c.now == null
-              ? const _Status('تعذّر حساب ديون مشتركيك الآن', tone: AppTone.neutral, icon: LucideIcons.circleHelp)
+              ? _Status(debtsWhy(c.pending, c.reason), tone: AppTone.neutral, icon: c.pending ? LucideIcons.loader : LucideIcons.circleHelp)
               : _Status(
                   'ديون مشتركيك الآن ${formatIQD(c.now!)} $cur${pct == null ? '' : ' — $pct% من السقف'}',
                   tone: pct != null && pct >= 80 ? AppTone.warning : AppTone.neutral,
@@ -178,7 +178,10 @@ class MoneyAlertsSection extends StatelessWidget {
             ),
           ],
           status: d.matchCount == null
-              ? null
+              ? (d.pending || d.reason != null
+                  ? _Status(d.pending ? 'جارٍ عدّ من يطابق…' : debtsWhy(false, d.reason),
+                      tone: AppTone.neutral, icon: d.pending ? LucideIcons.loader : LucideIcons.circleHelp)
+                  : null)
               : _Status(
                   d.matchCount == 0
                       ? 'ماكو أحد يطابق الآن — ما يوصلك ملخّص فارغ'
@@ -202,6 +205,27 @@ class MoneyAlertsSection extends StatelessWidget {
       'debtors': {'min_days': f.minDays, 'min_amount': f.minAmount, 'max_amount': f.maxAmount}
     });
   }
+}
+
+/// لماذا لا رقم للرصيد الآن — جارٍ، أو سببٌ يفهمه الوكيل (لا «تعذّر» واحدة لكلّ شيء).
+String balanceWhy(BalanceAlert b) {
+  if (b.pending) return 'جارٍ قراءة رصيدك…';
+  return switch (b.reason) {
+    'no_wallet' => 'هذه الشركة ما تعطي رصيد صفحة يُقرأ — تنبيه الرصيد غير متاح لها',
+    'no_session' => 'جلسة الشركة منتهية — ادخل شركتك من جديد حتى نقرأ رصيدك',
+    _ => 'تعذّرت قراءة رصيدك الآن',
+  };
+}
+
+/// لماذا لا رقم للديون / للملخّص الآن.
+String debtsWhy(bool pending, String? reason) {
+  if (pending) return 'جارٍ حساب ديون مشتركيك…';
+  return switch (reason) {
+    'no_token' || 'no_session' => 'لا جلسة محفوظة لهذه الشركة — ادخل شركتك من جديد حتى نقرأ ديون مشتركيك',
+    'no_age' => 'هذه الشركة بلا أعمارٍ لديونها — حدّد الملخّص بالمبلغ',
+    'age_unavailable' => 'تعذّرت قراءة أعمار الديون الآن',
+    _ => 'تعذّر حساب ديون مشتركيك الآن',
+  };
 }
 
 /// «يوم واحد» · «يومين» · «4 أيام» · «30 يوم».

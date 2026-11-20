@@ -158,16 +158,30 @@ int? _int(Object? v) {
 /// «رصيدك تحت حدّ».
 @immutable
 class BalanceAlert {
-  const BalanceAlert({required this.enabled, this.threshold, this.repeat = const AlertRepeat.once(), this.now, this.daysLeft});
+  const BalanceAlert({
+    required this.enabled,
+    this.threshold,
+    this.repeat = const AlertRepeat.once(),
+    this.now,
+    this.daysLeft,
+    this.pending = false,
+    this.reason,
+  });
   final bool enabled;
   final num? threshold;
   final AlertRepeat repeat;
 
-  /// الرصيد الآن (null = تعذّرت قراءته — لا تنبيه كاذب).
+  /// الرصيد الآن (null = لم يُقرأ — [pending] أو تعذّر بـ[reason]؛ لا رقم قديم ولا صفر كاذب).
   final num? now;
 
   /// كم يوماً يكفي بمعدّل صرف الأسبوع (null = لا معدّل بعد).
   final int? daysLeft;
+
+  /// القراءة جارية ولم تصل خلال مهلة الخادم — الشاشة تسأل ثانيةً بعد ثوانٍ.
+  final bool pending;
+
+  /// لماذا لا رقم: no_wallet (الشركة بلا رصيد صفحة) · no_session (جلسة الشركة منتهية) · unreadable.
+  final String? reason;
 
   static BalanceAlert fromJson(Object? raw) {
     final m = raw is Map ? raw : const {};
@@ -177,6 +191,8 @@ class BalanceAlert {
       repeat: AlertRepeat.fromJson(m['repeat']),
       now: _num(m['now']),
       daysLeft: _int(m['days_left']),
+      pending: m['pending'] == true,
+      reason: m['reason']?.toString(),
     );
   }
 }
@@ -184,14 +200,29 @@ class BalanceAlert {
 /// «سقف ديون مشتركيك» — ينبّه عند ٨٠٪ و١٠٠٪.
 @immutable
 class DebtCapAlert {
-  const DebtCapAlert({required this.enabled, this.cap, this.repeat = const AlertRepeat.once(), this.now});
+  const DebtCapAlert({
+    required this.enabled,
+    this.cap,
+    this.repeat = const AlertRepeat.once(),
+    this.now,
+    this.serverPercent,
+    this.pending = false,
+    this.reason,
+  });
   final bool enabled;
   final num? cap;
   final AlertRepeat repeat;
   final num? now;
 
+  /// نسبة الخادم نفسها (بالتقريب للأسفل كإشعاره) — والحساب هنا احتياطٌ لخادمٍ لا يرسلها.
+  final int? serverPercent;
+  final bool pending;
+
+  /// no_token / no_session (لا جلسة للشركة) · list (تعذّر جلب المشتركين) · unavailable.
+  final String? reason;
+
   /// النسبة الآن من السقف (null بلا سقفٍ أو بلا رقم).
-  int? get percent => cap == null || cap! <= 0 || now == null ? null : (now! * 100 / cap!).round();
+  int? get percent => serverPercent ?? (cap == null || cap! <= 0 || now == null ? null : (now! * 100 / cap!).floor());
 
   static DebtCapAlert fromJson(Object? raw) {
     final m = raw is Map ? raw : const {};
@@ -200,6 +231,9 @@ class DebtCapAlert {
       cap: _num(m['cap']),
       repeat: AlertRepeat.fromJson(m['repeat']),
       now: _num(m['now']),
+      serverPercent: _int(m['percent']),
+      pending: m['pending'] == true,
+      reason: m['reason']?.toString(),
     );
   }
 }
@@ -215,6 +249,8 @@ class DebtorsDigest {
     this.schedule = const DigestSchedule(mode: DigestMode.daily, at: '10:00'),
     this.matchCount,
     this.matchTotal,
+    this.pending = false,
+    this.reason,
   });
   final bool enabled;
   final int? minDays;
@@ -225,6 +261,10 @@ class DebtorsDigest {
   /// من يطابق الآن (null = لم يُحسب).
   final int? matchCount;
   final num? matchTotal;
+  final bool pending;
+
+  /// no_age (لا أعمار ديونٍ لهذه الشركة) · age_unavailable · ومثل السقف.
+  final String? reason;
 
   static DebtorsDigest fromJson(Object? raw) {
     final m = raw is Map ? raw : const {};
@@ -237,6 +277,8 @@ class DebtorsDigest {
       schedule: DigestSchedule.fromJson(m['schedule']),
       matchCount: _int(match['count']),
       matchTotal: _num(match['total']),
+      pending: m['pending'] == true,
+      reason: m['reason']?.toString(),
     );
   }
 }
@@ -267,6 +309,9 @@ class AgentNotifs {
   final List<AgentNotifLine> recent;
   final String currency;
 
+  /// قراءةٌ لم تصل خلال مهلة الخادم ⇒ الشاشة تسأل ثانيةً بعد ثوانٍ (لا رقم قديم بانتظارها).
+  bool get anyPending => balance.pending || debtCap.pending || debtors.pending;
+
   static AgentNotifs? fromJson(Object? raw) {
     if (raw is! Map) return null;
     return AgentNotifs(
@@ -287,15 +332,23 @@ class AgentNotifsApi {
 
   static const path = '/api/v2/agent-notifs';
 
+  /// آخر ما عرفناه: هل القسم متاحٌ لهذه الصفحة؟ (يُظهر مكانه بانتظار القراءة بدل أن يقفز المحتوى) — null قبل أوّل سؤال.
+  static bool? lastAvailable;
+
   /// الإعداد والحال الآن — null حين لا يعرف الخادم الميزة (404) أو تعذّرت القراءة: القسم لا يظهر.
   static Future<AgentNotifs?> load() async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(path);
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
-      return AgentNotifs.fromJson(body['data']);
+      final data = AgentNotifs.fromJson(body['data']);
+      lastAvailable = data != null;
+      return data;
     } on DioException catch (e) {
       if (kDebugMode) debugPrint('[AgentNotifsApi] load: ${e.response?.statusCode ?? e.type}');
+      // مطفأٌ لهذه الصفحة أو لصاحبها وحده ⇒ لا مكان له؛ تعذّرٌ عابر ⇒ يبقى ما عرفناه
+      final code = e.response?.statusCode;
+      if (code == 404 || code == 403) lastAvailable = false;
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('[AgentNotifsApi] load: $e');

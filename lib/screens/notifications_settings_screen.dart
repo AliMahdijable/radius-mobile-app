@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -52,6 +54,17 @@ class _NotificationsSettingsScreenState
   /// «تنبيهات المال» — null: الخادم لا يقدّمها لهذا الحساب (أو تعذّرت) ⇒ لا قسم لها.
   AgentNotifs? _money;
   bool _moneyBusy = false;
+  bool _moneyLoading = true;
+
+  /// قراءةٌ لم تصل خلال مهلة الخادم (pending) ⇒ سؤالٌ ثانٍ بعد ٤ث، ستّ مرّاتٍ على الأكثر — لا رقم قديم بانتظارها.
+  Timer? _poll;
+  int _polls = 0;
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -61,15 +74,31 @@ class _NotificationsSettingsScreenState
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final money = AgentNotifsApi.load();
+    // الشاشة لا تنتظر قراءات المال (قد تأخذ ثوانٍ): التفضيلات أوّلاً، والمال يصل بمكانه
+    unawaited(_loadMoney());
     final p = await NotificationsApi.load();
-    final m = await money;
     if (!mounted) return;
     setState(() {
       _prefs = p ?? NotificationPrefs.defaults;
-      _money = m;
       _loading = false;
     });
+  }
+
+  Future<void> _loadMoney() async {
+    final m = await AgentNotifsApi.load();
+    if (!mounted) return;
+    setState(() {
+      // سؤالٌ ثانٍ فشل (شبكة) بعد أن عُرض القسم ⇒ يبقى ما عُرض لا يختفي
+      if (m != null || _money == null) _money = m;
+      _moneyLoading = false;
+    });
+    _poll?.cancel();
+    if (m != null && m.anyPending && _polls < 6) {
+      _polls += 1;
+      _poll = Timer(const Duration(seconds: 4), () {
+        if (mounted && !_moneyBusy) unawaited(_loadMoney());
+      });
+    }
   }
 
   /// حفظ جزءٍ من «تنبيهات المال» — الخادم يردّ الإعداد كلّه بحاله الآن؛ الرفض يبقي القديم ويقول السبب.
@@ -82,6 +111,13 @@ class _NotificationsSettingsScreenState
       if (r.ok && r.data != null) _money = r.data;
       _moneyBusy = false;
     });
+    if (r.ok && r.data != null && r.data!.anyPending) {
+      _polls = 0;
+      _poll?.cancel();
+      _poll = Timer(const Duration(seconds: 4), () {
+        if (mounted && !_moneyBusy) unawaited(_loadMoney());
+      });
+    }
     if (!r.ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -184,6 +220,15 @@ class _NotificationsSettingsScreenState
                 if (_money != null) ...[
                   const _SectionLabel('تنبيهات المال'),
                   MoneyAlertsSection(data: _money!, onPatch: _patchMoney, busy: _moneyBusy),
+                  const SizedBox(height: Sp.md),
+                ] else if (_moneyLoading && AgentNotifsApi.lastAvailable == true) ...[
+                  // كان القسم هنا من قبل ⇒ مكانه بانتظار القراءة (لا يقفز المحتوى حين يصل)
+                  const _SectionLabel('تنبيهات المال'),
+                  const Padding(
+                    key: ValueKey('ma-loading'),
+                    padding: EdgeInsets.symmetric(vertical: Sp.lg),
+                    child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                  ),
                   const SizedBox(height: Sp.md),
                 ],
                 const _SectionLabel('تنبيهات الأجهزة'),
