@@ -1,23 +1,29 @@
 import 'api_client.dart';
 import '../core/util/format.dart';
 
-/// «الفائدة» على شحن المدراء الآجل (المالك ٢٠ نوفمبر ٢٠٢٦: «ضيف بقسم المدراء بالشحن بايرث او غير ايرث نسبه الفائده او مبلغ معين…
-/// من يشحن لوكيل اجل ام دين تنضاف ع الرصيد… لازم بالتقارير الحركه هاي تبين شنو جانت وكم فائده»).
+/// «الفائدة» على شحن المدراء (المالك ٢٠ نوفمبر ٢٠٢٦: «ضيف بقسم المدراء بالشحن بايرث او غير ايرث نسبه الفائده او مبلغ معين… من
+/// يشحن لوكيل اجل ام دين تنضاف ع الرصيد… لازم بالتقارير الحركه هاي تبين شنو جانت وكم فائده»؛ ثمّ ٢١ نوفمبر: «لا هي مفروض بالحالاتين
+/// حبي اجل او نقدي»).
 ///
-/// الرصيد يصل المدير كما هو، والفائدة دينٌ فوقه في «ديون أخرى» مربوطٌ بالشحنة — للآجل وحده، وحين يفتحها الخادم للصفحة.
+/// الرصيد يصل المدير كما هو، والفائدة فوقه — حين يفتحها الخادم للصفحة: مع الآجل دينٌ في «ديون أخرى» مربوطٌ بالشحنة، ومع النقديّ
+/// تُستلم نقداً معه بلا دين (حين يقبلها الخادم: [TopupFeeConfig.cash]).
 /// الحساب هنا للعرض قبل التأكيد وحده: الخادم (server/managerTopupFees.js) يحسبها بالمعادلة نفسها ويرفض (FEE_CHANGED) ما يخالف
 /// ما رآه الوكيل، والموقع (client-v2 src/lib/topup-fee.ts) بالقواعد نفسها.
 ///
-///   GET /api/v2/manager-topup-fees/config?provider=sas4|earthlink&manager=<id> ⇒ { success, enabled, last:{kind,value}|null, max_percent }
-///   جسم الشحن: fee = { kind: percent|fixed, value, amount } ⇒ الردّ: fee = { amount, debt_id, recorded, label } (+ warning بالساس)
+///   GET /api/v2/manager-topup-fees/config?provider=sas4|earthlink&manager=<id> ⇒ { success, enabled, last:{kind,value}|null, max_percent,
+///       collects:['debt','cash'] }
+///   جسم الشحن: fee = { kind: percent|fixed, value, amount } ⇒ الردّ: fee = { amount, debt_id, recorded, label, collect } (+ warning بالساس)
 enum TopupFeeKind { none, percent, fixed }
 
 /// هل الفائدة مفتوحةٌ للصفحة، وآخر فائدةٍ طُبّقت لهذا المدير (مقترحةٌ عند فتح النافذة).
 class TopupFeeConfig {
-  const TopupFeeConfig({this.enabled = false, this.lastKind, this.lastValue});
+  const TopupFeeConfig({this.enabled = false, this.lastKind, this.lastValue, this.cash = false});
   final bool enabled;
   final TopupFeeKind? lastKind;
   final num? lastValue;
+
+  /// الخادم يقبلها مع الشحن النقديّ أيضاً (٢١ نوفمبر — collects يضمّ cash). خادمٌ أقدم ⇒ مع الآجل وحده كما كان.
+  final bool cash;
 
   static const off = TopupFeeConfig();
 
@@ -35,14 +41,23 @@ class TopupFeeConfig {
         value = v;
       }
     }
-    return TopupFeeConfig(enabled: body['enabled'] == true, lastKind: kind, lastValue: value);
+    final collects = body['collects'];
+    return TopupFeeConfig(
+      enabled: body['enabled'] == true,
+      lastKind: kind,
+      lastValue: value,
+      cash: collects is List && collects.contains('cash'),
+    );
   }
 }
 
 /// ما ردّه الخادم عن الفائدة بعد شحنٍ ناجح.
 class TopupFeeOutcome {
-  const TopupFeeOutcome({required this.amount, required this.recorded, this.label});
+  const TopupFeeOutcome({required this.amount, required this.recorded, this.label, this.cash = false});
   final num amount;
+
+  /// استُلمت نقداً مع الشحن (لا دين) — وإلّا دينٌ في «ديون أخرى».
+  final bool cash;
 
   /// سُجّل دينها في «ديون أخرى». false: الشحن تمّ ودينها لم يُسجَّل — يُقال صريحاً (أضفها من «ديون أخرى»).
   final bool recorded;
@@ -59,6 +74,7 @@ class TopupFeeOutcome {
       amount: a,
       recorded: j['recorded'] == true,
       label: l == null || '$l'.trim().isEmpty ? null : '$l',
+      cash: j['collect'] == 'cash',
     );
   }
 }

@@ -8,8 +8,9 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// «الفائدة على الآجل» في نافذتي الشحن (الساس: balance_op_sheet، ايرث لنك: el_topup_sheet) — بدون · نسبة ٪ · مبلغ، ثمّ ما يدفعه
-/// المدير قبل التنفيذ سطراً سطراً: الرصيد اللي ينشحن · الفائدة · المجموع على المدير (كالموقع: TopupFeeField.tsx).
+/// «الفائدة» في نافذتي الشحن (الساس: balance_op_sheet، ايرث لنك: el_topup_sheet) — بدون · نسبة ٪ · مبلغ، ثمّ ما يدفعه المدير قبل
+/// التنفيذ سطراً سطراً: الرصيد اللي ينشحن · الفائدة · المجموع على المدير (الآجل: دينٌ في «ديون أخرى») أو المجموع اللي تستلمه نقداً
+/// (النقديّ [cash] — ٢١ نوفمبر). كالموقع: TopupFeeField.tsx.
 /// الحقل لا يحمل حالةً: النوع والنصّ عند النافذة، فتُرسل ما يُعرض هنا نفسه.
 class TopupFeeField extends StatelessWidget {
   const TopupFeeField({
@@ -19,6 +20,7 @@ class TopupFeeField extends StatelessWidget {
     required this.controller,
     required this.onKind,
     this.enabled = true,
+    this.cash = false,
   });
 
   /// مبلغ الشحن.
@@ -27,6 +29,9 @@ class TopupFeeField extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<TopupFeeKind> onKind;
   final bool enabled;
+
+  /// الشحن نقديّ: الفائدة تُستلم نقداً معه (لا دين).
+  final bool cash;
 
   static const _kinds = [TopupFeeKind.none, TopupFeeKind.percent, TopupFeeKind.fixed];
 
@@ -53,7 +58,7 @@ class TopupFeeField extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'الفائدة على الآجل',
+                  cash ? 'الفائدة على الشحن النقدي' : 'الفائدة على الآجل',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
@@ -109,12 +114,13 @@ class TopupFeeField extends StatelessWidget {
                   const SizedBox(height: 4),
                   _sumRow('الفائدة', amount),
                   const SizedBox(height: 4),
-                  _sumRow('المجموع على المدير', base + amount, strong: true),
+                  _sumRow(cash ? 'المجموع اللي تستلمه نقداً' : 'المجموع على المدير', base + amount, strong: true),
                 ],
               ),
             const SizedBox(height: 6),
             Text(
-              'تُسجَّل ديناً عليه في «ديون أخرى» — الرصيد يصله كما هو',
+              cash ? 'تستلمها نقداً مع الشحن — لا دين عليه، والرصيد يصله كما هو' : 'تُسجَّل ديناً عليه في «ديون أخرى» — الرصيد يصله كما هو',
+              key: const ValueKey('topup-fee-note'),
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11),
             ),
           ],

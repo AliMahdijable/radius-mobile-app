@@ -86,7 +86,9 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
     });
   }
 
-  bool get _feeOn => _asDebt && _feeCfg.enabled && _feeKind != TopupFeeKind.none;
+  /// الحقل ظاهر؟ آجلٌ — أو نقديٌّ حين يقبله الخادم (٢١ نوفمبر: «بالحالاتين اجل او نقدي») — والميزة مفتوحة.
+  bool get _feeShown => _feeCfg.enabled && (_asDebt || _feeCfg.cash);
+  bool get _feeOn => _feeShown && _feeKind != TopupFeeKind.none;
   String? get _feeProblem => _feeOn ? TopupFee.problem(_feeKind, _feeCtrl.text, _amount) : null;
 
   /// الفائدة بالدينار كما ستُرسل (0 بلا فائدة أو مع خطئها).
@@ -203,13 +205,16 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
         ? '\n\nآجل: يُسجَّل ${formatIQD(_amount)} د.ع ديناً عليه + ${TopupFee.label(_feeKind, feeValue, feeAmt)} في «ديون أخرى»'
             ' — المجموع ${formatIQD(_amount + feeAmt)} د.ع.'
         : '\n\nآجل: يُسجَّل ${formatIQD(_amount)} د.ع ديناً عليه في «ديون أخرى».';
+    final cashLine = feeAmt > 0
+        ? '\n\nنقداً: استلمتَ منه الآن ${formatIQD(_amount + feeAmt)} د.ع — الشحن ${formatIQD(_amount)} + ${TopupFee.label(_feeKind, feeValue, feeAmt)}.'
+        : '\n\nنقداً: استلمتَ المبلغ منه الآن.';
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('تأكيد الشحن'),
         content: Text(
           'تحويل ${formatIQD(_amount)} د.ع من رصيد إيداعك إلى «$name».'
-          '${_asDebt ? debtLine : '\n\nنقداً: استلمتَ المبلغ منه الآن.'}'
+          '${_asDebt ? debtLine : cashLine}'
           '${_willApp || _willWa ? '\n\nيصله ${[if (_willApp) 'إشعارٌ بالتطبيق', if (_willWa) 'رسالة واتساب'].join(' و')}.' : ''}',
           style: const TextStyle(height: 1.6),
         ),
@@ -327,13 +332,14 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
                 : 'أدنى مبلغ ${formatIQD(ElManagersApi.minTopup)} د.ع — شرط ايرث لنك',
             style: AppType.muted(color: _overBalance ? AppColors.warning : AppColors.textMid).copyWith(fontSize: 11),
           ),
-          if (_asDebt && _feeCfg.enabled) ...[
+          if (_feeShown) ...[
             const SizedBox(height: Sp.md),
             TopupFeeField(
               base: _amount,
               kind: _feeKind,
               controller: _feeCtrl,
               enabled: !_locked,
+              cash: !_asDebt,
               onKind: (k) => setState(() {
                 _feeTouched = true;
                 _feeKind = k;

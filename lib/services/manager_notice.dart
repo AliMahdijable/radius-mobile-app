@@ -275,7 +275,7 @@ class ManagerNoticeService {
       '💳 رصيدك الحالي: ${_fmt(currentCredit)} د.ع',
       if (previousDebt > 0) '↩️ الدين السابق: ${_fmt(previousDebt)} د.ع',
       if (totalDebt > 0) '📊 الدين الحالي: ${_fmt(totalDebt)} د.ع',
-      if (fee.isNotEmpty) '➕ $fee — تُضاف على دينك',
+      if (fee.isNotEmpty) '➕ $fee — ${isLoan ? 'تُضاف على دينك' : 'مدفوعة نقداً مع الشحن'}',
       if ((notes ?? '').trim().isNotEmpty) '📝 ملاحظة: ${notes!.trim()}',
     ];
     return lines.join('\n');

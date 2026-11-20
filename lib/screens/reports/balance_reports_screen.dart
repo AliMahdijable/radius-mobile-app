@@ -548,7 +548,7 @@ class BalanceStats extends StatelessWidget {
               'نقد التفعيلات ${formatIQD(p.cashNow)}',
               'تسديد ديونها ${formatIQD(p.paidIn)}',
               // المدراء الفرعيّون داخل الرقم (حين يفتح الخادم مفتاحهم): ما دخل منهم، وما رُدّ لهم بالسحب
-              if (mg != null && mg.cash + mg.paidIn > 0) 'من المدراء الفرعيّين ${formatIQD(mg.cash + mg.paidIn)}',
+              if (mg != null && mg.cash + mg.paidIn + mg.feesCash > 0) 'من المدراء الفرعيّين ${formatIQD(mg.cash + mg.paidIn + mg.feesCash)}',
               if (mg != null && mg.withdrawn > 0) 'ناقص سحبٍ من المدراء ${formatIQD(mg.withdrawn)}',
             ],
           ),

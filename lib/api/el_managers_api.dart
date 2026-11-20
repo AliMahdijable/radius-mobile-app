@@ -119,11 +119,11 @@ class ElTopupResult {
   /// «الفائدة» على الآجل كما سجّلها الخادم (٢٠ نوفمبر). تعذّر دينها تقوله رسالة الخادم نفسها («⚠️ لم تُسجَّل الفائدة…»).
   final TopupFeeOutcome? fee;
 
-  /// سطرٌ تحت رسالة النجاح: «مع فائدة 2% (2,000 د.ع) في «ديون أخرى»».
+  /// سطرٌ تحت رسالة النجاح: «مع فائدة 2% (2,000 د.ع) في «ديون أخرى»» (آجل) أو «مع فائدة 700 د.ع نقداً» (نقديّ).
   String? get feeLine {
     final f = fee;
     if (f == null || !f.recorded) return null;
-    return 'مع ${f.label ?? 'فائدة ${f.amount}'} في «ديون أخرى»';
+    return 'مع ${f.label ?? 'فائدة ${f.amount}'} ${f.cash ? 'نقداً' : 'في «ديون أخرى»'}';
   }
 
   bool get uncertain => !ok && (noResponse || code == 'OUTCOME_UNKNOWN' || code == 'IN_PROGRESS');

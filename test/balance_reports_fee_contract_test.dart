@@ -18,9 +18,10 @@ import 'employee_ledger/ledger_fixture.dart' show LedgerDiskLoader;
 import 'support/app_fonts.dart';
 
 /// «الفائدة» على شحن المدراء الآجل في «تقارير الأرصدة» (٢٠ نوفمبر ٢٠٢٦) على **ردّ الخادم الحقيقيّ**:
-/// `server_contract_fees.json` ولّده الخادم الحيّ (server/balanceReports.js + managerTopupFees.js على MySQL مؤقّتة، بلا بيانات إنتاج —
-/// gen_fee_contract.js): فترةٌ بمليون، شحنٌ نقديّ ٥٠ ألفاً وآجلٌ ١٠٠ ألف لـmgr.north بفائدة ٢٪ (٢٬٠٠٠) سُدّد منها ١٬٠٠٠، وآجلٌ ٢٥ ألفاً
-/// لـmgr.south بفائدةٍ ثابتة ٥٠٠ لم تُسدَّد. الموقع يُفحص على الملفّ نفسه.
+/// `server_contract_fees.json` ولّده الخادم (server/balanceReports.js + managerTopupFees.js، ad39cc0، على MySQL مؤقّتة بلا بيانات إنتاج —
+/// gen_fee_contract2.js): فترةٌ بمليون، شحنٌ نقديّ ٥٠ ألفاً وآجلٌ ١٠٠ ألف لـmgr.north بفائدة ٢٪ (٢٬٠٠٠) سُدّد منها ١٬٠٠٠، وآجلٌ ٢٥ ألفاً
+/// لـmgr.south بفائدةٍ ثابتة ٥٠٠ لم تُسدَّد، و(٢١ نوفمبر) شحنٌ نقديّ ٨٠ ألفاً لـmgr.east بفائدة ١٫٥٪ نقداً (١٬٢٠٠ — لا دين). الموقع يُفحص
+/// على الملفّ نفسه.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final raw = jsonDecode(File('test/balance_reports/server_contract_fees.json').readAsStringSync()) as Map<String, dynamic>;
@@ -35,17 +36,18 @@ void main() {
   Map<String, dynamic> row(String key) => items.firstWhere((x) => x['key'] == key);
   BalanceMgrMove mv(String key) => BalanceMove.fromJson(row(key))! as BalanceMgrMove;
 
-  test('الفترة: managers.fees بقارئه، والباقي على المدراء يحمل باقي الفوائد — والأرقام محسوبةٌ باليد', () {
+  test('الفترة: managers.fees وfees_cash بقارئيهما، والباقي على المدراء يحمل باقي الفوائد الآجلة — والأرقام محسوبةٌ باليد', () {
     final j = ((ov['periods'] as List).first as Map)['managers'] as Map;
-    expect(j.keys.toSet(), {'cash', 'withdrawn', 'loans', 'paid_in', 'open', 'late', 'count', 'fees'}, reason: 'مفتاحٌ جديد من الخادم بلا قرار');
+    expect(j.keys.toSet(), {'cash', 'withdrawn', 'loans', 'paid_in', 'open', 'late', 'count', 'fees', 'fees_cash'}, reason: 'مفتاحٌ جديد من الخادم بلا قرار');
     final p = BalanceOverview.fromJson(ov)!.periods.single;
     final m = p.managers!;
-    // آجلان 100,000 + 25,000 · فائدتان 2,000 + 500 سُدّد من الأولى 1,000 ⇒ الباقي 125,000 + 1,000 + 500
-    expect([m.cash, m.loans, m.fees, m.paidIn, m.open, m.withdrawn, m.count], [50000, 125000, 2500, 1000, 126500, 0, 6]);
-    expect(p.debtsCreated, 127500, reason: 'ديون الفترة = الآجلان + الفائدتان');
-    expect(p.collected, 51000, reason: 'النقديّ + تسديد الفائدة');
-    // ردٌّ قديم بلا fees (الخادم يرسله حين يوجد وحده) ⇒ 0 لا خطأ
-    expect(BalanceManagers.fromJson({...j}..remove('fees'))!.fees, 0);
+    // نقديّان 50,000 + 80,000 · آجلان 100,000 + 25,000 · فائدتان آجلتان 2,000 + 500 سُدّد من الأولى 1,000 · فائدةٌ نقديّة 1,200
+    expect([m.cash, m.loans, m.fees, m.feesCash, m.paidIn, m.open, m.withdrawn, m.count], [130000, 125000, 2500, 1200, 1000, 126500, 0, 8]);
+    expect(p.debtsCreated, 127500, reason: 'ديون الفترة = الآجلان + الفائدتان الآجلتان (النقديّة ليست ديناً)');
+    expect(p.collected, 132200, reason: 'النقديّان + تسديد الفائدة + الفائدة النقديّة');
+    // ردٌّ قديم بلا fees/fees_cash (الخادم يرسلهما حين يوجدان وحده) ⇒ 0 لا خطأ
+    final old = BalanceManagers.fromJson({...j}..remove('fees')..remove('fees_cash'))!;
+    expect([old.fees, old.feesCash], [0, 0]);
   });
 
   test('حركة الفائدة: كلّ مفتاحٍ بقارئه، مواصفتها، وحال دينها', () {
@@ -53,13 +55,21 @@ void main() {
       'key', 'kind', 'op', 'at_ms', 'sub', 'username', 'amount', 'remaining', 'debt_state', 'turned', 'paid_in', 'paid_late', //
       'last_paid_at_ms', 'after_close', 'by', 'note', 'fee',
     };
-    final fees = items.where((x) => x['op'] == 'fee').toList();
-    expect(fees.length, 2);
+    final fees = items.where((x) => x['op'] == 'fee' || x['op'] == 'fee_cash').toList();
+    expect(fees.length, 3);
     for (final j in fees) {
       expect(j.keys.toSet(), moveKeys, reason: 'مفتاح حركة فائدةٍ جديد من الخادم');
       expect((j['fee'] as Map).keys.toSet(), {'kind', 'value', 'base'});
     }
-    expect(items.where((x) => x['op'] != 'fee').every((x) => !x.containsKey('fee')), isTrue, reason: 'غير الفائدة بلا مواصفتها');
+    expect(items.where((x) => x['op'] != 'fee' && x['op'] != 'fee_cash').every((x) => !x.containsKey('fee')), isTrue, reason: 'غير الفائدة بلا مواصفتها');
+    // النقديّة (٢١ نوفمبر): «فائدة شحن نقدي» — لا دين، وتفاصيلها كالآجلة
+    final f3 = mv('f3');
+    expect([f3.op, f3.username, f3.amount, f3.remaining, f3.debtState, f3.op.debtLike, f3.op.isFee], [BalanceMgrOp.feeCash, 'mgr.east', 1200, 0, BalanceDebtState.none, false, true]);
+    expect([f3.fee!.percent, f3.fee!.value, f3.fee!.base], [true, 1.5, 80000]);
+    expect(balanceMgrFeeDetail(f3), '1.5% على 80,000');
+    expect(balanceMgrDebtNote(f3), isNull, reason: 'ليست ديناً');
+    expect(BalanceMgrOp.of('fee_cash'), BalanceMgrOp.feeCash);
+    expect(BalanceMgrOp.feeCash.label, 'فائدة شحن نقدي');
     final f1 = mv('f1');
     final f2 = mv('f2');
     expect([f1.op, f1.username, f1.amount, f1.remaining, f1.paidIn, f1.debtState, f1.by], [BalanceMgrOp.fee, 'mgr.north', 2000, 1000, 1000, BalanceDebtState.partly, 'admin@x']);
@@ -139,6 +149,7 @@ void main() {
       await t.pumpWidget(app(const BalanceReportsScreen()));
       await settle(t);
       expect(t.takeException(), isNull);
+      expect(inKey('bal-stat-collected', 'من المدراء الفرعيّين 132,200'), findsOneWidget, reason: '130,000 نقداً + 1,000 تسديد + 1,200 فائدة نقديّة');
       await tap(t, k('bal-detail-$pid'));
       expect(t.takeException(), isNull);
       expect(inKey('bal-sum-mgr-loans', '125,000 د.ع'), findsOneWidget);
@@ -146,15 +157,22 @@ void main() {
       expect(inKey('bal-sum-mgr-fees', 'منها فوائد الشحن الآجل'), findsOneWidget);
       expect(inKey('bal-sum-mgr-open', '126,500 د.ع'), findsOneWidget);
       expect(inKey('bal-summary', 'الباقي منها بذمّة المشتركين والمدراء'), findsOneWidget);
+      // النقديّة (٢١ نوفمبر): سطرها في «المحصَّل»، وبلاطة «المحصَّل» تضمّها في «من المدراء الفرعيّين»
+      expect(inKey('bal-sum-mgr-fees-cash', '1,200 د.ع'), findsOneWidget);
+      expect(inKey('bal-sum-mgr-fees-cash', 'فوائد الشحن النقدي'), findsOneWidget);
+      expect(inKey('bal-sum-collected', '132,200 د.ع'), findsOneWidget);
       await tap(t, k('bal-filter-managers'));
       expect(server.filters.last, 'managers');
       final rows = t.widgetList<BalanceMoveRow>(find.byType(BalanceMoveRow)).map((r) => r.move).cast<BalanceMgrMove>().toList();
-      expect(rows.map((m) => m.op.name).toList(), ['loan', 'loan', 'cash', 'pay', 'fee', 'fee']);
+      expect(rows.map((m) => m.op.name).toList(), ['cash', 'loan', 'loan', 'cash', 'pay', 'feeCash', 'fee', 'fee']);
       expect(find.text('فائدة شحن آجل'), findsNWidgets(2));
+      expect(find.text('فائدة شحن نقدي'), findsOneWidget);
       expect(find.textContaining('2% على 100,000'), findsOneWidget);
       expect(find.textContaining('مبلغ ثابت على 25,000'), findsOneWidget);
+      expect(find.textContaining('1.5% على 80,000'), findsOneWidget);
+      expect(find.text(balanceSigned(1200, sign: '+')), findsOneWidget, reason: 'النقديّة نقدٌ دخل بإشارته');
       final statuses = t.widgetList<BalanceMoveStatus>(k('bal-move-status')).map((c) => c.text).toList();
-      expect(statuses.sublist(4), ['دين باقي 500', 'تسدّد منه 1,000 · باقي 1,000']);
+      expect(statuses.sublist(5), ['أُضيف إلى «المحصَّل»', 'دين باقي 500', 'تسدّد منه 1,000 · باقي 1,000']);
       // الفائدة دينٌ بلا إشارة (كالآجل) — لا «+2,000» كنقدٍ دخل
       expect(find.text(balanceIqd(2000)), findsWidgets);
       expect(find.text(balanceSigned(2000, sign: '+')), findsNothing);

@@ -102,13 +102,15 @@ enum BalanceFilter {
 }
 
 /// عمليّة الرصيد مع مديرٍ فرعيّ: شحنٌ نقديّ («طبّلك»)، شحنٌ آجل (دينٌ من ديون الفترة)، تسديدٌ من دينه، أو سحب رصيدٍ منه (ينقص «طبّلك»)،
-/// أو «فائدة» شحنٍ آجل (٢٠ نوفمبر — server/managerTopupFees.js): دينٌ في «ديون أخرى» فوق الشحنة، من ديون الفترة كالآجل.
+/// أو «فائدة» شحنٍ آجل (٢٠ نوفمبر — server/managerTopupFees.js): دينٌ في «ديون أخرى» فوق الشحنة، من ديون الفترة كالآجل؛ أو «فائدة»
+/// شحنٍ نقديّ (٢١ نوفمبر — wire fee_cash): مستلَمةٌ نقداً معه فتدخل «المحصَّل» كالنقديّ.
 enum BalanceMgrOp {
   cash('شحن مدير نقدي'),
   loan('شحن مدير آجل'),
   pay('تسديد دين مدير'),
   withdraw('سحب رصيد من مدير'),
-  fee('فائدة شحن آجل');
+  fee('فائدة شحن آجل'),
+  feeCash('فائدة شحن نقدي');
 
   const BalanceMgrOp(this.label);
   final String label;
@@ -116,8 +118,18 @@ enum BalanceMgrOp {
   /// دينٌ بحاله (آجلٌ أو فائدته): مبلغه بلا إشارة، وحاله «كان دين وتسدّد» أو ما بقي منه.
   bool get debtLike => this == loan || this == fee;
 
-  static BalanceMgrOp? of(Object? v) =>
-      switch ('$v') { 'cash' => cash, 'loan' => loan, 'pay' => pay, 'withdraw' => withdraw, 'fee' => fee, _ => null };
+  /// سطر «فائدة» (آجلةً أو نقديّةً) — معه مواصفتها [BalanceMgrFee].
+  bool get isFee => this == fee || this == feeCash;
+
+  static BalanceMgrOp? of(Object? v) => switch ('$v') {
+        'cash' => cash,
+        'loan' => loan,
+        'pay' => pay,
+        'withdraw' => withdraw,
+        'fee' => fee,
+        'fee_cash' => feeCash,
+        _ => null,
+      };
 }
 
 /// مواصفة «الفائدة» على حركة [BalanceMgrOp.fee]: نسبةٌ ([value]٪) أو مبلغٌ ثابت، على شحنةٍ مبلغها [base].
@@ -186,6 +198,7 @@ class BalanceManagers {
     required this.afterClose,
     required this.count,
     this.fees = 0,
+    this.feesCash = 0,
   });
   final double cash;
   final double withdrawn;
@@ -198,6 +211,9 @@ class BalanceManagers {
   /// فوائد الشحن الآجل التي أُنشئت في الفترة (داخلةٌ في ديونها؛ [open] يحمل الباقي منها). غائبٌ من الخادم ⇒ 0.
   final double fees;
 
+  /// فوائد الشحن النقديّ المستلَمة قبل الإغلاق (٢١ نوفمبر — داخلةٌ في «طبّلك»/«المحصَّل»). غائبٌ ⇒ 0.
+  final double feesCash;
+
   static BalanceManagers? fromJson(Object? j) {
     if (j is! Map) return null;
     return BalanceManagers(
@@ -209,6 +225,7 @@ class BalanceManagers {
       afterClose: _n(j['late']),
       count: _i(j['count']),
       fees: _n(j['fees']),
+      feesCash: _n(j['fees_cash']),
     );
   }
 }
@@ -539,7 +556,7 @@ sealed class BalanceMove {
           afterClose: j['after_close'] == true,
           by: _s(j['by']),
           note: _s(j['note']),
-          fee: op == BalanceMgrOp.fee ? BalanceMgrFee.fromJson(j['fee']) : null,
+          fee: op.isFee ? BalanceMgrFee.fromJson(j['fee']) : null,
         );
     }
     return null;
@@ -635,7 +652,7 @@ class BalanceMgrMove extends BalanceMove {
   final String? by;
   final String? note;
 
-  /// مواصفة الفائدة ([BalanceMgrOp.fee] وحده).
+  /// مواصفة الفائدة ([BalanceMgrOp.isFee] وحدهما).
   final BalanceMgrFee? fee;
 }
 
@@ -736,10 +753,10 @@ String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
     ? null
     : balanceDebtNoteOf(state: m.debtState, turnedProfit: m.turnedProfit, paid: m.paidIn + m.paidLate, remaining: m.remaining, lastPaidAtMs: m.lastPaidAtMs, nowMs: nowMs);
 
-/// «2% على 100,000» أو «مبلغ ثابت على 25,000» — تفاصيل حركة الفائدة (كالموقع: feeDetail). null لغيرها.
+/// «2% على 100,000» أو «مبلغ ثابت على 25,000» — تفاصيل حركة الفائدة، آجلةً أو نقديّة (كالموقع: feeDetail). null لغيرها.
 String? balanceMgrFeeDetail(BalanceMgrMove m) {
   final f = m.fee;
-  if (m.op != BalanceMgrOp.fee || f == null) return null;
+  if (!m.op.isFee || f == null) return null;
   final on = f.base == null ? '' : ' على ${formatIQD(f.base!)}';
   if (!f.percent) return 'مبلغ ثابت$on';
   final v = (f.value * 100).round() / 100;

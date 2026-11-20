@@ -142,9 +142,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     });
   }
 
-  /// تُرسل الفائدة؟ شحنٌ آجل والميزة مفتوحة ونوعها ليس «بدون».
-  bool get _useFee =>
-      _op == _BalanceOp.deposit && _isLoan && !sessionIsKit && _feeCfg.enabled && _feeKind != TopupFeeKind.none;
+  /// الحقل ظاهر؟ شحنٌ آجل — أو نقديٌّ حين يقبله الخادم (٢١ نوفمبر: «بالحالاتين اجل او نقدي») — والميزة مفتوحة.
+  bool get _feeShown => _op == _BalanceOp.deposit && !sessionIsKit && _feeCfg.enabled && (_isLoan || _feeCfg.cash);
+
+  /// تُرسل الفائدة؟ الحقل ظاهر ونوعها ليس «بدون».
+  bool get _useFee => _feeShown && _feeKind != TopupFeeKind.none;
   String? get _feeProblem => _useFee ? TopupFee.problem(_feeKind, _feeCtrl.text, _amount) : null;
 
   Future<void> _refreshTgStatus() async {
@@ -533,13 +535,14 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 _quickChip(v),
             ],
           ),
-          if (_op == _BalanceOp.deposit && _isLoan && !sessionIsKit && _feeCfg.enabled) ...[
+          if (_feeShown) ...[
             const SizedBox(height: Sp.md),
             TopupFeeField(
               base: _amount,
               kind: _feeKind,
               controller: _feeCtrl,
               enabled: !_submitting,
+              cash: !_isLoan,
               onKind: (k) => setState(() {
                 _feeTouched = true;
                 _feeKind = k;

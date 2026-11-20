@@ -300,6 +300,9 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             BalanceLine(label: 'تسديد ديون الفترة', value: balanceIqd(p.paidIn), valueColor: AppTone.success.onSoft),
             if (mg != null && mg.cash > 0)
               BalanceLine(key: const ValueKey('bal-sum-mgr-cash'), label: 'شحن المدراء الفرعيّين نقداً', value: balanceIqd(mg.cash), valueColor: AppTone.success.onSoft),
+            // فوائد الشحن النقديّ (٢١ نوفمبر): مستلَمةٌ نقداً مع الشحن — داخلةٌ في «المحصَّل»
+            if (mg != null && mg.feesCash > 0)
+              BalanceLine(key: const ValueKey('bal-sum-mgr-fees-cash'), label: 'فوائد الشحن النقدي', value: balanceIqd(mg.feesCash), valueColor: AppTone.success.onSoft),
             if (mg != null && mg.paidIn > 0)
               BalanceLine(key: const ValueKey('bal-sum-mgr-paid'), label: 'تسديد ديون المدراء', value: balanceIqd(mg.paidIn), valueColor: AppTone.success.onSoft),
             if (mg != null && mg.withdrawn > 0)
@@ -502,12 +505,12 @@ class BalanceMoveRow extends StatelessWidget {
         details = [balanceDayTime(m.atMs, nowMs: nowMs), if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
         status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
       case BalanceMgrMove():
-        // شحنٌ نقديّ وتسديد دين: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل وفائدته: دينٌ بحاله كدين التفعيل.
+        // شحنٌ نقديّ وتسديد دين وفائدة الشحن النقديّ: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل وفائدته: دينٌ بحاله كدين التفعيل.
         tone = m.op.debtLike ? AppTone.warning : (m.op == BalanceMgrOp.withdraw ? AppTone.danger : AppTone.success);
         icon = switch (m.op) {
           BalanceMgrOp.pay => LucideIcons.handCoins,
           BalanceMgrOp.withdraw => LucideIcons.undo2,
-          BalanceMgrOp.fee => LucideIcons.percent,
+          BalanceMgrOp.fee || BalanceMgrOp.feeCash => LucideIcons.percent,
           _ => LucideIcons.users,
         };
         title = m.username;

@@ -80,7 +80,12 @@ void main() {
       expect(TopupFeeConfig.fromBody({'success': false, 'enabled': true}).enabled, isFalse, reason: 'ردٌّ فاشل ⇒ مطفأة');
       expect(TopupFeeConfig.fromBody({'success': true, 'enabled': true, 'last': {'kind': 'bonus', 'value': 2}}).lastKind, isNull);
       final out = TopupFeeOutcome.fromJson({'amount': 2000, 'debt_id': 9, 'recorded': true, 'label': 'فائدة 2% (2,000 د.ع)'})!;
-      expect([out.amount, out.recorded, out.label], [2000, true, 'فائدة 2% (2,000 د.ع)']);
+      expect([out.amount, out.recorded, out.label, out.cash], [2000, true, 'فائدة 2% (2,000 د.ع)', false]);
+      // ٢١ نوفمبر: الخادم يقبلها مع النقديّ (collects) — خادمٌ أقدم بلا collects ⇒ الآجل وحده
+      expect(TopupFeeConfig.fromBody({'success': true, 'enabled': true, 'collects': ['debt', 'cash']}).cash, isTrue);
+      expect(TopupFeeConfig.fromBody({'success': true, 'enabled': true, 'collects': ['debt']}).cash, isFalse);
+      expect(on.cash, isFalse);
+      expect(TopupFeeOutcome.fromJson({'amount': 700, 'recorded': true, 'collect': 'cash'})!.cash, isTrue);
       expect(TopupFeeOutcome.fromJson(null), isNull);
       expect(TopupFeeOutcome.fromJson({'recorded': true}), isNull);
     });
@@ -175,6 +180,37 @@ void main() {
       expect(push['notes'], 'فائدة 2% (2,000 د.ع)');
       final wa = s.bodies('POST', '/api/whatsapp/send-message').single['message'] as String;
       expect(wa, contains('➕ فائدة 2% (2,000 د.ع) — تُضاف على دينك'));
+    });
+
+    testWidgets('النقديّ بفائدة (٢١ نوفمبر — خادمٌ يقبلها): الحقل بلا «آجل» بعنوانه، «المجموع اللي تستلمه نقداً»، والجسم والرسالة', (t) async {
+      final s = await server(
+        config: {'success': true, 'enabled': true, 'last': {'kind': 'percent', 'value': 2}, 'max_percent': 100, 'collects': ['debt', 'cash']},
+        deposit: {
+          'success': true,
+          'fee': {'amount': 2000, 'debt_id': null, 'recorded': true, 'label': 'فائدة 2% (2,000 د.ع)', 'collect': 'cash'},
+        },
+      );
+      await open(t);
+      expect(fee, findsOneWidget, reason: 'نقديٌّ والخادم يقبلها');
+      expect(inFee('الفائدة على الشحن النقدي'), findsOneWidget);
+      await amount(t, '100000');
+      expect(inFee('المجموع اللي تستلمه نقداً'), findsOneWidget);
+      expect(inFee('102,000 د.ع'), findsOneWidget);
+      expect(find.descendant(of: fee, matching: find.textContaining('تستلمها نقداً مع الشحن')), findsOneWidget);
+      // «آجل» ⇒ العنوان والمجموع يتبعان الطريقة، ثمّ رجوعٌ للنقديّ
+      await loan(t);
+      expect(inFee('الفائدة على الآجل'), findsOneWidget);
+      expect(inFee('المجموع على المدير'), findsOneWidget);
+      await loan(t);
+      await submit(t);
+      final body = s.bodies('POST', '/api/v2/managers/41/deposit').single;
+      expect([body['isLoan'], body['fee']], [false, {'kind': 'percent', 'value': 2, 'amount': 2000}]);
+      expect(find.textContaining('تمت العملية — فائدة 2% (2,000 د.ع)'), findsOneWidget);
+      await simDrain(t);
+      final wa = s.bodies('POST', '/api/whatsapp/send-message').single['message'] as String;
+      expect(wa, contains('➕ فائدة 2% (2,000 د.ع) — مدفوعة نقداً مع الشحن'));
+      expect(wa, isNot(contains('تُضاف على دينك')));
+      expect(s.bodies('POST', '/api/fcm/send-manager-balance-update').single['notes'], 'فائدة 2% (2,000 د.ع)');
     });
 
     testWidgets('النقديّ بعد الآجل: لا فائدة في الجسم — و«بدون» كذلك', (t) async {
@@ -299,6 +335,18 @@ void main() {
         await simDrain(t);
         await t.pumpWidget(const SizedBox.shrink()); // الورقة لا تبقى مفتوحةً للمقاس التالي
         await t.pump();
+        // النقديّ (عنوانه ومجموعه أطول): «الفائدة على الشحن النقدي» و«المجموع اللي تستلمه نقداً»
+        await server(config: {'success': true, 'enabled': true, 'last': {'kind': 'percent', 'value': 2}, 'collects': ['debt', 'cash']});
+        await open(t, v: v);
+        await amount(t, '1250000');
+        await t.ensureVisible(fee);
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull, reason: 'نقديّ @${v.tag}');
+        expect(inFee('المجموع اللي تستلمه نقداً'), findsOneWidget);
+        expect(clipped(fee), isEmpty, reason: 'نصٌّ مقصوص (نقديّ) @${v.tag}');
+        await simDrain(t);
+        await t.pumpWidget(const SizedBox.shrink());
+        await t.pump();
       }
     });
   });
@@ -357,6 +405,34 @@ void main() {
       expect([body['as_debt'], body['amount'], body['fee']], [true, 50000, {'kind': 'fixed', 'value': 700, 'amount': 700}]);
       expect(result?.ok, isTrue);
       expect(result?.feeLine, 'مع فائدة 700 د.ع في «ديون أخرى»');
+      await simDrain(t);
+    });
+
+    testWidgets('نقديٌّ بفائدة (خادمٌ يقبلها): الحقل مع «شحن نقدي»، التأكيد «استلمتَ منه الآن 50,700»، والجسم والنتيجة', (t) async {
+      final s = await server(
+        config: {'success': true, 'enabled': true, 'last': {'kind': 'fixed', 'value': 700}, 'collects': ['debt', 'cash']},
+        topup: {
+          'success': true,
+          'message': 'تمّ شحن 50,000 د.ع لـ«najaf40»',
+          'fee': {'amount': 700, 'debt_id': null, 'recorded': true, 'label': 'فائدة 700 د.ع', 'collect': 'cash'},
+        },
+      );
+      await open(t);
+      expect(fee, findsOneWidget, reason: 'نقديٌّ افتراضاً والخادم يقبلها');
+      expect(inFee('الفائدة على الشحن النقدي'), findsOneWidget);
+      await t.enterText(find.byType(TextField).first, '50000');
+      await t.pumpAndSettle();
+      expect(inFee('المجموع اللي تستلمه نقداً'), findsOneWidget);
+      expect(inFee('50,700 د.ع'), findsOneWidget);
+      await t.ensureVisible(find.byType(SheetFooterBar));
+      await t.tap(find.byType(SheetFooterBar));
+      await t.pumpAndSettle();
+      expect(find.textContaining('نقداً: استلمتَ منه الآن 50,700 د.ع — الشحن 50,000 + فائدة 700 د.ع.'), findsOneWidget);
+      await t.tap(find.widgetWithText(FilledButton, 'شحن'));
+      await t.pumpAndSettle();
+      final body = s.bodies('POST', '/api/v2/el/managers/153/topup').single;
+      expect([body['as_debt'], body['fee']], [false, {'kind': 'fixed', 'value': 700, 'amount': 700}]);
+      expect(result?.feeLine, 'مع فائدة 700 د.ع نقداً');
       await simDrain(t);
     });
 
