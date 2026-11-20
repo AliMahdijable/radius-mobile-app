@@ -44,9 +44,9 @@ class MoneyAlertsSection extends StatelessWidget {
           hint: 'نبّهني لمّا ينزل رصيد صفحتي تحت مبلغ أحدّده',
           enabled: b.enabled,
           busy: busy,
-          onToggle: (v) => onPatch({
-            'balance': {'enabled': v}
-          }),
+          onToggle: (v) => _toggle(context, v,
+              kind: 'balance', field: 'threshold', current: b.threshold,
+              title: 'الحدّ الأدنى للرصيد', icon: LucideIcons.wallet, quick: const [50000, 100000, 250000, 500000]),
           rows: [
             _ValueRow(
               key: const ValueKey('ma-balance-threshold'),
@@ -95,9 +95,9 @@ class MoneyAlertsSection extends StatelessWidget {
           hint: 'نبّهني عند 80% من سقف أحدّده وعند تجاوزه',
           enabled: c.enabled,
           busy: busy,
-          onToggle: (v) => onPatch({
-            'debt_cap': {'enabled': v}
-          }),
+          onToggle: (v) => _toggle(context, v,
+              kind: 'debt_cap', field: 'cap', current: c.cap,
+              title: 'سقف ديون المشتركين', icon: LucideIcons.trendingUp, quick: const [1000000, 2000000, 5000000, 10000000]),
           rows: [
             _ValueRow(
               key: const ValueKey('ma-debtcap-cap'),
@@ -196,6 +196,22 @@ class MoneyAlertsSection extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// تشغيل تنبيهٍ بلا مبلغ ⇒ نافذة المبلغ أوّلاً (المالك ٢٠ نوفمبر: «منين احدد؟»)، ويُحفظان معاً؛ الإلغاء يبقيه مطفأً.
+  Future<void> _toggle(BuildContext context, bool on,
+      {required String kind, required String field, required num? current, required String title, required IconData icon, required List<num> quick}) async {
+    if (on && current == null) {
+      final v = await showAmountSheet(context, title: title, icon: icon, quick: quick);
+      if (v == null) return;
+      await onPatch({
+        kind: {'enabled': true, field: v}
+      });
+      return;
+    }
+    await onPatch({
+      kind: {'enabled': on}
+    });
   }
 
   Future<void> _editFilter(BuildContext context, DebtorsDigest d) async {
