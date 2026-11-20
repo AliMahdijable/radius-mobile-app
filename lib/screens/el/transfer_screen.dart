@@ -23,8 +23,13 @@ import '../../widgets/merged_section.dart';
 ///     يُحدّث الرصيد ويمسح المبلغ.
 ///  ٢) كشف الحساب: كلمة سرّ الإيداع + «عرض» ← جدول الحركات (التاريخ،
 ///     الوصف، المشترك، إيداع أخضر/سحب أحمر، الرصيد).
+///
+/// [statementOnly] (٢٠ نوفمبر — المالك: «بعد قسم الارصده تحويل ميحتاج لان رح يصير بالمدراء»): بطاقة «قوائم أخرى» صارت «كشف الحساب»
+/// وحده — الشحن للحسابات التابعة من «المدراء» (سجلٌّ وتأكيدٌ وإشعار). التحويل الكامل يبقى لمن لم تُفتح له «المدراء» بعد (يفتحه منها).
 class ElTransferScreen extends StatefulWidget {
-  const ElTransferScreen({super.key});
+  const ElTransferScreen({super.key, this.statementOnly = false});
+
+  final bool statementOnly;
 
   @override
   State<ElTransferScreen> createState() => _ElTransferScreenState();
@@ -85,7 +90,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadBalance(), _loadTargets()]);
+    await Future.wait([_loadBalance(), if (!widget.statementOnly) _loadTargets()]);
   }
 
   Future<void> _loadBalance() async {
@@ -227,10 +232,10 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('تحويل الرصيد',
+                Text(widget.statementOnly ? 'كشف الحساب' : 'تحويل الرصيد',
                     style: AppType.title(color: AppColors.textHi)
                         .copyWith(fontSize: 16)),
-                Text('تحويل بين الوكلاء + كشف الحساب',
+                Text(widget.statementOnly ? 'حركات رصيد الإيداع' : 'تحويل بين الوكلاء + كشف الحساب',
                     style: AppType.muted().copyWith(fontSize: 11)),
               ],
             ),
@@ -245,8 +250,10 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
                   const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
                 _balanceCard(),
-                const SizedBox(height: Sp.lg),
-                _transferSection(),
+                if (!widget.statementOnly) ...[
+                  const SizedBox(height: Sp.lg),
+                  _transferSection(),
+                ],
                 const SizedBox(height: Sp.xl),
                 _statementSection(),
               ],

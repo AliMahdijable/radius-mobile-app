@@ -416,6 +416,12 @@ class ElEmployeePerms {
   /// ويُمنحان فرادى (خارج الأدوار الجاهزة — فلا يصير «موظّف عام» الحاليّ مخصّصاً). مطابقٌ للويب (EL_BALANCE_KEYS).
   static const balanceReportKeys = <String>{'balance_reports.view', 'balance_reports.manage'};
 
+  /// «المدراء» لموزّع ايرث لنك (٢٠ نوفمبر — المالك: «ولاتنسى صلاحيات الموظفين اذا رد ينطي لموظف صلاحيه التحويل»؛ الخادم
+  /// server/earthlink/elManagers.js): العرض، والشحن (مالٌ لا يُستردّ — بكلمة الإيداع المحفوظة وحدها)، و«ديون أخرى» (ديون المدراء).
+  /// لايرث لنك وحدها، تُمنح فرادى (خارج الأدوار الجاهزة — والدور يعيد ضبطها كمفاتيح «تقارير الأرصدة»: أحوط لمالٍ لا يُستردّ)، والكتالوج
+  /// لا يعرض مفتاحي الشحن حتى تُفتح الميزة للحساب؛ و«ديون أخرى» لا تُعرض قبلها أيضاً ([offered]). مطابقٌ للويب (EL_MANAGER_KEYS).
+  static const elManagerKeys = <String>{'el_managers.view', 'el_managers.topup', 'reports.manager_debts'};
+
   /// خارج الأدوار الجاهزة: الدور لا يلمسها ([presets] · `_applyElPreset`) ولا تُحسب في مطابقته ([matching]) — تُمنح فرادى.
   static const roleFreeKeys = <String>{...checkKeys, ...vpnKeys, ...alertKeys, ...messageExclusionKeys};
 
@@ -629,6 +635,8 @@ class ElEmployeePerms {
     ...messageExclusionKeys,
     // «تقارير الأرصدة» (٢٠ نوفمبر) — تُمنح وحدها (خارج الأدوار الجاهزة)
     ...balanceReportKeys,
+    // «المدراء» (٢٠ نوفمبر) — تُمنح وحدها (خارج الأدوار الجاهزة)
+    ...elManagerKeys,
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في
@@ -810,7 +818,10 @@ class ElEmployeePerms {
   static Set<String> offered(Iterable<String>? catalogKeys) {
     if (catalogKeys == null) return keys;
     final c = catalogKeys.toSet();
-    return keys.where(c.contains).toSet();
+    // «ديون أخرى» (ديون المدراء) لموظّف ايرث لنك تتبع «المدراء»: الكتالوج يعرضها دائماً (مفتاحٌ عامّ)، فلا تُعرض قبل أن تُفتح الميزة
+    // للحساب (مفتاحاها في الكتالوج) — كي لا يُمنح ما لا قسم له.
+    final elDebtsHidden = ProviderService.isEarthlink && !c.contains('el_managers.view');
+    return keys.where((k) => c.contains(k) && !(elDebtsHidden && k == 'reports.manager_debts')).toSet();
   }
 }
 

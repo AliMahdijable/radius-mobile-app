@@ -81,6 +81,9 @@ const Set<String> _kitCapabilityKeys = {
 /// (مفتاحٌ false لصاحب الحساب). موظّف الشركة المُضافة يحكمه ما مُنح كموظّف ايرث لنك — إلّا موظّف المشروع الوطنيّ في مفاتيح أقسام
 /// بوّابته ([_nationalPortalOnlyKeys]).
 bool providerHidesAction(String key) {
+  // ايرث لنك (٢٠ نوفمبر): ديون المدراء = «ديون أخرى» داخل «المدراء» (حساباته التابعة) — لا تقرير «ديون المدراء» العامّ (لم يخدمه قبلُ،
+  // ومفتاحه لموظّفه لـ«ديون أخرى» وحدها).
+  if (ProviderService.isEarthlink && key == 'reports.manager_debts') return true;
   if (sessionIsFiberx) return _fiberxUnsupported.contains(key);
   if (sessionIsKit) {
     if (Perms.isEmployee) return ProviderService.parentIsZone && _nationalPortalOnlyKeys.contains(key);

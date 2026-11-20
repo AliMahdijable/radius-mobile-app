@@ -26,6 +26,7 @@ import 'el/required_cards_screen.dart';
 import 'el/transfer_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
+import 'managers/el_managers_screen.dart';
 import 'managers/managers_screen.dart';
 import 'national/national_money_screen.dart';
 import 'national/national_notes_screen.dart';
@@ -121,6 +122,9 @@ Listenable appModulesListenable() => Listenable.merge([
       TicketsState.gate,
       TicketsState.bell,
     ]);
+
+/// مفتاحا «المدراء» لموظّف ايرث لنك (٢٠ نوفمبر — الخادم server/earthlink/elManagers.js).
+const _elManagerKeys = ['el_managers.view', 'el_managers.topup'];
 
 /// الأقسام بترتيب الهاتف («قوائم أخرى»). الحاسبة ترتّبها بمجموعاتها.
 List<AppModule> buildAppModules() {
@@ -455,8 +459,29 @@ List<AppModule> buildAppModules() {
             : 'طلبات تجديد مشتركيك من تطبيقهم مع صورة التحويل',
         page: RenewRequestsScreen.mergedPage,
       ),
+    // ايرث لنك (٢٠ نوفمبر — المالك: «نفتحله قسم المدراء بس خاص بس ديون اخرى وشحن رصيد للمدراء… ماكو لا نقاط ولا سحب ولا تغير
+    // معلومات» · «ولاتنسى صلاحيات الموظفين»): حساباته التابعة في ايرث لنك بعمليّتين. الموظّف بمفتاحيه (el_managers.view/topup — لا
+    // managers.* التي كانت تفتح شاشة الساس)، وبلاهما بمكانه مقفلاً.
+    if (ProviderService.isEarthlink) ...[
+      if (!Perms.isEmployee || permShown(_elManagerKeys))
+        AppModule(
+          id: 'managers',
+          group: AppModuleGroup.manage,
+          locked: Perms.isEmployee && !Perms.hasAny(_elManagerKeys),
+          icon: LucideIcons.userCog,
+          tone: AppTone.brand,
+          title: 'more.managers'.tr(),
+          subtitle: 'شحن رصيد حساباتك التابعة وديونها الأخرى',
+          page: () => MergedSection.openOnly(
+              title: 'more.managers'.tr(),
+              reason: 'merged.reason_transfer'.trm(),
+              serves: (c) => c.provider == MergedProvider.earthlink,
+              servesNote: 'merged.serves_el'.trm(),
+              child: const ElManagersScreen()),
+        ),
+    ]
     // المدراء والموظّفون: مفتاحان لا يُمنحان لموظّف ايرث لنك أصلاً — مخفيّان عنده ومقفلان عند غيره.
-    if (permShown(const ['managers.view']))
+    else if (permShown(const ['managers.view']))
       AppModule(
         id: 'managers',
         group: AppModuleGroup.manage,
@@ -547,21 +572,22 @@ List<AppModule> buildAppModules() {
     ),
     // ── ايرث لنك — لموزِّعي EarthLink وحدهم (من `ProviderService.isEarthlink`، لا صلاحيّة ساس).
     if (ProviderService.isEarthlink) ...[
-      // تحويل الرصيد وكشف الإيداع لصاحب الحساب وحده (الخادم يردّ الموظّف بـ403 OWNER_ONLY).
+      // كشف الإيداع لصاحب الحساب وحده (الخادم يردّ الموظّف بـ403 OWNER_ONLY). ٢٠ نوفمبر — المالك: «بعد قسم الارصده تحويل ميحتاج لان
+      // رح يصير بالمدراء»: كانت «تحويل الرصيد» — الشحن للحسابات التابعة صار من «المدراء» (والتحويل القديم منها لمن لم تُفتح له بعد).
       if (!Perms.isEmployee)
         AppModule(
           id: 'el_transfer',
           group: AppModuleGroup.earthlink,
-          icon: LucideIcons.arrowRightLeft,
+          icon: LucideIcons.receiptText,
           tone: AppTone.brand,
-          title: 'تحويل الرصيد',
-          subtitle: 'تحويل الرصيد بين الوكلاء + كشف الحساب',
+          title: 'كشف الحساب',
+          subtitle: 'حركات رصيد الإيداع — الشحن للمدراء من «المدراء»',
           page: () => MergedSection.openOnly(
-              title: 'تحويل الرصيد',
+              title: 'كشف الحساب',
               reason: 'merged.reason_transfer'.trm(),
               serves: (c) => c.provider == MergedProvider.earthlink,
               servesNote: 'merged.serves_el'.trm(),
-              child: const ElTransferScreen()),
+              child: const ElTransferScreen(statementOnly: true)),
         ),
       // «الكارتات المطلوبة» — توقّع الكارتات والرصيد لمدّة؛ من «التقارير الماليّة».
       if (permShown(const ['reports.financial']))

@@ -423,13 +423,14 @@ void main() {
         of: find.byIcon(LucideIcons.shoppingCart),
         matching: byTypeName('_ModuleCard'));
 
-    testWidgets('مالك ايرث لنك: لا بطاقة «طلب الكارتات» — والتحويل باقٍ', (t) async {
+    testWidgets('مالك ايرث لنك: لا بطاقة «طلب الكارتات» — و«كشف الحساب» باقٍ (التحويل صار من «المدراء»)', (t) async {
       ProviderService.debugSet('earthlink');
       PermissionsService.debugSet(isEmployee: false);
       await showMore(t);
       expect(orderCard(), findsNothing);
       expect(find.text('طلب الكارتات'), findsNothing);
-      expect(find.text('تحويل الرصيد'), findsOneWidget);
+      expect(find.text('كشف الحساب'), findsOneWidget);
+      expect(find.text('تحويل الرصيد'), findsNothing);
       expect(find.text('الكارتات المطلوبة'), findsOneWidget);
     });
 

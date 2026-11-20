@@ -877,8 +877,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              'تبقى لك وحدك ولا تُمنح لموظّف: تحويل الرصيد وكشف الإيداع، '
-              'إلغاء التسوية، وإدارة الموظفين.',
+              'تبقى لك وحدك ولا تُمنح لموظّف: كشف الإيداع وكلمة مروره، '
+              'إلغاء التسوية، وإدارة الموظفين. وشحن رصيد المدراء تمنحه وحده — بكلمة الإيداع المحفوظة.',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),

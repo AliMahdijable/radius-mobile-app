@@ -277,12 +277,15 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('🚨 موظّف ايرث لنك: لا مدراء ولا موظّفون (مفتاحان لا يُمنحان)',
+    testWidgets('🚨 موظّف ايرث لنك: «المدراء» مقفلٌ بمكانه (مفتاحاه يُمنحان منذ ٢٠ نوفمبر) ولا موظّفون',
         (t) async {
       ProviderService.debugSet('earthlink');
       PermissionsService.debugSet(isEmployee: true);
       await showScreen(t, const MoreModulesScreen());
-      expect(find.byIcon(LucideIcons.userCog), findsNothing); // المدراء
+      // «المدراء» لايرث لنك (el_managers.view/topup — لا managers.* التي كانت تفتح شاشة الساس): بمكانه مقفلاً
+      final managers = find.ancestor(of: find.byIcon(LucideIcons.userCog), matching: moduleCards);
+      expect(managers, findsOneWidget);
+      expect(find.descendant(of: managers, matching: find.byType(PermLockIcon)), findsOneWidget);
       expect(find.byIcon(LucideIcons.users), findsNothing); // الموظّفون
       // وتحويل الرصيد لصاحب الحساب، والتبليغات (البثّ لا يُمنح له).
       expect(find.byIcon(LucideIcons.arrowRightLeft), findsNothing);
@@ -296,9 +299,9 @@ void main() {
       expect(portal, findsOneWidget);
       expect(find.descendant(of: portal, matching: find.byType(PermLockIcon)),
           findsNothing);
-      // …والباقي (8) مقفلٌ كلّه بمكانه.
-      expect(moduleCards, findsNWidgets(9));
-      expect(find.byType(PermLockIcon), findsNWidgets(8));
+      // …والباقي (9، منها «المدراء») مقفلٌ كلّه بمكانه.
+      expect(moduleCards, findsNWidgets(10));
+      expect(find.byType(PermLockIcon), findsNWidgets(9));
     });
 
     // تدقيق ١٨ أكتوبر: تلغرام كان يظهر لموظّف ايرث لنك بـ`whatsapp.send` الضمنيّ
