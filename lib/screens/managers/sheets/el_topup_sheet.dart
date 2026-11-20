@@ -206,7 +206,7 @@ class _ElTopupSheetState extends State<_ElTopupSheet> {
             ' — المجموع ${formatIQD(_amount + feeAmt)} د.ع.'
         : '\n\nآجل: يُسجَّل ${formatIQD(_amount)} د.ع ديناً عليه في «ديون أخرى».';
     final cashLine = feeAmt > 0
-        ? '\n\nنقداً: استلمتَ منه الآن ${formatIQD(_amount + feeAmt)} د.ع — الشحن ${formatIQD(_amount)} + ${TopupFee.label(_feeKind, feeValue, feeAmt)}.'
+        ? '\n\nنقداً: استلمتَ منه الآن ${formatIQD(_amount + feeAmt)} د.ع — الشحن ${formatIQD(_amount)} د.ع + ${TopupFee.label(_feeKind, feeValue, feeAmt)}.'
         : '\n\nنقداً: استلمتَ المبلغ منه الآن.';
     final ok = await showDialog<bool>(
       context: context,

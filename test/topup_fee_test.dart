@@ -427,7 +427,7 @@ void main() {
       await t.ensureVisible(find.byType(SheetFooterBar));
       await t.tap(find.byType(SheetFooterBar));
       await t.pumpAndSettle();
-      expect(find.textContaining('نقداً: استلمتَ منه الآن 50,700 د.ع — الشحن 50,000 + فائدة 700 د.ع.'), findsOneWidget);
+      expect(find.textContaining('نقداً: استلمتَ منه الآن 50,700 د.ع — الشحن 50,000 د.ع + فائدة 700 د.ع.'), findsOneWidget, reason: 'نصّ الموقع نفسه');
       await t.tap(find.widgetWithText(FilledButton, 'شحن'));
       await t.pumpAndSettle();
       final body = s.bodies('POST', '/api/v2/el/managers/153/topup').single;
