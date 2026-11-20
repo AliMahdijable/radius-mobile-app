@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/agent_notifs_api.dart';
+import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -583,6 +584,37 @@ num? _parseAmount(String s) {
   return d.isEmpty ? null : num.parse(d);
 }
 
+/// المبلغ كما يُحفظ: قاعدة اختصار الآلاف نفسها في كلّ حقول المال (AmountShorthand — «من يكتب 25 الحقل يتحوّل إلى
+/// 25000»؛ المالك ٢٠ نوفمبر عن «إشعاراتي»: «لازم اكتب الالف… صححها مثل البقية هو يكمل الاصفار مال الالف»). يُطبَّق عند
+/// الحفظ أيضاً — «حفظ» قبل الخروج من الحقل لا يحفظ 50 ديناراً.
+num? _effectiveAmount(String s) {
+  final raw = _parseAmount(s);
+  if (raw == null) return null;
+  return raw is int ? AmountShorthand.expand(raw) : raw;
+}
+
+/// «سيُحفظ 50,000 د.ع» تحت حقلٍ قيمته اختصار (كحقل المال الموحّد) — وإلّا لا شيء.
+Widget _shorthandHint(String text) {
+  final raw = _parseAmount(text);
+  if (raw is! int || !AmountShorthand.applies(raw)) return const SizedBox.shrink();
+  return Padding(
+    padding: const EdgeInsets.only(top: Sp.x6),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.auto_awesome_rounded, size: 13, color: AppColors.brandAccent),
+        const SizedBox(width: Sp.xs),
+        Flexible(
+          child: Text(
+            'سيُحفظ ${AmountShorthand.format(AmountShorthand.expand(raw))} ${'common.currency'.tr()}',
+            style: AppType.muted(color: AppColors.brandOnSoft),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 /// مبلغٌ بالدينار ⇒ القيمة (موجبة) أو null إن أُغلقت.
 Future<num?> showAmountSheet(BuildContext context,
     {required String title, required IconData icon, num? initial, List<num> quick = const []}) {
@@ -608,7 +640,8 @@ class _AmountSheet extends StatefulWidget {
 }
 
 class _AmountSheetState extends State<_AmountSheet> {
-  late final TextEditingController _c = TextEditingController(text: widget.initial == null ? '' : formatIQD(widget.initial!));
+  late final TextEditingController _c =
+      TextEditingController(text: widget.initial == null ? '' : AmountShorthand.format(widget.initial!.round()));
 
   @override
   void dispose() {
@@ -616,7 +649,8 @@ class _AmountSheetState extends State<_AmountSheet> {
     super.dispose();
   }
 
-  num? get _value => _parseAmount(_c.text);
+  /// كما يُحفظ — «50» ⇒ 50,000 (اختصار الآلاف)، ولو ضُغط «حفظ» والمؤشّر ما زال في الحقل.
+  num? get _value => _effectiveAmount(_c.text);
 
   @override
   Widget build(BuildContext context) {
@@ -638,23 +672,15 @@ class _AmountSheetState extends State<_AmountSheet> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            key: const ValueKey('ma-amount-field'),
-            controller: _c,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            textDirection: ui.TextDirection.ltr,
-            textAlign: TextAlign.center,
-            inputFormatters: [_GroupedDigits()],
-            style: AppType.amount(color: AppColors.textHi),
-            decoration: InputDecoration(
-              suffixText: 'common.currency'.tr(),
-              hintText: '0',
-              filled: true,
-              fillColor: AppColors.surfaceInput,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.lg), borderSide: BorderSide.none),
+          // حقل المال الموحّد (كبقيّة الشيتات): فواصل حيّة، «سيُحفظ 50,000 د.ع» تحت الاختصار، والتوسيع عند الخروج أو «تمّ»
+          SheetBox(
+            child: AmountTextField(
+              key: const ValueKey('ma-amount-field'),
+              controller: _c,
+              autofocus: true,
+              currency: 'common.currency'.tr(),
+              onValue: (_) => setState(() {}),
             ),
-            onChanged: (_) => setState(() {}),
           ),
           if (widget.quick.isNotEmpty) ...[
             const SizedBox(height: Sp.md),
@@ -666,7 +692,7 @@ class _AmountSheetState extends State<_AmountSheet> {
                   SheetQuickChip(
                     label: formatIQD(q),
                     selected: v == q,
-                    onTap: () => setState(() => _c.text = formatIQD(q)),
+                    onTap: () => setState(() => _c.text = AmountShorthand.format(q.round())),
                   ),
               ],
             ),
@@ -871,30 +897,44 @@ class _FilterSheetState extends State<_FilterSheet> {
   }
 
   int? get _d => int.tryParse(_days.text.replaceAll(RegExp(r'[^0-9]'), ''));
-  num? get _lo => _parseAmount(_min.text);
-  num? get _hi => _parseAmount(_max.text);
+  // المبلغان كما يُحفظان — اختصار الآلاف («5» ⇒ 5,000) كبقيّة حقول المال، ولو ضُغط «حفظ» والمؤشّر في الحقل
+  num? get _lo => _effectiveAmount(_min.text);
+  num? get _hi => _effectiveAmount(_max.text);
   bool get _bad => (_lo != null && _hi != null && _lo! > _hi!) || (_d != null && (_d! < 1 || _d! > 365));
 
-  /// خانة رقمٍ بلا عنوانٍ عائم (كان يتراكب على عنوان القسم) — الفارغة تقول معناها ([hint]).
-  Widget _field(TextEditingController c, String hint, {bool money = true, Key? key}) => TextField(
-        key: key,
-        controller: c,
-        keyboardType: TextInputType.number,
-        textDirection: ui.TextDirection.ltr,
-        textAlign: TextAlign.center,
-        inputFormatters: money ? [_GroupedDigits()] : [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
-        style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 13),
-          hintTextDirection: ui.TextDirection.rtl,
-          filled: true,
-          fillColor: AppColors.surfaceInput,
-          contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 14),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide.none),
-        ),
-        onChanged: (_) => setState(() {}),
-      );
+  /// خانة رقمٍ بلا عنوانٍ عائم (كان يتراكب على عنوان القسم) — الفارغة تقول معناها ([hint]). خانة المال: اختصار الآلاف عند
+  /// الخروج منها (AmountShorthandBox) و«سيُحفظ 5,000 د.ع» تحتها قبله.
+  Widget _field(TextEditingController c, String hint, {bool money = true, Key? key}) {
+    final field = TextField(
+      key: key,
+      controller: c,
+      keyboardType: TextInputType.number,
+      textDirection: ui.TextDirection.ltr,
+      textAlign: TextAlign.center,
+      inputFormatters: money ? [_GroupedDigits()] : [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+      style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 13),
+        hintTextDirection: ui.TextDirection.rtl,
+        filled: true,
+        fillColor: AppColors.surfaceInput,
+        contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide.none),
+      ),
+      onChanged: (_) => setState(() {}),
+    );
+    if (!money) return field;
+    return AmountShorthandBox(
+      controller: c,
+      onExpanded: (_) => setState(() {}),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [field, _shorthandHint(c.text)],
+      ),
+    );
+  }
 
   /// عنوانٌ صغير فوق خانة.
   Widget _labeled(String label, Widget field) => Column(
@@ -936,7 +976,9 @@ class _FilterSheetState extends State<_FilterSheet> {
           SheetSection(
             label: 'المبلغ (بالدينار)',
             footnote: 'من وحدها = أكبر من · إلى وحدها = أقلّ من',
+            // من أعلى: تلميح «سيُحفظ …» تحت خانةٍ واحدة لا يُنزل الأخرى عن صفّها
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: _labeled('من', _field(_min, 'أي مبلغ', key: const ValueKey('ma-filter-min')))),
                 const SizedBox(width: Sp.sm),
