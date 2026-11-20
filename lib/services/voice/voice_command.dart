@@ -622,6 +622,7 @@ class VoiceCommand {
     'تلغرام': 'telegram', 'تليغرام': 'telegram', 'تلكرام': 'telegram', 'تليكرام': 'telegram', 'telegram': 'telegram',
     'تبليغات': 'broadcast', 'تبليغ': 'broadcast', 'بث': 'broadcast', 'broadcast': 'broadcast',
     'سجل رسايل': 'message_logs', 'رسايل': 'message_logs', 'messages': 'message_logs',
+    'تواصل': 'comms',
     'تذاكر': 'tickets', 'tickets': 'tickets',
     'طلبات تجديد': 'renew_requests', 'طلبات تفعيل': 'renew_requests', 'renew requests': 'renew_requests',
     'مدراء': 'managers', 'مدراء فرعيين': 'managers', 'وكلاء': 'managers', 'managers': 'managers', 'agents': 'managers',

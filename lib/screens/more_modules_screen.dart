@@ -38,9 +38,22 @@ class MoreModulesScreen extends StatelessWidget {
       // الأقسام نفسها في القائمة الجانبيّة على الحاسبة — مصدرها واحد (app_modules.dart).
       listenable: appModulesListenable(),
       builder: (context, _) {
-        final cards = <Widget>[
-          for (final m in buildAppModules())
-            _ModuleCard(
+        // ٢٠ نوفمبر (المالك: «القوائم صايره هوسه»): البطاقات تحت عناوين مجموعاتها كالقائمة الجانبيّة على الحاسبة — المجموعات
+        // بترتيب أوّل ظهورها هنا (فالتقارير تبقى أوّلاً)، وكلّ بطاقةٍ بترتيبها داخل مجموعتها. مجموعةٌ واحدة ⇒ بلا عنوان.
+        final modules = buildAppModules();
+        final groups = <AppModuleGroup>[];
+        for (final m in modules) {
+          if (!groups.contains(m.group)) groups.add(m.group);
+        }
+        final cards = <Widget>[];
+        for (final g in groups) {
+          if (groups.length > 1) cards.add(ModuleGroupLabel(moduleGroupTitle(g), key: ValueKey('more-group-${g.name}')));
+          var first = true;
+          for (final m in modules.where((m) => m.group == g)) {
+            if (!first) cards.add(const SizedBox(height: Sp.sm));
+            first = false;
+            cards.add(ModuleCard(
+              key: ValueKey('more-${m.id}'),
               locked: m.locked,
               unavailable: m.unavailable,
               icon: m.icon,
@@ -52,8 +65,9 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => m.page()),
               ),
-            ),
-        ];
+            ));
+          }
+        }
 
         return Scaffold(
           backgroundColor: AppColors.bg,
@@ -67,7 +81,7 @@ class MoreModulesScreen extends StatelessWidget {
                 TabHeader(title: 'more.title'.tr()),
                 // «كل الشركات» (٨ نوفمبر): كلّ قسمٍ يختار شركته من الشريط داخله (يُدار من هنا، أو للعرض، أو «بدّل إليها») — والمفتوحة تُسمّى
                 const MergedOpenCompanyNote(padding: EdgeInsets.only(top: Sp.md)),
-                const SizedBox(height: Sp.lg),
+                SizedBox(height: groups.length > 1 ? Sp.sm : Sp.lg),
                 if (cards.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: Sp.huge),
@@ -91,10 +105,7 @@ class MoreModulesScreen extends StatelessWidget {
                     ),
                   )
                 else
-                  for (int i = 0; i < cards.length; i++) ...[
-                    if (i > 0) const SizedBox(height: Sp.sm),
-                    cards[i],
-                  ],
+                  ...cards,
               ],
             ),
           ),
@@ -104,8 +115,37 @@ class MoreModulesScreen extends StatelessWidget {
   }
 }
 
-class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({
+/// اسم المجموعة كما في القائمة الجانبيّة على الحاسبة.
+String moduleGroupTitle(AppModuleGroup g) => switch (g) {
+      AppModuleGroup.manage => 'desktop.group_manage'.tr(),
+      AppModuleGroup.finance => 'desktop.group_finance'.tr(),
+      AppModuleGroup.comms => 'desktop.group_comms'.tr(),
+      AppModuleGroup.customize => 'desktop.group_customize'.tr(),
+      AppModuleGroup.earthlink => 'desktop.group_earthlink'.tr(),
+    };
+
+/// عنوانٌ صغير فوق مجموعة بطاقات — «المزيد» و«التواصل».
+class ModuleGroupLabel extends StatelessWidget {
+  const ModuleGroupLabel(this.label, {super.key});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.xs, Sp.lg, Sp.xs, Sp.sm),
+      child: Text(
+        label,
+        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+      ),
+    );
+  }
+}
+
+/// بطاقة قسم — «المزيد» و«التواصل».
+class ModuleCard extends StatelessWidget {
+  const ModuleCard({
+    super.key,
     this.locked = false,
     this.unavailable,
     required this.icon,
@@ -115,8 +155,12 @@ class _ModuleCard extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.badge,
+    this.trailing,
   });
   final IconData icon;
+
+  /// قيمةٌ محايدة قبل السهم (عدد المستثنين…) — لا تنبيه؛ المقفل بلاها.
+  final String? trailing;
 
   /// عددٌ ينتظر صاحبه (غير المقروءة) — رقمٌ صغير قبل السهم؛ المقفل بلا رقم.
   final int? badge;
@@ -223,6 +267,14 @@ class _ModuleCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: AppType.microBold(color: AppColors.warningOnSoft),
                   ),
+                ),
+                const SizedBox(width: Sp.xs),
+              ],
+              if (!locked && trailing != null) ...[
+                Text(
+                  trailing!,
+                  key: const ValueKey('module-trailing'),
+                  style: AppType.label(color: AppColors.textMid).copyWith(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: Sp.xs),
               ],

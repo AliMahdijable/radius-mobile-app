@@ -92,10 +92,9 @@ class _DesktopShellState extends State<DesktopShell> {
     'settlements',
     'topup',
     'sales',
-    'broadcast',
-    'message_logs',
+    // «التواصل» (٢٠ نوفمبر): التبليغات وحالة الرسائل وتلغرام وقسم الواتساب بالإعدادات — بندٌ واحد.
+    'comms',
     'tickets',
-    'telegram',
     'portal',
     'el_transfer',
     'el_required_cards',

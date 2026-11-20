@@ -42,6 +42,7 @@ import '../subscribers/subscriber_detail_screen.dart';
 import '../subscribers/sheets/activate_sheet.dart';
 import '../subscribers/sheets/add_subscriber_sheet.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
+import '../comms/comms_screen.dart';
 import '../app_modules.dart';
 import '../settings_screen.dart';
 import '../shell_nav.dart';
@@ -585,7 +586,8 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       'topup': ['topup', 'jtpay'],
     };
     final ids = same[id] ?? [id];
-    final modules = buildAppModules();
+    // «التواصل» (٢٠ نوفمبر): التبليغات وحالة الرسائل وتلغرام صارت بنوداً داخله — تُفتح مباشرةً بأسمائها كما كانت.
+    final modules = [...buildAppModules(), for (final e in buildCommsEntries()) e.module];
     for (final want in ids) {
       for (final m in modules) {
         if (m.id != want) continue;

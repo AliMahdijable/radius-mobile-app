@@ -50,6 +50,7 @@ const reviewedSectionSites = <String, (String, String)>{
   'lib/screens/accounts/accounts_screen.dart ManagersApi.fetchPassword': ('open', '«الصفحات» (OpenCompanyScope)'),
   'lib/screens/accounts/accounts_screen.dart ManagersApi.listFull': ('open', '«الصفحات» (OpenCompanyScope)'),
   'lib/screens/app_modules.dart TicketsApi.servedByProvider': ('value', 'قيمةٌ ثابتة، لا طلب'),
+  'lib/screens/comms/comms_screen.dart BroadcastApi.channelsInfo': ('open', 'سطر حال تلغرام في «التواصل» — المفتوحة'),
   'lib/screens/network_devices/fiber/fiber_outage_screen.dart BroadcastApi.broadcast': ('open', 'مشتركو أجهزة المفتوحة'),
   'lib/services/fiber/fiber_monitor.dart BroadcastApi.broadcast': ('open', '«رجع النت» بالخلفيّة'),
   'lib/screens/packages/packages_screen.dart ManagersApi.lite': ('open', 'قسم «للمفتوحة وحدها»'),

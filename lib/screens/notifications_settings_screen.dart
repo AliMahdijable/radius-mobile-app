@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../api/agent_alerts_api.dart';
+import '../api/agent_notifs_api.dart';
 import '../api/notifications_api.dart';
 import '../services/active_company.dart';
 import '../services/provider_service.dart';
@@ -9,6 +13,12 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'desktop/desk_widgets.dart';
+import 'my_alerts/money_alerts_section.dart';
+import 'network_devices/agent_alerts_screen.dart';
+import 'network_devices/device_alerts_screen.dart';
+
+/// اسم الشاشة وصفّها بالإعدادات (٢٠ نوفمبر): ما يصل الوكيلَ نفسه — المال والأجهزة والاشتراكات وأوقات السكون.
+const kMyAlertsTitle = 'إشعاراتي';
 
 /// تنبيه «دين على مدير فرعي» لهذه الجلسة؟ شركات SAS4 نعم؛ ايرث لنك والمشروع
 /// الوطنيّ (FTTH) لا مدراء فرعيّين لهما ولا ديون مدراء، فلا يقع أبداً.
@@ -25,8 +35,8 @@ bool showManagerDebtToggle() {
 /// «تذاكر المشروع الوطني»: الوطنيّ على providerKit (`watani`) وحده — FTTH القديم وبقيّة الشركات بلا هذا التنبيه.
 bool showNationalTicketToggle() => ProviderService.isKit && ProviderService.parentIsZone;
 
-/// شاشة "الإشعارات" — تجمع 3 toggles لإشعارات FCM + أوقات السكون
-/// (DND). كل تغيير يُحفظ تلقائياً بـPUT مع snackbar.
+/// «إشعاراتي» — ما يصل الوكيلَ نفسه: «تنبيهات المال» (٢٠ نوفمبر، حين يقدّمها الخادم)، «تنبيهات الأجهزة»، toggles إشعارات FCM،
+/// وأوقات السكون (DND) التي تؤجّل كلّ ذلك. كل تغيير يُحفظ تلقائياً بـPUT مع snackbar.
 class NotificationsSettingsScreen extends StatefulWidget {
   const NotificationsSettingsScreen({super.key});
 
@@ -41,6 +51,21 @@ class _NotificationsSettingsScreenState
   bool _loading = true;
   bool _saving = false;
 
+  /// «تنبيهات المال» — null: الخادم لا يقدّمها لهذا الحساب (أو تعذّرت) ⇒ لا قسم لها.
+  AgentNotifs? _money;
+  bool _moneyBusy = false;
+  bool _moneyLoading = true;
+
+  /// قراءةٌ لم تصل خلال مهلة الخادم (pending) ⇒ سؤالٌ ثانٍ بعد ٤ث، ستّ مرّاتٍ على الأكثر — لا رقم قديم بانتظارها.
+  Timer? _poll;
+  int _polls = 0;
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,12 +74,69 @@ class _NotificationsSettingsScreenState
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    // الشاشة لا تنتظر قراءات المال (قد تأخذ ثوانٍ): التفضيلات أوّلاً، والمال يصل بمكانه
+    unawaited(_loadMoney());
     final p = await NotificationsApi.load();
     if (!mounted) return;
     setState(() {
       _prefs = p ?? NotificationPrefs.defaults;
       _loading = false;
     });
+  }
+
+  Future<void> _loadMoney() async {
+    final m = await AgentNotifsApi.load();
+    if (!mounted) return;
+    setState(() {
+      // سؤالٌ ثانٍ فشل (شبكة) بعد أن عُرض القسم ⇒ يبقى ما عُرض لا يختفي
+      if (m != null || _money == null) _money = m;
+      _moneyLoading = false;
+    });
+    _poll?.cancel();
+    if (m != null && m.anyPending && _polls < 6) {
+      _polls += 1;
+      _poll = Timer(const Duration(seconds: 4), () {
+        if (mounted && !_moneyBusy) unawaited(_loadMoney());
+      });
+    }
+  }
+
+  /// حفظ جزءٍ من «تنبيهات المال» — الخادم يردّ الإعداد كلّه بحاله الآن؛ الرفض يبقي القديم ويقول السبب.
+  Future<bool> _patchMoney(Map<String, Object?> patch) async {
+    if (_moneyBusy) return false;
+    setState(() => _moneyBusy = true);
+    final r = await AgentNotifsApi.save(patch);
+    if (!mounted) return r.ok;
+    setState(() {
+      if (r.ok && r.data != null) _money = r.data;
+      _moneyBusy = false;
+    });
+    if (r.ok && r.data != null && r.data!.anyPending) {
+      _polls = 0;
+      _poll?.cancel();
+      _poll = Timer(const Duration(seconds: 4), () {
+        if (mounted && !_moneyBusy) unawaited(_loadMoney());
+      });
+    }
+    if (!r.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(r.message ?? 'notifs.save_failed'.tr()),
+          backgroundColor: AppColors.errorFill,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    return r.ok;
+  }
+
+  /// «تنبيهات الأجهزة»: تنبيهات الخادم إن كانت مفتوحةً لهذه الشركة، وإلّا تنبيهات الهاتف — كزرّ التنبيهات بقسم الأجهزة.
+  Future<void> _openDeviceAlerts() async {
+    final st = AgentAlertsApi.cached ?? await AgentAlertsApi.status();
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => st?.available == true ? const AgentAlertsScreen() : const DeviceAlertsScreen(),
+    ));
   }
 
   /// كل تعديل يُحفظ optimistically — نحدّث الـlocal state فوراً ثم
@@ -124,7 +206,7 @@ class _NotificationsSettingsScreenState
           backgroundColor: AppColors.bg,
           elevation: 0,
           scrolledUnderElevation: 0,
-          title: Text('notifications.title'.tr(),
+          title: Text(kMyAlertsTitle,
               style:
                   AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
           iconTheme: IconThemeData(color: AppColors.textHi),
@@ -135,6 +217,29 @@ class _NotificationsSettingsScreenState
           : ListView(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
+                if (_money != null) ...[
+                  const _SectionLabel('تنبيهات المال'),
+                  MoneyAlertsSection(data: _money!, onPatch: _patchMoney, busy: _moneyBusy),
+                  const SizedBox(height: Sp.md),
+                ] else if (_moneyLoading && AgentNotifsApi.lastAvailable == true) ...[
+                  // كان القسم هنا من قبل ⇒ مكانه بانتظار القراءة (لا يقفز المحتوى حين يصل)
+                  const _SectionLabel('تنبيهات المال'),
+                  const Padding(
+                    key: ValueKey('ma-loading'),
+                    padding: EdgeInsets.symmetric(vertical: Sp.lg),
+                    child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                  ),
+                  const SizedBox(height: Sp.md),
+                ],
+                const _SectionLabel('تنبيهات الأجهزة'),
+                _LinkRow(
+                  key: const ValueKey('my-alerts-devices'),
+                  icon: LucideIcons.router,
+                  label: 'انطفاء أجهزتي ورجوعها',
+                  sub: 'الأبراج والسكترات والأولتات، والحرارة والفولتيّة',
+                  onTap: _openDeviceAlerts,
+                ),
+                const SizedBox(height: Sp.md),
                 _SectionLabel('notifs.types_section'.tr()),
                 _Toggle(
                   icon: LucideIcons.clock,
@@ -257,6 +362,59 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+/// صفٌّ يفتح شاشة — بشكل [_Toggle] نفسه وسهمٍ مكان المفتاح.
+class _LinkRow extends StatelessWidget {
+  const _LinkRow({super.key, required this.icon, required this.label, required this.sub, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final String sub;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 16, color: AppColors.brand),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(sub, style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11, height: 1.4)),
+                  ],
+                ),
+              ),
+              Icon(LucideIcons.chevronLeft, color: AppColors.textLow, size: 18),
+            ],
+          ),
         ),
       ),
     );

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
+import 'package:rad_mysvcs/screens/comms/comms_screen.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
 import 'package:rad_mysvcs/screens/settings_screen.dart';
 import 'package:rad_mysvcs/screens/view_scope_screen.dart';
-import 'package:rad_mysvcs/screens/whatsapp/whatsapp_status_screen.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -69,11 +69,17 @@ void main() {
   }
 
   group('الإعدادات', () {
-    lockedCase('موظّف ساس بلا مفاتيح: ٤ صفوف واتساب + نطاق العرض + الأجهزة',
+    lockedCase('موظّف ساس بلا مفاتيح: «واتساب وتلغرام» + نطاق العرض + الأجهزة',
         sasEmpNone, (t) async {
       await openSettings(t);
-      // ٤ (واتساب) + ١ (نطاق العرض) + ١ (بيانات دخول الأجهزة) + ١ («قوالب الطباعة»: تُفتح للعرض وتعديلها مقفل).
-      expect(find.byType(PermLockIcon), findsNWidgets(7));
+      // ١ («واتساب وتلغرام» — صفوف الواتساب الأربعة صارت بنوداً في «التواصل»، ٢٠ نوفمبر) + ١ (نطاق العرض)
+      // + ١ (بيانات دخول الأجهزة) + ١ («قوالب الطباعة»: تُفتح للعرض وتعديلها مقفل).
+      expect(find.byType(PermLockIcon), findsNWidgets(4));
+      expect(find.descendant(of: find.byKey(const ValueKey('settings-comms-row')), matching: find.byType(PermLockIcon)),
+          findsOneWidget);
+      // «إشعاراتي» تفضيلاته هو — بلا قفل كما كان صفّ «الإشعارات».
+      expect(find.descendant(of: find.byKey(const ValueKey('settings-my-alerts')), matching: find.byType(PermLockIcon)),
+          findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -82,10 +88,10 @@ void main() {
       await t.ensureVisible(find.byType(PermLockIcon).first);
       await t.tap(find.byType(PermLockIcon).first);
       await t.pump(const Duration(seconds: 3));
-      expect(find.byType(WhatsAppStatusScreen), findsNothing);
+      expect(find.byType(CommsScreen), findsNothing);
       expect(find.byType(SettingsScreen), findsOneWidget);
 
-      await t.tap(find.byType(PermLockIcon).at(4));
+      await t.tap(find.byType(PermLockIcon).at(1));
       await t.pump(const Duration(seconds: 3));
       expect(find.byType(ViewScopeScreen), findsNothing);
     });
@@ -93,7 +99,12 @@ void main() {
     lockedCase('موظّف ايرث لنك: لا قسم واتساب ولا عرض ولا أجهزة (لا تُمنح)',
         s3ElEmpNone, (t) async {
       await openSettings(t);
-      expect(find.byType(PermLockIcon), findsNothing);
+      // «واتساب وتلغرام» وحدها مقفلة بمكانها: فيها «حالة الرسائل» (مفتاحها يُمنح له) كبطاقتها في «قوائم أخرى» —
+      // لا حالة الواتساب ولا قوالبه ولا جدولته ولا تلغرام (لا تُمنح لدوره)، ولا عرض ولا أجهزة.
+      expect(find.byType(PermLockIcon), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('settings-comms-row')), matching: find.byType(PermLockIcon)),
+          findsOneWidget);
+      expect(buildCommsEntries().map((e) => e.module.id), ['message_logs']);
       expect(find.byType(SettingsScreen), findsOneWidget);
     });
 
