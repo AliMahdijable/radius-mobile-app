@@ -48,6 +48,13 @@ class DeviceCheckText {
 
   static const unreachableHint = 'تأكّد من العنوان والشبكة';
 
+  /// خطأ قراءةٍ أجاب فيه الجهاز وبياناته هي التي لم تُقرأ: جداوله لا تطابق ما نعرفه، أو انقطعت قراءته في منتصفها (رسائل قرّاء
+  /// الأولت «قراءةٌ ناقصة…» و«… لا يكشف …» تُرمى بعد أن أجاب SNMP بهويّته). ليس إعداداً خاطئاً — ٢٠ نوفمبر: أولتٌ بجداول
+  /// NSCRTV قيل لوكيله «تأكّد من الـcommunity والمنفذ» وإعداداته سليمة.
+  static bool isDataError(String error) => error.startsWith('قراءةٌ ناقصة') || error.contains('لا يكشف');
+
+  static const dataErrorHint = 'إعدادات الاتصال سليمة — بياناته لم تُقرأ كاملة';
+
   /// خدمة الإدارة المسجّلة: «SNMP:444» · «API (HTTP):8729» · «منفذ الإدارة 80».
   static String service(NetworkDevice d) {
     final port = d.apiPort ?? d.port;
@@ -68,6 +75,14 @@ class DeviceCheckText {
     }
     final svcDown = _serviceDown(d, c);
     if (!svcDown && readError == null) return null;
+    if (!svcDown && isDataError(readError!)) {
+      return DeviceCheckNote(
+        title: reachableTitle(via: c.via, port: c.port),
+        detail: dataErrorHint,
+        tone: AppTone.warning,
+        icon: LucideIcons.triangleAlert,
+      );
+    }
     return DeviceCheckNote(
       // ثبت الردّ بخدمته المسجّلة (منفذها يقبل والدخول يفشل) ⇒ المنفذ نفسه، فالخطأ في اسم المستخدم/كلمة المرور لا المنفذ.
       title: c.via == ReachVia.service

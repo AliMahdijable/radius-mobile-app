@@ -494,7 +494,8 @@ class DeviceImage extends StatelessWidget {
       OltVendor.hsgq => 'hsgq',
       OltVendor.cdata => 'cdata',
       OltVendor.vsol => 'vsol',
-      OltVendor.unknown => b.isEmpty ? 'other' : b,
+      // NSCRTV معيارٌ لا علامة (لا يأتي من السجلّ أصلاً) — العلامة المسجّلة كما هي.
+      OltVendor.nscrtv || OltVendor.unknown => b.isEmpty ? 'other' : b,
     };
   }
 

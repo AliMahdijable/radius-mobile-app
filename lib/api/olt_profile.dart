@@ -10,7 +10,9 @@ import '../models/network_device.dart';
 ///
 /// `hsgq` (٢٨ أكتوبر): أولت HSGQ EPON وما يحمل برمجيّته بأسماءٍ أخرى — يُعرف بالمؤسّسة `50224` لا بالاسم ([HsgqOlt]).
 /// `cdata` (٢٩ أكتوبر): أولت C-Data EPON ‏(«GEPON OLT») — يُعرف بالمؤسّسة `34592` ([CdataOlt]).
-enum OltVendor { vsol, bdcom, hsgq, cdata, unknown }
+/// `nscrtv` (٢٠ نوفمبر): أولت EPON بجداول NSCRTV القياسيّة — يُعرف بالمؤسّسة `17409` نفسها ([NscrtvOlt]). أوّله أولت وكيلٍ
+/// سجّله «C-Data» («EasyPath Ethernet-PON»، ‏4 PON · 4 GE · 2 XGE، منافذه «pon0/0/1»).
+enum OltVendor { vsol, bdcom, hsgq, cdata, nscrtv, unknown }
 
 /// ملفّ المصنّع لجهازٍ واحد: من السجلّ أوّلاً، ثمّ من هويّته الحيّة.
 ///
@@ -58,9 +60,12 @@ class OltProfile {
   /// جداول C-Data ‏(`1.3.6.1.4.1.34592`) — بالـGET وحده على فهارس محسوبة ([CdataOlt]).
   bool get readsCdataTables => vendor == OltVendor.cdata;
 
-  /// أولتٌ تُقرأ الـONU فيه من جدول المصنّع **بالـGET وحده** على فهارس نحسبها (HSGQ · C-Data — [OltGetTables]): لا صفوف
-  /// ONU في IF-MIB يُعتمد عليها، فلا ifLastChange ولا ifOperStatus لها ولا ifAlias.
-  bool get readsGetTables => vendor == OltVendor.hsgq || vendor == OltVendor.cdata;
+  /// جداول NSCRTV القياسيّة ‏(`1.3.6.1.4.1.17409.2.3`) — بالـGET وحده على فهارس محسوبة ([NscrtvOlt]).
+  bool get readsNscrtvTables => vendor == OltVendor.nscrtv;
+
+  /// أولتٌ تُقرأ الـONU فيه من جدول المصنّع **بالـGET وحده** على فهارس نحسبها (HSGQ · C-Data · NSCRTV — [OltGetTables]): لا
+  /// صفوف ONU في IF-MIB يُعتمد عليها، فلا ifLastChange ولا ifOperStatus لها ولا ifAlias.
+  bool get readsGetTables => vendor == OltVendor.hsgq || vendor == OltVendor.cdata || vendor == OltVendor.nscrtv;
 
   /// `ifPhysAddress` على BDCOM عنوانُ واجهةٍ مشترك (٣ عناوين لـ٨٦ ONU)،
   /// فقراءته هناك عمودٌ مدفوعٌ بلا فائدة. وعلى HSGQ صفوف الـONU في IF-MIB
@@ -79,7 +84,8 @@ class OltProfile {
   /// كم يُحدّث الجهاز عدّادات منافذه — `null` = لحظيّاً. HSGQ كلّ ~٣١ ثانية (خمسون قراءةً بفاصل ثانية، ٢٨ أكتوبر):
   /// بينهما تُرجع القيمة نفسها، فالفرق صفرٌ هناك «لم يُحدَّث» لا «لم يمرّ شيء»، ونبضة ثلاث ثوانٍ تقسم نصف دقيقةٍ من
   /// الترفك على ثلاث ثوانٍ (عشرة أضعاف). فالمعدّل بين قيمتين مختلفتين وحدهما ([VsolTraffic.portsMoved]).
-  /// وC-Data كلّ ~٤ ثوانٍ (قراءةٌ كلّ ثانيةٍ ١٢ مرّة، ٢٩ أكتوبر) — أطول من نبضة اللوحة، فالقاعدة نفسها.
+  /// وC-Data كلّ ~٤ ثوانٍ (قراءةٌ كلّ ثانيةٍ ١٢ مرّة، ٢٩ أكتوبر) — أطول من نبضة اللوحة، فالقاعدة نفسها. وNSCRTV لحظيّاً
+  /// (٢٤ قراءةً بفاصل ~٠٫٦ث تغيّرت كلّها، ٢٠ نوفمبر).
   Duration? get countersRefresh => switch (vendor) {
         OltVendor.hsgq => const Duration(seconds: 31),
         OltVendor.cdata => const Duration(seconds: 4),
@@ -91,6 +97,7 @@ class OltProfile {
         OltVendor.vsol => 'VSOL OLT',
         OltVendor.hsgq => 'HSGQ OLT',
         OltVendor.cdata => 'C-Data OLT',
+        OltVendor.nscrtv => 'EPON OLT',
         OltVendor.unknown => 'OLT',
       };
 
@@ -130,6 +137,15 @@ class OltProfile {
   static bool isCdataObjectId(String? oid) {
     final o = oid?.trim() ?? '';
     return o == cdataEnterprise || o.startsWith('$cdataEnterprise.');
+  }
+
+  /// NSCRTV — معيار الكيبل الصينيّ الذي تبني عليه أولتاتٌ كثيرة جداول EPON (‏NSCRTV-FTTX-EPON-MIB). أولت الوكيل (٢٠ نوفمبر)
+  /// يُبلّغ `sysObjectID` = ‏`…17409` نفسه بلا ذيل، ووصفه «EasyPath Ethernet-PON» — لا اسم مصنّعٍ فيه.
+  static const nscrtvEnterprise = '1.3.6.1.4.1.17409';
+
+  static bool isNscrtvObjectId(String? oid) {
+    final o = oid?.trim() ?? '';
+    return o == nscrtvEnterprise || o.startsWith('$nscrtvEnterprise.');
   }
 
   /// «C-Data» / «CDATA» كلمةً، أو رمز سلسلتها EPON ‏(`FD1104S` · `FD1108SN` · `FD1216S`) — في طرازٍ كتبه المشغّل أو
@@ -285,6 +301,8 @@ class OltProfile {
       live = OltVendor.hsgq;
     } else if (isCdataObjectId(oid) || hasCdataIdentity(descr)) {
       live = OltVendor.cdata;
+    } else if (isNscrtvObjectId(oid)) {
+      live = OltVendor.nscrtv;
     } else if (oid.startsWith(vsolEnterprise) ||
         hasVsolIdentity(descr) ||
         _vsolLiveModel.hasMatch(descr)) {
@@ -298,6 +316,8 @@ class OltProfile {
       OltVendor.hsgq => hint.vendor == OltVendor.hsgq ? hint.model : null,
       // C-Data كذلك: «GEPON OLT» بلا طراز.
       OltVendor.cdata => hint.vendor == OltVendor.cdata ? hint.model : null,
+      // NSCRTV معيارٌ لا مصنّع: طراز سجلّ C-Data (‏FD1204SN…) يبقى — وطراز VSOL كُتب خطأً لا.
+      OltVendor.nscrtv => hint.vendor == OltVendor.cdata || hint.vendor == OltVendor.nscrtv ? hint.model : null,
       _ => _vsolLiveModel.firstMatch(descr)?.group(1)?.toUpperCase() ??
           (hint.vendor == OltVendor.vsol ? hint.model : null),
     };
@@ -309,6 +329,7 @@ class OltProfile {
       oltLikely: live == OltVendor.vsol ||
           live == OltVendor.hsgq ||
           live == OltVendor.cdata ||
+          live == OltVendor.nscrtv ||
           isBdcomOltModel(model) ||
           (hint.oltLikely && !isBdcomSwitchModel(model)),
     );
