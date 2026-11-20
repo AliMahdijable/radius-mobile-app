@@ -10,6 +10,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -43,12 +44,25 @@ AppTone balanceStateTone(BalanceState s) => switch (s) {
 /// «كل الشركات» (١٦ نوفمبر — المالك: «اي ضيفها بالتطبيق»): [companyKey] شركة الشريط لحظة فتح القسم (null = المفتوحة) — كلّ قراءةٍ
 /// وكتابةٍ في الشاشتين وشيتاتهما بها صراحةً، و[canWrite] بما يقوله الخادم لها (`routed_writes`) — حتى يصل الجواب لا زرّ كتابة.
 class BalanceReportsController extends ChangeNotifier {
-  BalanceReportsController({this.companyKey}) : canWrite = companyKey == null;
+  BalanceReportsController({this.companyKey})
+      : _employee = PermissionsService.isEmployee,
+        canWrite = companyKey == null && !PermissionsService.isEmployee;
 
   final String? companyKey;
 
-  /// أزرار الكتابة (شحن، تعديل، حذف، تسوية، إغلاق): المفتوحة دائماً؛ غيرها بجواب الخادم.
+  /// موظّف الصفحة (٢٠ نوفمبر — المالك: «صلاحيه تقارير الارصيده تكدر تسوي صلاحيه للموظفين هم»): يقرأ القسم بمفتاح «العرض»،
+  /// ويكتب بمفتاح «التسجيل» معه — بجواب الخادم (`can_manage`)، وحتى يصل لا زرّ كتابة.
+  final bool _employee;
+
+  /// أزرار الكتابة (شحن، تعديل، حذف، تسوية، إغلاق): للمدير في الصفحة المفتوحة دائماً؛ غيرها بجواب الخادم
+  /// (`routed_writes` للشركة المختارة في «كل الشركات»، و`can_manage` للموظّف).
   bool canWrite;
+
+  /// الموظّف بلا مفتاح «التسجيل»: القسم له للعرض — سطرٌ يقول لماذا ([employeeReadOnlyText]).
+  bool employeeReadOnly = false;
+
+  static const employeeReadOnlyText =
+      'للعرض — تسجيل الشحن والتسوية والإغلاق يحتاج صلاحيّة «تقارير الأرصدة — تسجيل الشحن والتسوية والإغلاق» من مدير الصفحة.';
 
   BalanceOverview? data;
   String? error;
@@ -65,12 +79,15 @@ class BalanceReportsController extends ChangeNotifier {
 
   Future<void> load() async {
     final key = companyKey;
-    final meF = key == null ? null : BalanceReportsApi.me(companyKey: key);
+    final meF = key == null && !_employee ? null : BalanceReportsApi.me(companyKey: key);
     final r = await BalanceReportsApi.overview(companyKey: key);
     if (meF != null) {
       final me = await meF;
       if (_disposed) return;
-      canWrite = me?.routedWrites == true;
+      final routedOk = key == null || me?.routedWrites == true;
+      final empOk = !_employee || me?.canManage == true;
+      canWrite = routedOk && empOk;
+      employeeReadOnly = _employee && me != null && !me.canManage;
     }
     if (_disposed) return;
     loading = false;
@@ -227,7 +244,11 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         title: 'سجّل أوّل شحن للرصيد',
         body: _c.canWrite
             ? 'اكتب تاريخ الشحن ومبلغه، ويحسب النظام من سجلّاته كم حصّلت منه وكم بقي حتى يعود مبلغه — حتى لو كان تاريخه قديماً.'
-            : 'للعرض هنا — تسجيل الشحن لهذه الشركة من صفحتها.',
+            : _c.employeeReadOnly
+                ? BalanceReportsController.employeeReadOnlyText
+                : _c.companyKey != null
+                    ? 'للعرض هنا — تسجيل الشحن لهذه الشركة من صفحتها.'
+                    : 'لم يُسجَّل شحنٌ للرصيد بعد.',
         action: _c.canWrite ? 'شحن جديد' : null,
         actionKey: const ValueKey('bal-first'),
         onAction: _c.canWrite ? _new : null,
@@ -244,7 +265,11 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 96),
         children: [
           Text('لكلّ شحن رصيد: ما حصّلته منه، والمتبقّي حتى يعود مبلغه، وربحك', style: AppType.muted(color: AppColors.textMid)),
-          if (!_c.canWrite) ...[
+          if (_c.employeeReadOnly) ...[
+            const SizedBox(height: Sp.x6),
+            Text(BalanceReportsController.employeeReadOnlyText,
+                key: const ValueKey('bal-employee-readonly'), style: AppType.micro(color: AppTone.warning.onSoft)),
+          ] else if (!_c.canWrite && _c.companyKey != null) ...[
             const SizedBox(height: Sp.x6),
             Text('للعرض هنا — تسجيل الشحن والتسوية والإغلاق لهذه الشركة من صفحتها.',
                 key: const ValueKey('bal-routed-readonly'), style: AppType.micro(color: AppTone.warning.onSoft)),

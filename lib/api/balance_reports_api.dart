@@ -633,10 +633,15 @@ class BalancePeriodPage {
 }
 
 class BalanceMe {
-  const BalanceMe({required this.featureEnabled, required this.canManage, required this.isEmployee, this.routedWrites});
+  const BalanceMe({required this.featureEnabled, required this.canManage, required this.isEmployee, this.routedWrites, this.canView});
   final bool featureEnabled;
+
+  /// يسجّل الشحن والتسوية والإغلاق: المدير، أو الموظّف بمفتاحَي العرض والتسجيل (٢٠ نوفمبر).
   final bool canManage;
   final bool isEmployee;
+
+  /// يقرأ القسم (٢٠ نوفمبر): المدير، أو الموظّف بمفتاح «تقارير الأرصدة — عرض» — null من خادمٍ أقدم لا يرسله.
+  final bool? canView;
 
   /// «كل الشركات» وحده: هل تُقبل كتابات هذه الشركة من هنا — null في الوضع العاديّ (الخادم لا يرسله).
   final bool? routedWrites;
@@ -645,6 +650,19 @@ class BalanceMe {
 // ─────────────────────────── نصوصٌ وأوقات (نقيّة) ───────────────────────────
 
 String balanceIqd(num v) => '${formatIQD(v)} د.ع';
+
+/// اسم المشترك العربيّ بجانب يوزره في حركات الفترة (٢٠ نوفمبر — المالك: «اريد اضيف اسم المشترك الي بالعربي»): الأوّل والأخير
+/// بلا ما يساوي اليوزر نفسه (الساس كثيراً يحفظ الاسم = اليوزر) — وnull حين لا اسم غيره (يبقى اليوزر وحده). مطابقٌ للويب
+/// (`balanceSubName` في lib/balance-reports.ts).
+String? balanceSubName(String username, {String? firstname, String? lastname}) {
+  final u = username.trim().toLowerCase();
+  final parts = [firstname, lastname]
+      .map((x) => (x ?? '').replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((x) => x.isNotEmpty && x.toLowerCase() != u)
+      .toList();
+  final name = parts.join(' ').trim();
+  return name.isNotEmpty && name.toLowerCase() != u ? name : null;
+}
 
 /// اللحظة بحقول بغداد (سنة/شهر/يوم/ساعة/دقيقة تُقرأ منها مباشرةً).
 DateTime balanceBaghdad(int ms) => DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).add(const Duration(hours: 3));
@@ -800,11 +818,13 @@ class BalanceReportsApi {
       final data = body['data'];
       if (body['success'] != true || data is! Map) return null;
       final rw = data['routed_writes'];
+      final cv = data['can_view'];
       return BalanceMe(
         featureEnabled: data['feature_enabled'] == true,
         canManage: data['can_manage'] == true,
         isEmployee: data['is_employee'] == true,
         routedWrites: rw is bool ? rw : null,
+        canView: cv is bool ? cv : null,
       );
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 balance-reports me: $e');

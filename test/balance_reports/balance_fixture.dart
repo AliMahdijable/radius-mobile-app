@@ -213,6 +213,21 @@ class BalanceServer implements HttpClientAdapter {
   bool enabled = true;
   bool employee = false;
 
+  /// الموظّف (٢٠ نوفمبر — الخادم f690ad8): مفتاح «تقارير الأرصدة — عرض» يقرأ، و«— تسجيل الشحن والتسوية والإغلاق» معه يكتب؛
+  /// وبلاهما 403 PERMISSION_DENIED كالخادم (الكتابة المرفوضة تُسجَّل في [writes] — ليرى الاختبار أنّ التطبيق لم يرسلها أصلاً).
+  bool empView = false;
+  bool empManage = false;
+  bool get _canView => !employee || empView;
+  bool get _canManage => !employee || (empView && empManage);
+  static (int, Map<String, dynamic>) _denied(bool view) => (403, {
+        'success': false,
+        'code': 'PERMISSION_DENIED',
+        'permission': view ? 'balance_reports.view' : 'balance_reports.manage',
+        'message': view
+            ? 'لا تملك صلاحيّة «تقارير الأرصدة — عرض» — يمنحها مدير الصفحة من صلاحيّات الموظّف'
+            : 'لا تملك صلاحيّة «تقارير الأرصدة — تسجيل الشحن والتسوية والإغلاق» — يمنحها مدير الصفحة من صلاحيّات الموظّف',
+      });
+
   /// «الفترة التالية تُفتح عند الإغلاق»: مفتاح الخادم لهذه الصفحة (مطفأ ⇒ الخادم الوهميّ كما كان حرفاً).
   bool autoNext = false;
 
@@ -369,11 +384,11 @@ class BalanceServer implements HttpClientAdapter {
     if (p == '$base/me') {
       meReads++;
       if (meFail) return (503, {'success': false, 'message': 'الخدمة مشغولة'});
-      return (200, {'success': true, 'data': {'feature_enabled': enabled, 'can_manage': !employee, 'is_employee': employee}});
+      return (200, {'success': true, 'data': {'feature_enabled': enabled, 'can_manage': _canManage, 'is_employee': employee, 'can_view': _canView}});
     }
     if (p == base && m == 'GET') {
       listReads++;
-      if (employee) return (403, {'success': false, 'code': 'MANAGER_ONLY', 'message': 'هذا القسم لمدير الصفحة وحده'});
+      if (!_canView) return _denied(true);
       if (listFail == 'big') return _refuse('BALANCE_REPORT_TOO_BIG', 'حركات هذا الحساب أكثر ممّا يحسبه التقرير الآن — راسل الدعم لتجهيزه لحسابك');
       if (listFail == 'unavailable') return _refuse('BALANCE_REPORTS_UNAVAILABLE', 'تعذّر تحميل تقارير الأرصدة الآن — حاول بعد قليل');
       if (!enabled) return (200, {'success': true, 'data': {'feature_enabled': false, 'can_manage': true, 'periods': <Object>[]}});
@@ -383,6 +398,8 @@ class BalanceServer implements HttpClientAdapter {
     if (pm == null) return (404, {'success': false, 'message': 'غير موجود'});
     final id = pm.group(1) == null ? null : int.parse(pm.group(1)!);
     if (m != 'GET') writes.add(BalanceWrite(m, p, body));
+    if (!_canView) return _denied(true);
+    if (m != 'GET' && !_canManage) return _denied(false);
     if (id == null && m == 'POST') {
       for (final x in periods) {
         if (_noAmount(x)) return _refuse('AMOUNT_PENDING', 'عندك فترة مفتوحة بلا مبلغ شحن — اكتب مبلغها أوّلاً', {'period_id': x['id']});

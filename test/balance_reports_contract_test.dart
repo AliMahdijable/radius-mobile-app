@@ -121,8 +121,9 @@ void main() {
       expect([o.noPrice, o.noAmount, o.noSnapshot, o.transfersUnknown], [q['no_price'], q['no_amount'], q['no_snapshot'], q['transfers_unknown']]);
       final empty = BalanceOverview.fromJson(data('empty_overview'))!;
       expect([empty.featureEnabled, empty.periods.length], [true, 0]);
-      expect(data('me_manager'), {'feature_enabled': true, 'can_manage': true, 'is_employee': false});
-      expect(data('me_employee'), {'feature_enabled': true, 'can_manage': false, 'is_employee': true});
+      // can_view (٢٠ نوفمبر — الخادم f690ad8): الموظّف بمفتاح «تقارير الأرصدة — عرض» — يقرؤه كرت التقارير (BalanceMe.canView)
+      expect(data('me_manager'), {'feature_enabled': true, 'can_manage': true, 'is_employee': false, 'can_view': true});
+      expect(data('me_employee'), {'feature_enabled': true, 'can_manage': false, 'is_employee': true, 'can_view': false});
     });
 
     final actFields = <String, Object? Function(BalanceActMove)?>{
@@ -240,7 +241,10 @@ void main() {
       expect([over['status'], (over['body'] as Map)['code'], (over['body'] as Map)['success']], [409, 'OVER_REMAINING', false]);
       expect('${(over['body'] as Map)['message']}', contains('130,000'));
       expect((contract['note_required_error'] as Map)['status'], 400);
-      expect(((contract['employee_overview'] as Map)['body'] as Map)['code'], 'MANAGER_ONLY');
+      // الموظّف بلا مفتاح «العرض» (٢٠ نوفمبر): 403 برسالةٍ تسمّي المفتاح — لم يعد «لمدير الصفحة وحده»
+      final emp = contract['employee_overview'] as Map;
+      expect([emp['status'], (emp['body'] as Map)['code'], (emp['body'] as Map)['permission']], [403, 'PERMISSION_DENIED', 'balance_reports.view']);
+      expect('${(emp['body'] as Map)['message']}', contains('تقارير الأرصدة — عرض'));
       expect((contract['missing_period'] as Map)['status'], 404);
     });
   });
@@ -507,6 +511,16 @@ void main() {
       ApiClient.dio.httpClientAdapter = BalanceContractServer(contract);
     });
     tearDown(PermissionsService.debugReset);
+
+    testWidgets('«من أنا» بقارئ التطبيق (٢٠ نوفمبر): can_view وcan_manage كما في الردّ الحقيقيّ — للمدير والموظّف', (t) async {
+      await t.runAsync(() async {
+        final mgr = await BalanceReportsApi.me(companyKey: null);
+        expect([mgr!.featureEnabled, mgr.canManage, mgr.isEmployee, mgr.canView], [true, true, false, true]);
+        ApiClient.dio.httpClientAdapter = BalanceContractServer({...contract, 'me_manager': contract['me_employee']});
+        final emp = await BalanceReportsApi.me(companyKey: null);
+        expect([emp!.featureEnabled, emp.canManage, emp.isEmployee, emp.canView], [true, false, true, false]);
+      });
+    });
 
     Widget app(Widget child) => EasyLocalization(
           supportedLocales: const [Locale('ar'), Locale('en')],

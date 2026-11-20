@@ -148,13 +148,12 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
           // ويظلّ يبحث عن الفرق. (حُذفت من هنا بطلب صاحب المشروع.)
           // «كل الشركات» (٨ نوفمبر): ديون مدراء كلّ شركات الساس — تظهر ولو كانت المفتوحة بلا مدراء فرعيّين بنوعها (ايرث لنك/المُضافة)
-          // «تقارير الأرصدة»: الكرت حين تُفتح الميزة للحساب؛ لمدير الصفحة وحده — الموظّف يراه مقفلاً بنصّه. وفي «كل الشركات»
-          // (١٦ نوفمبر): لشركة الشريط بمكانها بغلاف قسمها.
+          // «تقارير الأرصدة»: الكرت حين تُفتح الميزة للحساب. والموظّف (٢٠ نوفمبر) يفتحه بمفتاح «تقارير الأرصدة — عرض» (`can_view`
+          // من الخادم — لا المحصور بمديرٍ فرعيّ)، وبلاه يراه مقفلاً بمكانه. وفي «كل الشركات» (١٦ نوفمبر): لشركة الشريط بمكانها بغلاف قسمها.
           if ((_balance?.featureEnabled == true && !MergedMode.active.value) || _mergedBal)
             _ReportCard(
               key: const ValueKey('report-balances'),
-              locked: !MergedMode.active.value && (_balance?.isEmployee ?? false),
-              lockedMessage: 'هذا القسم لمدير الصفحة وحده',
+              locked: !MergedMode.active.value && (_balance?.isEmployee ?? false) && !(_balance?.canView ?? false),
               icon: LucideIcons.walletCards,
               color: AppColors.success,
               merged: true,
@@ -421,7 +420,6 @@ class _ReportCard extends StatelessWidget {
   const _ReportCard({
     super.key,
     this.locked = false,
-    this.lockedMessage,
     required this.icon,
     required this.color,
     required this.title,
@@ -444,12 +442,9 @@ class _ReportCard extends StatelessWidget {
   /// مكان السهم، والنقر رسالةٌ لا تنقّل — فلا يُفتح تقريرٌ يردّه الخادم 403.
   final bool locked;
 
-  /// نصّ القفل حين لا صلاحيّة تُطلب أصلاً (قسمٌ لمدير الصفحة وحده).
-  final String? lockedMessage;
-
   void _open(BuildContext context) {
     if (locked) {
-      showNoPermission(context, message: lockedMessage);
+      showNoPermission(context);
       return;
     }
     HapticFeedback.selectionClick();

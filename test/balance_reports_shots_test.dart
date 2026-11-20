@@ -8,8 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/reports/balance_reports_screen.dart';
 import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
+import 'package:rad_mysvcs/services/balance_sub_names.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 
 import 'balance_reports/balance_fixture.dart';
@@ -21,6 +23,7 @@ import 'visual_perm/visual_perm_harness.dart';
 /// كلّ لقطةٍ بطول محتواها ([_fit]) وبظلالها الحقيقيّة. بياناتٌ تجريبيّة وحدها.
 /// ١٦ نوفمبر: لقطات المدراء الفرعيّين داخل الحساب من **ردّ الخادم الحقيقيّ** (server_contract_managers.json) بأوقاتٍ مزاحة.
 /// ١٦ نوفمبر مساءً: «الفترة التالية تُفتح عند الإغلاق» — 20 تأكيد الإغلاق · 21 الفترة بلا مبلغ · 22 ورقة المبلغ · 23 تفاصيلها · 24 المغلقة المقفلة.
+/// ٢٠ نوفمبر: 25 الموظّف بمفتاح «العرض» وحده (سطر «للعرض» بلا أزرار كتابة) · 26 الاسم العربيّ بجانب اليوزر في حركات الفترة.
 /// المخرجات: VISUAL_OUT (أو build/visual_perm المُتجاهَل بgit).
 const _wide = VisualDevice('480', Size(480, 1040), 3);
 const _narrowDark = VisualDevice('320_dark', Size(320, 693), 3, dark: true);
@@ -100,6 +103,37 @@ void main() {
   }
 
   for (final d in [_wide, _narrowDark]) {
+    shots('الموظّف للعرض والاسم العربيّ بجانب اليوزر ${d.tag}', (t) async {
+      Subscriber sub(String u, String first, String last) => Subscriber.fromJson({'username': u, 'firstname': first, 'lastname': last});
+      BalanceSubNames.probe = () async => 0;
+      BalanceSubNames.loadAll = () async => [
+            sub('user0@net', 'علي', 'حسين'),
+            sub('user1@net', 'user1@net', ''),
+            sub('user2@net', 'محمد جاسم', ''),
+            sub('user3@net', 'عبد الرحمن عبد الكريم عبد الأمير', 'الحسيني الموسوي البغدادي'),
+            sub('user4@net', 'Ahmed', 'Kareem'),
+            sub('user5@net', 'زينب', 'كاظم'),
+            sub('user6@net', 'حيدر', 'عباس'),
+            sub('user8@net', 'سجاد', 'فلاح'),
+            sub('user9@net', 'مصطفى', 'رعد'),
+          ];
+      try {
+        await up(BalanceServer.ownerExample()
+          ..employee = true
+          ..empView = true);
+        PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true, 'subscribers.view': true});
+        await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+        await settle(t, seconds: 2);
+        await _fit(t, d);
+        await _shot(t, '25_employee_view', d);
+        await tap(t, k('bal-detail-1'));
+        await _fit(t, d);
+        await _shot(t, '26_names', d);
+      } finally {
+        BalanceSubNames.debugReset();
+      }
+    });
+
     shots('مثال المالك ثمّ التسوية ${d.tag}', (t) async {
       await up(BalanceServer.ownerExample()..balance = 3000);
       await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());

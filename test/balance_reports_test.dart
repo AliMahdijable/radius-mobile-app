@@ -7,10 +7,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/balance_reports_api.dart';
+import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
+import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/reports/balance_period_screen.dart';
 import 'package:rad_mysvcs/screens/reports/balance_reports_screen.dart';
 import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
+import 'package:rad_mysvcs/services/balance_sub_names.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,11 +32,16 @@ void main() {
     await EasyLocalization.ensureInitialized();
     PermissionsService.debugReset();
     BalanceReportsState.reset();
+    // أسماء المشتركين (٢٠ نوفمبر): بلا قائمةٍ افتراضاً — مجموعة «الأسماء» تضبطها
+    BalanceSubNames.probe = () async => 0;
+    BalanceSubNames.loadAll = () async => null;
+    BalanceSubNames.lookup = (_) async => const <Subscriber>[];
   });
 
   tearDown(() {
     PermissionsService.debugReset();
     BalanceReportsState.reset();
+    BalanceSubNames.debugReset();
   });
 
   void use(BalanceServer s) {
@@ -639,16 +647,278 @@ void main() {
       expect(src, contains("_guardSync('BalanceReportsState.reset', () => BalanceReportsState.reset());"));
     });
 
-    testWidgets('الموظّف: الكرت بمكانه مقفلاً بنصّه — لا يفتح ولا يطلب اللوحة', (t) async {
+    testWidgets('الموظّف بلا «تقارير الأرصدة — عرض»: الكرت بمكانه مقفلاً بنصّ الصلاحيّة — لا يفتح ولا يطلب اللوحة', (t) async {
       use(BalanceServer.ownerExample()..employee = true);
       PermissionsService.debugSet(isEmployee: true, permissions: const {'reports.financial': true});
       await hub(t);
       expect(k('report-balances'), findsOneWidget);
       await tap(t, k('report-balances'));
-      expect(find.text('هذا القسم لمدير الصفحة وحده'), findsOneWidget);
+      expect(find.text('locked.toast'.tr()), findsOneWidget);
+      expect(find.text('هذا القسم لمدير الصفحة وحده'), findsNothing, reason: 'لم يعد للمدير وحده (٢٠ نوفمبر)');
       expect(find.byType(BalanceReportsScreen), findsNothing);
       expect(server.listReads, 0);
       await done(t);
+    });
+
+    testWidgets('الموظّف بمفتاح «العرض» (can_view من الخادم): الكرت مفتوحٌ ويفتح الصفحة', (t) async {
+      use(BalanceServer.ownerExample()
+        ..employee = true
+        ..empView = true);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'reports.financial': true, 'balance_reports.view': true});
+      await hub(t);
+      await tap(t, k('report-balances'));
+      expect(find.text('locked.toast'.tr()), findsNothing);
+      expect(k('bal-hero'), findsOneWidget);
+      expect(server.listReads, greaterThan(0));
+      await done(t);
+    });
+  });
+
+  // ═══════════ ٢٠ نوفمبر: الموظّف بمفتاحَيه، والاسم العربيّ بجانب اليوزر ═══════════
+  group('الموظّف (٢٠ نوفمبر)', () {
+    testWidgets('«العرض» وحده: اللوحة والتفاصيل تُقرأ، سطر «للعرض» بسببه، ولا زرّ كتابة ولا طلب كتابة', (t) async {
+      use(BalanceServer.three()
+        ..employee = true
+        ..empView = true);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true});
+      await open(t);
+      expect(k('bal-hero'), findsOneWidget);
+      expect(t.widget<Text>(k('bal-employee-readonly')).data, BalanceReportsController.employeeReadOnlyText);
+      expect(k('bal-routed-readonly'), findsNothing, reason: 'سطر «كل الشركات» ليس له');
+      for (final key in ['bal-new', 'bal-amount-btn', 'bal-adjust-1', 'bal-close-1', 'bal-edit-1', 'bal-adjust-2', 'bal-close-2', 'bal-edit-2']) {
+        expect(k(key), findsNothing, reason: key);
+      }
+      await tap(t, k('bal-detail-1'));
+      expect(rows(), findsWidgets);
+      expect(k('bal-adjust-1'), findsNothing);
+      expect(k('bal-close-1'), findsNothing);
+      expect(server.writes, isEmpty);
+      await done(t);
+    });
+
+    testWidgets('«العرض» و«التسجيل»: أزرار الكتابة بلا سطر «للعرض»، والشحن يُرسل', (t) async {
+      use(BalanceServer.ownerExample()
+        ..employee = true
+        ..empView = true
+        ..empManage = true);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true, 'balance_reports.manage': true});
+      await open(t);
+      expect(k('bal-employee-readonly'), findsNothing);
+      expect(k('bal-new'), findsOneWidget);
+      expect(k('bal-adjust-1'), findsOneWidget);
+      await done(t);
+    });
+
+    testWidgets('حتى يصل جواب «من أنا» لا زرّ كتابة؛ وتعذّره ⇒ للعرض بلا سطرٍ يَعِد بشيء', (t) async {
+      use(BalanceServer.ownerExample()
+        ..employee = true
+        ..empView = true
+        ..empManage = true
+        ..meFail = true);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true, 'balance_reports.manage': true});
+      final c = BalanceReportsController();
+      expect(c.canWrite, isFalse, reason: 'الموظّف لا يكتب قبل جواب الخادم');
+      c.dispose();
+      await open(t);
+      expect(k('bal-hero'), findsOneWidget);
+      expect(k('bal-new'), findsNothing);
+      expect(k('bal-adjust-1'), findsNothing);
+      expect(k('bal-employee-readonly'), findsNothing);
+      expect(k('bal-routed-readonly'), findsNothing);
+      await done(t);
+    });
+
+    testWidgets('لا شحنات و«العرض» وحده: الشرح بسببه بلا زرّ', (t) async {
+      use(BalanceServer()
+        ..employee = true
+        ..empView = true);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true});
+      await open(t);
+      expect(k('bal-empty'), findsOneWidget);
+      expect(find.text(BalanceReportsController.employeeReadOnlyText), findsOneWidget);
+      expect(k('bal-first'), findsNothing);
+      await done(t);
+    });
+
+    test('مفتاحاه لموظّفي ايرث لنك وفايبر اكس والشركات المُضافة — خارج الأدوار الجاهزة، و«موظّف عام» الحاليّ يبقى مطابقاً', () {
+      expect(ElEmployeePerms.balanceReportKeys, {'balance_reports.view', 'balance_reports.manage'});
+      for (final e in {'ايرث لنك': ElEmployeePerms.earthlinkKeys, 'فايبر اكس': ElEmployeePerms.fiberxKeys, 'الشركات المُضافة': ElEmployeePerms.kitKeys}.entries) {
+        expect(e.value.containsAll(ElEmployeePerms.balanceReportKeys), isTrue, reason: e.key);
+      }
+      for (final p in ElEmployeePerms.presets) {
+        expect(p.keys.intersection(ElEmployeePerms.balanceReportKeys), isEmpty, reason: p.id);
+      }
+      // موظّف ايرث لنك على «موظّف عام» (قبل اليوم): يبقى مطابقاً والمفتاحان مطفأان؛ ومنح «العرض» فرادى ⇒ مخصّص (كالتذاكر)
+      final general = ElEmployeePerms.presets.firstWhere((p) => p.id == 'general');
+      final perms = {for (final k in ElEmployeePerms.earthlinkKeys) k: general.keys.contains(k)};
+      expect(ElEmployeePerms.matching(perms)?.id, 'general');
+      expect(ElEmployeePerms.matching({...perms, 'balance_reports.view': true}), isNull);
+    });
+
+    test('المدير كما كان: يكتب من أوّل لحظة بلا سؤال «من أنا»', () {
+      PermissionsService.debugSet(isEmployee: false);
+      final c = BalanceReportsController();
+      expect([c.canWrite, c.employeeReadOnly], [true, false]);
+      c.dispose();
+    });
+  });
+
+  group('الاسم العربيّ بجانب اليوزر (٢٠ نوفمبر)', () {
+    Subscriber sub(String u, String first, String last) => Subscriber.fromJson({'username': u, 'firstname': first, 'lastname': last});
+    final subs = [
+      sub('user0@net', 'علي', 'حسين'),
+      sub('user1@net', 'user1@net', 'user1@net'), // الاسم = اليوزر ⇒ لا اسم
+      sub('USER2@NET', 'محمد جاسم', ''), // حالة الأحرف تختلف ⇒ يطابق
+      sub('user3@net', 'عبد الرحمن عبد الكريم عبد الأمير', 'الحسيني الموسوي البغدادي'),
+      sub('user5@net', 'زينب', 'كاظم'), // تسديد دين
+    ];
+    Finder nameIn(String row) => find.descendant(of: k('bal-move-$row'), matching: k('bal-move-name'));
+    String? nameOf(WidgetTester t, String row) => nameIn(row).evaluate().isEmpty ? null : t.widget<Text>(nameIn(row)).data;
+
+    test('balanceSubName: الأوّل والأخير بلا ما يساوي اليوزر، وnull حين لا اسم غيره', () {
+      expect(balanceSubName('user0@net', firstname: 'علي', lastname: 'حسين'), 'علي حسين');
+      expect(balanceSubName('user1@net', firstname: 'user1@net', lastname: 'USER1@NET'), isNull);
+      expect(balanceSubName('u', firstname: '  محمد   جاسم ', lastname: 'u'), 'محمد جاسم');
+      expect(balanceSubName('u', firstname: null, lastname: ''), isNull);
+      expect(balanceSubName('Ali', firstname: 'ali', lastname: null), isNull);
+    });
+
+    testWidgets('الحساب العاديّ: الاسم بعد اليوزر للتفعيل والتسديد، والقائمة مرّةً واحدة ولو زادت الحركات', (t) async {
+      var loads = 0;
+      var probes = 0;
+      BalanceSubNames.probe = () async {
+        probes++;
+        return 0;
+      };
+      BalanceSubNames.loadAll = () async {
+        loads++;
+        return subs;
+      };
+      use(BalanceServer.ownerExample());
+      await open(t);
+      await tap(t, k('bal-detail-1'));
+      expect(nameOf(t, 'a500'), 'علي حسين');
+      expect(inKey('bal-move-a500', 'user0@net'), findsOneWidget, reason: 'العنوان يبقى اليوزر');
+      expect(nameOf(t, 'a501'), isNull, reason: 'الاسم = اليوزر');
+      expect(nameOf(t, 'a502'), 'محمد جاسم', reason: 'حالة الأحرف');
+      expect(nameOf(t, 'a504'), isNull, reason: 'ليس بالقائمة');
+      expect(nameOf(t, 'p905'), 'زينب كاظم', reason: 'تسديد الدين أيضاً');
+      expect(nameOf(t, 'a503'), 'عبد الرحمن عبد الكريم عبد الأمير الحسيني الموسوي البغدادي');
+      await tap(t, k('bal-moves-more'));
+      await tap(t, k('bal-moves-more'));
+      expect(rows(), findsNWidgets(47));
+      expect([loads, probes], [1, 1], reason: 'القائمة المخبّأة مرّة، لا مع كلّ صفحة');
+      await done(t);
+    });
+
+    testWidgets('الحساب الكبير: أسماء صفوف الصفحة وحدها من الساس (≤١٠٠، كلّ يوزرٍ مرّة) — لا القائمة الكاملة', (t) async {
+      final asked = <List<String>>[];
+      var loads = 0;
+      BalanceSubNames.probe = () async => 89000;
+      BalanceSubNames.loadAll = () async {
+        loads++;
+        return subs;
+      };
+      BalanceSubNames.lookup = (u) async {
+        asked.add(List.of(u));
+        final want = u.map((x) => x.toLowerCase()).toSet();
+        return subs.where((s) => want.contains(s.username.toLowerCase())).toList();
+      };
+      use(BalanceServer.ownerExample());
+      await open(t);
+      await tap(t, k('bal-detail-1'));
+      expect(nameOf(t, 'a500'), 'علي حسين');
+      expect(nameOf(t, 'p905'), 'زينب كاظم');
+      await tap(t, k('bal-moves-more'));
+      await tap(t, k('bal-moves-more'));
+      expect(loads, 0, reason: 'لا قائمة كاملة لحسابٍ كبير');
+      final all = asked.expand((x) => x).toList();
+      expect(asked.every((x) => x.length <= 100), isTrue);
+      expect(all.length, all.toSet().length, reason: 'كلّ يوزرٍ يُسأل عنه مرّة');
+      expect(all.toSet().length, 47);
+      await done(t);
+    });
+
+    testWidgets('موظّفٌ بلا «عرض المشتركين»: لا طلب لقائمتهم ولا أسماء — اليوزر وحده', (t) async {
+      var calls = 0;
+      BalanceSubNames.probe = () async {
+        calls++;
+        return 0;
+      };
+      BalanceSubNames.loadAll = () async {
+        calls++;
+        return subs;
+      };
+      use(BalanceServer.ownerExample()
+        ..employee = true
+        ..empView = true);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true});
+      await open(t);
+      await tap(t, k('bal-detail-1'));
+      expect(rows(), findsWidgets);
+      expect(k('bal-move-name'), findsNothing);
+      expect(calls, 0);
+      await done(t);
+      // وبالمفتاح: الأسماء تظهر له
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'balance_reports.view': true, 'subscribers.view': true});
+      await open(t);
+      await tap(t, k('bal-detail-1'));
+      expect(nameOf(t, 'a500'), 'علي حسين');
+      await done(t);
+    });
+
+    test('«كل الشركات» (شركةٌ مختارة): لا أسماء — قائمة التطبيق لشركة الجلسة لا المختارة', () async {
+      var calls = 0;
+      BalanceSubNames.probe = () async {
+        calls++;
+        return 0;
+      };
+      BalanceSubNames.loadAll = () async {
+        calls++;
+        return subs;
+      };
+      final n = BalanceSubNames(companyKey: 'speednet-iq:859');
+      expect(n.enabled, isFalse);
+      expect(await n.fill(['user0@net']), isFalse);
+      expect([calls, n.of('user0@net')], [0, null]);
+    });
+
+    test('تعذّر القائمة: يُسأل عنها ثانيةً مع الصفحة التالية (لا تغيب الأسماء بعثرة شبكة)', () async {
+      var loads = 0;
+      BalanceSubNames.loadAll = () async {
+        loads++;
+        return loads == 1 ? null : subs;
+      };
+      final n = BalanceSubNames();
+      expect(await n.fill(['user0@net']), isFalse);
+      // اليوزرات نفسها (تحديث الصفحة نفسها) تُسأل ثانيةً — لا تبقى بلا أسماء لأنّها سُئل عنها مرّة
+      expect(await n.fill(['user0@net']), isTrue);
+      expect([loads, n.of('USER0@NET')], [2, 'علي حسين']);
+      // القائمة عُرفت: لا طلب بعدها، والباقي منها
+      expect(await n.fill(['user0@net', 'user5@net']), isFalse);
+      expect([loads, n.of('user5@net')], [2, 'زينب كاظم']);
+    });
+
+    testWidgets('أضيق هاتف وخطٌّ ×1.2: الاسم الطويل كاملاً تحت اليوزر بلا قصّ، داخل سطره ولا يركب المبلغ', (t) async {
+      BalanceSubNames.loadAll = () async => subs;
+      for (final width in [320.0, 390.0]) {
+        use(BalanceServer.ownerExample());
+        await open(t, width: width, textScale: 1.2);
+        await tap(t, k('bal-detail-1'));
+        expect(t.takeException(), isNull, reason: '@$width');
+        final name = nameIn('a503');
+        expect(name, findsOneWidget);
+        final w = t.widget<Text>(name);
+        expect([w.maxLines, w.overflow], [null, null], reason: 'الاسم لا يُقصّ');
+        final para = t.renderObject<RenderParagraph>(find.descendant(of: name, matching: find.byType(RichText)));
+        expect(para.didExceedMaxLines, isFalse);
+        final row = t.getRect(k('bal-move-a503'));
+        final r = t.getRect(name);
+        expect(r.left >= row.left - 0.5 && r.right <= row.right + 0.5, isTrue, reason: 'داخل سطره @$width: $r / $row');
+        final amount = t.getRect(find.descendant(of: k('bal-move-a503'), matching: find.textContaining('د.ع')).first);
+        expect(r.overlaps(amount), isFalse, reason: 'لا يركب المبلغ @$width');
+        await done(t);
+      }
     });
   });
 }

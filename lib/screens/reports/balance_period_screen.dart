@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/balance_reports_api.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/balance_sub_names.dart';
 import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -48,6 +49,9 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
   /// كلّ قراءةٍ بجيلها: ردٌّ يصل بعد فلترٍ أو كتابةٍ أحدث يُهمل.
   int _gen = 0;
   int _seenVersion = 0;
+
+  /// الاسم العربيّ بجانب اليوزر (٢٠ نوفمبر — المالك: «اريد اضيف اسم المشترك الي بالعربي»).
+  late final BalanceSubNames _names = BalanceSubNames(companyKey: widget.controller.companyKey);
 
   @override
   void initState() {
@@ -133,7 +137,20 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
         _counts = counts;
       }
     });
+    unawaited(_loadNames());
   }
+
+  /// أسماء ما حُمل من الحركات ممّا لم يُعرف بعد — القائمة تُعرض بلا انتظارها، والاسم يظهر حين يصل.
+  Future<void> _loadNames() async {
+    if (_items.isEmpty) return;
+    if (await _names.fill(BalanceSubNames.usersOf(_items)) && mounted) setState(() {});
+  }
+
+  String? _nameOf(BalanceMove m) => switch (m) {
+        BalanceActMove() => _names.of(m.username),
+        BalancePayMove() => _names.of(m.username),
+        _ => null,
+      };
 
   void _setFilter(BalanceFilter f) {
     if (f == _filter) return;
@@ -399,7 +416,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
         children: [
           for (var i = 0; i < shown; i++) ...[
             if (i > 0) Divider(height: 1, thickness: 1, indent: Sp.md, endIndent: Sp.md, color: AppColors.divider),
-            BalanceMoveRow(key: ValueKey('bal-move-${_items[i].key}'), move: _items[i]),
+            BalanceMoveRow(key: ValueKey('bal-move-${_items[i].key}'), move: _items[i], name: _nameOf(_items[i])),
           ],
           if (footer != null) ...[
             Divider(height: 1, thickness: 1, color: AppColors.divider),
@@ -437,9 +454,12 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
 
 /// سطر حركة: مربّع أيقونةٍ بلون نوعها، الاسم وشارته وقبالته المبلغ، التفاصيل بخطٍّ يُقرأ، ثمّ حال الدين بشارته.
 class BalanceMoveRow extends StatelessWidget {
-  const BalanceMoveRow({super.key, required this.move, this.nowMs});
+  const BalanceMoveRow({super.key, required this.move, this.nowMs, this.name});
   final BalanceMove move;
   final int? nowMs;
+
+  /// اسم المشترك العربيّ بعد يوزره (٢٠ نوفمبر) — للتفعيل وتسديد الدين وحدهما؛ null ⇒ اليوزر وحده كما كان.
+  final String? name;
 
   @override
   Widget build(BuildContext context) {
@@ -511,6 +531,7 @@ class BalanceMoveRow extends StatelessWidget {
         note = m.note;
     }
     final info = details.whereType<String>().where((x) => x.trim().isNotEmpty).join(' · ');
+    final subName = (m is BalanceActMove || m is BalancePayMove) && (name?.trim().isNotEmpty ?? false) ? name!.trim() : null;
     const pad = Sp.sm + 2;
     return Padding(
       padding: const EdgeInsetsDirectional.only(start: Sp.md, end: Sp.md, top: pad, bottom: pad),
@@ -543,6 +564,9 @@ class BalanceMoveRow extends StatelessWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
+                            // الاسم العربيّ بعد اليوزر — يلتفّ تحته كاملاً إن ضاق السطر، ولا يُقصّ (كالويب)
+                            if (subName != null)
+                              Text(subName, key: const ValueKey('bal-move-name'), style: AppType.rowValue(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
                             for (final t in tags) ToneChip(label: t.text, tone: t.tone, dense: true),
                           ],
                         ),

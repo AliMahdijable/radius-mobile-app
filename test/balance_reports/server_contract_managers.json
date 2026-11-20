@@ -1,8 +1,8 @@
 {
  "meta": {
-  "root": "devtree",
+  "root": "MyServices-Pro",
   "mode": "managers",
-  "module_sha1": "3324efd8eb4b082ba498ebbc6dea774a40b22132"
+  "module_sha1": "0393a26262eca35774f65ef531f1b3a607236d7a"
  },
  "empty_overview": {
   "success": true,
@@ -115,7 +115,7 @@
   "body": {
    "success": false,
    "code": "OVER_REMAINING",
-   "message": "المبلغ أكبر من المعوز (60,000 د.ع)",
+   "message": "المبلغ أكبر من المتبقّي (60,000 د.ع)",
    "remaining": 60000
   }
  },
@@ -307,7 +307,8 @@
   "data": {
    "feature_enabled": true,
    "can_manage": true,
-   "is_employee": false
+   "is_employee": false,
+   "can_view": true
   }
  },
  "me_employee": {
@@ -315,15 +316,17 @@
   "data": {
    "feature_enabled": true,
    "can_manage": false,
-   "is_employee": true
+   "is_employee": true,
+   "can_view": false
   }
  },
  "employee_overview": {
   "status": 403,
   "body": {
    "success": false,
-   "code": "MANAGER_ONLY",
-   "message": "هذا القسم لمدير الصفحة وحده"
+   "code": "PERMISSION_DENIED",
+   "permission": "balance_reports.view",
+   "message": "لا تملك صلاحيّة «تقارير الأرصدة — عرض» — يمنحها مدير الصفحة من صلاحيّات الموظّف"
   }
  },
  "overview": {
