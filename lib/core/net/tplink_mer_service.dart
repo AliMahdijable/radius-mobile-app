@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../models/device_health.dart';
 import 'router_types.dart';
 import 'tplink_agile_service.dart' show AgileCrypto;
+import 'device_net.dart';
 
 /// راوتر TP-Link بواجهة «$.su» وبروتوكول MER (Archer C64 وأخواته — https على 8443 و«/» على 80 يحوّل إليه؛ قِيس من كود الجهاز
 /// نفسه ١٢ نوفمبر عبر متصفّحٍ بلا واجهة، وقبل الدخول بطلباتٍ بلا اعتماد):
@@ -381,10 +382,10 @@ class TplinkMerService {
 
   static void _note(String host, MerIssue issue, String trace) => _issues[host] = (issue: issue, trace: trace, at: DateTime.now());
 
-  static HttpClient _client() => HttpClient()
+  static HttpClient _client() => DeviceNet.cpeHttp(HttpClient()
     ..connectionTimeout = _connect
     ..idleTimeout = const Duration(seconds: 15)
-    ..badCertificateCallback = (_, __, ___) => true;
+    ..badCertificateCallback = (_, __, ___) => true);
 
   /// [client] = عميل الجلسة (اتّصالٌ محفوظ يُعاد استعماله كالمتصفّح — جهاز CGI من العائلة نفسها يربط الجلسة المعمّاة بالاتّصال)؛ بلا عميل ⇒ طلبٌ مستقلّ.
   static Future<({int status, HttpHeaders headers, String body})?> _http(String url, {String method = 'GET', String? body, String? referer, HttpClient? client}) async {

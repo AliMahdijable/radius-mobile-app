@@ -19,7 +19,7 @@ typedef RouterCreds = ({String ip, String user, String pass});
 /// القراءة دخولٌ على الراوتر لا تجري مع كلّ فتحٍ للكرت. لكلّ شبكة: الاسم وكلمة السرّ (مخفيّةٌ حتى تُكشف، وتُنسخ)، و«تغيير كلمة السرّ»
 /// بتأكيدٍ صريح (الأجهزة المتّصلة تنقطع وتحتاج الكلمة الجديدة). صلاحيّة «إدارة الأجهزة» — بلاها يبقى السطر مقفلاً لا مخفيّاً.
 class RouterWifiPanel extends StatefulWidget {
-  const RouterWifiPanel({super.key, required this.vendor, required this.creds, this.onBusy, this.onRebooted});
+  const RouterWifiPanel({super.key, required this.vendor, required this.creds, this.onBusy, this.onRebooted, this.net});
 
   final String vendor;
 
@@ -33,11 +33,17 @@ class RouterWifiPanel extends StatefulWidget {
   /// الاعتماد الذي دخل به الفحص على هذا الراوتر (أو null حين لا اعتماد).
   final Future<RouterCreds?> Function() creds;
 
+  /// طريق الراوتر من الكرت ([DeviceNet.cpeZone] — عبر ممرّ «وضع VPN» أو مباشرةً)؛ بلاه مباشرٌ كما كان.
+  final Future<T> Function<T>(Future<T> Function() fn)? net;
+
   @override
   State<RouterWifiPanel> createState() => _RouterWifiPanelState();
 }
 
 class _RouterWifiPanelState extends State<RouterWifiPanel> {
+  /// طلبٌ إلى الراوتر بطريق الكرت.
+  Future<T> _viaCard<T>(Future<T> Function() fn) => widget.net?.call(fn) ?? fn();
+
   bool _open = false;
   bool _busy = false;
   List<RouterWifi>? _wifi;
@@ -71,7 +77,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       });
       return;
     }
-    final r = await RouterOps.readWifi(widget.vendor, c.ip, c.user, c.pass);
+    final r = await _viaCard(() => RouterOps.readWifi(widget.vendor, c.ip, c.user, c.pass));
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -121,7 +127,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       return;
     }
     HapticFeedback.mediumImpact();
-    final r = await RouterOps.setWifiPassword(widget.vendor, c.ip, c.user, c.pass, next);
+    final r = await _viaCard(() => RouterOps.setWifiPassword(widget.vendor, c.ip, c.user, c.pass, next));
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -148,7 +154,7 @@ class _RouterWifiPanelState extends State<RouterWifiPanel> {
       );
       if (now == true && mounted) {
         setState(() => _busy = true);
-        final rb = await RouterOps.reboot(widget.vendor, c.ip, c.user, c.pass);
+        final rb = await _viaCard(() => RouterOps.reboot(widget.vendor, c.ip, c.user, c.pass));
         if (rb.ok) widget.onRebooted?.call();
         if (!mounted) return;
         setState(() => _busy = false);

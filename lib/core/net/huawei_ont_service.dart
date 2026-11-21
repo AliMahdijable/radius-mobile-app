@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 import '../../models/device_health.dart';
+import 'device_net.dart';
 
 /// Direct port of mobile-app/lib/core/services/huawei_ont_service.dart —
 /// keeps the same login flow, base URL fallback order, and HTML
@@ -23,7 +24,7 @@ class HuaweiOntService {
       headers: {'Accept': 'text/html,application/xhtml+xml,*/*'},
     ));
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final c = HttpClient();
+      final c = DeviceNet.cpeHttp(HttpClient());
       c.badCertificateCallback = (_, __, ___) => true;
       return c;
     };

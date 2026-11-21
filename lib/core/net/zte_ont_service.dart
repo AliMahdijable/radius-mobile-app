@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 import '../../models/device_health.dart';
+import 'device_net.dart';
 
 /// جهاز المشترك الضوئيّ ZTE (شريحة ZXIC، واجهة `.gch`) — طلب المالك ٢٥ أكتوبر: «عدنا نوع اجهزه جديد… نريد هم نعرض
 /// المعلومات مال جهاز الضوئي للمشتركين وكذلك الترفك».
@@ -54,7 +55,7 @@ class ZteOntService {
       headers: {'Accept': 'text/html,application/xhtml+xml,*/*'},
     ));
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final c = HttpClient();
+      final c = DeviceNet.cpeHttp(HttpClient());
       c.badCertificateCallback = (_, __, ___) => true;
       return c;
     };

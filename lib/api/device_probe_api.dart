@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/net/device_net.dart';
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/tenda_service.dart';
 import '../core/net/zte_ont_service.dart';
@@ -129,6 +130,11 @@ class DeviceProbeApi {
 
   static String _k(String? company, String s) =>
       DeviceConfigApi.scoped(company, s);
+
+  /// مفتاح ذاكرةٍ بطريق الاتّصال (٢٢ نوفمبر — كرت المشترك بـ«وضع VPN» يقرأ جهازه عبر الممرّ، [DeviceNet.cpeZone]): ما قيل عن
+  /// عنوانٍ مباشرةً («لم يردّ» من موبايلٍ خارج شبكته) غير ما قيل عنه عبر الممرّ — فلا يُغلق أحدهما الآخر: «ميّت»، الفحص الجاري،
+  /// البنگ، و«ليس TP-Link/ميكروتك/…» من تعرّفٍ لم يصل. ما نجح (اللقطة، النوع، الاعتماد الفائز) حقيقةٌ عن الجهاز فواحد.
+  static String _rk(String key) => DeviceNet.cpePiped ? 'vpn|$key' : key;
 
   static const _ttl = Duration(minutes: 5);
 
@@ -340,6 +346,10 @@ class DeviceProbeApi {
   static final Map<String, ({bool ok, DateTime at})> _reachCache = {};
   static const _reachTtl = Duration(seconds: 20);
 
+  /// للاختبار: البنگ بلا شبكة (يُنادى في نطاق المستدعي — [DeviceNet.cpePiped] يقول طريقه؛ null = لا حكم).
+  @visibleForTesting
+  static Future<bool?> Function(String address)? debugReach;
+
   /// `true` واصل · `false` لا يردّ · `null` لا عنوان بعد (فلا حكم).
   static Future<bool?> reachable({
     required String fallbackIp,
@@ -358,7 +368,7 @@ class DeviceProbeApi {
       ip = '';
     }
     if (ip.isEmpty) return null;
-    final key = _k(company, ip);
+    final key = _rk(_k(company, ip));
     if (!force) {
       final hit = _reachCache[key];
       if (hit != null && DateTime.now().difference(hit.at) < _reachTtl) {
@@ -367,11 +377,19 @@ class DeviceProbeApi {
     }
     bool ok;
     try {
-      // عنوانٌ بمنفذ (IP مخصّص خلف تحويل منفذ) ⇒ اتّصالٌ بذلك المنفذ نفسه على كلّ منصّة.
-      ok = Platform.isWindows && TcpReachability.split(ip).port == null
-          ? (await WindowsIcmp.ping(ip, count: 2, timeout: const Duration(seconds: 1)))
-              .isNotEmpty
-          : await TcpReachability.isReachable(ip);
+      // عنوانٌ بمنفذ (IP مخصّص خلف تحويل منفذ) ⇒ اتّصالٌ بذلك المنفذ نفسه على كلّ منصّة. عبر الممرّ: TCP دائماً (ICMP ويندوز
+      // من الهاتف نفسه لا يصل شبكة الوكيل).
+      // الممرّ نفسه تعذّر (رفض العنوان، الخادم، الامتلاء) ⇒ لا حكم (null) — لا «لا يستجيب» عن جهازٍ لم يُسأل.
+      final seam = debugReach;
+      final bool? v = seam != null
+          ? await seam(ip)
+          : DeviceNet.cpePiped
+              ? await TcpReachability.verdict(ip, timeout: const Duration(seconds: 3))
+              : Platform.isWindows && TcpReachability.split(ip).port == null
+                  ? (await WindowsIcmp.ping(ip, count: 2, timeout: const Duration(seconds: 1))).isNotEmpty
+                  : await TcpReachability.isReachable(ip);
+      if (v == null) return null;
+      ok = v;
     } catch (_) {
       ok = false;
     }
@@ -410,9 +428,11 @@ class DeviceProbeApi {
     final userKey = subscriberUsername == null || subscriberUsername.isEmpty
         ? null
         : _k(company, _slotUser(subscriberUsername, slot));
+    // عبر الممرّ: فشلٌ محفوظ (غالباً من موبايلٍ خارج شبكته) لا يُصدَّق — يُفحص الجهاز عبر الممرّ. النجاح يُصدَّق.
+    final piped = DeviceNet.cpePiped;
     if (!force && userKey != null) {
       final byUser = _snapByUser[userKey];
-      if (byUser != null && DateTime.now().difference(byUser.at) < _ttl) {
+      if (byUser != null && DateTime.now().difference(byUser.at) < _ttl && !(piped && byUser.snap == null)) {
         return byUser.snap;
       }
     }
@@ -445,7 +465,7 @@ class DeviceProbeApi {
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
     if (!force) {
-      final deadAt = _deadCache[ipKey];
+      final deadAt = _deadCache[_rk(ipKey)];
       if (deadAt != null && DateTime.now().difference(deadAt) < _deadTtl) {
         return null;
       }
@@ -454,7 +474,7 @@ class DeviceProbeApi {
     // Snapshot cache
     if (!force) {
       final cached = _snapCache[ipKey];
-      if (cached != null && DateTime.now().difference(cached.at) < _ttl) {
+      if (cached != null && DateTime.now().difference(cached.at) < _ttl && !(piped && cached.snap == null)) {
         // كمان نُثبّت _snapByUser لو مو موجود (hydrate case).
         if (userKey != null) {
           _snapByUser[userKey] ??= cached;
@@ -468,18 +488,19 @@ class DeviceProbeApi {
     // بدونه: موجة القائمة تفحص جهازاً، وفي أثنائها يفتح المستخدم كارته
     // — فينطلق فحص ثانٍ متوازٍ لنفس العنوان لأنّ الكاش لا يمتلئ إلّا
     // بعد انتهاء الأوّل. جهاز واحد، فحصان، وضِعف الاستهلاك.
-    final pending = _inFlight[ipKey];
+    final flightKey = _rk(ipKey);
+    final pending = _inFlight[flightKey];
     if (pending != null) {
       if (!retryLogin) return pending;
       await pending; // فحصٌ بإعدادٍ قديم: ننتظره ثمّ نفحص بالجديد.
     }
 
     final future = _probeAndStore(effectiveIp, cfg, userKey, company, report: retryLogin);
-    _inFlight[ipKey] = future;
+    _inFlight[flightKey] = future;
     try {
       return await future;
     } finally {
-      _inFlight.remove(ipKey);
+      _inFlight.remove(flightKey);
     }
   }
 
@@ -552,14 +573,15 @@ class DeviceProbeApi {
             code: code, message: '${i == 0 ? '' : '+'}${text.substring(i, (i + _diagChunk).clamp(0, text.length))}');
       }
     }
+    final deadKey = _rk(ipKey);
     if (snap != null) {
       _kindByIp[ipKey] = snap.kind;
       final v = snap.ubnt?.vendor;
       if (v != null) _radioVendorByKey[ipKey] = v;
-      _deadCache.remove(ipKey); // نجاح → ما هو ميت
+      _deadCache.remove(deadKey); // نجاح → ما هو ميت
     } else {
       // فشل — نضيف لـdead cache حتى نوفّر محاولات متكرّرة قريبة.
-      _deadCache[ipKey] = now;
+      _deadCache[deadKey] = now;
       // Kind cache قد يكون قديم ونحن جربنا الـkind المخزّن وفشل — نمسحه
       // حتى المحاولة القادمة تفجّر parallel وتلقّط لو الجهاز اتبدّل.
       _kindByIp.remove(ipKey);
@@ -569,13 +591,13 @@ class DeviceProbeApi {
       if (kv != 'tplink' && !MikrotikCpeService.isVendor(kv)) _radioVendorByKey.remove(ipKey);
     }
     _schedulePersist();
-    if (timedOut) _keepLate(run, entry, ipKey, userKey);
+    if (timedOut) _keepLate(run, entry, ipKey, userKey, deadKey);
     return snap;
   }
 
   /// قراءةٌ وصلت بعد سقف الفحص — كانت تُرمى: مستقبَلات Dart لا تُلغى، فالفحص يُكمل بعد أن نتخلّى عنه (على خطٍّ بعيد
   /// يُكمل كثيراً). تُحفظ ما دامت نتيجة الفشل التي كتبناها هي الأحدث — فحصٌ أحدث أو إبطالٌ بعدنا لا يُغطّى.
-  static void _keepLate(Future<DeviceHealthSnapshot?> run, _Cached failed, String ipKey, String? userKey) {
+  static void _keepLate(Future<DeviceHealthSnapshot?> run, _Cached failed, String ipKey, String? userKey, String deadKey) {
     unawaited(run.then((late) {
       if (late == null || !identical(_snapCache[ipKey], failed)) return;
       final e = _Cached(late, DateTime.now());
@@ -586,7 +608,7 @@ class DeviceProbeApi {
       _kindByIp[ipKey] = late.kind;
       final v = late.ubnt?.vendor;
       if (v != null) _radioVendorByKey[ipKey] = v;
-      _deadCache.remove(ipKey);
+      _deadCache.remove(deadKey);
       _issueByKey.remove(ipKey);
       if (userKey != null) _issueByUser.remove(userKey);
       _schedulePersist();
@@ -601,16 +623,20 @@ class DeviceProbeApi {
     _snapCache.remove(k);
     _kindByIp.remove(k);
     _deadCache.remove(k);
+    _deadCache.remove('vpn|$k');
     _ontVendorByKey.remove(k);
     _ontWinner.remove(k);
     _ubntWinner.remove(k);
     _tplinkWinner.remove(k);
     _radioVendorByKey.remove(k);
     _ubntHttpsOnly.remove(k);
-    _airOsSeen.remove(ip.trim());
-    _tplinkSeen.remove(ip.trim());
-    _tpClassicSeen.remove(ip.trim());
-    _tpAgileSeen.remove(ip.trim());
+    for (final h in [ip.trim(), 'vpn|${ip.trim()}']) {
+      _airOsSeen.remove(h);
+      _tplinkSeen.remove(h);
+      _tpClassicSeen.remove(h);
+      _tpAgileSeen.remove(h);
+      _mtSeen.remove(h);
+    }
     // اعتماداتٌ جديدة تُجرَّب: الرفض السابق على هذا العنوان يُنسى (لا يُعاد إلّا المرفوض نفسه بلا تغيير).
     ZteOntService.forget(ip.trim());
     TplinkPharosService.forget(ip.trim());
@@ -621,7 +647,6 @@ class DeviceProbeApi {
     TplinkCgiPlainService.forget(ip.trim());
     TplinkMerService.forget(ip.trim());
     _mikrotikWinner.remove(k);
-    _mtSeen.remove(ip.trim());
     MikrotikCpeService.forget(ip.trim());
     _schedulePersist();
   }
@@ -1128,14 +1153,15 @@ class DeviceProbeApi {
   static final _mtSeen = <String, ({bool yes, DateTime at})>{};
 
   static Future<bool> _helloMikrotik(String ip) {
-    final running = _mtHello[ip];
+    final k = _rk(ip);
+    final running = _mtHello[k];
     if (running != null) return running;
-    final seen = _mtSeen[ip];
+    final seen = _mtSeen[k];
     if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
     final f = MikrotikCpeService.detect(ip).catchError((Object _) => false);
-    _mtHello[ip] = f;
-    f.then((y) => _mtSeen[ip] = (yes: y, at: DateTime.now()));
-    f.whenComplete(() => _mtHello.remove(ip));
+    _mtHello[k] = f;
+    f.then((y) => _mtSeen[k] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _mtHello.remove(k));
     return f;
   }
 
@@ -1195,7 +1221,7 @@ class DeviceProbeApi {
   static final _familySeen = <String, ({bool yes, DateTime at})>{};
 
   static Future<bool> _helloFamily(String family, String ip, Future<bool> Function(String ip) detect) {
-    final key = '$family|$ip';
+    final key = '$family|${_rk(ip)}';
     final running = _familyHello[key];
     if (running != null) return running;
     final seen = _familySeen[key];
@@ -1354,18 +1380,19 @@ class DeviceProbeApi {
   static final _tendaSeen = <String, ({bool yes, DateTime at})>{};
 
   static Future<bool> _helloTenda(String ip) {
-    final running = _tendaHello[ip];
+    final k = _rk(ip);
+    final running = _tendaHello[k];
     if (running != null) return running;
-    final seen = _tendaSeen[ip];
+    final seen = _tendaSeen[k];
     if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
     final f = (() async {
       if (await _isTplink(ip)) return false;
       return TendaService.detect(ip);
     })()
         .catchError((Object _) => false);
-    _tendaHello[ip] = f;
-    f.then((y) => _tendaSeen[ip] = (yes: y, at: DateTime.now()));
-    f.whenComplete(() => _tendaHello.remove(ip));
+    _tendaHello[k] = f;
+    f.then((y) => _tendaSeen[k] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _tendaHello.remove(k));
     return f;
   }
 
@@ -1421,18 +1448,19 @@ class DeviceProbeApi {
   /// تعرّفٌ كلاسيكيّ — **بعد** أن يقول تعرّف Pharos إنّ العنوان ليس Pharos: طلب «/» على Pharos قد يُبدّل الـnonce الذي حفظه تعرّفه
   /// (الجهاز يحفظ آخر nonce طلبه أيّ عميل). على الكلاسيكيّ نفسه يجيب طلب Pharos بـ401 سريعاً، فلا يزيد الانتظار إلّا ~٠٫٤ث.
   static Future<TpClassicHello?> _helloTpClassic(String ip) {
-    final running = _tpClassicHello[ip];
+    final k = _rk(ip);
+    final running = _tpClassicHello[k];
     if (running != null) return running;
-    final seen = _tpClassicSeen[ip];
+    final seen = _tpClassicSeen[k];
     if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.hello);
     final f = (() async {
       if (await _isTplink(ip)) return null;
       return TplinkClassicService.detect(ip);
     })()
         .catchError((Object _) => null);
-    _tpClassicHello[ip] = f;
-    f.then((h) => _tpClassicSeen[ip] = (hello: h, at: DateTime.now()));
-    f.whenComplete(() => _tpClassicHello.remove(ip));
+    _tpClassicHello[k] = f;
+    f.then((h) => _tpClassicSeen[k] = (hello: h, at: DateTime.now()));
+    f.whenComplete(() => _tpClassicHello.remove(k));
     return f;
   }
 
@@ -1489,14 +1517,15 @@ class DeviceProbeApi {
   static final _tpAgileSeen = <String, ({bool yes, DateTime at})>{};
 
   static Future<bool> _helloTpAgile(String ip) {
-    final running = _tpAgileHello[ip];
+    final k = _rk(ip);
+    final running = _tpAgileHello[k];
     if (running != null) return running;
-    final seen = _tpAgileSeen[ip];
+    final seen = _tpAgileSeen[k];
     if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
     final f = TplinkAgileService.detect(ip).catchError((Object _) => false);
-    _tpAgileHello[ip] = f;
-    f.then((y) => _tpAgileSeen[ip] = (yes: y, at: DateTime.now()));
-    f.whenComplete(() => _tpAgileHello.remove(ip));
+    _tpAgileHello[k] = f;
+    f.then((y) => _tpAgileSeen[k] = (yes: y, at: DateTime.now()));
+    f.whenComplete(() => _tpAgileHello.remove(k));
     return f;
   }
 
@@ -1553,19 +1582,20 @@ class DeviceProbeApi {
   static const _tplinkSeenFor = Duration(seconds: 30);
 
   static ({bool yes, DateTime at})? _tplinkRecent(String ip) {
-    final seen = _tplinkSeen[ip];
+    final seen = _tplinkSeen[_rk(ip)];
     return seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor ? seen : null;
   }
 
   /// تعرّفٌ جديد (بـnonce دخوله). null بلا طلبٍ حين عُرف للتوّ أنّ العنوان ليس TP-Link.
   static Future<PharosHello?> _helloTplink(String ip) {
-    final running = _tplinkHello[ip];
+    final k = _rk(ip);
+    final running = _tplinkHello[k];
     if (running != null) return running;
     if (_tplinkRecent(ip)?.yes == false) return Future.value(null);
     final f = TplinkPharosService.hello(ip).catchError((Object _) => null);
-    _tplinkHello[ip] = f;
-    f.then((h) => _tplinkSeen[ip] = (yes: h != null, at: DateTime.now()));
-    f.whenComplete(() => _tplinkHello.remove(ip));
+    _tplinkHello[k] = f;
+    f.then((h) => _tplinkSeen[k] = (yes: h != null, at: DateTime.now()));
+    f.whenComplete(() => _tplinkHello.remove(k));
     return f;
   }
 
@@ -1669,11 +1699,12 @@ class DeviceProbeApi {
   static final _zteDetecting = <String, Future<bool>>{};
 
   static Future<bool> _isZte(String ip) {
-    final running = _zteDetecting[ip];
+    final k = _rk(ip);
+    final running = _zteDetecting[k];
     if (running != null) return running;
     final f = ZteOntService.detect(ip);
-    _zteDetecting[ip] = f;
-    f.whenComplete(() => _zteDetecting.remove(ip));
+    _zteDetecting[k] = f;
+    f.whenComplete(() => _zteDetecting.remove(k));
     return f;
   }
 
@@ -1859,21 +1890,22 @@ class DeviceProbeApi {
     final dbg = debugAirOsHttps;
     if (dbg != null) return dbg(ip);
     if (_hasPort(ip)) return Future.value(false);
-    final seen = _airOsSeen[ip];
+    final k = _rk(ip);
+    final seen = _airOsSeen[k];
     if (seen != null && DateTime.now().difference(seen.at) < _tplinkSeenFor) return Future.value(seen.yes);
-    final running = _airOsRunning[ip];
+    final running = _airOsRunning[k];
     if (running != null) return running;
     final f = UbiquitiService.looksAirOsHttps(ip).then((yes) {
-      _airOsSeen[ip] = (yes: yes, at: DateTime.now());
+      _airOsSeen[k] = (yes: yes, at: DateTime.now());
       return yes;
     });
-    _airOsRunning[ip] = f;
+    _airOsRunning[k] = f;
     // 🐛 ١٦ نوفمبر: كان `.whenComplete(() => _airOsRunning.remove(ip))` مسلسلاً في [f] نفسه — `remove` يُرجع [f]، و`whenComplete`
     // ينتظر ما يُرجعه ⇒ [f] ينتظر نفسه فلا يكتمل أبداً. فكلّ أوّل فحصٍ لراوتر (TP-Link بعائلاته · Tenda · WR840 · ميكروتك) يعلق في
     // [viaRouter] حتى سقف الفحص ⇒ «تعذّرت قراءته»، وينجح الثاني خلال ٣٠ث من ذاكرة [_airOsSeen] وحدها (منذ 4c9357b9، إصدار 181).
     // الحذف سطرٌ منفصل يُهمَل ناتجه، والجسم لا يُرجع شيئاً.
     f.whenComplete(() {
-      _airOsRunning.remove(ip);
+      _airOsRunning.remove(k);
     });
     return f;
   }

@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../models/device_health.dart';
 import 'router_types.dart';
 import 'tplink_agile_service.dart' show AgileCrypto;
+import 'device_net.dart';
 
 /// راوتر TP-Link المنزليّ القديم (واجهة `userRpm` — TL-WR741ND v4 بفيرموير 3.16.6، قِيس حيّاً ١١ نوفمبر على راوتر مشترك):
 ///
@@ -403,7 +404,7 @@ class TplinkClassicService {
     Duration? timeout,
   }) async {
     final base = baseFor(host);
-    final client = HttpClient()..connectionTimeout = _connect;
+    final client = DeviceNet.cpeHttp(HttpClient()..connectionTimeout = _connect);
     try {
       final req = await client.getUrl(Uri.parse('$base$path')).timeout(_connect);
       req.followRedirects = false;
@@ -430,7 +431,7 @@ class TplinkClassicService {
   /// POST واحد بنصٍّ JSON (دخول الفيرموير المعمّى) ⇒ (الحالة، النصّ). شبكةٌ/مهلة ⇒ null. لا إعادة أبداً.
   static Future<({int status, String body})?> _post(String host, String path, String body) async {
     final base = baseFor(host);
-    final client = HttpClient()..connectionTimeout = _connect;
+    final client = DeviceNet.cpeHttp(HttpClient()..connectionTimeout = _connect);
     try {
       final req = await client.postUrl(Uri.parse('$base$path')).timeout(_connect);
       req.followRedirects = false;

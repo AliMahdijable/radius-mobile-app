@@ -30,6 +30,32 @@ class DeviceNet {
 
   static bool get _on => Zone.current[_directKey] != true && (Zone.current[_vpnKey] == true || vpnOn());
 
+  // ── جهاز المشترك (النانو/الضوئيّ/الراوتر) — ٢٢ نوفمبر، المالك على كرت جهاز مشتركٍ بـ«وضع VPN»: «ليش يظهر لا يستجيب وهو بي
+  // معلومات… وكذلك ترفك وزر ريبوت ماكو» ──
+  //
+  // قرّاء جهاز المشترك مباشرةٌ دائماً — موجة القائمة وتنبيه المشترك وفحص المشتركين لا تمرّ بالممرّ (مئات الأجهزة تُغرقه) — إلّا
+  // داخل [cpeZone] بـ`vpn: true`: كرت مشتركٍ واحد مفتوح بـ«وضع VPN» يقرأ جهازه وترفكه ويعيد تشغيله عبر الممرّ كقسم الأجهزة.
+  static const _cpeKey = #deviceNetCpe;
+
+  /// [fn] لجهاز مشتركٍ واحد: [vpn] ⇒ اتّصالاته عبر الممرّ ما دام «وضع VPN» شغّالاً ولأجهزته طريق، وإلّا مباشرةً ([direct]).
+  /// الأعمق يغلب (مؤقّتٌ أُنشئ بطريقٍ ثمّ نادى بالآخر). ما يُنشأ داخله (مؤقّتات، مستقبَلات) يبقى فيه.
+  static R cpeZone<R>(bool vpn, R Function() fn) =>
+      runZoned(fn, zoneValues: vpn ? {_cpeKey: true, _directKey: false} : {_cpeKey: false, _directKey: true});
+
+  /// اتّصالات جهاز المشترك هنا تمرّ عبر الممرّ (داخل [cpeZone] والوضع شغّال) — مفتاح ذاكرة الفحص بطريقه.
+  static bool get cpePiped => Zone.current[_cpeKey] == true && _on;
+
+  /// عميل HTTP لجهاز مشترك: داخل [cpeZone] كـ[adopt]، وخارجه كما هو حرفاً.
+  static HttpClient cpeHttp(HttpClient c) => Zone.current[_cpeKey] == true ? adopt(c) : c;
+
+  /// [Socket.connect] لجهاز مشترك: داخل [cpeZone] كـ[connect]، وخارجه مباشرٌ حرفاً.
+  static Future<Socket> cpeConnect(Object host, int port, {Duration? timeout}) => Zone.current[_cpeKey] == true
+      ? connect(host, port, timeout: timeout)
+      : Socket.connect(host, port, timeout: timeout);
+
+  /// قارئ جهاز مشتركٍ يمرّ بقنوات [DeviceNet] نفسها (RouterOS لميكروتك): داخل [cpeZone] كما يقرّر، وخارجه مباشرٌ ([direct]).
+  static Future<T> cpe<T>(Future<T> Function() fn) => Zone.current[_cpeKey] == true ? fn() : direct(fn);
+
   /// عنوانٌ خاصّ IPv4 (10/8، 172.16/12، 192.168/16، 100.64/10) — ما يصله نفق الوكيل.
   static bool isPrivateV4(String host) {
     final m = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(host.trim());

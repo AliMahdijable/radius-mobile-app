@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 import '../../models/device_health.dart';
+import 'device_net.dart';
 
 /// Direct port of mobile-app/lib/core/services/ubiquiti_service.dart.
 /// Handles both airOS 6.x (form login) and 8.x (JSON /api/auth).
@@ -19,7 +20,7 @@ class UbiquitiService {
       headers: {'Accept': 'application/json, text/html, */*'},
     ));
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final c = HttpClient();
+      final c = DeviceNet.cpeHttp(HttpClient());
       c.badCertificateCallback = (_, __, ___) => true;
       return c;
     };
@@ -71,7 +72,7 @@ class UbiquitiService {
     try {
       final uri = Uri.parse(base);
       final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
-      final sock = await Socket.connect(uri.host, port,
+      final sock = await DeviceNet.cpeConnect(uri.host, port,
           timeout: const Duration(milliseconds: 1200));
       sock.destroy();
       return true;

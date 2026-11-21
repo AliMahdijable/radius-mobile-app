@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
+import 'device_net.dart';
 
 /// جهاز المشترك اللاسلكيّ TP-Link Pharos (CPE/WBS — واجهة PharOS) — طلب المالك ١٠ نوفمبر: «صنف جديد من النانوات tplink يحتاج
 /// نضيفه ضمن الاعتمادات… يجلب نفس المعلومات مال النانوات».
@@ -102,9 +103,9 @@ class TplinkPharosService {
   }
 
   static Future<_Reply> _send(String base, String method, String path, {String? cookie, String? form, Duration? connect}) async {
-    final client = HttpClient()
+    final client = DeviceNet.cpeHttp(HttpClient()
       ..connectionTimeout = connect ?? _connect
-      ..badCertificateCallback = (_, __, ___) => true;
+      ..badCertificateCallback = (_, __, ___) => true);
     try {
       final HttpClientRequest req;
       try {

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
+import '../../../core/net/device_net.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
 import '../../../core/net/zte_ont_service.dart';
@@ -119,6 +120,29 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// `null` لم يُحسم بعد (أو لا عنوان) — يملأ الحبّة فوراً قبل أن يكمل الفحص.
   bool? _reach;
   String? _notes;
+
+  // ── طريق جهاز المشترك (٢٢ نوفمبر — المالك على هذا الكرت بـ«وضع VPN»: «ليش يظهر لا يستجيب وهو بي معلومات اكو وكذلك ترفك
+  // وزر ريبوت ماكو؟») — كان الكرت يقرأ الجهاز مباشرةً من الموبايل وهو خارج شبكته، فلا قراءة ولا ترفك ولا زرّ، وفوق قراءة
+  // الخادم «لا يستجيب» من بنگٍ لم يصل. الآن بالوضع يقرأه عبر ممرّ الخادم كقسم الأجهزة: كلّ ما يفتحه الكرت إلى الجهاز
+  // (البنگ، الفحص، نبضات الترافيك، الإقلاع، واي فاي الراوتر) يمرّ بـ[_net]. موجة القائمة وغيرها تبقى مباشرة.
+
+  /// الصفّ للشركة المفتوحة — الممرّ ممرّها (صفّ شركةٍ أخرى في «كل الشركات» لا يمرّ منه: شبكةٌ أخرى قد تحمل العنوان نفسه).
+  bool _openCo = true;
+
+  /// آخر طريقٍ قُرئ به ([_syncRoute] يعيد القراءة حين يتبدّل).
+  bool? _lastVia;
+
+  /// تبدّل الطريق وفحصٌ جارٍ ⇒ يُعاد بعده بالطريق الجديد.
+  bool _routePending = false;
+
+  /// «وضع VPN» شغّال ولأجهزته طريق، والصفّ للشركة المفتوحة ⇒ الجهاز عبر الممرّ.
+  bool get _viaVpn => _openCo && DeviceNet.vpnOn();
+
+  /// كلّ اتّصالٍ بالجهاز من هذا الكرت بطريقه الآن ([DeviceNet.cpeZone]) — المؤقّتات المُنشأة داخله تبقى فيه.
+  V _net<V>(V Function() fn) => DeviceNet.cpeZone(_viaVpn, fn);
+
+  /// [_net] لمن يأخذه معاملاً (لوحة واي فاي الراوتر).
+  Future<T> _netF<T>(Future<T> Function() fn) => _net(fn);
 
   /// قائمة المتّصلين بالراوتر (آيبي/ماك/اسم) مطويّةٌ افتراضاً — تنفتح بنقر الوكيل فقط (المالك ١١ نوفمبر).
   bool _clientsExpanded = false;
@@ -330,6 +354,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // ٦ نوفمبر: «وضع VPN» ونتائج فحصه ⇒ الكرت يعرض قراءة الـVPN بدل «غير واصل»
     VpnNow.version.addListener(_onVpn);
     VpnNow.mode.addListener(_onVpn);
+    _openCo = widget.company == null;
+    _lastVia = _viaVpn;
+    if (widget.company != null) unawaited(_resolveOpenCo());
     // ⚠️ اقرأ ما فحصته موجة القائمة قبل أن تفحص.
     //
     // كان الكارت يُطلق فحصاً كاملاً عند كل فتح بلا سؤال الكاش، بينما
@@ -375,18 +402,52 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _maybeStartTraffic();
       _checkReach(force: true);
     }
+    if (old.company != widget.company) {
+      _openCo = widget.company == null;
+      if (widget.company != null) unawaited(_resolveOpenCo());
+      _syncRoute();
+    }
+  }
+
+  /// شركة الصفّ هي المفتوحة؟ («كل الشركات» يحمل كلّ صفٍّ مفتاحه، والمفتوحة أيضاً.)
+  Future<void> _resolveOpenCo() async {
+    final key = widget.company;
+    bool open;
+    try {
+      open = await MergedMode.isOpenKey(key);
+    } catch (_) {
+      open = false;
+    }
+    if (!mounted || key != widget.company || open == _openCo) return;
+    setState(() => _openCo = open);
+    _syncRoute();
+  }
+
+  /// تبدّل طريق الجهاز («وضع VPN» شُغّل أو أُطفئ، أو عُرفت شركة الصفّ): ما فُتح بالطريق القديم (جلسة الترافيك) يُغلق، ويُقرأ
+  /// الجهاز بالجديد — والبنگ معه (حكمه القديم من طريقٍ آخر).
+  void _syncRoute() {
+    final via = _viaVpn;
+    if (via == _lastVia) return;
+    _lastVia = via;
+    _stopTraffic(clear: true);
+    _reach = null;
+    if (_probing) {
+      _routePending = true;
+      return;
+    }
+    _run(force: true);
   }
 
   /// بنگ سريع — مستقلٌّ عن الفحص الكامل: يُظهر «واصل/لا» خلال ~ثانية بدل
   /// انتظار الدخول والقراءة. لا ينتظر جلسة الساس (customIp يكفي).
   Future<void> _checkReach({bool force = false}) async {
-    final r = await DeviceProbeApi.reachable(
-      fallbackIp: widget.ip,
-      subscriberUsername: widget.username,
-      slot: widget.slot,
-      company: widget.company,
-      force: force,
-    );
+    final r = await _net(() => DeviceProbeApi.reachable(
+          fallbackIp: widget.ip,
+          subscriberUsername: widget.username,
+          slot: widget.slot,
+          company: widget.company,
+          force: force,
+        ));
     if (mounted) setState(() => _reach = r);
   }
 
@@ -456,7 +517,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     });
   }
 
-  void _maybeStartTraffic() {
+  /// نبضات الترافيك بطريق الجهاز الآن ([_net]) — مؤقّتاتها تبقى فيه، وتبدّل الطريق يوقفها ويبدؤها من جديد ([_syncRoute]).
+  void _maybeStartTraffic() => _net(_maybeStartTrafficNow);
+
+  void _maybeStartTrafficNow() {
     if (_trafficTimer != null || _trafficPaused) return;
     final snap = _snap;
     // ⚠️ الشرط على **نوع الجهاز** لا على وجود عدّادات في لقطة الفحص:
@@ -962,9 +1026,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     if (_probing) return;
     _probing = true;
     try {
-      await _refreshQuietlyInner(force: force);
+      await _net(() => _refreshQuietlyInner(force: force));
     } finally {
       _probing = false;
+      // عبر الممرّ: ذيل قراءة الخادم يقول «جارٍ» ما دام الفحص — وفحصٌ صامتٌ فشل لا يرسم شيئاً، فيُرسم هنا.
+      if (mounted && _viaVpn && _snap == null) setState(() {});
       _afterProbe();
     }
   }
@@ -1010,7 +1076,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     }
     _probing = true;
     try {
-      await _runInner(force: force, retryLogin: retryLogin);
+      await _net(() => _runInner(force: force, retryLogin: retryLogin));
     } finally {
       _probing = false;
       _afterProbe();
@@ -1018,9 +1084,17 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   void _afterProbe() {
-    if (!_retryPending || !mounted) return;
-    _retryPending = false;
-    _run(force: true, retryLogin: true);
+    if (!mounted) return;
+    if (_retryPending) {
+      _retryPending = false;
+      _routePending = false;
+      _run(force: true, retryLogin: true);
+      return;
+    }
+    if (_routePending) {
+      _routePending = false;
+      _run(force: true);
+    }
   }
 
   Future<void> _runInner({bool force = false, bool retryLogin = false}) async {
@@ -1413,7 +1487,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             icon: LucideIcons.power,
             busy: _rebooting,
             color: AppColors.error,
-            onTap: _rebooting ? null : _confirmReboot,
+            onTap: _rebooting ? null : () => _net(_confirmReboot),
           ),
           const SizedBox(width: Sp.sm),
         ],
@@ -1435,6 +1509,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     late final String label;
     late final Color fg, bg, border;
     final snap = _snap;
+    // الجسم يعرض قراءة الـVPN ⇒ الحبّة تقول ما تقوله (٢٢ نوفمبر): كانت «لا يستجيب» من بنگ موبايلٍ خارج شبكته فوق قراءةٍ
+    // من جهازه نفسه. بنگٌ وصل (عبر الممرّ) يغلب قراءةً أقدم.
+    final vr = snap == null ? _vpnReading() : null;
     if (snap != null) {
       // الفحص الكامل جاهز: واصلٌ ومقروء.
       label = switch (snap.kind) {
@@ -1451,6 +1528,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       fg = AppColors.brandOnSoft;
       bg = AppColors.brandSoftBg;
       border = AppColors.brandSoftBorder;
+    } else if (vr != null) {
+      final alive = _reach == true || !vr.dead;
+      label = alive ? 'يستجيب' : 'لا يستجيب';
+      fg = alive ? AppColors.successFill : AppColors.dangerOnSoft;
+      bg = alive ? AppColors.successSoftBg : AppColors.dangerSoftBg;
+      border = alive ? AppColors.successSoftBorder : AppColors.dangerSoftBorder;
     } else if (_reach == false) {
       // بنگ حسم: غير واصل — بلا انتظار الفحص الكامل.
       label = 'لا يستجيب';
@@ -1491,7 +1574,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   void _onVpn() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _syncRoute();
+    setState(() {});
   }
 
   /// خارج شبكتك / «وضع VPN»: آخر قراءةٍ لهذا المشترك عبر الـVPN (٣٠ د) — null إن لم تُقرأ أو كنت على شبكتك.
@@ -1637,17 +1722,24 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _ => _reach == false
           ? (
               title: 'الجهاز لا يستجيب',
-              hint: 'لا يردّ على فحص الاتّصال — تأكّد أنّه يعمل وعلى الشبكة نفسها',
+              hint: _viaVpn
+                  ? 'لا يردّ على فحص الاتّصال عبر الـVPN — تأكّد أنّه يعمل'
+                  : 'لا يردّ على فحص الاتّصال — تأكّد أنّه يعمل وعلى الشبكة نفسها',
             )
           : _reach == true
               ? (
                   title: 'الجهاز يستجيب بس تعذّرت قراءته',
                   hint: 'فحص الاتّصال يصل — غالباً النوع أو بيانات الدخول، اضبطهن من زرّ الإعدادات',
                 )
-              : (
-                  title: 'لم يُتمكّن من الوصول للجهاز',
-                  hint: 'اضبط الـIP وبيانات الدخول من زرّ الإعدادات',
-                ),
+              : _viaVpn
+                  ? (
+                      title: 'تعذّر الوصول لجهازه عبر الـVPN',
+                      hint: 'الـVPN ما وصل لهذا العنوان الآن — اسحب للتحديث بعد لحظات',
+                    )
+                  : (
+                      title: 'لم يُتمكّن من الوصول للجهاز',
+                      hint: 'اضبط الـIP وبيانات الدخول من زرّ الإعدادات',
+                    ),
     };
   }
 
@@ -1767,9 +1859,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             for (final w in tiles) SizedBox(width: 132, child: w),
           ]),
         const SizedBox(height: Sp.xs),
-        Text('القراءة الكاملة وحركة البيانات من هاتفك لمّا ترجع لشبكتك', style: AppType.micro(color: AppColors.textLow)),
+        Text(_vpnFootnote(), style: AppType.micro(color: AppColors.textLow)),
       ],
     );
+  }
+
+  /// سطر ذيل قراءة الـVPN: بالوضع يُقرأ الجهاز عبر الممرّ (جارٍ، أو سبب تعذّره)؛ وبغيره — خارج شبكتك بلا الوضع، أو صفٌّ لشركةٍ
+  /// غير المفتوحة، أو صفحةٌ بلا طريقٍ لأجهزتها — القراءة الكاملة من هاتفك على شبكتك كما كان.
+  String _vpnFootnote() {
+    if (!_viaVpn) return 'القراءة الكاملة وحركة البيانات من هاتفك لمّا ترجع لشبكتك';
+    if (_loading || _probing) return 'جارٍ قراءة جهازه كاملاً عبر الـVPN…';
+    final why = DeviceProbeApi.issueFor(username: widget.username, ip: widget.ip, company: widget.company, slot: widget.slot);
+    if (why == null || why.issue == ProbeIssue.unreachable) return 'تعذّرت القراءة الكاملة عبر الـVPN الآن — اسحب للتحديث';
+    return 'القراءة الكاملة عبر الـVPN: ${_whyNoReading().title}';
   }
 
   Widget _unreachable() {
@@ -1973,7 +2075,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         if (u.isRouter && RouterOps.canWifi(u.vendor)) ...[
           const SizedBox(height: Sp.sm),
           Divider(height: 1, color: AppColors.divider),
-          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds, onBusy: _routerOpBusy, onRebooted: _routerRebooting),
+          RouterWifiPanel(vendor: u.vendor, creds: _routerCreds, onBusy: _routerOpBusy, onRebooted: _routerRebooting, net: _netF),
         ],
       ],
     );

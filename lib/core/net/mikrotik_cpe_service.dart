@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -119,12 +118,13 @@ class MikrotikCpeService {
     return m == null ? a : m.group(1)!;
   }
 
-  /// RouterOS؟ — منفذ الـAPI أو Winbox يقبل الاتّصال (أوّل «نعم» يحسم). مباشرةً من الهاتف دائماً (لا ممرّ VPN).
+  /// RouterOS؟ — منفذ الـAPI أو Winbox يقبل الاتّصال (أوّل «نعم» يحسم). مباشرةً من الهاتف — وعبر ممرّ VPN لكرت مشتركٍ مفتوح
+  /// بـ«وضع VPN» وحده ([DeviceNet.cpeZone]).
   static Future<bool> detect(String address) async {
     final host = hostOf(address);
     Future<bool> open(int port) async {
       try {
-        final s = await Socket.connect(host, port, timeout: detectTimeout);
+        final s = await DeviceNet.cpeConnect(host, port, timeout: detectTimeout);
         s.destroy();
         return true;
       } catch (_) {
@@ -237,7 +237,7 @@ class MikrotikCpeService {
     final prev = _serial[host] ?? Future<void>.value();
     final mine = Completer<void>();
     _serial[host] = mine.future;
-    return prev.then((_) => DeviceNet.direct(() => _read(host, user, pass))).whenComplete(() {
+    return prev.then((_) => DeviceNet.cpe(() => _read(host, user, pass))).whenComplete(() {
       mine.complete();
       if (identical(_serial[host], mine.future)) _serial.remove(host);
     });
@@ -278,7 +278,7 @@ class MikrotikCpeService {
 
   static Future<bool> _portOpen(String host, int port) async {
     try {
-      final s = await Socket.connect(host, port, timeout: detectTimeout);
+      final s = await DeviceNet.cpeConnect(host, port, timeout: detectTimeout);
       s.destroy();
       return true;
     } catch (_) {
@@ -366,7 +366,7 @@ class MikrotikCpeService {
 
   /// جلسةٌ حيّة للبطاقة: قناةٌ تُفتح مرّةً، ثمّ `monitor-traffic` (معدّلٌ جاهز من الجهاز) كلّ نبضة، والإشارة/المتّصلون/مدّة PPPoE
   /// كلّ رابعة. null ⇒ لم تُفتح (رفضٌ أو لا طريق أو SSH — `monitor-traffic` لا يُترجَم سكربتاً).
-  static Future<RouterLive?> openLive(String address, String user, String pass) => DeviceNet.direct(() async {
+  static Future<RouterLive?> openLive(String address, String user, String pass) => DeviceNet.cpe(() async {
         final host = hostOf(address);
         if (_rejected.contains(_key(host, user, pass))) return null;
         ({RouterOsChannel ch, MtRoute route})? o;

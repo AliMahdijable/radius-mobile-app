@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
 import 'router_types.dart';
+import 'device_net.dart';
 
 /// راوتر Tenda (واجهة GoAhead — F3 بفيرموير V12.01.01.42 وراوترٌ آخر بـV02.03.01.110، قِيسا حيّاً ١٢ نوفمبر على راوترَي مشتركَين):
 ///
@@ -256,7 +257,7 @@ class TendaService {
     Duration? timeout,
   }) async {
     final base = baseFor(host);
-    final client = HttpClient()..connectionTimeout = _connect;
+    final client = DeviceNet.cpeHttp(HttpClient()..connectionTimeout = _connect);
     try {
       final req = await client.openUrl(method, Uri.parse('$base$path')).timeout(_connect);
       req.followRedirects = false;

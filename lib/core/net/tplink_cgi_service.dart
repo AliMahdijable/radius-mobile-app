@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/device_health.dart';
 import 'tplink_agile_service.dart' show AgileCrypto;
+import 'device_net.dart';
 
 /// راوتر TP-Link بواجهة CGI القديمة مع تعمية GDPR (Archer C50 وأخواته — HTTP على 80؛ قِيس من كود الجهاز نفسه ١٢ نوفمبر):
 ///
@@ -36,7 +37,7 @@ class _KaConn {
 
   Future<void> _open() async {
     await close();
-    final s = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+    final s = await DeviceNet.cpeConnect(host, port, timeout: const Duration(seconds: 5));
     _sock = s;
     _done = false;
     _buf.clear();
@@ -369,7 +370,7 @@ class TplinkCgiService {
 
   static Future<bool> detect(String host) async {
     final base = baseFor(host.trim());
-    final client = HttpClient()..connectionTimeout = _connect;
+    final client = DeviceNet.cpeHttp(HttpClient()..connectionTimeout = _connect);
     try {
       final req = await client.getUrl(Uri.parse('$base/')).timeout(_connect);
       req.followRedirects = false;

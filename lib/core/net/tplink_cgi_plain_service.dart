@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/device_health.dart';
 import 'tplink_cgi_service.dart';
 import 'tplink_classic_service.dart';
+import 'device_net.dart';
 
 enum CgiPlainIssue { rejected, locked, tooManyFails, busy, unreachable, readFailed }
 
@@ -143,7 +144,7 @@ class TplinkCgiPlainService {
     Duration? timeout,
   }) async {
     final base = baseFor(host);
-    final client = HttpClient()..connectionTimeout = _connect;
+    final client = DeviceNet.cpeHttp(HttpClient()..connectionTimeout = _connect);
     try {
       final req = await client.openUrl(method, Uri.parse('$base$path')).timeout(_connect);
       req.followRedirects = false;

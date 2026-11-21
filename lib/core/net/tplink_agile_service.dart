@@ -25,6 +25,7 @@ import 'package:pointycastle/export.dart'
 
 import '../../models/device_health.dart';
 import 'router_types.dart';
+import 'device_net.dart';
 
 /// TP-Link «Agile» modern router (Archer AX10 & kin — واجهة الـSPA الحديثة):
 /// جهاز المشترك راوترٌ منزليّ (لا راديو)، بروتوكولٌ **مختلف عن userRpm الكلاسيكيّ** ([TplinkClassicService]):
@@ -455,9 +456,9 @@ class TplinkAgileService {
 
   static Future<({int status, String body, String cookie})?> _post(String base, String path, String body,
       {Map<String, String>? headers, Duration? timeout}) async {
-    final client = HttpClient()
+    final client = DeviceNet.cpeHttp(HttpClient()
       ..connectionTimeout = _connect
-      ..badCertificateCallback = (_, __, ___) => true; // شهادة ذاتيّة التوقيع
+      ..badCertificateCallback = (_, __, ___) => true); // شهادة ذاتيّة التوقيع
     try {
       final req = await client.postUrl(Uri.parse('$base$path')).timeout(_connect);
       req.followRedirects = false;
