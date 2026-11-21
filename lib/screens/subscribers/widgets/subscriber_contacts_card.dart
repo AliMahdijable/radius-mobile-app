@@ -9,6 +9,7 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/merged_mode.dart';
 
 /// حال «أرقام تواصل إضافيّة» لمشتركٍ واحد (المالك ١٤ نوفمبر): تُجلب مرّة، وتُضاف/تُعدَّل بورقتها. تملكه شاشة المشترك (كالملاحظة)
 /// وتعرضها بطاقة الهويّة تحت الهاتف (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت»)، ويقرؤه «المزيد» للإضافة والتعديل. «كل الشركات» (مشتركٌ من شركةٍ أخرى) لا يُجلب — يُعدَّل من صفحة الشركة.
@@ -27,10 +28,12 @@ class SubscriberContactsController extends ChangeNotifier {
   /// جُلبت بنجاح — قبلها لا حفظ (حفظٌ على أرقامٍ لم تُقرأ قد يمحوها).
   bool get ready => loaded && !failed;
 
+  /// «كل الشركات» (الدفعة ب، ٢١ نوفمبر — الخادم 342c96b): أرقام مشترك الصفّ من شركته (قراءةٌ موجَّهة، ومفتاح الميزة لشركته) —
+  /// بلا مفتاح كما كان حرفاً.
   Future<void> load() async {
-    if (_loading || sub.username.isEmpty || sub.companyKey != null) return;
+    if (_loading || sub.username.isEmpty) return;
     _loading = true;
-    final r = await SubscriberContactsApi.get(sub.username);
+    final r = await MergedOps.run(sub, () => SubscriberContactsApi.get(sub.username));
     _loading = false;
     if (_disposed) return;
     loaded = true;
@@ -96,7 +99,9 @@ class _ContactsSheetState extends State<_ContactsSheet> {
       _errField = null;
       _errText = null;
     });
-    final r = await SubscriberContactsApi.save(widget.sub.username, wa: _wa.text, tg: _tg.text, phone: widget.sub.phone);
+    // «كل الشركات»: الحفظ لشركة المشترك بمرجع نافذته (يوزره — الخادم يطابقه حرفاً)؛ بلا مفتاح كما كان
+    final r = await MergedOps.write(
+        widget.sub, () => SubscriberContactsApi.save(widget.sub.username, wa: _wa.text, tg: _tg.text, phone: widget.sub.phone));
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {

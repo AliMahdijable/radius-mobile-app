@@ -450,6 +450,19 @@ class CompanyRefs {
 
   static String _k(String key, String idx, CompanyRefKind kind) => '$key|$idx|${kind.name}';
 
+  /// كتاباتٌ مفتاحها **يوزر** المشترك (الدفعة ب، ٢١ نوفمبر — الخادم 342c96b: subscriber-device-set/reset بـ:username مفكوكاً،
+  /// subscriber-contacts-set بيوزر الجسم مقصوصاً): مرجع النافذة نفسه محفوظٌ بيوزر مشتركها أيضاً ([capture] من ردّ القراءة —
+  /// data.username المقصوص، كما يبصمه الخادم) في خانة `u:<اليوزر>`. لا يوزرٌ في سجلّ.
+  static String _userSlot(String username) => 'u:$username';
+  static final RegExp _deviceWrite = RegExp(r'^/api/subscribers/([^/]+)/device/?$');
+  static String? _decodeSeg(String s) {
+    try {
+      return Uri.decodeComponent(s);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static ({String idx, String tail})? _parse(String path) {
     final m = _base.firstMatch(path);
     if (m == null) return null;
@@ -497,6 +510,20 @@ class CompanyRefs {
     if (m == 'GET') return null;
     final body = _bodySubject(m, path, data);
     if (body != null) return (idx: body, kind: CompanyRefKind.subject);
+    // «إعداد جهاز المشترك» (الحفظ والحذف) بيوزر المسار مفكوكاً — كـreq.params بالخادم
+    if (m == 'PUT' || m == 'DELETE') {
+      final d = _deviceWrite.firstMatch(path);
+      if (d != null) {
+        final u = _decodeSeg(d.group(1)!);
+        return u == null || u.isEmpty ? null : (idx: _userSlot(u), kind: CompanyRefKind.subject);
+      }
+    }
+    // «الأرقام الإضافيّة» (الحفظ) بيوزر الجسم مقصوصاً وحدّ ١٢٨ — كمعالجها بالخادم
+    if (m == 'PUT' && path == '/api/v2/subscriber-contacts' && data is Map) {
+      final raw = data['username'];
+      final u = raw is String ? raw.trim() : '';
+      return u.isEmpty || u.length > 128 ? null : (idx: _userSlot(u), kind: CompanyRefKind.subject);
+    }
     if (m == 'POST') {
       final w = _walletWrite.firstMatch(path);
       if (w != null) return (idx: w.group(1)!, kind: CompanyRefKind.subject);
@@ -509,16 +536,24 @@ class CompanyRefs {
     return null;
   }
 
-  /// يحفظ مرجع ردٍّ موجَّه إن سكّه الخادم.
-  static void capture(String key, String method, String path, Headers headers) {
+  /// يحفظ مرجع ردٍّ موجَّه إن سكّه الخادم. نافذة المشترك ([body] ردّها) تُحفظ بيوزره أيضاً لكتابات «اليوزر» (الدفعة ب).
+  static void capture(String key, String method, String path, Headers headers, [Object? body]) {
     final mint = mintOf(method, path);
     if (mint == null) return;
     final v = headers.value('x-company-ref');
     if (v == null || !_refRe.hasMatch(v)) return;
     _refs[_k(key, mint.idx, mint.kind)] = v;
+    if (mint.kind == CompanyRefKind.subject && body is Map && body['data'] is Map) {
+      final u = (body['data'] as Map)['username'];
+      final t = u is String ? u.trim() : '';
+      if (t.isNotEmpty) _refs[_k(key, _userSlot(t), CompanyRefKind.subject)] = v;
+    }
   }
 
   static String? lookup(String key, String idx, CompanyRefKind kind) => _refs[_k(key, idx, kind)];
+
+  /// مرجع نافذة مشترك [username] في الشركة [key] — إن فُتحت نافذته (الدفعة ب).
+  static String? lookupUser(String key, String username) => _refs[_k(key, _userSlot(username.trim()), CompanyRefKind.subject)];
 
   /// بعد نجاح تفعيلٍ/تمديد: عرض السعر استُهلك بالخادم.
   static void consume(String key, String method, String path) {

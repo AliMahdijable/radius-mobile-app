@@ -59,6 +59,7 @@ class DeviceProbeCard extends StatefulWidget {
     this.ip = '',
     required this.username,
     this.company,
+    this.subscriberIdx,
     this.slot = 1,
       this.onFold,
   });
@@ -76,8 +77,11 @@ class DeviceProbeCard extends StatefulWidget {
   final String username;
 
   /// شركة الصفّ في «كل الشركات» (null في الوضع العاديّ): إعداد الجهاز وافتراضات المدير من شركته، والفحص من الهاتف كما هو.
-  /// حفظ إعداد الجهاز للشركة وحدها (خارج جدول التوجيه).
+  /// حفظ إعداد الجهاز وحذفه لشركته كذلك منذ ٢١ نوفمبر (الدفعة ب — بمرجع نافذة مشتركه: [DeviceConfigSheet]).
   final String? company;
+
+  /// رقم المشترك في شركته — لنافذته قبل حفظ إعداد جهازه في «كل الشركات» (null ⇒ مرجع النافذة المفتوحة بيوزره).
+  final String? subscriberIdx;
 
   /// ما يرسمه الكارت ذو المفتاح [key] الآن — القراءة المعروضة ووقتها
   /// وملاحظة المدير — لـ«نسخ كلّ المعلومات». `null` حين لا يكون مركَّباً
@@ -1282,10 +1286,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   Future<void> _openConfig() async {
-    // «كل الشركات»: الحفظ (PUT/DELETE) خارج جدول التوجيه — كان سيُحفظ تحت الشركة المفتوحة لا شركة المشترك.
-    final blocked = MergedOps.unsupportedAt(widget.company);
-    if (blocked != null) {
-      showSheetSnack(context, blocked, isError: true);
+    // «كل الشركات» (الدفعة ب، ٢١ نوفمبر — الخادم 342c96b): القراءة والحفظ والحذف بشركة الصفّ ومرجع نافذة مشتركه (يوزره) — لا
+    // حجب. صفحة موظّفٍ كتابتها مقفلةٌ من هنا ⇒ سببها ولا ورقة (والمعترض يرفض الكتابة محلّيّاً ولو وصلت).
+    final locked = MergedOps.writeLockAt(widget.company);
+    if (locked != null) {
+      showSheetSnack(context, locked, isError: true);
       return;
     }
     final changed = await showAppSheet<bool>(
@@ -1293,7 +1298,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (_) => DeviceConfigSheet(username: widget.username, sessionIp: widget.ip),
+      builder: (_) => DeviceConfigSheet(
+        username: widget.username,
+        sessionIp: widget.ip,
+        companyKey: widget.company,
+        subscriberIdx: widget.subscriberIdx,
+      ),
     );
     if (changed == true && mounted) {
       // The sheet already invalidated per-IP cache when it saved. «حفظ وفحص» = محاولة دخولٍ جديدة حتى باعتماداتٍ رُفضت قبل

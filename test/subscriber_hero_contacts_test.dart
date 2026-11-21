@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/device_config_api.dart';
@@ -147,7 +148,7 @@ void main() {
     await close(t);
   });
 
-  testWidgets('المفتاح مطفأ، أو «كل الشركات» (مشتركٌ من شركةٍ أخرى): لا صفّ ولا جلب', (t) async {
+  testWidgets('المفتاح مطفأ: لا صفّ؛ و«كل الشركات» (الدفعة ب، ٢١ نوفمبر): أرقام المشترك من شركته', (t) async {
     contacts({'wa_phone2': '07801234567'}, enabled: false);
     await open(t, const SimVariant(390, dark: false));
     expect(find.text('07801234567'), findsNothing);
@@ -155,10 +156,17 @@ void main() {
     await close(t);
 
     server.requests.clear();
+    server.echoCompanyKey = true;
+    final prev = AccountApi.tokenSource;
+    AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+    addTearDown(() => AccountApi.tokenSource = prev);
     contacts({'wa_phone2': '07801234567'});
-    await open(t, const SimVariant(390, dark: false), sub: _sub(companyKey: 'earthlink:1025'));
-    expect(server.calls('GET', SubscriberContactsApi.path), isEmpty);
-    expect(find.text('07801234567'), findsNothing);
+    await open(t, const SimVariant(390, dark: false), sub: _sub(companyKey: 'c0000000000b2'));
+    final g = server.calls('GET', SubscriberContactsApi.path);
+    expect(g.length, 1);
+    expect(g.single.headers['x-company-key'], 'c0000000000b2', reason: 'من شركة المشترك لا المفتوحة');
+    expect(find.text('07801234567'), findsOneWidget, reason: 'الرقم الثاني بكرت مشترك الشركة الأخرى');
+    expect(find.text('ثانٍ'), findsOneWidget);
     await close(t);
   });
 }

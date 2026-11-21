@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+import 'package:rad_mysvcs/api/account_api.dart';
+import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/subscriber_contacts_api.dart';
@@ -12,7 +15,7 @@ import 'sim_el/sim_harness.dart';
 
 /// «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر: «اضافة امكانيه اضافة رقم واتساب ومعرف او رقم تلي كرام للمشترك … يستعين بالرقم الثاني …
 /// بمعرف تلي»): المتحكّم يجلبها مرّة، والورقة (من «المزيد») تحفظ الحقلين (PUT) وتُظهر خطأ الخادم تحت حقله، والمفتاح المطفأ ⇒ لا
-/// ورقة، و«كل الشركات» ⇒ لا جلب. عرضها داخل بطاقة الهويّة (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت») ⇒
+/// ورقة، و«كل الشركات» ⇒ بشركة المشترك ومرجع نافذته (الدفعة ب، ٢١ نوفمبر). عرضها داخل بطاقة الهويّة (المالك ١٤ نوفمبر: «يظهرهن هنا وي كارت») ⇒
 /// subscriber_hero_contacts_test.dart.
 const _v = SimVariant(390, dark: false);
 const _path = SubscriberContactsApi.path;
@@ -113,13 +116,40 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('«كل الشركات» (مشتركٌ من شركةٍ أخرى): لا جلب ولا ورقة', (t) async {
+  testWidgets('«كل الشركات» (الدفعة ب، ٢١ نوفمبر): الجلب والحفظ لشركة المشترك بمرجع نافذته (يوزره) — لا شيء للمفتوحة', (t) async {
+    const key = 'c0000000000b2';
+    final ref = 'r_${'k' * 22}';
+    server.echoCompanyKey = true;
+    final prev = AccountApi.tokenSource;
+    AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+    addTearDown(() {
+      AccountApi.tokenSource = prev;
+      CompanyRefs.reset();
+    });
+    // نافذة المشترك فُتحت في شركته (صفحته) — الخادم سكّ مرجعها، والعميل يحفظه بيوزره أيضاً
+    CompanyRefs.reset();
+    CompanyRefs.capture(key, 'GET', '/api/v2/subscribers/900004', Headers.fromMap({'x-company-ref': [ref]}),
+        {'success': true, 'data': {'idx': '900004', 'username': 'ali.hasan'}});
     server.reply('GET', _path, 200, {'success': true, 'enabled': true, 'contact': {'wa_phone2': '07801234567'}});
-    final c = await open(t, sub: _sub(companyKey: 'earthlink:1025'));
-    expect(server.calls('GET', _path), isEmpty);
-    expect(c.loaded, isFalse);
+    server.on('PUT', _path, (o) {
+      final b = o.data as Map;
+      return SimReply(200, {'success': true, 'contact': {'wa_phone2': b['wa_phone2'], 'tg_contact': null}});
+    });
+    final c = await open(t, sub: _sub(companyKey: key));
+    final g = server.calls('GET', _path).single;
+    expect([g.headers['x-company-key'], g.queryParameters['username']], [key, 'ali.hasan'], reason: 'من شركة المشترك');
+    expect(c.ready && c.enabled, isTrue);
+    expect(c.contact?.waPhone2, '07801234567');
     await simOpen(t);
-    expect(find.byType(TextField), findsNothing);
+    await t.enterText(find.byKey(const ValueKey('sub-contacts-wa_phone2')), '07901234567');
+    await t.pumpAndSettle();
+    await t.tap(find.text('حفظ'));
+    await t.pumpAndSettle();
+    final p = server.calls('PUT', _path).single;
+    expect([p.headers['x-company-key'], p.headers['x-company-ref']], [key, ref], reason: 'لشركته بمرجع نافذته');
+    expect((p.data as Map)['username'], 'ali.hasan');
+    expect(server.requests.where((o) => o.method != 'GET' && o.headers['x-company-key'] == null), isEmpty, reason: 'لا كتابة للمفتوحة');
+    expect(c.contact?.waPhone2, '07901234567');
     await simDrain(t);
   });
 

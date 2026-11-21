@@ -19,8 +19,15 @@ import '../../../core/widgets/sheet_scaffold.dart';
 /// credentials, custom IP, and a free-form note. All fields optional;
 /// empties fall through to admin defaults + library defaults.
 class DeviceConfigSheet extends StatefulWidget {
-  const DeviceConfigSheet({super.key, required this.username, this.sessionIp = ''});
+  const DeviceConfigSheet({super.key, required this.username, this.sessionIp = '', this.companyKey, this.subscriberIdx});
   final String username;
+
+  /// «كل الشركات» (الدفعة ب، ٢١ نوفمبر — الخادم 342c96b): شركة الصفّ — القراءة والحفظ والحذف موجَّهةٌ لها بمرجع نافذة مشتركه
+  /// (يوزره)، ومخابئ الفحص بمفتاحها. null = الوضع العاديّ كما كان حرفاً.
+  final String? companyKey;
+
+  /// رقم المشترك في شركته — يفتح نافذته إن لم تُفتح قبل الحفظ ([DeviceConfigApi.saveConfig]).
+  final String? subscriberIdx;
 
   /// آيبي جلسة المشترك الآن — لإبطال فحص «الجهاز الثاني» المكتوب «:منفذ» بعد الحفظ.
   final String sessionIp;
@@ -93,7 +100,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
 
   /// المحفوظ الآن من الخادم (لا من كاش الدقائق الخمس — جهازٌ آخر قد حفظ بعده). تعذّرت القراءة ⇒ [_loadFailed] لا حقولٌ فارغة.
   Future<void> _load() async {
-    final cfg = await DeviceConfigApi.fetchFresh(widget.username);
+    final cfg = await DeviceConfigApi.fetchFresh(widget.username, company: widget.companyKey);
     if (!mounted) return;
     if (cfg == null) {
       setState(() {
@@ -158,7 +165,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
       secondUsername: second.value == null || _user2.text.trim().isEmpty ? null : _user2.text.trim(),
       secondPassword: second.value == null || _pass2.text.isEmpty ? null : _pass2.text,
     );
-    final ok = await DeviceConfigApi.saveConfig(widget.username, cfg);
+    final ok = await DeviceConfigApi.saveConfig(widget.username, cfg, company: widget.companyKey, idx: widget.subscriberIdx);
     if (!mounted) return;
     setState(() => _saving = false);
     if (!ok) {
@@ -168,18 +175,20 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     // Invalidate any cached probe under the old IP AND the new IP so the
     // detail card re-probes against the freshly-pinned credentials.
     if (_originalIp != null && _originalIp!.isNotEmpty) {
-      DeviceProbeApi.invalidateIp(_originalIp!);
+      DeviceProbeApi.invalidateIp(_originalIp!, company: widget.companyKey);
     }
     if (cfg.customIp != null && cfg.customIp!.isNotEmpty) {
-      DeviceProbeApi.invalidateIp(DeviceProbeApi.addressOf(widget.sessionIp, cfg.customIp));
+      DeviceProbeApi.invalidateIp(DeviceProbeApi.addressOf(widget.sessionIp, cfg.customIp), company: widget.companyKey);
     }
     // الجهاز الثاني: نتيجته القديمة لا تُعرض لجهازٍ آخر، وعنوانه القديم والجديد (بعد حلّ «:منفذ» على عنوان الجهاز الأوّل —
     // القديم والجديد) — اعتمادٌ جديد يُجرَّب ولو رُفض قبله.
-    if (_originalSecond != cfg.secondAddress || _originalIp != cfg.customIp) DeviceProbeApi.forgetUser(widget.username, slot: 2);
+    if (_originalSecond != cfg.secondAddress || _originalIp != cfg.customIp) {
+      DeviceProbeApi.forgetUser(widget.username, company: widget.companyKey, slot: 2);
+    }
     for (final a in {_originalSecond, cfg.secondAddress}) {
       for (final first in {_originalIp, cfg.customIp}) {
         final eff = DeviceProbeApi.secondAddressOf(widget.sessionIp, first, a);
-        if (eff.isNotEmpty) DeviceProbeApi.invalidateIp(eff);
+        if (eff.isNotEmpty) DeviceProbeApi.invalidateIp(eff, company: widget.companyKey);
       }
     }
     Navigator.of(context).pop(true);
@@ -187,7 +196,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
 
   Future<void> _reset() async {
     setState(() => _saving = true);
-    final ok = await DeviceConfigApi.resetConfig(widget.username);
+    final ok = await DeviceConfigApi.resetConfig(widget.username, company: widget.companyKey, idx: widget.subscriberIdx);
     if (!mounted) return;
     setState(() => _saving = false);
     if (!ok) {
@@ -195,7 +204,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
       return;
     }
     if (_originalIp != null && _originalIp!.isNotEmpty) {
-      DeviceProbeApi.invalidateIp(_originalIp!);
+      DeviceProbeApi.invalidateIp(_originalIp!, company: widget.companyKey);
     }
     Navigator.of(context).pop(true);
   }

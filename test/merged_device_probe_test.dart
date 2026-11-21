@@ -47,9 +47,20 @@ class _DeviceServer implements HttpClientAdapter {
   /// شركاتٌ يرفضها التوجيه (جلسةٌ انتهت) — 409 بنصٍّ عربيّ كالخادم.
   final failKeys = <String>{};
 
+  /// مرجع النافذة الذي يسكّه الخادم لنافذة المشترك (الدفعة ب).
+  static final windowRef = 'r_${'w' * 22}';
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     final path = o.uri.path;
+    // نافذة المشترك (الموجَّهة): ردّ الخادم بيوزره ومرجعها — كـsubscriber-detail
+    final w = RegExp(r'^/api/v2/subscribers/(\d+)$').firstMatch(path);
+    if (w != null && o.method == 'GET' && o.headers['x-company-key'] is String) {
+      final key = o.headers['x-company-key'] as String;
+      routed.add(o);
+      return _json(200, {'success': true, 'data': {'idx': w.group(1), 'username': 'u2'}},
+          headers: {'x-company-key': [key], 'x-company-ref': [windowRef]});
+    }
     if (!_isDevicePath(path)) return inner.fetch(o, requestStream, cancelFuture);
     final key = o.headers['x-company-key'] as String?;
     (key == null ? open : routed).add(o);
@@ -241,12 +252,12 @@ void main() {
     await down();
   });
 
-  testWidgets('كارت الجهاز لصفٍّ مدموج: إعداده من شركته، وزرّ الإعدادات يقول «للشركة وحدها» ولا يفتح الحفظ', (t) async {
+  testWidgets('كارت الجهاز لصفٍّ مدموج: إعداده من شركته، وزرّ الإعدادات يفتح الورقة — القراءة والحفظ والحذف لشركة الصفّ بمرجع نافذة مشتركه (الدفعة ب، ٢١ نوفمبر)', (t) async {
     await up();
     await pumpVisual(t, phone,
         home: (_) => const Scaffold(
               body: SingleChildScrollView(
-                child: DeviceProbeCard(username: 'u2', company: _kA),
+                child: DeviceProbeCard(username: 'u2', company: _kA, subscriberIdx: '42'),
               ),
             ));
     await settle(t, seconds: 2);
@@ -256,10 +267,23 @@ void main() {
         reason: 'إعداد الجهاز من شركة الصفّ');
     expect(srv.open.where((o) => o.uri.path == '/api/subscribers/u2/device'), isEmpty,
         reason: 'لا شيء من الشركة المفتوحة');
+    srv.routed.clear();
     await t.tap(find.byIcon(LucideIcons.settings));
     await settle(t, seconds: 1);
-    expect(find.textContaining('يعمل من الشركة وحدها'), findsOneWidget);
-    expect(find.byType(DeviceConfigSheet), findsNothing);
+    expect(find.textContaining('يعمل من الشركة وحدها'), findsNothing, reason: 'لم يعد «للشركة وحدها»');
+    expect(find.byType(DeviceConfigSheet), findsOneWidget);
+    expect(srv.routed.where((o) => o.method == 'GET' && o.uri.path == '/api/subscribers/u2/device' && o.headers['x-company-key'] == _kA),
+        isNotEmpty, reason: 'القراءة الطازجة من شركة الصفّ');
+    // «حفظ وفحص الجهاز» ⇒ نافذة المشترك (idx 42) ثمّ الحفظ لشركته بمرجعها — لا شيء للمفتوحة
+    await t.tap(find.text('حفظ وفحص الجهاز'));
+    await settle(t, seconds: 2);
+    final puts = srv.routed.where((o) => o.method == 'PUT' && o.uri.path == '/api/subscribers/u2/device').toList();
+    expect(puts.length, 1);
+    expect([puts.single.headers['x-company-key'], puts.single.headers['x-company-ref']], [_kA, _DeviceServer.windowRef]);
+    expect(srv.routed.where((o) => o.method == 'GET' && o.uri.path == '/api/v2/subscribers/42' && o.headers['x-company-key'] == _kA).length, 1,
+        reason: 'النافذة بشركة الصفّ مرّةً');
+    expect(srv.open.where((o) => o.method != 'GET' && _isDevicePath(o.uri.path)), isEmpty, reason: 'لا حفظ للمفتوحة');
+    expect(find.byType(DeviceConfigSheet), findsNothing, reason: 'الورقة أُغلقت بعد الحفظ');
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 6));
     await down();

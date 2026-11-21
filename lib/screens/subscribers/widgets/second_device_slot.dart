@@ -10,11 +10,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// كرت معلومات جهازٍ ثانٍ تحت كرت الجهاز، يظهر حين يحفظ الوكيل عنواناً ثانياً في إعداد المشترك (زرّ الإعدادات في الكرت) — ويختفي
 /// حين يمسحه، بلا إعادة فتح الصفحة ([DeviceConfigApi.revision]).
 class SecondDeviceSlot extends StatefulWidget {
-  const SecondDeviceSlot({super.key, required this.ip, required this.username, this.company});
+  const SecondDeviceSlot({super.key, required this.ip, required this.username, this.company, this.subscriberIdx});
 
   final String ip;
   final String username;
   final String? company;
+
+  /// رقم المشترك في شركته — لنافذته قبل حفظ إعداد جهازه في «كل الشركات» (الدفعة ب).
+  final String? subscriberIdx;
 
   @override
   State<SecondDeviceSlot> createState() => _SecondDeviceSlotState();
@@ -74,6 +77,7 @@ class _SecondDeviceSlotState extends State<SecondDeviceSlot> {
           ip: widget.ip,
           username: widget.username,
           company: widget.company,
+          subscriberIdx: widget.subscriberIdx,
           slot: 2,
           onFold: fold,
         ),

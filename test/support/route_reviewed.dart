@@ -328,13 +328,12 @@ const reviewedSideWriters = <String, (String, String, String)>{
       ('row-arg', 'sub', 'تذكير الدين من القائمة — كسابقه، بشركة الصفّ'),
   'lib/services/manual_wa_sender.dart#handleWaPreviewAfterOp WhatsAppApi.sendMessage':
       ('open-guard', '', 'التلقائيّ من واتساب المفتوحة صراحةً، وصفّ غيرها يُرفض قبله (autoWaBlockedFor)'),
-  'lib/screens/subscribers/sheets/device_config_sheet.dart#_save DeviceConfigApi.saveConfig': (
-    'entry',
-    'lib/screens/subscribers/widgets/device_probe_card.dart#_openConfig DeviceConfigSheet',
-    'إعداد الجهاز يُفتح من كارت الجهاز وحده بعد MergedOps.unsupportedAt',
-  ),
+  // ٢١ نوفمبر — الدفعة ب (الخادم 342c96b): الحفظ والحذف موجَّهان داخل DeviceConfigApi بشركة الصفّ (MergedOps.writeAt(company, idx) —
+  // مرجع نافذة مشتركه بيوزره)، والورقة تأخذ شركة كارت الجهاز وحده (companyKey: widget.company — يثبته merged_card_messages_test).
+  'lib/screens/subscribers/sheets/device_config_sheet.dart#_save DeviceConfigApi.saveConfig':
+      ('row-arg', 'company', 'إعداد جهاز المشترك بشركة الصفّ ومرجع نافذة مشتركه'),
   'lib/screens/subscribers/sheets/device_config_sheet.dart#_reset DeviceConfigApi.resetConfig':
-      ('entry', 'lib/screens/subscribers/widgets/device_probe_card.dart#_openConfig DeviceConfigSheet', 'كسابقه'),
+      ('row-arg', 'company', 'كسابقه — حذف الإعداد'),
   'lib/services/receipt_service.dart#_emit PrintedReceiptsApi.archive': ('row', '', 'أرشيف الوصل لشركة المشترك'),
   'lib/screens/subscribers/sheets/fiberx_extend_flow.dart#showFiberxExtendFlow SubscribersApi.fiberxExtendNotice':
       ('gate', r'\bsub\.companyKey\s*==\s*null\b', 'إشعار فايبر اكس لصفٍّ بلا مفتاح وحده (مشترك الجلسة)'),

@@ -415,6 +415,10 @@ class SimServer implements HttpClientAdapter {
   /// مساراتٌ طُلبت ولا معالج لها (ردّت ٤٠٤).
   final unhandled = <String>[];
 
+  /// «كل الشركات» (٢١ نوفمبر): يردّ مفتاح الشركة المرسَل كالخادم الحقيقيّ (صدى `x-company-key`) — لاختبارات الطلبات الموجَّهة.
+  /// مطفأٌ افتراضاً: بقيّة الاختبارات كما كانت حرفاً.
+  bool echoCompanyKey = false;
+
   static String _key(String method, String path) =>
       '${method.toUpperCase()} $path';
 
@@ -458,7 +462,10 @@ class SimServer implements HttpClientAdapter {
           .toBody();
     }
     final r = await handler(options);
-    return r.toBody();
+    final out = r.toBody();
+    final k = options.headers['x-company-key'];
+    if (echoCompanyKey && k is String) out.headers['x-company-key'] = [k];
+    return out;
   }
 
   @override

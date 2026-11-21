@@ -383,7 +383,7 @@ class _AuthInterceptor extends Interceptor {
         },
       ));
     }
-    CompanyRefs.capture(key, o.method, o.uri.path, response.headers);
+    CompanyRefs.capture(key, o.method, o.uri.path, response.headers, response.data);
     if (o.method.toUpperCase() != 'GET' && !CompanyRoute.keepsList.contains(o.uri.path)) CompanyRoute.onWrite?.call(key);
     final ok = (response.statusCode ?? 0) < 300 && !(data is Map && data['success'] == false);
     if (ok) CompanyRefs.consume(key, o.method, o.uri.path);
@@ -419,7 +419,7 @@ class _AuthInterceptor extends Interceptor {
     if (data is Map && data['success'] == false && data['code'] == CompanyRouteCodes.disabled) {
       CompanyRoute.onEmployeeRouteStopped?.call(data['message']?.toString());
     }
-    CompanyRefs.capture(key, o.method, o.uri.path, response.headers);
+    CompanyRefs.capture(key, o.method, o.uri.path, response.headers, response.data);
     if (o.method.toUpperCase() != 'GET' && !CompanyRoute.keepsList.contains(o.uri.path)) CompanyRoute.onWrite?.call(key);
     final ok = (response.statusCode ?? 0) < 300 && !(data is Map && data['success'] == false);
     if (ok) CompanyRefs.consume(key, o.method, o.uri.path);

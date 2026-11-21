@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 import '../models/device_health.dart';
+import '../services/merged_mode.dart';
 import '../services/permissions_service.dart';
 
 /// Per-subscriber CPE credentials override. When non-null fields are
@@ -321,17 +322,20 @@ class DeviceConfigApi {
   ///
   /// [fetchConfig] يردّ فارغاً عند التعذّر (الفحص يمضي بالافتراضات)، وهذا لا يصلح لورقةٍ تحفظ: «حفظ وفحص» فوق حقولٍ فارغةٍ
   /// سببها تعذّر القراءة — أو كاشٌ قديم وجهازٌ آخر حفظ بعده — يمسح ما هو محفوظ (الخادم يكتب الحقول كلّها). نجاحها يحدّث الكاش.
-  static Future<DeviceConfig?> fetchFresh(String username) async {
+  ///
+  /// [company] (الدفعة ب، ٢١ نوفمبر): صفٌّ من «كل الشركات» ⇒ القراءة موجَّهةٌ لشركته ومخبؤها بمفتاحها؛ بلا مفتاح كما كان حرفاً.
+  static Future<DeviceConfig?> fetchFresh(String username, {String? company}) async {
     final u = username.trim();
     if (u.isEmpty) return const DeviceConfig();
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/subscribers/$username/device');
-      _noteDenied(null, r.statusCode);
+      final r = await CompanyRoute.run(
+          company, () => ApiClient.dio.get<Map<String, dynamic>>('/api/subscribers/$username/device'));
+      _noteDenied(company, r.statusCode);
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
       final dev = body['device'];
       final cfg = dev is Map ? DeviceConfig.fromJson(Map<String, dynamic>.from(dev)) : const DeviceConfig();
-      _cache[scoped(null, u)] = _CachedConfig(cfg, DateTime.now());
+      _cache[scoped(company, u)] = _CachedConfig(cfg, DateTime.now());
       return cfg;
     } catch (_) {
       return null;
@@ -444,15 +448,22 @@ class DeviceConfigApi {
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   /// PUT /api/subscribers/:username/device — saves override.
-  static Future<bool> saveConfig(String username, DeviceConfig cfg) async {
+  ///
+  /// «كل الشركات» (الدفعة ب، ٢١ نوفمبر — الخادم 342c96b): صفٌّ بمفتاح [company] ⇒ الحفظ موجَّهٌ لشركته بمرجع نافذة مشتركه
+  /// (الخادم يطابق يوزر المسار بيوزر النافذة حرفاً؛ [idx] يفتح النافذة إن لم تُفتح — [MergedOps.writeAt]). بلا مفتاح كما كان حرفاً.
+  static Future<bool> saveConfig(String username, DeviceConfig cfg, {String? company, String? idx}) async {
     try {
-      final r = await ApiClient.dio.put<Map<String, dynamic>>(
-        '/api/subscribers/$username/device',
-        data: cfg.toPutJson(),
+      final r = await MergedOps.writeAt(
+        company,
+        idx,
+        () => ApiClient.dio.put<Map<String, dynamic>>(
+          '/api/subscribers/$username/device',
+          data: cfg.toPutJson(),
+        ),
       );
       final ok = r.data?['success'] == true;
       if (ok) {
-        invalidateCache(username);
+        invalidateCache(username, company: company);
         revision.value++;
       }
       return ok;
@@ -462,15 +473,19 @@ class DeviceConfigApi {
   }
 
   /// DELETE /api/subscribers/:username/device — drops the override
-  /// so the probe falls through to admin defaults + library defaults.
-  static Future<bool> resetConfig(String username) async {
+  /// so the probe falls through to admin defaults + library defaults. [company]/[idx] كـ[saveConfig].
+  static Future<bool> resetConfig(String username, {String? company, String? idx}) async {
     try {
-      final r = await ApiClient.dio.delete<Map<String, dynamic>>(
-        '/api/subscribers/$username/device',
+      final r = await MergedOps.writeAt(
+        company,
+        idx,
+        () => ApiClient.dio.delete<Map<String, dynamic>>(
+          '/api/subscribers/$username/device',
+        ),
       );
       final ok = r.data?['success'] == true;
       if (ok) {
-        invalidateCache(username);
+        invalidateCache(username, company: company);
         revision.value++;
       }
       return ok;

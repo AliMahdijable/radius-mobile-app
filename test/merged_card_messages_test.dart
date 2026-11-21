@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -9,6 +10,11 @@ import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/whatsapp_api.dart';
+import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/models/device_health.dart';
+import 'package:rad_mysvcs/api/subscriber_contacts_api.dart';
+import 'package:rad_mysvcs/api/device_config_api.dart';
 import 'package:rad_mysvcs/services/connection_alerts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,6 +29,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// والسلوك الكامل بالواجهة (التنبيه، القوالب الثلاثة من صفحة المشترك، رمز QR): test/merged_route_proof_test.dart البند ٧.
 const _kB = 'c0000000000b2';
 final _refB = 'r_${'b' * 22}';
+
+/// يوزر مشترك كلّ idx كما يردّه معالج نافذته (ايرث لنك بـ@، والعربيّ) — الدفعة ب.
+const _users = {'9': 'ali@net', '10': 'علي.٧', '11': ' padded '};
 
 /// خادمٌ بصدى المفتاح: يسجّل كلّ طلبٍ بمفتاحه، وجسم كلّ كتابةٍ ومرجعها.
 class _Srv implements HttpClientAdapter {
@@ -60,10 +69,19 @@ class _Srv implements HttpClientAdapter {
       return j({'success': true, 'data': {'enabled': key == _kB, 'fiber_rx_dbm': key == _kB ? -22 : -27}});
     }
     if (m == 'GET' && RegExp(r'^/api/v2/subscribers/\d+$').hasMatch(path)) {
-      return ResponseBody.fromString(jsonEncode({'success': true, 'data': {}}), 200, headers: {
+      final idx = path.split('/').last;
+      return ResponseBody.fromString(jsonEncode({'success': true, 'data': {'idx': idx, 'username': _users[idx] ?? 'sub$idx'}}), 200, headers: {
         ...h,
         if (key != null) 'x-company-ref': [_refB],
       });
+    }
+    if (RegExp(r'^/api/subscribers/[^/]+/device$').hasMatch(path) && (m == 'PUT' || m == 'DELETE')) {
+      return j({'success': true});
+    }
+    if (path == '/api/v2/subscriber-contacts') {
+      return m == 'GET'
+          ? j({'success': true, 'enabled': true, 'contact': {'wa_phone2': '9647701112222', 'tg_contact': '@ali_b'}})
+          : j({'success': true, 'contact': {'wa_phone2': '9647701112222', 'tg_contact': null}});
     }
     if (path == '/api/whatsapp/send-message' || path == '/api/whatsapp/send-media') {
       return j({'success': true, 'channel': 'whatsapp'});
@@ -238,6 +256,102 @@ void main() {
       ConnectionAlertSettings.resetCompanies();
       expect(await pending, isNull);
       expect(ConnectionAlertSettings.peekCompany(_kB), isNull);
+    });
+  });
+
+  group('الدفعة ب: «إعداد جهاز المشترك» و«الأرقام الإضافيّة» بيوزر مشترك النافذة (الخادم 342c96b)', () {
+    ({String idx, CompanyRefKind kind})? need(String m, String p, [Object? data]) => CompanyRefs.requireOf(m, p, data);
+    const subject = CompanyRefKind.subject;
+
+    test('requireOf: الجهاز بيوزر المسار مفكوكاً (كـreq.params)، والأرقام بيوزر الجسم مقصوصاً وحدّ ١٢٨ — كالخادم حرفاً', () {
+      expect(need('PUT', '/api/subscribers/ali%40net/device'), (idx: 'u:ali@net', kind: subject));
+      expect(need('PUT', '/api/subscribers/ali@net/device'), (idx: 'u:ali@net', kind: subject));
+      expect(need('DELETE', '/api/subscribers/${Uri.encodeComponent('علي.٧')}/device'), (idx: 'u:علي.٧', kind: subject));
+      expect(need('PUT', '/api/v2/subscriber-contacts', {'username': '  ali@net ', 'wa_phone2': '1'}), (idx: 'u:ali@net', kind: subject));
+      for (final bad in <(String, String, Object?)>[
+        ('GET', '/api/subscribers/ali/device', null),
+        ('POST', '/api/subscribers/ali/device', null),
+        ('PUT', '/api/subscribers/ali/device/x', null),
+        ('PUT', '/api/subscribers/%E0%A4/device', null),
+        ('PUT', '/api/v2/subscriber-contacts', {'username': '   '}),
+        ('PUT', '/api/v2/subscriber-contacts', {'username': ['ali']}),
+        ('PUT', '/api/v2/subscriber-contacts', {'username': 'a' * 129}),
+        ('PUT', '/api/v2/subscriber-contacts', 'username=ali'),
+        ('GET', '/api/v2/subscriber-contacts', {'username': 'ali'}),
+        ('DELETE', '/api/v2/subscriber-contacts', {'username': 'ali'}),
+      ]) {
+        expect(need(bad.$1, bad.$2, bad.$3), isNull, reason: '${bad.$1} ${bad.$2} ${bad.$3}');
+      }
+    });
+
+    test('capture: نافذة المشترك تُحفظ بيوزره المقصوص أيضاً — وعرض السعر وردٌّ بلا يوزر لا', () async {
+      await CompanyRoute.run(_kB, () => ApiClient.dio.get<dynamic>('/api/v2/subscribers/9'));
+      await CompanyRoute.run(_kB, () => ApiClient.dio.get<dynamic>('/api/v2/subscribers/11'));
+      expect(CompanyRefs.lookupUser(_kB, 'ali@net'), _refB);
+      expect(CompanyRefs.lookupUser(_kB, 'padded'), _refB, reason: 'مقصوصاً كالخادم');
+      expect(CompanyRefs.lookupUser(_kB, 'Ali@net'), isNull, reason: 'حرفاً');
+      expect(CompanyRefs.lookupUser('c0000000000a1', 'ali@net'), isNull, reason: 'لكلّ شركةٍ نافذتها');
+      CompanyRefs.reset();
+      expect(CompanyRefs.lookupUser(_kB, 'ali@net'), isNull);
+    });
+
+    test('DeviceConfigApi: الحفظ والحذف بشركة الصفّ ومرجع نافذة مشتركه (تُفتح بـidx إن لم تُفتح)؛ وبلا مفتاح كما كان', () async {
+      const cfg = DeviceConfig(deviceType: DeviceKind.ubiquiti, username: 'admin', password: 'p', customIp: '10.0.0.2');
+      expect(await DeviceConfigApi.saveConfig('ali@net', cfg, company: _kB, idx: '9'), isTrue);
+      expect(srv.asked, ['GET /api/v2/subscribers/9 $_kB', 'PUT /api/subscribers/ali@net/device $_kB'], reason: 'النافذة ثمّ الحفظ لشركتها');
+      expect(srv.refs['PUT /api/subscribers/ali@net/device'], _refB);
+      expect(await DeviceConfigApi.resetConfig('ali@net', company: _kB, idx: '9'), isTrue);
+      expect(srv.asked.last, 'DELETE /api/subscribers/ali@net/device $_kB');
+      expect(srv.refs['DELETE /api/subscribers/ali@net/device'], _refB);
+      expect(srv.asked.where((a) => a.startsWith('GET /api/v2/subscribers/9')).length, 1, reason: 'النافذة مرّةً — المرجع محفوظ');
+      srv.asked.clear();
+      expect(await DeviceConfigApi.saveConfig('u7', cfg), isTrue);
+      expect(srv.asked, ['PUT /api/subscribers/u7/device -'], reason: 'الوضع العاديّ: بلا نافذةٍ ولا مفتاح');
+      expect(srv.refs['PUT /api/subscribers/u7/device'], isNull);
+    });
+
+    test('الأرقام الإضافيّة: القراءة والحفظ لشركة صفّ المشترك بمرجع نافذته؛ وبلا مفتاح كما كان', () async {
+      final row = Subscriber(idx: '9', username: 'ali@net', firstname: 'علي', lastname: 'ب', phone: '07701234567', companyKey: _kB);
+      final g = await MergedOps.run(row, () => SubscriberContactsApi.get(row.username));
+      expect([g.ok, g.enabled, g.contact?.tgContact], [true, true, '@ali_b']);
+      expect(srv.asked.single, 'GET /api/v2/subscriber-contacts $_kB');
+      final w = await MergedOps.write(row, () => SubscriberContactsApi.save(row.username, wa: '07701112222', tg: '', phone: row.phone));
+      expect(w.ok, isTrue);
+      expect(srv.asked.last, 'PUT /api/v2/subscriber-contacts $_kB');
+      expect(srv.refs['PUT /api/v2/subscriber-contacts'], _refB);
+      expect((srv.bodies['PUT /api/v2/subscriber-contacts']! as Map)['username'], 'ali@net');
+      srv.asked.clear();
+      final plain = Subscriber(idx: '9', username: 'ali@net', firstname: 'علي', lastname: 'ب', phone: '07701234567');
+      expect((await MergedOps.write(plain, () => SubscriberContactsApi.save(plain.username, wa: '', tg: '', phone: plain.phone))).ok, isTrue);
+      expect(srv.asked, ['PUT /api/v2/subscriber-contacts -']);
+    });
+
+    test('بناء الورقة: إعداد الجهاز يُفتح من كارت الجهاز وحده بشركة الكارت ورقم مشتركه، وصفحة المشترك تمرّرهما', () {
+      final libFiles = Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'));
+      final sites = <String>[];
+      for (final f in libFiles) {
+        final src = f.readAsStringSync();
+        for (final m in RegExp(r'(?<![\w.])DeviceConfigSheet\(').allMatches(src)) {
+          if (src.substring(0, m.start).trimRight().endsWith('const') && src.substring(m.start - 30 < 0 ? 0 : m.start - 30, m.start).contains('const DeviceConfigSheet')) continue;
+          sites.add('${f.path}:${src.substring(m.start, (m.start + 220).clamp(0, src.length)).replaceAll(RegExp(r'\s+'), ' ')}');
+        }
+      }
+      final builds = sites.where((x) => !x.contains('DeviceConfigSheet({super.key')).toList();
+      expect(builds.length, 1, reason: builds.join('\n'));
+      expect(builds.single, startsWith('lib/screens/subscribers/widgets/device_probe_card.dart:'));
+      expect(builds.single, contains('companyKey: widget.company,'));
+      expect(builds.single, contains('subscriberIdx: widget.subscriberIdx,'));
+      final card = File('lib/screens/subscribers/widgets/device_probe_card.dart').readAsStringSync();
+      final open = card.substring(card.indexOf('Future<void> _openConfig() async {'), card.indexOf('DeviceConfigSheet(\n        username: widget.username,'));
+      expect(open, contains('final locked = MergedOps.writeLockAt(widget.company);'), reason: 'صفحة موظّفٍ مقفلة ⇒ لا ورقة');
+      expect(open, isNot(contains('unsupportedAt')), reason: 'لم يعد «للشركة وحدها»');
+      final detail = File('lib/screens/subscribers/subscriber_detail_screen.dart').readAsStringSync();
+      expect(detail, contains('company: sub.companyKey,\n                          subscriberIdx: sub.idx,'));
+      expect(detail, contains('SecondDeviceSlot(ip: sub.ipAddress ?? \'\', username: sub.username, company: sub.companyKey, subscriberIdx: sub.idx)'));
+      final sheet = File('lib/screens/subscribers/sheets/device_config_sheet.dart').readAsStringSync();
+      expect(sheet, contains('DeviceConfigApi.fetchFresh(widget.username, company: widget.companyKey)'));
+      expect(RegExp(r'DeviceProbeApi\.invalidateIp\([^;]*\);').allMatches(sheet).every((m) => m.group(0)!.contains('company: widget.companyKey')), isTrue,
+          reason: 'مخابئ الفحص بمفتاح شركة الصفّ');
     });
   });
 }

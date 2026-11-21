@@ -179,7 +179,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   }
 
   /// «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر: واتساب ثانٍ وتلغرام على خادمنا — حين لا يصل رقمه): حالها هنا كالملاحظة — الكرت
-  /// للأرقام القائمة، و«المزيد» يضيف أو يعدّل. «كل الشركات» (مشتركٌ من شركةٍ أخرى) لا يُجلب — يُعدَّل من صفحة الشركة.
+  /// للأرقام القائمة، و«المزيد» يضيف أو يعدّل. «كل الشركات» (الدفعة ب، ٢١ نوفمبر): أرقام مشترك الصفّ من شركته وحفظها لها.
   SubscriberContactsController? _contacts;
   String? _contactsId;
   SubscriberContactsController get _subContacts {
@@ -193,7 +193,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   }
   /// ما تعرضه بطاقة الهويّة: الأرقام القائمة بعد جلبٍ ناجح والمفتاح مفتوح — وإلّا لا شيء (لا صفّ «تعذّر»).
   SubscriberContacts? get _heroContacts {
-    if (sub.companyKey != null) return null;
     final c = _subContacts;
     if (!c.ready || !c.enabled) return null;
     final v = c.contact;
@@ -478,8 +477,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   children: [
                     // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
                     // «أرقام تواصل إضافيّة» داخل البطاقة (المالك ١٤ نوفمبر) — تُرسم حين تصل وحين تُعدَّل من «المزيد».
+                    // «كل الشركات» (الدفعة ب، ٢١ نوفمبر): أرقام مشترك الصفّ من شركته — تُرسم حين تصل كالوضع العاديّ
                     ListenableBuilder(
-                      listenable: sub.companyKey == null ? _subContacts : const AlwaysStoppedAnimation<double>(0),
+                      listenable: _subContacts,
                       builder: (context, _) => _SubscriberHero(
                         sub: sub,
                         password: _subscriberPassword,
@@ -634,11 +634,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                           ip: sub.ipAddress ?? '',
                           username: sub.username,
                           company: sub.companyKey,
+                          subscriberIdx: sub.idx,
                           onFold: fold,
                         ),
                       ),
                       // «الجهاز الثاني» (نانو + راوتر) — يظهر حين يُحفظ له عنوانٌ في إعداد الجهاز.
-                      SecondDeviceSlot(ip: sub.ipAddress ?? '', username: sub.username, company: sub.companyKey),
+                      SecondDeviceSlot(ip: sub.ipAddress ?? '', username: sub.username, company: sub.companyKey, subscriberIdx: sub.idx),
                     ],
                     const SizedBox(height: Sp.sm),
                     // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
@@ -1571,7 +1572,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       SubActionGroup('subscribers.group_contact'.tr(), [
         // «أرقام تواصل إضافيّة» (المالك ١٤ نوفمبر: «اضافة امكانيه اضافة رقم واتساب ومعرف او رقم تلي كرام للمشترك»): على خادمنا،
         // تُستعمل حين لا يصل رقمه. المفتاح مطفأ للحساب ⇒ لا زرّ؛ الموظّف بلا subscribers.edit يراه بمكانه مقفلاً.
-        if (sub.companyKey == null && _subContacts.enabled)
+        if (_subContacts.enabled)
           SubAction(
             icon: LucideIcons.userPlus,
             label: (_subContacts.contact?.isEmpty ?? true) ? 'إضافة واتساب ثانٍ أو تلغرام' : 'تعديل الأرقام الإضافيّة',

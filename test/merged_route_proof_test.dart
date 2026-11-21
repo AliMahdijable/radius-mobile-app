@@ -211,10 +211,12 @@ void main() {
               'context: context,\n      sub: sub,\n      templateType: templateType,',
               'context: context,\n      sub: null,\n      templateType: templateType,'),
           'ليس بصفّه');
+      // إعداد الجهاز (الدفعة ب): الحفظ بشركة الصفّ — مفتاحٌ فارغ يُكشف (بناء الورقة بغير شركة الكارت يثبته merged_card_messages_test)
       proves(sideVerdict,
-          append('lib/screens/subscribers/subscriber_detail_screen.dart',
-              "Future<void> _planted(BuildContext c) => showAppSheet<bool>(context: c, builder: (_) => const DeviceConfigSheet(username: 'u'));"),
-          'DeviceConfigSheet يُبنى بلا حارس');
+          plant('lib/screens/subscribers/sheets/device_config_sheet.dart',
+              'final ok = await DeviceConfigApi.saveConfig(widget.username, cfg, company: widget.companyKey, idx: widget.subscriberIdx);',
+              'final ok = await DeviceConfigApi.saveConfig(widget.username, cfg, company: null, idx: widget.subscriberIdx);'),
+          'ليس بصفّه');
     });
 
     test('٨: فصلٌ فرديّ في ملفّ الجماعيّ (الاستثناء بالدالّة)، وحارسٌ أُزيل من دالّته، وشيتٌ جماعيّ يُبنى خارج دالّة عرضه', () {
