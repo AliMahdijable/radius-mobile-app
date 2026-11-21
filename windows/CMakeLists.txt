@@ -39,7 +39,9 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  # /wd"4238" (٢١ نوفمبر ٢٠٢٦، بناء 191): مترجم CI الأحدث يحذّر C4238 في firebase_auth_plugin.cpp (كودٌ خارجيّ لم يتغيّر —
+  # القفل نفسه بنى 190) و/WX يجعله خطأً فيسقط البناء. التحذير وحده يُطفأ؛ /W4 /WX لبقيّة التحذيرات كما هي.
+  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100" /wd"4238")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
