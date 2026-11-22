@@ -16,17 +16,16 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../el/el_reports.dart';
-import 'activations_report_screen.dart';
 import 'activity_log_report_screen.dart';
 import 'all_managers_debts_screen.dart';
 import 'balance_reports_screen.dart';
-import 'daily_activations_report_screen.dart';
 import 'deleted_debts_screen.dart';
 import 'package_distribution_screen.dart';
 import 'sessions_report_screen.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import 'v2/activations_report_v2_screen.dart';
 import 'v2/finance_report_v2_screen.dart';
 
 /// شاشة hub للتقارير — 7 كروت تنقل لكل تقرير منفصل.
@@ -200,31 +199,21 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               },
             ),
         ];
+        // «التفعيلات» و«التفعيلات اليوميّة» تقريرٌ واحد على الشكل الموحّد (٢٢ نوفمبر — المالك: «ادمج التفعيلات واليوميّة»):
+        // «اليوم» فترةٌ فيه، ومن يملك «اليوميّة» وحدها يراه لليوم وحده.
+        final dailyShown = permShown(const ['reports.daily_activations']) && !providerHidesAction('reports.daily_activations');
+        final dailyHas = Perms.has('reports.daily_activations') && !providerHidesAction('reports.daily_activations');
         final activations = <Widget>[
-          if (permShown(const ['reports.activations']))
+          if (permShown(const ['reports.activations']) || dailyShown)
             _ReportCard(
-              locked: !Perms.has('reports.activations'),
+              locked: !Perms.has('reports.activations') && !dailyHas,
               icon: LucideIcons.zap,
               color: AppColors.brand,
               merged: true,
               title: 'reports.activations'.tr(),
-              subtitle: 'reports.activations_hint'.tr(),
+              subtitle: Perms.has('reports.activations') || !dailyHas ? 'reports.activations_hint'.tr() : 'reports.daily_activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ActivationsReportScreen()),
-              ),
-            ),
-          if (permShown(const ['reports.daily_activations']) && !providerHidesAction('reports.daily_activations'))
-            _ReportCard(
-              locked: !Perms.has('reports.daily_activations'),
-              icon: LucideIcons.calendarDays,
-              color: AppColors.info,
-              merged: true,
-              title: 'reports.daily_activations'.tr(),
-              subtitle: 'reports.daily_activations_hint'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const DailyActivationsReportScreen()),
+                MaterialPageRoute(builder: (_) => const ActivationsReportV2Screen()),
               ),
             ),
         ];

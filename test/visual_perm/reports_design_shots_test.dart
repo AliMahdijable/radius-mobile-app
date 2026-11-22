@@ -12,6 +12,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
+import 'package:rad_mysvcs/screens/reports/v2/activations_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/finance_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
@@ -360,6 +361,41 @@ Map<String, Object?> _financeBody(double k) {
   };
 }
 
+/// تفعيلات شهرٍ نموذجيّ (١ أكتوبر – ٢٢ نوفمبر) بأسماءٍ وباقاتٍ متنوّعة — [k] كثافة الشركة.
+List<Map<String, Object?>> _actRows(double k) {
+  const names = [('محمد', 'عبد الله'), ('حسن', 'كاظم'), ('زهراء', 'محمود'), ('علي', 'جبار'), ('سارة', 'علي'), ('كرار', 'هادي')];
+  const packages = ['FTTH 50 ميغا', 'Gaming 100', 'D-Active 75 العائليّة', 'أعمال 200'];
+  const prices = [35000, 45000, 25000, 60000];
+  final out = <Map<String, Object?>>[];
+  var id = 1;
+  for (var m = 11; m >= 10; m--) {
+    for (var d = m == 11 ? 22 : 31; d >= 1; d--) {
+      final n = ((m == 11 ? 7 : 6) + (d * 7 % 5)) * k;
+      for (var i = 0; i < n.round(); i++) {
+        final kind = i % 6; // 0-2 نقديّ، 3 بالدين، 4 تمديد، 5 من الساس
+        final p = (d + i) % 4;
+        final nm = names[(d + i) % names.length];
+        final at = '2026-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')} ${(20 - i % 12).toString().padLeft(2, '0')}:${(i * 7 % 60).toString().padLeft(2, '0')}:00';
+        out.add({
+          'id': id++,
+          'action_type': kind == 4 ? 'SUBSCRIBER_EXTEND' : 'SUBSCRIBER_ACTIVATE',
+          'action_description': switch (kind) { 3 => 'تفعيل غير نقدي', 4 => 'تمديد', 5 => 'تفعيل (من الساس)', _ => 'تفعيل نقدي' },
+          'admin_username': i % 3 == 0 ? 'ali.h' : 'admin@sup',
+          if (i % 4 == 1) 'acting_employee_full_name': 'زينب',
+          'user_username': 'u$id',
+          'user_firstname': nm.$1,
+          'user_lastname': nm.$2,
+          'created_at': at,
+          'from_sas': kind == 5 ? 1 : 0,
+          'money_amount': kind == 4 || kind == 5 ? '0.00' : '${prices[p]}.00',
+          'action_data': jsonEncode({if (kind != 4) 'package_name': packages[p]}),
+        });
+      }
+    }
+  }
+  return out;
+}
+
 class _BeforeServer implements HttpClientAdapter {
   _BeforeServer(this.inner);
   final VisualServer inner;
@@ -377,6 +413,22 @@ class _BeforeServer implements HttpClientAdapter {
     if (get && p == '/api/reports/finance') {
       final prev = o.queryParameters['limit_logs']?.toString() == '1';
       return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1)), key);
+    }
+    if (get && p == '/api/activities') {
+      final q = o.queryParameters;
+      final lo = '${q['date_from']}', hi = '${q['date_to']}';
+      final type = q['activity_type']?.toString();
+      final all = [
+        for (final r in _actRows(key == _kEarth ? 0.7 : 1))
+          if ('${r['created_at']}'.compareTo(lo) >= 0 && '${r['created_at']}'.compareTo(hi) <= 0 && (type == null || r['action_type'] == type)) r,
+      ];
+      final limit = int.tryParse('${q['limit']}') ?? 100;
+      final page = int.tryParse('${q['page'] ?? 1}') ?? 1;
+      return _json({
+        'success': true,
+        'data': all.skip((page - 1) * limit).take(limit).toList(),
+        'pagination': {'total': all.length, 'page': page, 'limit': limit},
+      }, key);
     }
     if (get && p == '/api/v2/managers') {
       return _json({
@@ -839,6 +891,23 @@ void main() {
       final cut = _cut(t);
       expect(cut, isEmpty, reason: 'نصٌّ مقصوص: $cut');
       await _savePhone(t, '12_v2_merged', d, {'period': find.byType(RpPeriodBar)}, bottom: find.byType(RpExportBar));
+      await down(t);
+    });
+
+    testWidgets('13_v2_activations', (t) async {
+      await up();
+      ActivationsReportV2Screen.clock = () => DateTime(2026, 11, 22, 18);
+      final d = _dev(480, h: 5600);
+      await pumpVisual(t, d, home: (_) => const ActivationsReportV2Screen());
+      // ردودٌ فوق 50KB تُفكّ في خيطٍ حقيقيّ ⇒ انتظارٌ حقيقيّ لا نبضاتٌ مزيّفة وحدها
+      for (var i = 0; i < 25; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 60)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      await settle(t, seconds: 2);
+      final cut = _cut(t);
+      expect(cut, isEmpty, reason: 'نصٌّ مقصوص: $cut');
+      await _savePhone(t, '13_v2_activations', d, {'period': find.byType(RpPeriodBar)}, bottom: find.byType(RpExportBar));
       await down(t);
     });
 

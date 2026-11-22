@@ -167,7 +167,9 @@ class RpRow {
 
   /// «تفعيل نقدي · FTTH 50 ميغا · علي حسن».
   final String detail;
-  final num amount;
+
+  /// null = حركةٌ بلا مال (تمديد، تفعيلٌ من الساس) ⇒ لا رقم — لا «0».
+  final num? amount;
 
   /// «18:05».
   final String time;
@@ -555,7 +557,8 @@ class RpCompanyTable extends StatelessWidget {
 
   /// عناوين الأعمدة الثلاثة («الواصل» · «الدين» · «الربح»).
   final List<String> heads;
-  final List<num> total;
+  /// null = مجهول (مالٌ لم يصل من شركةٍ داخلة) ⇒ «—» لا رقمٌ ناقص.
+  final List<num?> total;
 
   /// «خارج المجموع: …».
   final String? outside;
@@ -593,7 +596,7 @@ class RpCompanyTable extends StatelessWidget {
             name: Text('المجموع', style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1),
             cells: [
               for (var i = 0; i < total.length; i++)
-                RpFitText(formatIQD(total[i]),
+                RpFitText(total[i] == null ? '—' : formatIQD(total[i]!),
                     style: AppType.rowValue(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
             ],
           ),
@@ -645,7 +648,7 @@ class RpCompanyTable extends StatelessWidget {
       case RpCompanyState.ok:
         return _row(name: name, cells: [
           for (var i = 0; i < 3; i++)
-            RpFitText(formatIQD([l.a, l.b, l.c][i] ?? 0),
+            RpFitText([l.a, l.b, l.c][i] == null ? '—' : formatIQD([l.a, l.b, l.c][i]!),
                 style: AppType.bodyStrong(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
         ]);
       case RpCompanyState.loading:
@@ -1438,11 +1441,12 @@ class RpRowsCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text('${r.negative ? '−' : ''}${formatIQD(r.amount)}',
-                    style: AppType.bodyStrong(color: r.tone.fg), maxLines: 1),
-              ),
+              if (r.amount != null)
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text('${r.negative ? '−' : ''}${formatIQD(r.amount!)}',
+                      style: AppType.bodyStrong(color: r.tone.fg), maxLines: 1),
+                ),
               Directionality(
                 textDirection: TextDirection.ltr,
                 child: Text(r.time, style: AppType.micro(color: AppColors.textLow)),

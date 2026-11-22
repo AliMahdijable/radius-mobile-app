@@ -648,7 +648,25 @@ class ActivityRow {
     this.targetName,
     required this.createdAt,
     this.balanceAfter,
+    this.moneyAmount,
+    this.fromSas = false,
+    this.packageName,
+    this.partialUnpaid = 0,
   });
+
+  /// مبلغ الحركة بقاعدة التقرير الماليّ نفسها (الخادم `money_amount` = moneySql.amount — ٢٢ نوفمبر، da6fec4): المُزامَن من الساس
+  /// صفر، ثمّ action_data، ثمّ رقم «IQD» في الوصف. `null` = خادمٌ لا يرسله (مبلغٌ مجهول — لا صفر).
+  final num? moneyAmount;
+
+  /// سطرٌ زامنّاه من الساس (`from_sas`) — تفعيلٌ تمّ في الساس نفسه، لا مال يمرّ بنا.
+  final bool fromSas;
+
+  /// الباقة من action_data (`package_name`) — التمديد لا يحملها.
+  final String? packageName;
+
+  /// غير المدفوع من «نقدي جزئي» = (user_price أو price) − partial_cash_amount، لا أقلّ من صفر — partialUnpaidExpr الخادم حرفاً؛
+  /// يدخل «بالدين» كما يضمّه التقرير الماليّ إلى «تفعيل بالدين».
+  final num partialUnpaid;
   final int id;
   final String actionType;
   final String? actionDescription;
@@ -698,7 +716,49 @@ class ActivityRow {
       createdAt: ts,
       balanceAfter:
           j['balance_after'] == null ? null : FinanceKPIs._n(j['balance_after']),
+      moneyAmount: j['money_amount'] == null ? null : FinanceKPIs._n(j['money_amount']),
+      fromSas: FinanceLog._truthy(j['from_sas']),
+      packageName: _str(_data(j)['package_name']),
+      partialUnpaid: partialUnpaidOf(_data(j), j['action_description']?.toString() ?? ''),
     );
+  }
+
+  /// action_data خريطةً (يصل نصّ JSON أو خريطة) — فارغةٌ لما لا يُقرأ.
+  static Map<String, dynamic> _data(Map<String, dynamic> j) {
+    final raw = j['action_data'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.trim().startsWith('{')) {
+      try {
+        final m = jsonDecode(raw);
+        if (m is Map) return Map<String, dynamic>.from(m);
+      } catch (_) {}
+    }
+    return const {};
+  }
+
+  static String? _str(Object? v) {
+    final s = v?.toString().trim() ?? '';
+    return s.isEmpty || s == 'null' ? null : s;
+  }
+
+  static num? _numOrNull(Object? v) {
+    if (v == null) return null;
+    if (v is num) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty || s == 'null') return null;
+    return num.tryParse(s);
+  }
+
+  /// partialUnpaidExpr (FinanceReportController) حرفاً: «نقدي جزئي» (payment_type أو الوصف) وpartial_cash_amount موجود ⇒
+  /// max(0, (user_price ?? price ?? 0) − partial_cash_amount)؛ وإلّا صفر. غيابه صفرٌ لا السعر (سجلّات الكلاسيك تكتبه 0 لكلّ تفعيل).
+  @visibleForTesting
+  static num partialUnpaidOf(Map<String, dynamic> data, String description) {
+    final partial = '${data['payment_type'] ?? ''}' == 'نقدي جزئي' || description.contains('نقدي جزئي');
+    final paid = _numOrNull(data['partial_cash_amount']);
+    if (!partial || paid == null) return 0;
+    final price = _numOrNull(data['user_price']) ?? _numOrNull(data['price']) ?? 0;
+    final v = price - paid;
+    return v > 0 ? v : 0;
   }
 }
 
@@ -1089,6 +1149,67 @@ class ReportsApi {
     } catch (e) {
       _log('activities', e);
       return (ok: false, rows: const <ActivityRow>[], error: 'تعذّر التحميل');
+    }
+  }
+
+  /// كلّ سطور نوعٍ واحدٍ بالفترة صفحةً صفحة (التقرير الموحّد «التفعيلات» — ٢٢ نوفمبر): السقف القديم (5000 سطرٍ من كلّ الأنواع)
+  /// كانت تملؤه الإشعارات الآليّة فتنقص التفعيلات بصمت. النوع على الخادم (`activity_type`)، والصفحات حتى آخرها؛ تكرارٌ عند حدود
+  /// الصفحات (سطرٌ جديد أزاحها) يُسقط بالمعرّف. [maxPages] بلغها ⇒ `complete: false` (يُسمّى، لا نقصٌ صامت).
+  static Future<({bool ok, List<ActivityRow> rows, String? error, bool complete})> activitiesAll({
+    required DateTime from,
+    required DateTime to,
+    required String activityType,
+    List<String>? userIds,
+    String? actionManagerId,
+    String? userManager,
+    int? employeeId,
+    int pageSize = 2000,
+    int maxPages = 25,
+  }) async {
+    final out = <ActivityRow>[];
+    final seen = <int>{};
+    try {
+      for (var page = 1; page <= maxPages; page++) {
+        final qp = <String, String>{
+          'limit': '$pageSize',
+          'page': '$page',
+          'activity_type': activityType,
+          'date_from': _dateStart(from),
+          'date_to': _dateEnd(to),
+          if (actionManagerId != null && actionManagerId.isNotEmpty)
+            'user_id': actionManagerId
+          else if (userIds != null && userIds.isNotEmpty)
+            'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
+          if (userManager != null && userManager.isNotEmpty) 'user_manager': userManager,
+          if (employeeId != null) 'employee_id': '$employeeId',
+        };
+        final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/activities', queryParameters: qp);
+        final body = r.data ?? const {};
+        if (body['success'] != true) {
+          return (ok: false, rows: out, error: body['message']?.toString(), complete: false);
+        }
+        final list = body['data'] is List ? body['data'] as List : const [];
+        var got = 0;
+        for (final m in list.whereType<Map>()) {
+          final row = ActivityRow.fromJson(Map<String, dynamic>.from(m));
+          if (row == null) continue;
+          got++;
+          if (row.actionType.toUpperCase().trim() != activityType) continue; // صرفيّاتٌ مدموجة أو غيرها
+          if (seen.add(row.id)) out.add(row);
+        }
+        final pg = body['pagination'];
+        final total = pg is Map ? int.tryParse('${pg['total'] ?? ''}') : null;
+        if (got < pageSize || (total != null && page * pageSize >= total)) {
+          return (ok: true, rows: out, error: null, complete: true);
+        }
+      }
+      return (ok: true, rows: out, error: null, complete: false);
+    } on DioException catch (e) {
+      _log('activities all', e);
+      return (ok: false, rows: out, error: _friendly(e), complete: false);
+    } catch (e) {
+      _log('activities all', e);
+      return (ok: false, rows: out, error: 'تعذّر التحميل', complete: false);
     }
   }
 
