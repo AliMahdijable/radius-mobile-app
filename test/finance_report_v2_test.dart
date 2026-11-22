@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
@@ -555,9 +554,9 @@ void main() {
         expect(prev['limit_logs'], '1', reason: 'المقارنة أرقامٌ وحدها');
         expect(hero(t).kpi.value, 9850000);
         expect(hero(t).kpi.delta, closeTo((9850000 - 8865000) / 8865000, 1e-9));
-        final trend = t.widget<RpTrendCard>(find.byType(RpTrendCard));
-        expect(trend.points.length, 22);
-        expect(trend.bLabel, isNull, reason: 'الخادم لا يرسل الدين يوماً بيوم ⇒ لا خطّ صفرٍ كاذب');
+        // «يوماً بيوم» أُلغي (المالك ٢٢ نوفمبر) — يبقى خطّ الصافي الصغير في البطاقة الكبرى من السلسلة نفسها
+        expect(find.byType(RpTrendCard), findsNothing);
+        expect(hero(t).spark.length, 22);
         expect(find.byType(RpCompanyChips), findsNothing);
         expect(find.byType(RpCompanyTable), findsNothing);
         expect(t.takeException(), isNull);
@@ -598,13 +597,8 @@ void main() {
         expect(server.finance[0].$2['date_from'], '2026-10-24 00:00:00');
         expect(server.finance[1].$2['date_from'], '2026-09-24 00:00:00');
         expect(server.finance[1].$2['date_to'], '2026-10-23 23:59:59');
-        final trend = t.widget<RpTrendCard>(find.byType(RpTrendCard));
-        expect([for (final p in trend.points) p.day], [for (var d = 24; d <= 31; d++) d, for (var d = 1; d <= 22; d++) d]);
-        // الرسم نفسه: المحور بترتيب النقاط (رقم اليوم محوراً كان يرجع من 31 إلى 1)، وخطٌّ واحد بلا دين الخادم
-        final chart = t.widget<LineChart>(find.descendant(of: find.byType(RpTrendCard), matching: find.byType(LineChart)));
-        expect(chart.data.lineBarsData.length, 1);
-        final xs = [for (final s in chart.data.lineBarsData.first.spots) s.x];
-        expect(xs, [for (var i = 0; i < 30; i++) i.toDouble()]);
+        expect(find.byType(RpTrendCard), findsNothing, reason: '«يوماً بيوم» أُلغي (المالك ٢٢ نوفمبر)');
+        expect(hero(t).spark.length, 30, reason: 'الأيّام الثلاثون عبر الشهرين بترتيبها');
         expect(t.takeException(), isNull);
       } finally {
         await down(t);
@@ -766,34 +760,6 @@ void main() {
         expect(t.takeException(), isNull);
       } finally {
         ReportExportActions.debugSink = null;
-        await down(t);
-      }
-    });
-
-    testWidgets('«الدين» يوماً بيوم: يُرسم حين يرسله الخادم، وفي كل الشركات لا يُرسم إن غاب عن شركة (لا مجموعٌ ناقص)', (t) async {
-      await up();
-      server.debtFor.add(null);
-      try {
-        await open(t);
-        expect(t.widget<RpTrendCard>(find.byType(RpTrendCard)).bLabel, 'الدين');
-      } finally {
-        await down(t);
-      }
-      await up();
-      server.debtFor.add(_kSup); // ايرث لنك بلا الحقل
-      try {
-        await merged(t);
-        await open(t);
-        expect(t.widget<RpTrendCard>(find.byType(RpTrendCard)).bLabel, isNull);
-        server.debtFor.add(_kEarth);
-        await t.tap(find.text('الكل'));
-        for (var i = 0; i < 10; i++) {
-          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
-          await t.pump(const Duration(milliseconds: 100));
-        }
-        expect(t.widget<RpTrendCard>(find.byType(RpTrendCard)).bLabel, 'الدين', reason: 'كلّها ترسله ⇒ يُرسم');
-        expect(t.takeException(), isNull);
-      } finally {
         await down(t);
       }
     });

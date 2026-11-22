@@ -956,17 +956,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     ));
     parts.add(RpKpiGrid(kpis: FinanceView.kpis(v.kpis, v.prev), compareWith: f.range.vsText, onTap: (k) => _drill(k, v)));
     parts.add(RpCountsRow(items: FinanceView.counts(v.kpis)));
-    final trend = _f!.types.isEmpty ? FinanceView.trend(v.series, f.range) : const <RpTrendPoint>[];
-    if (trend.length > 1) {
-      final hasDebt = v.series.any((d) => d.debt != null);
-      parts.add(RpTrendCard(
-        title: f.range.days > 62 ? 'شهراً بشهر' : 'يوماً بيوم',
-        monthly: f.range.days > 62,
-        points: trend,
-        aLabel: 'الواصل',
-        bLabel: hasDebt ? 'الدين' : null,
-      ));
-    }
+    // «يوماً بيوم» (الرسم) أُلغي من التقرير الماليّ (المالك ٢٢ نوفمبر: «اكو قسم بالتقارير المالية يوما بيوم هذا الغي»)
     final b = _breakdown(v);
     final cap = _tabAll ? b.shares.length : 6;
     parts.add(RpBreakdownCard(
