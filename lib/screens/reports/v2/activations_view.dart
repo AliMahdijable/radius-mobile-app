@@ -194,6 +194,7 @@ class ActivationsView {
       time: t == null || _dateOnly(r.createdAt) ? '' : '${two(t.hour)}:${two(t.minute)}',
       company: company,
       cost: k == ActKind.cash && r.partialUnpaid > 0 ? 'منها بالدين ${formatIQD(r.partialUnpaid)}' : null,
+      balanceAfter: r.balanceAfter,
     );
   }
 

@@ -17,13 +17,15 @@ class RpPrefs {
 
   static String _key(String report) => 'report.v2.$report';
 
-  static Future<RpFilterValue> load(String report, {required DateTime now, String? openTag}) async {
+  /// [fallback] فترة التقرير أوّل مرّة (سجلّ الحركات: هذا الأسبوع كما كان).
+  static Future<RpFilterValue> load(String report,
+      {required DateTime now, String? openTag, RpPreset fallback = RpPreset.thisMonth}) async {
     try {
       final p = await SharedPreferences.getInstance();
       final raw = p.getString(_key(report));
-      if (raw == null) return RpFilterValue(range: RpRange.of(RpPreset.thisMonth, now: now));
+      if (raw == null) return RpFilterValue(range: RpRange.of(fallback, now: now));
       final j = jsonDecode(raw);
-      if (j is! Map) return RpFilterValue(range: RpRange.of(RpPreset.thisMonth, now: now));
+      if (j is! Map) return RpFilterValue(range: RpRange.of(fallback, now: now));
       Map<String, Set<String>> sets(Object? v) => v is Map
           ? {for (final e in v.entries) '${e.key}': {for (final x in (e.value is List ? e.value as List : const [])) '$x'}}
           : <String, Set<String>>{};
@@ -44,7 +46,7 @@ class RpPrefs {
         types: [for (final x in (j['t'] is List ? j['t'] as List : const [])) '$x'],
       );
     } catch (_) {
-      return RpFilterValue(range: RpRange.of(RpPreset.thisMonth, now: now));
+      return RpFilterValue(range: RpRange.of(fallback, now: now));
     }
   }
 

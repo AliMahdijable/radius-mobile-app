@@ -55,6 +55,7 @@ const reviewedSectionSites = <String, (String, String)>{
   'lib/services/fiber/fiber_monitor.dart BroadcastApi.broadcast': ('open', '«رجع النت» بالخلفيّة'),
   'lib/screens/packages/packages_screen.dart ManagersApi.lite': ('open', 'قسم «للمفتوحة وحدها»'),
   'lib/screens/reports/activity_log_report_screen.dart ExpensesApi.list': ('open', 'تقرير المفتوحة'),
+  'lib/screens/reports/v2/activity_log_v2_screen.dart ExpensesApi.list': ('open', 'سجلّ الحركات الموحّد — صرفيّات المفتوحة'),
   'lib/screens/reports/all_managers_debts_screen.dart ManagerDebtsApi.list': ('open', 'تقرير المفتوحة'),
   'lib/screens/reports/all_managers_debts_screen.dart ManagerDebtsApi.summary': ('open', 'تقرير المفتوحة'),
   'lib/screens/reports/all_managers_debts_screen.dart ManagerMovementsApi.list': ('open', 'تقرير المفتوحة'),

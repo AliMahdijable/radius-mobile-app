@@ -35,7 +35,6 @@ import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../widgets/active_company_line.dart';
 import '../account/company_switch_sheet.dart';
-import '../reports/activity_log_report_screen.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -58,6 +57,7 @@ import 'widgets/subscribers_card.dart';
 import '../../services/merged_text.dart';
 import '../../widgets/employee_limits_card.dart';
 import '../employees/employee_my_ledger_screen.dart' show EmployeeLedgerCard;
+import '../reports/v2/activity_log_v2_screen.dart';
 import '../reports/v2/finance_report_v2_screen.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
@@ -1003,7 +1003,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       trailingLocked: !_canActivityLog,
                       onTrailingTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const ActivityLogReportScreen(),
+                          builder: (_) => const ActivityLogV2Screen(),
                         ),
                       ),
                     ),

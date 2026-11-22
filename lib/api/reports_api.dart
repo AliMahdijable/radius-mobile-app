@@ -1158,7 +1158,9 @@ class ReportsApi {
   static Future<({bool ok, List<ActivityRow> rows, String? error, bool complete})> activitiesAll({
     required DateTime from,
     required DateTime to,
-    required String activityType,
+    String? activityType,
+    List<String>? activityTypes,
+    List<String>? excludeTypes,
     List<String>? userIds,
     String? actionManagerId,
     String? userManager,
@@ -1173,7 +1175,10 @@ class ReportsApi {
         final qp = <String, String>{
           'limit': '$pageSize',
           'page': '$page',
-          'activity_type': activityType,
+          if (activityType != null) 'activity_type': activityType,
+          // أنواعٌ بقائمة (الخادم 9bfabd2): خادمٌ أقدم يتجاهلهما فتصل الأنواع كلّها — والحصر هنا بعد الوصول يبقيها صحيحة
+          if (activityTypes != null && activityTypes.isNotEmpty) 'activity_types': activityTypes.join(','),
+          if (excludeTypes != null && excludeTypes.isNotEmpty) 'exclude_types': excludeTypes.join(','),
           'date_from': _dateStart(from),
           'date_to': _dateEnd(to),
           if (actionManagerId != null && actionManagerId.isNotEmpty)
@@ -1194,7 +1199,10 @@ class ReportsApi {
           final row = ActivityRow.fromJson(Map<String, dynamic>.from(m));
           if (row == null) continue;
           got++;
-          if (row.actionType.toUpperCase().trim() != activityType) continue; // صرفيّاتٌ مدموجة أو غيرها
+          final at = row.actionType.toUpperCase().trim();
+          if (activityType != null && at != activityType) continue; // صرفيّاتٌ مدموجة أو غيرها
+          if (activityTypes != null && activityTypes.isNotEmpty && !activityTypes.contains(at)) continue;
+          if (excludeTypes != null && excludeTypes.contains(at)) continue;
           if (seen.add(row.id)) out.add(row);
         }
         final pg = body['pagination'];

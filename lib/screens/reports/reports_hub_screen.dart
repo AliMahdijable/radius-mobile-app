@@ -16,7 +16,6 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../el/el_reports.dart';
-import 'activity_log_report_screen.dart';
 import 'all_managers_debts_screen.dart';
 import 'balance_reports_screen.dart';
 import 'deleted_debts_screen.dart';
@@ -26,6 +25,7 @@ import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import 'v2/activations_report_v2_screen.dart';
+import 'v2/activity_log_v2_screen.dart';
 import 'v2/finance_report_v2_screen.dart';
 
 /// شاشة hub للتقارير — 7 كروت تنقل لكل تقرير منفصل.
@@ -239,8 +239,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               title: 'reports.activity_log'.tr(),
               subtitle: 'reports.activity_log_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ActivityLogReportScreen()),
+                MaterialPageRoute(builder: (_) => const ActivityLogV2Screen()),
               ),
             ),
         ];

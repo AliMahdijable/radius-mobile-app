@@ -154,10 +154,15 @@ class RpRow {
     this.company,
     this.negative = false,
     this.cost,
+    this.balanceAfter,
   });
 
   final IconData icon;
   final RpTone tone;
+
+  /// الدين المتبقّي بعد الحركة — موقَّعاً (سالبٌ = دَينٌ عليه)؛ null ⇒ لا سطر (حركةٌ لا تمسّ الرصيد، لا «0»). طلب المالك ٤ سبتمبر:
+  /// «مفروض يظهر المتبقّي للدين أو رصيد في جميع التقارير» — كان في ReportLogTile وسقط من الشكل الموحّد أوّل مرّة.
+  final num? balanceAfter;
 
   /// سطر كلفة الباقة تحت الحركة (للمالك) — null بلا كلفة.
   final String? cost;
@@ -321,27 +326,30 @@ class RpPeriodBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: Sp.sm),
-          _Pill(
-            selected: compareOn,
-            onTap: onCompare,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(compareOn ? LucideIcons.squareCheck : LucideIcons.square,
-                    size: 16, color: compareOn ? AppColors.brand : AppColors.textLow),
-                const SizedBox(width: Sp.x6),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('قارن', style: AppType.bodyBold(color: compareOn ? AppColors.brand : AppColors.textHi), maxLines: 1),
-                    Text(compareWith, style: AppType.micro(color: AppColors.textMid), maxLines: 1),
-                  ],
-                ),
-              ],
+          // بلا مقارنة لهذا التقرير (سجلّ الحركات، «اليوميّة» وحدها) ⇒ لا زرّ يبدو قابلاً للّمس ولا يفعل شيئاً
+          if (onCompare != null || compareOn) ...[
+            const SizedBox(width: Sp.sm),
+            _Pill(
+              selected: compareOn,
+              onTap: onCompare,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(compareOn ? LucideIcons.squareCheck : LucideIcons.square,
+                      size: 16, color: compareOn ? AppColors.brand : AppColors.textLow),
+                  const SizedBox(width: Sp.x6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('قارن', style: AppType.bodyBold(color: compareOn ? AppColors.brand : AppColors.textHi), maxLines: 1),
+                      Text(compareWith, style: AppType.micro(color: AppColors.textMid), maxLines: 1),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -557,6 +565,7 @@ class RpCompanyTable extends StatelessWidget {
 
   /// عناوين الأعمدة الثلاثة («الواصل» · «الدين» · «الربح»).
   final List<String> heads;
+
   /// null = مجهول (مالٌ لم يصل من شركةٍ داخلة) ⇒ «—» لا رقمٌ ناقص.
   final List<num?> total;
 
@@ -1423,6 +1432,7 @@ class RpRowsCard extends StatelessWidget {
                 Text(r.detail, style: AppType.micro(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
                 if (r.cost != null)
                   Text(r.cost!, style: AppType.micro(color: AppColors.textLow), maxLines: 2, overflow: TextOverflow.ellipsis),
+                if (r.balanceAfter != null) _balanceLine(r.balanceAfter!),
                 if (r.company != null)
                   Row(
                     children: [
@@ -1503,4 +1513,24 @@ class RpExportBar extends StatelessWidget {
       ],
     );
   }
+}
+
+/// «الدين بعدها: 15,000 د.ع» / «رصيد دائن: …» / «لا دين بعدها» — بلون حاله (كـReportLogTile).
+String rpBalanceText(num b) => b == 0
+    ? 'لا دين بعدها'
+    : (b < 0 ? 'الدين بعدها: ${formatIQD(b.abs().round())} د.ع' : 'رصيد دائن: ${formatIQD(b.round())} د.ع');
+
+Widget _balanceLine(num b) {
+  final color = b < 0 ? AppColors.error : (b > 0 ? AppColors.success : AppColors.textMid);
+  return Padding(
+    padding: const EdgeInsets.only(top: 2),
+    child: Row(
+      children: [
+        Icon(b < 0 ? LucideIcons.trendingDown : (b > 0 ? LucideIcons.trendingUp : LucideIcons.check), size: 11, color: color),
+        const SizedBox(width: Sp.xs),
+        Flexible(
+            child: Text(rpBalanceText(b), style: AppType.microBold(color: color), maxLines: 2, overflow: TextOverflow.ellipsis)),
+      ],
+    ),
+  );
 }

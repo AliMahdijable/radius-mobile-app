@@ -223,6 +223,7 @@ class FinanceView {
       time: t == null || _dateOnly(l.createdAt) ? '' : '${two(t.hour)}:${two(t.minute)}',
       company: company,
       cost: showCost ? FinanceLogs.costLine(l) : null,
+      balanceAfter: l.balanceAfter,
     );
   }
 
