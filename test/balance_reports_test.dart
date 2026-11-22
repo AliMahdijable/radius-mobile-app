@@ -258,6 +258,22 @@ void main() {
       await done(t);
     });
 
+    testWidgets('الشكل الموحّد: لمس «ديون الفترة» يفتح تفاصيلها على «ديون باقية» — والأرقام الأخرى لا تُلمس', (t) async {
+      use(BalanceServer.ownerExample());
+      await open(t);
+      // «›» على البطاقة التي تُفتح وحدها
+      for (final id in ['collected', 'remaining', 'profit']) {
+        expect(find.descendant(of: k('bal-stat-$id'), matching: find.byType(InkWell)), findsNothing, reason: '$id لا تُلمس');
+      }
+      expect(find.descendant(of: k('bal-stat-debts'), matching: find.byType(InkWell)), findsOneWidget);
+      await tap(t, k('bal-stat-debts'));
+      expect(find.byType(BalancePeriodScreen), findsOneWidget);
+      expect(server.pageReqs.any((r) => r.filter == 'open' && r.offset == 0), isTrue, reason: 'أوّل طلبٍ بـ«ديون باقية»');
+      expect(server.pageReqs.any((r) => r.filter == 'all'), isFalse, reason: 'لا «الكل» قبله');
+      expect(t.widget<SheetQuickChip>(k('bal-filter-open')).selected, isTrue);
+      await done(t);
+    });
+
     testWidgets('الرصيد: فيه رصيد ⇒ لا تنبيه؛ تعذّرت قراءته ⇒ لا تنبيه ولا «0 د.ع»', (t) async {
       use(BalanceServer.ownerExample()..balance = 800000);
       await open(t);
