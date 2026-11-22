@@ -60,7 +60,7 @@ Map<String, Object?> _companies() => {
     };
 
 /// تقريرٌ بمقياس [k]: الصافي عند ١ = 11,450,000 − 1,150,000 − 450,000 = 9,850,000. [logs] بدل السطور الستّة (شهرٌ مزدحم).
-Map<String, Object?> _financeBody(double k, {List<Map<String, Object?>>? logs}) {
+Map<String, Object?> _financeBody(double k, {List<Map<String, Object?>>? logs, bool debt = false}) {
   num r(num v) => (v * k / 1000).round() * 1000;
   Map<String, Object?> log(int id, String type, String desc, num amount, String first, String last, String at, {String? emp}) => {
         'id': id,
@@ -94,7 +94,8 @@ Map<String, Object?> _financeBody(double k, {List<Map<String, Object?>>? logs}) 
       ],
       // بلا debt_sum (خادم اليوم) ⇒ لا خطّ «الدين» صفراً
       'timeseries': [
-        for (var d = 1; d <= 22; d++) {'date': '2026-11-${d.toString().padLeft(2, '0')}', 'payments_sum': r(500000 + d * 1000), 'payments_count': 9},
+        for (var d = 1; d <= 22; d++)
+          {'date': '2026-11-${d.toString().padLeft(2, '0')}', 'payments_sum': r(500000 + d * 1000), 'payments_count': 9, if (debt) 'debt_sum': r(100000)},
       ],
       'stacked': [
         {'action_type': 'SUBSCRIBER_ACTIVATE', 'count': 182, 'amount_sum': r(12600000)},
@@ -120,6 +121,9 @@ class _Server implements HttpClientAdapter {
 
   /// شركاتٌ يتعذّر تقريرها الآن.
   final failing = <String>{};
+
+  /// شركاتٌ يرسل خادمها debt_sum يوماً بيوم (null = المفتوحة).
+  final debtFor = <String?>{};
 
   /// شهرٌ مزدحم: السطور كلّها (الأحدث أوّلاً)، والخادم يرسل منها ما في الفترة بسقف 1000 — كالحقيقيّ.
   List<Map<String, Object?>>? month;
@@ -148,7 +152,7 @@ class _Server implements HttpClientAdapter {
       if (key != null && failing.contains(key)) return _json({'success': false, 'message': 'انتهت جلستها'}, key);
       final prev = o.queryParameters['limit_logs']?.toString() == '1';
       final rows = month == null ? null : _slice(Map<String, dynamic>.from(o.queryParameters));
-      return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows), key);
+      return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows, debt: debtFor.contains(key)), key);
     }
     if (key != null) return _json({'success': true, 'data': const []}, key);
     return inner.fetch(o, body, cancel);
@@ -722,6 +726,34 @@ void main() {
         expect(t.takeException(), isNull);
       } finally {
         ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
+    testWidgets('«الدين» يوماً بيوم: يُرسم حين يرسله الخادم، وفي كل الشركات لا يُرسم إن غاب عن شركة (لا مجموعٌ ناقص)', (t) async {
+      await up();
+      server.debtFor.add(null);
+      try {
+        await open(t);
+        expect(t.widget<RpTrendCard>(find.byType(RpTrendCard)).bLabel, 'الدين');
+      } finally {
+        await down(t);
+      }
+      await up();
+      server.debtFor.add(_kSup); // ايرث لنك بلا الحقل
+      try {
+        await merged(t);
+        await open(t);
+        expect(t.widget<RpTrendCard>(find.byType(RpTrendCard)).bLabel, isNull);
+        server.debtFor.add(_kEarth);
+        await t.tap(find.text('الكل'));
+        for (var i = 0; i < 10; i++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        expect(t.widget<RpTrendCard>(find.byType(RpTrendCard)).bLabel, 'الدين', reason: 'كلّها ترسله ⇒ يُرسم');
+        expect(t.takeException(), isNull);
+      } finally {
         await down(t);
       }
     });

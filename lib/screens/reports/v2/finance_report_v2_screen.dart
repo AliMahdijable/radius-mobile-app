@@ -390,6 +390,9 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         if (co.included) co,
     ];
     final prevReady = !hasType && inc.isNotEmpty && inc.every((co) => co.prevDone && co.prev != null);
+    // «الدين» يوماً بيوم: من كلّ شركةٍ داخلة أو لا يُرسم — شركةٌ لا يرسله خادمها (ايرث لنك، فايبر اكس) كان يجعل الخطّ مجموع غيرها
+    // وحدها كأنّه الكلّ.
+    final debtFromAll = inc.every((co) => co.cur!.series.isEmpty || co.cur!.series.any((d) => d.debt != null));
     final series = <String, FinanceDayRow>{};
     for (final co in inc) {
       for (final d in co.cur!.series) {
@@ -399,7 +402,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
           day: d.day,
           revenue: (o?.revenue ?? 0) + d.revenue,
           count: (o?.count ?? 0) + d.count,
-          debt: o?.debt == null && d.debt == null ? null : (o?.debt ?? 0) + (d.debt ?? 0),
+          debt: !debtFromAll ? null : (o?.debt ?? 0) + (d.debt ?? 0),
         );
       }
     }
