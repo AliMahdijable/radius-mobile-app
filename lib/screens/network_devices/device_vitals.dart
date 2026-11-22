@@ -1045,13 +1045,17 @@ class DeviceVitals {
                 icon: LucideIcons.signal,
                 tone: Grade.signal(w.signal),
               ),
-        Vital(
-          label: 'المعالج',
-          value: '${s.host.cpuload}',
-          unit: '٪',
-          icon: LucideIcons.cpu,
-          tone: Grade.percentLowerBetter(s.host.cpuload),
-        ),
+        // المعالج من عدّاداته الحقيقيّة وحدها — لم يُقرأ ⇒ خانةٌ فارغة لا «0٪» (ولا متوسّط الحِمل كما كان).
+        if (s.host.cpuload case final cpu?)
+          Vital(
+            label: 'المعالج',
+            value: '$cpu',
+            unit: '٪',
+            icon: LucideIcons.cpu,
+            tone: Grade.percentLowerBetter(cpu),
+          )
+        else
+          Vital.empty.withIcon(LucideIcons.cpu),
         s.host.temperature == 0
             ? Vital.empty.withIcon(LucideIcons.thermometer)
             : Vital(

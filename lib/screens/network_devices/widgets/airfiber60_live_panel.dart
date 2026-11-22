@@ -35,6 +35,9 @@ class AirFiber60LivePanel extends StatefulWidget {
 
 class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
   UbntStats? _stats;
+
+  /// المعروض القراءةُ الأولى السريعة والكاملة في الطريق — نسبة معالجٍ غائبة الآن «يُقاس…» لا «لم تُقرأ».
+  bool _partial = false;
   bool _loading = false;
   String? _error;
   Timer? _timer;
@@ -134,6 +137,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                 if (!mounted) return;
                 setState(() {
                   _stats = partial;
+                  _partial = true;
                 });
               }
             : null, // ← refresh: تجاهل partial، انتظر البيانات الكاملة
@@ -144,6 +148,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       if (!mounted) return;
       setState(() {
         _stats = s;
+        _partial = false;
         DeviceStatsCache.instance.putRaw(widget.device.id, s);
         _lastFetch = DateTime.now();
         _loading = false;
@@ -155,10 +160,14 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       if (!mounted) return;
       setState(() {
         _error = msg;
+        _partial = false;
         _loading = false;
       });
     }
   }
+
+  /// سطر خانة المعالج حين لا نسبة: القراءة الكاملة في الطريق ⇒ «يُقاس…»، وإلّا «لم تُقرأ».
+  String? _cpuSub(int? cpu) => cpu != null ? null : (_partial ? 'يُقاس…' : 'لم تُقرأ');
 
   void _updateInterfaceRates(UbntStats s) {
     final now = DateTime.now();
@@ -346,7 +355,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
 
     final down = top(rx: true), up = top(rx: false);
     return [
-      DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: s.host.cpuload.toDouble()),
+      DeskPercentTile(
+          icon: LucideIcons.cpu, label: 'المعالج', percent: s.host.cpuload?.toDouble(), sub: _cpuSub(s.host.cpuload)),
       DeskPercentTile(
         icon: LucideIcons.memoryStick,
         label: 'الذاكرة',
@@ -966,7 +976,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
   // 🌡️ System card — CPU/RAM/Uptime
   // ═══════════════════════════════════════════════════════
   Widget _systemCard(UbntStats s) {
-    final cpuPercent = s.host.cpuload.toDouble();
+    final cpuPercent = s.host.cpuload?.toDouble();
     final memPercent = s.memUsedPercent ?? 0;
 
     return _cardWrapper(
@@ -993,7 +1003,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           icon: LucideIcons.cpu,
           label: 'CPU',
           percent: cpuPercent,
-          detail: '${cpuPercent.round()}%',
+          // لم تُقرأ ⇒ «—» (أو «يُقاس…» حتى تصل القراءة الكاملة) — لا «0%».
+          detail: cpuPercent == null ? (_partial ? 'يُقاس…' : '—') : '${cpuPercent.round()}%',
         ),
         const SizedBox(height: 8),
         // RAM
@@ -1018,13 +1029,15 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     );
   }
 
+  /// [percent] null: لم تُقرأ ⇒ شريطٌ فارغ ولونٌ خافت، والنصّ في [detail].
   Widget _percentRow({
     required IconData icon,
     required String label,
-    required double percent,
+    required double? percent,
     required String detail,
   }) {
-    final color = _percentColor(percent);
+    final p = percent;
+    final color = p == null ? AppColors.textLow : _percentColor(p);
     return Row(children: [
       Icon(icon, size: 14, color: AppColors.textMid),
       const SizedBox(width: 6),
@@ -1036,7 +1049,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(R.pill),
           child: LinearProgressIndicator(
-            value: (percent / 100).clamp(0.0, 1.0),
+            value: p == null ? 0 : (p / 100).clamp(0.0, 1.0),
             minHeight: 6,
             backgroundColor: AppColors.border,
             valueColor: AlwaysStoppedAnimation(color),

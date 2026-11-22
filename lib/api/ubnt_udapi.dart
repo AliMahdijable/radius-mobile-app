@@ -182,7 +182,8 @@ class UbntUdapi {
       devmodel: (id['product'] ?? id['model'] ?? '').toString(),
       fwversion: (id['firmwareVersion'] ?? id['firmware'] ?? '').toString(),
       uptime: _int(dev['uptime']) ?? 0,
-      cpuload: cpus.isEmpty ? 0 : (cpus.reduce((a, b) => a + b) / cpus.length).round(),
+      // لا نسبة في الردّ ⇒ null («—»)، لا «0٪» كأنّ المعالج خامل.
+      cpuload: cpus.isEmpty ? null : (cpus.reduce((a, b) => a + b) / cpus.length).round().clamp(0, 100),
       temperature: cpuTemp ?? 0,
     );
 

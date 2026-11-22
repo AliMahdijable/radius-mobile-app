@@ -66,10 +66,10 @@ void main() {
     test('🚨 UBNT أيضاً — آخر مصدر ضجيج', () {
       // خمسون سطراً لكلّ جهاز UBNT في كلّ نبضة، بقيت بعد إسكات ميكروتك.
       final ubnt = File('lib/api/ubnt_api.dart').readAsStringSync();
-      expect(ubnt.contains("DevLog.trace(() =>\n          '══════ UBNT output"),
+      // المسافة البادئة لا تهمّ (٢٢ نوفمبر: انتقلت الأوامر من `_fetchWithUser` إلى `_collect`) — المهمّ أنّه DevLog.trace.
+      expect(RegExp(r"DevLog\.trace\(\(\) =>\s*'══════ UBNT output").hasMatch(ubnt),
           isTrue, reason: 'الحمولة الخام ما زالت تُطبع دائماً');
-      expect(ubnt.contains("debugPrint(\n            '══════ UBNT output"),
-          isFalse);
+      expect(RegExp(r"debugPrint\(\s*'══════ UBNT output").hasMatch(ubnt), isFalse);
       expect(ubnt.contains("DevLog.trace(() => '🔑 UBNT SSH try"), isTrue);
     });
 
