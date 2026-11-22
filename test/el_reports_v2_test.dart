@@ -192,6 +192,8 @@ void main() {
       expect([for (final d in rows.days) d.date], ['2026/11/22', '2026/11/21', '2026/11/20'], reason: 'الأحدث أوّلاً');
       expect(rows.days.first.rows.single.company?.name, 'ايرث لنك ١');
       expect(rows.days[1].rows.single.trailing, '512');
+      // الأوقات صباحاً ومساءً (المالك ٢٢ نوفمبر) — بتوقيت ايرث لنك كما أرسلته
+      expect([for (final d in rows.days) d.rows.single.time], ['9:30 صباحاً', '10:00 صباحاً', '6:00 مساءً']);
       await t.enterText(find.byType(TextField), 'تجربة');
       await settleAsync(t, 3);
       await tapExport(t, 'Excel');

@@ -315,9 +315,12 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
     return s.length >= 10 ? s.substring(0, 10).replaceAll('-', '/') : 'بلا تاريخ';
   }
 
+  /// الساعة كما أرسلتها ايرث لنك (بتوقيتها) بنظام ١٢ «7:34 مساءً» (المالك ٢٢ نوفمبر: «الأوقات خلّي صباحاً ومساءً»).
   static String _time(String? raw) {
     final s = (raw ?? '').trim().replaceFirst('T', ' ');
-    return s.length >= 16 ? s.substring(11, 16) : '';
+    if (s.length < 16) return '';
+    final h = int.tryParse(s.substring(11, 13)), m = int.tryParse(s.substring(14, 16));
+    return h == null || m == null || h > 23 || m > 59 ? '' : clock12Ar(DateTime(2000, 1, 1, h, m));
   }
 
   List<RpDay> _days(List<({String? key, ElTestUsageRow row})> rows) {
