@@ -89,7 +89,11 @@ class RpKpi {
     this.upIsGood = true,
     this.isCount = false,
     this.unit,
+    this.display,
   });
+
+  /// نصّ الرقم حين ليس مالاً ولا عدّاً («1.2 GB» في الجلسات) — يغلب [isCount] و[rpMoney].
+  final String? display;
 
   /// اسم البطاقة الثابت (حركاتها عند اللمس) — فارغٌ في صور التصميم.
   final String id;
@@ -108,7 +112,7 @@ class RpKpi {
   /// وحدة العدّ («تفعيل»).
   final String? unit;
 
-  String get text => isCount ? '${formatIQD(value)}${unit == null ? '' : ' $unit'}' : rpMoney(value);
+  String get text => display ?? (isCount ? '${formatIQD(value)}${unit == null ? '' : ' $unit'}' : rpMoney(value));
 }
 
 class RpTrendPoint {
@@ -155,7 +159,11 @@ class RpRow {
     this.negative = false,
     this.cost,
     this.balanceAfter,
+    this.trailing,
   });
+
+  /// نصّ مكان المبلغ حين ليس مالاً («↓1.2 GB · ↑300 MB» في الجلسات) — يُعرض حين [amount] null.
+  final String? trailing;
 
   final IconData icon;
   final RpTone tone;
@@ -1162,6 +1170,7 @@ class RpBreakdownCard extends StatelessWidget {
     this.more,
     this.onMore,
     this.unit = 'حركة',
+    this.countOnly = false,
   });
   final List<String> tabs;
   final int selected;
@@ -1178,6 +1187,9 @@ class RpBreakdownCard extends StatelessWidget {
 
   /// وحدة العدّ تحت المبلغ.
   final String unit;
+
+  /// العدد هو الرقم البارز لا المال (الجلسات) — المال لا يُعرض.
+  final bool countOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -1272,11 +1284,11 @@ class RpBreakdownCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(rpMoney(s.amount), style: AppType.bodyStrong(color: tone.fg), maxLines: 1),
+                Text(countOnly ? '${formatIQD(s.count)} $unit' : rpMoney(s.amount), style: AppType.bodyStrong(color: tone.fg), maxLines: 1),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('${s.count} $unit · ', style: AppType.micro(color: AppColors.textLow), maxLines: 1),
+                    if (!countOnly) Text('${s.count} $unit · ', style: AppType.micro(color: AppColors.textLow), maxLines: 1),
                     Directionality(
                       textDirection: TextDirection.ltr,
                       child: Text('${(s.share * 100).round()}%', style: AppType.microBold(color: AppColors.textMid)),
@@ -1456,6 +1468,11 @@ class RpRowsCard extends StatelessWidget {
                   textDirection: TextDirection.ltr,
                   child: Text('${r.negative ? '−' : ''}${formatIQD(r.amount!)}',
                       style: AppType.bodyStrong(color: r.tone.fg), maxLines: 1),
+                )
+              else if (r.trailing != null)
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text(r.trailing!, style: AppType.microBold(color: r.tone.fg), maxLines: 1),
                 ),
               Directionality(
                 textDirection: TextDirection.ltr,

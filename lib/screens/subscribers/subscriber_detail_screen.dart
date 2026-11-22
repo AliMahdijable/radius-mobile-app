@@ -32,7 +32,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../reports/v2/account_statement_v2_screen.dart';
-import '../reports/sessions_report_screen.dart';
+import '../reports/v2/sessions_v2_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
 import 'sheets/add_credit_sheet.dart';
@@ -886,7 +886,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       case SubscriberAutoAction.sessions:
         if (!_autoAllowed('reports.sessions', 'سجلّ الجلسات')) return;
         await Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => SessionsReportScreen(initialUsername: sub.username, companyKey: sub.companyKey),
+          builder: (_) => SessionsV2Screen(initialUsername: sub.username, companyKey: sub.companyKey),
         ));
       case SubscriberAutoAction.price:
         if (sub.idx == null) {
@@ -1728,7 +1728,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 : () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) =>
-                            SessionsReportScreen(initialUsername: sub.username, companyKey: sub.companyKey),
+                            SessionsV2Screen(initialUsername: sub.username, companyKey: sub.companyKey),
                       ),
                     ),
           ),
