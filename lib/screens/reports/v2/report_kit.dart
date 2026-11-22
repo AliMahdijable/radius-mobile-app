@@ -205,7 +205,9 @@ class RpDay {
   /// «2026/11/22».
   final String date;
   final int count;
-  final num sum;
+
+  /// «واصل» اليوم — null = سطورٌ بلا مال (التجريبيّ) ⇒ لا «واصل 0».
+  final num? sum;
   final List<RpRow> rows;
 }
 
@@ -587,7 +589,7 @@ class RpCompanyTable extends StatelessWidget {
   final ValueChanged<RpCompany>? onTap;
   final ValueChanged<RpCompany>? onRetry;
 
-  /// عناوين الأعمدة الثلاثة («الواصل» · «الدين» · «الربح»).
+  /// عناوين الأعمدة — ثلاثةٌ عادةً («الواصل» · «الدين» · «الربح»)، أو أقلّ ([total] بعددها).
   final List<String> heads;
 
   /// null = مجهول (مالٌ لم يصل من شركةٍ داخلة) ⇒ «—» لا رقمٌ ناقص.
@@ -685,8 +687,9 @@ class RpCompanyTable extends StatelessWidget {
     );
     switch (l.state) {
       case RpCompanyState.ok:
+        // عمودٌ لكلّ عنوان (1–3): تقريرٌ برقمين (ايرث لنك: المشتركون والباقات) لا عمود «—» فارغاً له
         return _row(name: name, cells: [
-          for (var i = 0; i < 3; i++)
+          for (var i = 0; i < heads.length && i < 3; i++)
             RpFitText([l.a, l.b, l.c][i] == null ? '—' : rpNum([l.a, l.b, l.c][i]!),
                 style: AppType.bodyStrong(color: tones[i].fg), alignment: AlignmentDirectional.centerEnd),
         ]);
@@ -1362,9 +1365,15 @@ class RpRowsCard extends StatelessWidget {
       this.onSearch,
       this.note,
       this.empty,
-      this.searchHint = 'ابحث باسم المشترك أو يوزره أو رقمه'});
+      this.searchHint = 'ابحث باسم المشترك أو يوزره أو رقمه',
+      this.title = 'الحركات',
+      this.unit = 'حركة'});
   final int total;
   final List<RpDay> days;
+
+  /// عنوان البطاقة ووحدة العدّ («المشتركون» · «مشترك» في التجريبيّ).
+  final String title;
+  final String unit;
 
   /// نصّ حقل البحث (ديون المدراء: باسم المدير).
   final String searchHint;
@@ -1392,9 +1401,9 @@ class RpRowsCard extends StatelessWidget {
         children: [
           RpTitle(
             icon: LucideIcons.listOrdered,
-            title: 'الحركات',
+            title: title,
             tone: RpTone.neutral,
-            trailing: Text('${formatIQD(total)} حركة', style: AppType.pillBold(color: AppColors.textMid)),
+            trailing: Text('${formatIQD(total)} $unit', style: AppType.pillBold(color: AppColors.textMid)),
           ),
           const SizedBox(height: Sp.md),
           Container(
@@ -1468,9 +1477,11 @@ class RpRowsCard extends StatelessWidget {
             Directionality(
                 textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
             const SizedBox(width: Sp.sm),
-            Expanded(child: Text('${d.count} حركة', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
-            Text('واصل ', style: AppType.micro(color: AppColors.textMid)),
-            Text(rpMoney(d.sum), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
+            Expanded(child: Text('${d.count} $unit', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
+            if (d.sum != null) ...[
+              Text('واصل ', style: AppType.micro(color: AppColors.textMid)),
+              Text(rpMoney(d.sum!), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
+            ],
           ],
         ),
       );
