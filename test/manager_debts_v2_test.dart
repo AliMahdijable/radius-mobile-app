@@ -185,7 +185,8 @@ Map<String, Object?> _elRows(String id) => switch (id) {
             {'row_type': 'balance', 'id': -5, 'sub_kind': 'deposit_loan', 'amount': 50000, 'source': 'el_topup', 'debt_id': 77,
               'note': 'شحن آجل', 'event_at': '2026-11-18T09:30:00.000Z'},
             {'row_type': 'debt_created', 'id': 77, 'amount': 50000, 'debt_id': 77, 'event_at': '2026-11-18T09:30:00.000Z'},
-            {'row_type': 'debt_payment', 'id': 301, 'amount': 20000, 'debt_id': 77, 'event_at': '2026-11-20T10:00:00.000Z'},
+            // كاتّحاد الخادم (db.js listManagerMovements): التسديد بـrelated_debt_id، وdebt_created بـdebt_id = رقم الدين
+            {'row_type': 'debt_payment', 'id': 301, 'amount': 20000, 'debt_id': null, 'related_debt_id': 77, 'event_at': '2026-11-20T10:00:00.000Z'},
           ],
         },
       '2048' => {
