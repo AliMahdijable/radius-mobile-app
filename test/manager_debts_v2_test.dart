@@ -184,6 +184,14 @@ Map<String, Object?> _companies() => {
       ],
     };
 
+/// يفتح قسماً مطويّاً بلمسة عنوانه (المالك ٢٢ نوفمبر: الأقسام الفرعيّة مقفولةٌ حتى يُنقر عليها).
+Future<void> unfold(WidgetTester t, Type card) async {
+  final title = find.descendant(of: find.byType(card), matching: find.byType(RpTitle)).first;
+  await t.ensureVisible(title);
+  await t.tap(title);
+  await t.pump();
+}
+
 void main() {
   setUpAll(visualSetUpAll);
 
@@ -242,6 +250,7 @@ void main() {
       expect(k['total']!.value, 85000);
       expect(k['debtors']!.value, 3, reason: 'm1 وm3 بالساس + m2 بالأخرى');
       expect(find.textContaining('دين 1 مدير لم يُقرأ من الساس'), findsOneWidget);
+      await unfold(t, RpRowsCard);
       expect(find.text('تسديد كامل — دين أخرى'), findsWidgets, reason: 'الدين 7 متبقّيه صفر');
       // «عمر الدين»: المتبقّي من «ديون أخرى» بتاريخه — المسدَّد لا يدخل
       final card = t.widget<RpBreakdownCard>(find.byType(RpBreakdownCard));

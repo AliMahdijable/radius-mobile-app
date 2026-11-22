@@ -124,9 +124,16 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   bool get _merged => MergedMode.active.value;
   DateTime get _now => FinanceReportV2Screen.clock();
 
+  /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+  late final _folds = RpFolds(_id, const {});
+  RpFold _fold(String s) => _folds.fold(s, setState);
+
   @override
   void initState() {
     super.initState();
+    unawaited(_folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
     unawaited(_start());
@@ -960,6 +967,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     final b = _breakdown(v);
     final cap = _tabAll ? b.shares.length : 6;
     parts.add(RpBreakdownCard(
+      fold: _fold('breakdown'),
       tabs: _tabs,
       selected: _tab.clamp(0, _tabs.length - 1),
       shares: b.shares.take(cap).toList(),
@@ -974,6 +982,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     final m = _merged ? _combined : null;
     final rows = FinanceView.search(v.logs, _q);
     parts.add(RpRowsCard(
+      fold: _fold('rows'),
+      query: _q,
       total: rows.length,
       days: FinanceView.days(rows, companyOf: m == null ? null : (l) => _coOf(l, m), showCost: v.showCost, limit: _visible),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
@@ -1020,6 +1030,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         if (l.state == RpCompanyState.ok) l,
     ];
     return RpCompanyTable(
+      fold: _fold('companies'),
       heads: const ['الواصل', 'الدين', 'الصافي'],
       lines: lines,
       total: [

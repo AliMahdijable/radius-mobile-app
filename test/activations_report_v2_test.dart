@@ -128,6 +128,14 @@ Map<String, Object?> _companies() => {
       ],
     };
 
+/// يفتح قسماً مطويّاً بلمسة عنوانه (المالك ٢٢ نوفمبر: الأقسام الفرعيّة مقفولةٌ حتى يُنقر عليها).
+Future<void> unfold(WidgetTester t, Type card) async {
+  final title = find.descendant(of: find.byType(card), matching: find.byType(RpTitle)).first;
+  await t.ensureVisible(title);
+  await t.tap(title);
+  await t.pump();
+}
+
 void main() {
   // ═══════════════════════════════ ١) السطر ═══════════════════════════════
 
@@ -364,6 +372,7 @@ void main() {
         expect(r.details, contains('عدد الحركات: 22'));
         expect(r.details.any((d) => d.startsWith('ناقص')), isFalse);
         got.clear();
+        await unfold(t, RpRowsCard);
         final rows = find.byType(RpRowsCard);
         await t.scrollUntilVisible(find.descendant(of: rows, matching: find.byType(TextField)), 600,
             scrollable: find.byType(Scrollable).first);

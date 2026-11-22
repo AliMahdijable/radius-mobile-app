@@ -165,6 +165,14 @@ class _Server implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// يفتح قسماً مطويّاً بلمسة عنوانه (المالك ٢٢ نوفمبر: الأقسام الفرعيّة مقفولةٌ حتى يُنقر عليها).
+Future<void> unfold(WidgetTester t, Type card) async {
+  final title = find.descendant(of: find.byType(card), matching: find.byType(RpTitle)).first;
+  await t.ensureVisible(title);
+  await t.tap(title);
+  await t.pump();
+}
+
 void main() {
   // ═══════════════════════════════ ١) الفترات ═══════════════════════════════
 
@@ -579,6 +587,7 @@ void main() {
         Navigator.of(t.element(sheet)).pop();
         await t.pump(const Duration(milliseconds: 400));
 
+        await unfold(t, RpRowsCard);
         final rows = find.byType(RpRowsCard);
         await t.enterText(find.descendant(of: rows, matching: find.byType(TextField)), 'زهراء');
         await t.pump(const Duration(milliseconds: 200));
@@ -588,6 +597,67 @@ void main() {
       } finally {
         await down(t);
       }
+    });
+
+    testWidgets('الأقسام الفرعيّة مطويّةٌ أوّل مرّة — المهمّات ظاهرة، ولمسة العنوان تفتح القسم، والشاشة تتذكّره', (t) async {
+      await up(prefs: {});
+      try {
+        await open(t);
+        // المهمّات: البطل والبطاقات ظاهرة
+        expect(find.byType(RpHeroKpi), findsOneWidget);
+        expect(find.byType(RpKpiGrid), findsOneWidget);
+        // الفرعيّة: العنوان وحده — لا تبويبات «قسّم حسب» ولا حقل بحث الحركات ولا سطورها
+        final rows = find.byType(RpRowsCard);
+        expect(find.descendant(of: rows, matching: find.byType(TextField)), findsNothing);
+        expect(find.descendant(of: rows, matching: find.text('زهراء محمود')), findsNothing);
+        expect(find.descendant(of: rows, matching: find.text('الحركات')), findsOneWidget);
+        final brk = find.byType(RpBreakdownCard);
+        expect(find.descendant(of: brk, matching: find.text('قسّم حسب')), findsOneWidget);
+        expect(find.descendant(of: brk, matching: find.byType(SingleChildScrollView)), findsNothing);
+
+        await unfold(t, RpRowsCard);
+        expect(find.descendant(of: rows, matching: find.byType(TextField)), findsOneWidget);
+        expect(find.descendant(of: rows, matching: find.text('زهراء محمود')), findsWidgets);
+        // البحث ثمّ الطيّ: يُذكر تحت العنوان، ويعود في الحقل حين يُفتح — لا قائمةٌ محصورةٌ ببحثٍ لا يُرى
+        await t.enterText(find.descendant(of: rows, matching: find.byType(TextField)), 'زهراء');
+        await t.pump(const Duration(milliseconds: 200));
+        await unfold(t, RpRowsCard);
+        expect(find.descendant(of: rows, matching: find.byType(TextField)), findsNothing);
+        expect(find.descendant(of: rows, matching: find.text('البحث: «زهراء»')), findsOneWidget);
+        await unfold(t, RpRowsCard);
+        final field = t.widget<TextField>(find.descendant(of: rows, matching: find.byType(TextField)));
+        expect(field.controller?.text, 'زهراء');
+        expect(find.descendant(of: rows, matching: find.text('محمد عبد الله')), findsNothing);
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+
+        // فتحٌ جديد للتقرير: الحركات مفتوحة كما تُركت، و«قسّم حسب» مطويّ
+        await t.pumpWidget(const SizedBox());
+        await open(t);
+        expect(find.descendant(of: find.byType(RpRowsCard), matching: find.byType(TextField)), findsOneWidget);
+        expect(find.descendant(of: find.byType(RpBreakdownCard), matching: find.byType(SingleChildScrollView)), findsNothing);
+        final saved = (await t.runAsync(SharedPreferences.getInstance))!.getString('report.v2.finance.folds');
+        expect(jsonDecode(saved!), {'rows': true});
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    test('RpFolds: الافتراض، والمحفوظ يغلبه، والتالف يُتجاهل', () async {
+      SharedPreferences.setMockInitialValues({'report.v2.x.folds': jsonEncode({'a': true, 'b': 'نعم', 'c': false})});
+      final f = RpFolds('x', const {'c': true, 'd': true});
+      expect([f.open('a'), f.open('c'), f.open('d'), f.open('z')], [false, true, true, false], reason: 'قبل التحميل: الافتراض');
+      await f.load();
+      expect([f.open('a'), f.open('b'), f.open('c'), f.open('d')], [true, false, false, true]);
+      f.toggle('d');
+      await Future<void>.delayed(Duration.zero);
+      final g = RpFolds('x', const {'d': true});
+      await g.load();
+      expect(g.open('d'), isFalse);
+      SharedPreferences.setMockInitialValues({'report.v2.y.folds': 'ليس JSON'});
+      final h = RpFolds('y', const {'k': true});
+      await h.load();
+      expect(h.open('k'), isTrue);
     });
 
     testWidgets('آخر 30 يوماً: من ٢٤ أكتوبر، والمقارنة بالثلاثين قبلها، و«يوماً بيوم» بترتيبه عبر الشهرين', (t) async {
@@ -710,6 +780,7 @@ void main() {
       ReportExportActions.debugSink = (r) async => got.add(r);
       try {
         await open(t);
+        await unfold(t, RpRowsCard);
         final rows = find.byType(RpRowsCard);
         await t.scrollUntilVisible(find.descendant(of: rows, matching: find.byType(TextField)), 600,
             scrollable: find.byType(Scrollable).first);
@@ -776,6 +847,7 @@ void main() {
         expect(hero(t).kpi.value, 9850000, reason: 'سوبرنت وحدها');
 
         server.failing.clear();
+        await unfold(t, RpCompanyTable);
         await t.tap(find.text('أعد'));
         for (var i = 0; i < 8; i++) {
           await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));

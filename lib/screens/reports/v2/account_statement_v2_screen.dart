@@ -352,6 +352,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
     ]));
     final rows = _search(d.rows);
     parts.add(RpRowsCard(
+      query: _q,
       total: rows.length,
       days: _days(rows, limit: _visible),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,

@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter/foundation.dart';
+
+import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_sheets.dart';
 
@@ -76,5 +80,52 @@ class RpPrefs {
     } catch (_) {
       // تفضيلٌ لا أكثر
     }
+  }
+}
+
+/// الأقسام الفرعيّة المطويّة لكلّ تقرير (المالك ٢٢ نوفمبر: «الأقسام الفرعيّة خلّيها مقفولة — المهمّات تظهر والفرعيّة هو ينقر عليها
+/// ويظهرها… اعتمد هلشي بتصميم التطبيق والموقع»): [defaults] ما يُفتح أوّل مرّة (السجلّ يفتح حركاته، والماليّ يطويها)، وما فتحه الوكيل
+/// أو طواه يُتذكّر على هذا الجهاز. التخزين يتعذّر ⇒ الافتراض بلا خطأ.
+class RpFolds {
+  RpFolds(this.report, this.defaults);
+
+  final String report;
+  final Map<String, bool> defaults;
+  final Map<String, bool> _state = {};
+
+  String get _key => 'report.v2.$report.folds';
+
+  bool open(String section) => _state[section] ?? defaults[section] ?? false;
+
+  Future<void> load() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_key);
+      if (raw == null) return;
+      final j = jsonDecode(raw);
+      if (j is! Map) return;
+      for (final e in j.entries) {
+        if (e.value is bool) _state['${e.key}'] = e.value as bool;
+      }
+    } catch (_) {
+      // الافتراض
+    }
+  }
+
+  /// [RpFold] القسم لشاشةٍ تعيد بناءها بـ[rebuild] (setState).
+  RpFold fold(String section, void Function(VoidCallback fn) rebuild) =>
+      RpFold(open: open(section), onToggle: () => rebuild(() => toggle(section)));
+
+  void toggle(String section) {
+    _state[section] = !open(section);
+    final snapshot = Map<String, bool>.of(_state);
+    unawaited(() async {
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setString(_key, jsonEncode(snapshot));
+      } catch (_) {
+        // تفضيلٌ لا أكثر
+      }
+    }());
   }
 }

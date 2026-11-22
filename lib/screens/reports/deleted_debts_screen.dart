@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -23,6 +25,7 @@ import '../../widgets/company_tag.dart';
 import '../account/company_switch_sheet.dart';
 import 'v2/debt_age.dart';
 import 'v2/report_kit.dart';
+import 'v2/report_prefs.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_permission_gate.dart';
 import '../../services/merged_text.dart';
@@ -65,9 +68,16 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   String? _openKey;
   int _gen = 0;
 
+  /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+  late final _folds = RpFolds('deleted_debts', const {});
+  RpFold _fold(String s) => _folds.fold(s, setState);
+
   @override
   void initState() {
     super.initState();
+    unawaited(_folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     MergedMode.active.addListener(_onMergedMode);
     if (Perms.has('deleted_debts.view')) {
       _load();
@@ -504,6 +514,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     final shares = _shares(allRows, tab);
     final cap = _tabAll ? shares.length : 6;
     out.add(RpBreakdownCard(
+      fold: _fold('breakdown'),
       tabs: tabs,
       selected: tabs.indexOf(tab),
       tone: RpTone.debt,
@@ -628,6 +639,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     }
     final ok = [for (final l in lines) if (l.state == RpCompanyState.ok) l];
     return RpCompanyTable(
+      fold: _fold('companies'),
       heads: const ['المدينون', 'الديون', 'أقدم من 3 أشهر'],
       tones: const [RpTone.loss, RpTone.debt, RpTone.loss],
       lines: lines,

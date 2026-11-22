@@ -259,17 +259,27 @@ class RpIconBox extends StatelessWidget {
 }
 
 /// عنوان جزءٍ في البطاقة: أيقونة + اسم + ما بطرفه.
+/// فتحٌ وطيّ القسم الفرعيّ (المالك ٢٢ نوفمبر: «الأقسام الفرعيّة خلّيها مقفولة — المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+class RpFold {
+  const RpFold({required this.open, required this.onToggle});
+  final bool open;
+  final VoidCallback onToggle;
+}
+
 class RpTitle extends StatelessWidget {
-  const RpTitle({super.key, required this.icon, required this.title, this.tone = RpTone.brand, this.trailing});
+  const RpTitle({super.key, required this.icon, required this.title, this.tone = RpTone.brand, this.trailing, this.fold});
   final IconData icon;
   final String title;
   final RpTone tone;
   final Widget? trailing;
 
+  /// قسمٌ يُطوى: العنوان كلّه لمسة، وسهمٌ يدور.
+  final RpFold? fold;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Row(
+    final row = Row(
       children: [
         RpIconBox(icon: icon, tone: tone, size: 28),
         const SizedBox(width: Sp.sm),
@@ -277,8 +287,18 @@ class RpTitle extends StatelessWidget {
           child: Text(title, style: AppType.cardTitleBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         if (trailing != null) ...[const SizedBox(width: Sp.sm), trailing!],
+        if (fold != null) ...[
+          const SizedBox(width: Sp.xs),
+          AnimatedRotation(
+            turns: fold!.open ? 0.5 : 0,
+            duration: const Duration(milliseconds: 180),
+            child: Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textMid),
+          ),
+        ],
       ],
     );
+    if (fold == null) return row;
+    return Semantics(button: true, expanded: fold!.open, child: _Tap(onTap: fold!.onToggle, radius: R.sm, child: row));
   }
 }
 
@@ -584,7 +604,8 @@ class RpCompanyTable extends StatelessWidget {
       this.outside,
       this.onTap,
       this.onRetry,
-      this.tones = const [RpTone.money, RpTone.debt, RpTone.brand]});
+      this.tones = const [RpTone.money, RpTone.debt, RpTone.brand],
+      this.fold});
   final List<RpCompanyLine> lines;
   final ValueChanged<RpCompany>? onTap;
   final ValueChanged<RpCompany>? onRetry;
@@ -601,6 +622,9 @@ class RpCompanyTable extends StatelessWidget {
   /// ألوان الأعمدة الثلاثة (توزيع الباقات: عددٌ ثمّ إيرادٌ ثمّ ربح).
   final List<RpTone> tones;
 
+  /// قسمٌ فرعيّ يُطوى (المالك ٢٢ نوفمبر) — null = لا يُطوى.
+  final RpFold? fold;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -611,12 +635,16 @@ class RpCompanyTable extends StatelessWidget {
           RpTitle(
             icon: LucideIcons.building2,
             title: 'حسب الشركة',
-            // سطران عند الضيق (320) — لا يزاحم العنوان حتى يُقصّ
-            trailing: Flexible(
-              child: Text('لمسة على شركة تحصر التقرير عليها',
-                  style: AppType.micro(color: AppColors.textLow), maxLines: 2, textAlign: TextAlign.end),
-            ),
+            // سطران عند الضيق (320) — لا يزاحم العنوان حتى يُقصّ؛ ومطويّاً لا شركات تُلمس فلا تلميح
+            trailing: (fold?.open ?? true)
+                ? Flexible(
+                    child: Text('لمسة على شركة تحصر التقرير عليها',
+                        style: AppType.micro(color: AppColors.textLow), maxLines: 2, textAlign: TextAlign.end),
+                  )
+                : null,
+            fold: fold,
           ),
+          if (fold?.open ?? true) ...[
           const SizedBox(height: Sp.md),
           _row(
             name: const SizedBox.shrink(),
@@ -658,6 +686,7 @@ class RpCompanyTable extends StatelessWidget {
                 ],
               ),
             ),
+          ],
           ],
         ],
       ),
@@ -1031,7 +1060,7 @@ class RpTrendCard extends StatelessWidget {
     this.aTone = RpTone.money,
     this.bTone = RpTone.debt,
     this.monthly = false,
-  });
+    this.fold});
 
   final List<RpTrendPoint> points;
   final String title;
@@ -1055,6 +1084,9 @@ class RpTrendCard extends StatelessWidget {
     final d = points[i].day;
     return i == 0 || d == 1 || d % 5 == 0;
   }
+
+  /// قسمٌ فرعيّ يُطوى (المالك ٢٢ نوفمبر) — null = لا يُطوى.
+  final RpFold? fold;
 
   @override
   Widget build(BuildContext context) {
@@ -1094,7 +1126,9 @@ class RpTrendCard extends StatelessWidget {
                 if (withB) ...[const SizedBox(width: Sp.md), _legend(bLabel!, bTone.fg)],
               ],
             ),
+            fold: fold,
           ),
+          if (fold?.open ?? true) ...[
           const SizedBox(height: Sp.md),
           SizedBox(
             height: 170,
@@ -1153,6 +1187,7 @@ class RpTrendCard extends StatelessWidget {
               ),
             ),
           ),
+          ],
         ],
       ),
     );
@@ -1200,7 +1235,7 @@ class RpBreakdownCard extends StatelessWidget {
     this.icon = LucideIcons.chartPie,
     this.onShare,
     this.empty = 'لا حركات بهذه الفترة',
-  });
+    this.fold});
 
   /// نصّ البطاقة بلا سطور («لا ديون أخرى متبقّية» لعمر الدين).
   final String empty;
@@ -1230,6 +1265,9 @@ class RpBreakdownCard extends StatelessWidget {
   /// العدد هو الرقم البارز لا المال (الجلسات) — المال لا يُعرض.
   final bool countOnly;
 
+  /// قسمٌ فرعيّ يُطوى (المالك ٢٢ نوفمبر) — null = لا يُطوى.
+  final RpFold? fold;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -1237,7 +1275,8 @@ class RpBreakdownCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          RpTitle(icon: icon, title: title, tone: RpTone.brand),
+          RpTitle(icon: icon, title: title, tone: RpTone.brand, fold: fold),
+          if (fold?.open ?? true) ...[
           const SizedBox(height: Sp.md),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1284,6 +1323,7 @@ class RpBreakdownCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
           ],
         ],
       ),
@@ -1355,6 +1395,40 @@ class RpBreakdownCard extends StatelessWidget {
 
 // ═══════════════════════════════ الحركات ═══════════════════════════════
 
+/// حقل بحث الحركات: يبدأ بنصّ الشاشة ([RpRowsCard.query]) ثمّ يملك نصّه.
+class _RpSearchField extends StatefulWidget {
+  const _RpSearchField({required this.initial, required this.hint, required this.onChanged});
+  final String initial;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_RpSearchField> createState() => _RpSearchFieldState();
+}
+
+class _RpSearchFieldState extends State<_RpSearchField> {
+  late final _c = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: _c,
+        onChanged: widget.onChanged,
+        style: AppType.body(color: AppColors.textHi),
+        decoration: InputDecoration(
+          isCollapsed: true,
+          border: InputBorder.none,
+          hintText: widget.hint,
+          hintStyle: AppType.body(color: AppColors.textPlaceholder),
+        ),
+      );
+}
+
 class RpRowsCard extends StatelessWidget {
   const RpRowsCard(
       {super.key,
@@ -1367,7 +1441,9 @@ class RpRowsCard extends StatelessWidget {
       this.empty,
       this.searchHint = 'ابحث باسم المشترك أو يوزره أو رقمه',
       this.title = 'الحركات',
-      this.unit = 'حركة'});
+      this.unit = 'حركة',
+      this.query = '',
+      this.fold});
   final int total;
   final List<RpDay> days;
 
@@ -1391,9 +1467,17 @@ class RpRowsCard extends StatelessWidget {
   /// نصّ القائمة الفارغة.
   final String? empty;
 
+  /// قسمٌ فرعيّ يُطوى (المالك ٢٢ نوفمبر) — null = لا يُطوى.
+  final RpFold? fold;
+
+  /// نصّ البحث الحاليّ عند الشاشة: الحقل يُبنى من جديد حين يُفتح القسم بعد طيّه فيحمله (لا حقلٌ فارغ والقائمة محصورةٌ ببحثٍ
+  /// لا يُرى)، وما دام القسم مطويّاً يُذكر البحث تحت عنوانه.
+  final String query;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final folded = !(fold?.open ?? true);
     return RpCard(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
       child: Column(
@@ -1404,7 +1488,13 @@ class RpRowsCard extends StatelessWidget {
             title: title,
             tone: RpTone.neutral,
             trailing: Text('${formatIQD(total)} $unit', style: AppType.pillBold(color: AppColors.textMid)),
+            fold: fold,
           ),
+          if (folded && query.trim().isNotEmpty) ...[
+            const SizedBox(height: Sp.x6),
+            Text('البحث: «${query.trim()}»', style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 2),
+          ],
+          if (!folded) ...[
           const SizedBox(height: Sp.md),
           Container(
             height: H.search,
@@ -1422,16 +1512,7 @@ class RpRowsCard extends StatelessWidget {
                   child: onSearch == null
                       ? Text(searchHint,
                           style: AppType.body(color: AppColors.textPlaceholder), maxLines: 1, overflow: TextOverflow.ellipsis)
-                      : TextField(
-                          onChanged: onSearch,
-                          style: AppType.body(color: AppColors.textHi),
-                          decoration: InputDecoration(
-                            isCollapsed: true,
-                            border: InputBorder.none,
-                            hintText: searchHint,
-                            hintStyle: AppType.body(color: AppColors.textPlaceholder),
-                          ),
-                        ),
+                      : _RpSearchField(initial: query, hint: searchHint, onChanged: onSearch!),
                 ),
               ],
             ),
@@ -1461,6 +1542,7 @@ class RpRowsCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
           ],
         ],
       ),

@@ -82,9 +82,16 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
   bool get _merged => MergedMode.active.value;
   DateTime get _now => PackageDistV2Screen.clock();
 
+  /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+  late final _folds = RpFolds(_id, const {'breakdown': true});
+  RpFold _fold(String s) => _folds.fold(s, setState);
+
   @override
   void initState() {
     super.initState();
+    unawaited(_folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
     unawaited(_start());
@@ -677,6 +684,7 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
     final cap = _tabAll ? ordered.length : _cap;
     final shown = ordered.take(cap).toList();
     out.add(RpBreakdownCard(
+      fold: _fold('breakdown'),
       title: 'pkgdist.packages'.tr(),
       icon: LucideIcons.package,
       tabs: [for (final x in tabs) _tabLabel(x)],
@@ -760,6 +768,7 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
       }
     }
     return RpCompanyTable(
+      fold: _fold('companies'),
       heads: const ['التفعيلات', 'الإيراد', 'الربح'],
       tones: const [RpTone.info, RpTone.money, RpTone.brand],
       lines: lines,

@@ -70,9 +70,16 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
   DateTime get _now => ManagerDebtsV2Screen.clock();
   bool get _all => _f!.range.preset == RpPreset.all;
 
+  /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+  late final _folds = RpFolds(_id, const {});
+  RpFold _fold(String s) => _folds.fold(s, setState);
+
   @override
   void initState() {
     super.initState();
+    unawaited(_folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
     unawaited(_start());
@@ -516,6 +523,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     final cap = _tabAll ? shares.length : 6;
     final age = _tabs[_tab.clamp(0, _tabs.length - 1)] == _ageTab;
     parts.add(RpBreakdownCard(
+      fold: _fold('breakdown'),
       tabs: _tabs,
       selected: _tab.clamp(0, _tabs.length - 1),
       tone: age ? RpTone.debt : RpTone.money,
@@ -533,6 +541,8 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       onMore: () => setState(() => _tabAll = true),
     ));
     parts.add(RpRowsCard(
+      fold: _fold('rows'),
+      query: _q,
       total: events.length,
       days: ManagerDebtsView.days(events, companyOf: _merged ? _coOf : null, limit: _visible),
       more: events.length > _visible ? 'عرض المزيد (${events.length - _visible})' : null,
@@ -575,6 +585,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     }
     final inc = [for (final l in lines) if (l.state == RpCompanyState.ok) l];
     return RpCompanyTable(
+      fold: _fold('companies'),
       heads: const ['متبقّي SAS', 'متبقّي أخرى', 'الإجمالي'],
       lines: lines,
       total: [

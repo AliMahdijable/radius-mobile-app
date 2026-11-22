@@ -18,6 +18,7 @@ import '../../desktop/desk_widgets.dart';
 import '../widgets/report_export.dart';
 import '../widgets/report_permission_gate.dart';
 import 'report_kit.dart';
+import 'report_prefs.dart';
 
 // تقريرا ايرث لنك على الشكل الموحّد (٢٢ نوفمبر — بند المقترح: «كشف حساب المشترك، وتقريرا ايرث لنك: نفس الشكل الموحّد»):
 // «استخدام التجريبيّ» و«المشتركون حسب الباقة». حالٌ الآن لا فترة (الخادم يحدّده) ⇒ بلا شريط فترة. «كل الشركات»: شركات ايرث لنك
@@ -46,6 +47,10 @@ mixin _ElLoad<W extends StatefulWidget, T> on State<W> {
 
   bool get merged => MergedMode.active.value;
 
+  /// معرّف التقرير لحفظ ما طُوي من أقسامه (المالك ٢٢ نوفمبر: «الفرعيّة هو ينقر عليها ويظهرها»).
+  String get reportId;
+  late final folds = RpFolds(reportId, const {});
+
   /// ({rows, error}) — error غير null ⇒ تعذّرت.
   Future<({List<T> rows, String? error})> fetch();
 
@@ -55,6 +60,9 @@ mixin _ElLoad<W extends StatefulWidget, T> on State<W> {
 
   void startLoad() {
     MergedMode.active.addListener(_onMerged);
+    unawaited(folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     unawaited(load());
   }
 
@@ -164,6 +172,7 @@ mixin _ElLoad<W extends StatefulWidget, T> on State<W> {
     }
     final ok = [for (final l in lines) if (l.state == RpCompanyState.ok) l];
     return RpCompanyTable(
+      fold: folds.fold('companies', setState),
       heads: heads,
       tones: tones,
       lines: lines,
@@ -266,6 +275,9 @@ class ElTestUsageV2Screen extends StatefulWidget {
 class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTestUsageV2Screen, ElTestUsageRow> {
   static const _pageSize = 40;
   String _q = '';
+
+  @override
+  String get reportId => 'el_test_usage';
   int _visible = _pageSize;
 
   @override
@@ -382,6 +394,7 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
       notes: [if (failed.isNotEmpty) 'merged.not_in_sum'.trm(args: [failed.map((n) => '«$n»').join('، ')])],
     ));
     parts.add(RpRowsCard(
+      query: _q,
       total: rows.length,
       days: _days(rows),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
@@ -414,6 +427,9 @@ class ElByPackageV2Screen extends StatefulWidget {
 class _ElByPackageV2State extends State<ElByPackageV2Screen> with _ElLoad<ElByPackageV2Screen, ElPackageCount> {
   static const _cap = 12;
   bool _all = false;
+
+  @override
+  String get reportId => 'el_by_package';
 
   @override
   void initState() {

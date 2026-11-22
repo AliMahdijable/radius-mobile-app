@@ -97,9 +97,16 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
   bool get _todayOnly => !_canAll && _canToday;
   String get _perm => _canAll || !_canToday ? 'reports.activations' : 'reports.daily_activations';
 
+  /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+  late final _folds = RpFolds(_id, const {});
+  RpFold _fold(String s) => _folds.fold(s, setState);
+
   @override
   void initState() {
     super.initState();
+    unawaited(_folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
     unawaited(_start());
@@ -765,6 +772,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     final trend = ActivationsView.trend(v.rows, f.range);
     if (trend.length > 1) {
       parts.add(RpTrendCard(
+        fold: _fold('trend'),
         title: f.range.days > 62 ? 'العدد شهراً بشهر' : 'العدد يوماً بيوم',
         monthly: f.range.days > 62,
         points: trend,
@@ -777,6 +785,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     final shares = _breakdown(v);
     final cap = _tabAll ? shares.length : 6;
     parts.add(RpBreakdownCard(
+      fold: _fold('breakdown'),
       tabs: _tabs,
       selected: _tab.clamp(0, _tabs.length - 1),
       tone: RpTone.brand,
@@ -790,6 +799,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     ));
     final rows = ActivationsView.search(v.rows, _q);
     parts.add(RpRowsCard(
+      fold: _fold('rows'),
+      query: _q,
       total: rows.length,
       days: ActivationsView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
@@ -838,6 +849,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
         if (l.state == RpCompanyState.ok) l,
     ];
     return RpCompanyTable(
+      fold: _fold('companies'),
       heads: const ['نقداً', 'بالدين', 'الحركات'],
       lines: lines,
       // مالٌ مجهولٌ في شركةٍ داخلة ⇒ المجموع «—» لا جمع المعروف وحده

@@ -21,6 +21,7 @@ import '../../desktop/desk_widgets.dart';
 import '../widgets/report_export.dart';
 import '../widgets/report_permission_gate.dart';
 import 'report_kit.dart';
+import 'report_prefs.dart';
 
 /// «الجلسات» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»): المتّصلون الآن أو سجلّ الجلسات من الساس (أحدث 2000 صفّ —
 /// الساس لا يعطي سجلّاً بفترة)، البحث باليوزر/IP/MAC من الخادم، والشركات و«حسب الشركة»، والأعداد والأحجام، و«قسّم حسب» المدير/اليوم،
@@ -75,9 +76,16 @@ class _SessionsV2State extends State<SessionsV2Screen> {
 
   bool get _merged => MergedMode.active.value && widget.initialUsername == null;
 
+  /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
+  late final _folds = RpFolds('sessions', const {'rows': true});
+  RpFold _fold(String s) => _folds.fold(s, setState);
+
   @override
   void initState() {
     super.initState();
+    unawaited(_folds.load().then((_) {
+      if (mounted) setState(() {});
+    }));
     final u = widget.initialUsername?.trim() ?? '';
     if (u.isNotEmpty) {
       _online = false;
@@ -465,6 +473,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
     };
     final cap = _tabAll ? shares.length : 6;
     parts.add(RpBreakdownCard(
+      fold: _fold('breakdown'),
       tabs: _tabs,
       selected: _tab.clamp(0, _tabs.length - 1),
       tone: RpTone.brand,
@@ -485,6 +494,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
       ]));
     }
     parts.add(RpRowsCard(
+      fold: _fold('rows'),
       total: v.rows.length,
       days: _days(v.rows, v.co, limit: _visible),
       more: v.rows.length > _visible ? 'عرض المزيد (${v.rows.length - _visible})' : null,
@@ -556,6 +566,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
     }
     final inc = [for (final l in lines) if (l.state == RpCompanyState.ok) l];
     return RpCompanyTable(
+      fold: _fold('companies'),
       heads: const ['الجلسات', 'المشتركون', 'متّصل'],
       lines: lines,
       total: [
