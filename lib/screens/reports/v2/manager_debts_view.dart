@@ -4,6 +4,7 @@ import '../../../api/manager_debts_api.dart';
 import '../../../api/manager_movements_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/ar_date.dart';
+import '../../../core/util/server_time.dart';
 import '../../../core/util/format.dart';
 import 'report_kit.dart';
 
@@ -166,7 +167,6 @@ class ManagerDebtsView {
 
   static RpRow row(MgrEvent e, {RpCompany? company}) {
     final meta = e.meta;
-    String two(int n) => n.toString().padLeft(2, '0');
     final t = e.date.toLocal();
     return RpRow(
       icon: switch (e.kind) {
@@ -186,7 +186,7 @@ class ManagerDebtsView {
       ].join(' · '),
       amount: e.amount == 0 ? null : e.amount.abs(),
       negative: meta.debit && e.amount != 0,
-      time: '${two(t.hour)}:${two(t.minute)}',
+      time: clock12Ar(t),
       company: company,
     );
   }

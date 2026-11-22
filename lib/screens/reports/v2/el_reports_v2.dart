@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/company_route.dart';
 import '../../../api/earthlink_api.dart';
 import '../../../api/merged_dashboard_api.dart';
+import '../../../core/util/server_time.dart';
 import '../../../core/util/format.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
@@ -365,7 +366,7 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
             if (merged) coOf(r.key)?.name ?? '',
             r.row.name,
             r.row.username ?? '',
-            (r.row.date ?? '').replaceFirst('T', ' '),
+            exportLocalAr(r.row.date),
             r.row.usage == null ? '' : '${r.row.usage}',
           ],
       ],

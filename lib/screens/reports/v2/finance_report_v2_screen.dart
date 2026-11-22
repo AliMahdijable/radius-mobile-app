@@ -534,7 +534,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
             l.userUsername ?? '',
             l.amount == 0 ? '' : l.amount.toString(),
             if (showCost) l.packageCost == null ? '' : FinanceLogs.plainNumber(l.packageCost!),
-            exportTime(l.createdAt),
+            exportTimeAr(l.createdAt),
             (l.actionDescription ?? '').replaceAll('\n', ' '),
             arabicActionLabel(l.actionType, l.actionDescription ?? ''),
             l.actingEmployeeFullName ?? l.adminUsername ?? '',

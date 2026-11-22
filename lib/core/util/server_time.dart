@@ -88,6 +88,35 @@ String exportTime(String? raw) {
   return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
 }
 
+/// الساعة بنظام ١٢ وبالعربيّة (المالك ٢٢ نوفمبر: «الأوقات خلّي صباحاً ومساءً»): 19:34 ⇒ «7:34 مساءً»، 00:05 ⇒ «12:05 صباحاً»،
+/// 12:30 ⇒ «12:30 مساءً». يُعرض بسطرٍ RTL (الرقم ثمّ الكلمة) — لا داخل اتّجاهٍ LTR وإلّا انقلبت الكلمة قبل الرقم.
+String clock12Ar(DateTime t) {
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  return '$h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'صباحاً' : 'مساءً'}';
+}
+
+/// «2026-11-07 9:21 مساءً» — التاريخ ثمّ [clock12Ar] لتصدير التقارير الموحّدة.
+String stampAr(DateTime t) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${clock12Ar(t)}';
+}
+
+/// [exportTime] بساعة ١٢ ([stampAr]) — وقتٌ من قاعدتنا (UTC) لتصدير التقارير الموحّدة. تاريخٌ وحده يبقى، وما لا يُقرأ كما جاء.
+String exportTimeAr(String? raw) {
+  final s = raw?.trim() ?? '';
+  if (s.isEmpty || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return s;
+  final t = parseServerUtc(s);
+  return t == null ? s : stampAr(t);
+}
+
+/// وقتٌ **من الساس أو ايرث لنك** (بتوقيت بغداد، بلا منطقة) للتصدير بساعة ١٢ — تاريخٌ وحده يبقى، وما لا يُقرأ كما جاء.
+String exportLocalAr(String? raw) {
+  final s = raw?.trim() ?? '';
+  if (s.isEmpty || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return s;
+  final t = parseSasLocal(s);
+  return t == null ? s : stampAr(t);
+}
+
 /// يقرأ تاريخاً **من الساس** — وهو بتوقيت بغداد.
 ///
 /// يُترك كما هو عمداً: الأجهزة في العراق، فقراءتُه محلّيّاً صحيحة.

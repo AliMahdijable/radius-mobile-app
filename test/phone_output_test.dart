@@ -156,6 +156,24 @@ void main() {
     expect(exportTime(''), '');
     expect(exportTime('غير معروف'), 'غير معروف');
   });
+
+  test('٥ب الأوقات صباحاً ومساءً (المالك ٢٢ نوفمبر): ساعة ١٢ بالعربيّة في التقارير الموحّدة وتصديرها', () {
+    expect(clock12Ar(DateTime(2026, 11, 22, 19, 34)), '7:34 مساءً');
+    expect(clock12Ar(DateTime(2026, 11, 22, 0, 5)), '12:05 صباحاً');
+    expect(clock12Ar(DateTime(2026, 11, 22, 12, 30)), '12:30 مساءً');
+    expect(clock12Ar(DateTime(2026, 11, 22, 11, 59)), '11:59 صباحاً');
+    expect(clock12Ar(DateTime(2026, 11, 22, 23, 35)), '11:35 مساءً');
+    expect(stampAr(DateTime(2026, 11, 7, 9, 3)), '2026-11-07 9:03 صباحاً');
+    final t = DateTime.parse('2026-11-07T21:21:56.000Z').toLocal();
+    expect(exportTimeAr('2026-11-07T21:21:56.000Z'), stampAr(t));
+    expect(exportTimeAr('2026-11-07'), '2026-11-07', reason: 'الصرفيات بتاريخٍ وحده');
+    expect(exportTimeAr(''), '');
+    expect(exportTimeAr('غير معروف'), 'غير معروف');
+    expect(exportLocalAr('2026-11-22 19:34:00'), '2026-11-22 7:34 مساءً', reason: 'الساس بتوقيت بغداد كما هو');
+    expect(exportLocalAr('2026-11-22T00:05:00'), '2026-11-22 12:05 صباحاً');
+    expect(exportLocalAr('2026-11-22'), '2026-11-22');
+    expect(exportLocalAr(null), '');
+  });
   testWidgets('٦ الصورة على خلفيّةٍ بيضاء: الشفّاف يصير أبيض والحبر يبقى', (t) async {
     late List<int> corner, mid;
     await t.runAsync(() async {

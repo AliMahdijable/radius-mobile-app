@@ -438,7 +438,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
             r.userFullName ?? r.targetName ?? r.userUsername ?? '',
             r.userUsername ?? '',
             ActivityLogView.moneyOf(r) == null ? '' : '${ActivityLogView.moneyOf(r)}',
-            exportTime(r.createdAt),
+            exportTimeAr(r.createdAt),
             (r.actionDescription ?? '').replaceAll('\n', ' '),
             arabicActionLabel(r.actionType, r.actionDescription ?? ''),
             ActivityLogView.actorOf(r),

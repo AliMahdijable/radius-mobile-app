@@ -424,6 +424,11 @@ void main() {
         final d = VisualDevice('', Size(w, 2600), 2, dark: dark);
         await pumpVisual(t, d, home: (_) => const ManagerDebtsV2Screen());
         await settleAsync(t);
+        // مطويّاً كما يفتحه الوكيل أوّل مرّة، ثمّ مفتوحاً (الحركات بأوقاتها صباحاً/مساءً على الضيّق)
+        await shot(t, '${id}_folded', d);
+        await unfold(t, RpBreakdownCard);
+        await unfold(t, RpRowsCard);
+        await t.scrollUntilVisible(find.byType(RpHeroKpi), -600, scrollable: find.byType(Scrollable).first);
         await shot(t, id, d);
       } finally {
         await down(t);
@@ -445,6 +450,11 @@ void main() {
         final d = VisualDevice('', Size(w, 2800), 2);
         await pumpVisual(t, d, home: (_) => const ManagerDebtsV2Screen());
         await settleAsync(t);
+        // مطويّاً كما يفتحه الوكيل أوّل مرّة، ثمّ مفتوحاً (الحركات بأوقاتها صباحاً/مساءً على الضيّق)
+        await shot(t, '${id}_folded', d);
+        await unfold(t, RpBreakdownCard);
+        await unfold(t, RpRowsCard);
+        await t.scrollUntilVisible(find.byType(RpHeroKpi), -600, scrollable: find.byType(Scrollable).first);
         await shot(t, id, d);
       } finally {
         await down(t);

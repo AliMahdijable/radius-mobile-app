@@ -1614,10 +1614,8 @@ class RpRowsCard extends StatelessWidget {
                   textDirection: TextDirection.ltr,
                   child: Text(r.trailing!, style: AppType.microBold(color: r.tone.fg), maxLines: 1),
                 ),
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(r.time, style: AppType.micro(color: AppColors.textLow)),
-              ),
+              // «7:34 مساءً» بسطرٍ RTL: الرقم ثمّ الكلمة (LTR كان يقلبها «مساءً 7:34»)
+              Text(r.time, style: AppType.micro(color: AppColors.textLow), maxLines: 1),
             ],
           ),
         ],

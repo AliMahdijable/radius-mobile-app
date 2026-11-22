@@ -232,7 +232,6 @@ class _SessionsV2State extends State<SessionsV2Screen> {
 
   RpRow _row(SessionRow s, {RpCompany? company}) {
     final t = parseSasLocal((s.startedAt ?? '').trim());
-    String two(int n) => n.toString().padLeft(2, '0');
     return RpRow(
       icon: s.isOnline ? LucideIcons.wifi : LucideIcons.wifiOff,
       tone: s.isOnline ? RpTone.money : RpTone.neutral,
@@ -244,7 +243,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
       ].join(' · '),
       amount: null,
       trailing: s.bytesIn > 0 || s.bytesOut > 0 ? '↓${bytes(s.bytesIn)}  ↑${bytes(s.bytesOut)}' : null,
-      time: t == null ? '' : '${two(t.hour)}:${two(t.minute)}',
+      time: t == null ? '' : clock12Ar(t),
       company: company,
     );
   }
@@ -320,8 +319,8 @@ class _SessionsV2State extends State<SessionsV2Screen> {
           s.userManager ?? '',
           bytes(s.bytesIn),
           bytes(s.bytesOut),
-          s.startedAt ?? '',
-          s.endedAt ?? '',
+          exportLocalAr(s.startedAt),
+          exportLocalAr(s.endedAt),
           s.isOnline ? 'subscribers.status_online'.tr() : 'subscribers.status_expired'.tr(),
         ],
     ];

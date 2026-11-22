@@ -519,7 +519,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
               r.packageName ?? '',
               amount == null || amount == 0 ? '' : '$amount',
               k == ActKind.cash && r.partialUnpaid > 0 ? '${r.partialUnpaid}' : '',
-              exportTime(r.createdAt),
+              exportTimeAr(r.createdAt),
               ActivationsView.actorOf(r),
             ];
           })(),

@@ -167,7 +167,6 @@ class ActivationsView {
     final k = kindOf(r);
     final m = moneyOf(r);
     final t = timeOf(r);
-    String two(int n) => n.toString().padLeft(2, '0');
     final amount = k == ActKind.debt ? m.debt : m.cash;
     final detail = [
       kindLabel(k),
@@ -191,7 +190,7 @@ class ActivationsView {
       detail: detail,
       // التمديد والمزامَن من الساس بلا مال ⇒ بلا رقم؛ والمبلغ المجهول كذلك
       amount: k == ActKind.extend || k == ActKind.sas ? null : amount,
-      time: t == null || _dateOnly(r.createdAt) ? '' : '${two(t.hour)}:${two(t.minute)}',
+      time: t == null || _dateOnly(r.createdAt) ? '' : clock12Ar(t),
       company: company,
       cost: k == ActKind.cash && r.partialUnpaid > 0 ? 'منها بالدين ${formatIQD(r.partialUnpaid)}' : null,
       balanceAfter: r.balanceAfter,

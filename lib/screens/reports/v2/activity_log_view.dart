@@ -104,7 +104,6 @@ class ActivityLogView {
       _ => (LucideIcons.pencil, RpTone.neutral),
     };
     final tm = timeOf(r);
-    String two(int n) => n.toString().padLeft(2, '0');
     final detail = [
       desc.isNotEmpty ? desc : label,
       if (actorOf(r).isNotEmpty) actorOf(r),
@@ -116,7 +115,7 @@ class ActivityLogView {
       detail: detail,
       amount: moneyOf(r),
       negative: expenseTypes.contains(t) && (moneyOf(r) ?? 0) != 0,
-      time: tm == null || _dateOnly(r.createdAt) ? '' : '${two(tm.hour)}:${two(tm.minute)}',
+      time: tm == null || _dateOnly(r.createdAt) ? '' : clock12Ar(tm),
       company: company,
       balanceAfter: r.balanceAfter,
     );

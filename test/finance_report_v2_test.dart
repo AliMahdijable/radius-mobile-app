@@ -618,6 +618,15 @@ void main() {
         await unfold(t, RpRowsCard);
         expect(find.descendant(of: rows, matching: find.byType(TextField)), findsOneWidget);
         expect(find.descendant(of: rows, matching: find.text('زهراء محمود')), findsWidgets);
+        // الأوقات صباحاً ومساءً (المالك ٢٢ نوفمبر) وبسطرٍ RTL: الرقم ثمّ الكلمة
+        final clock = RegExp(r'^(1[0-2]|[1-9]):[0-5]\d (صباحاً|مساءً)$');
+        final times = find.descendant(of: rows, matching: find.byWidgetPredicate((w) => w is Text && clock.hasMatch(w.data ?? '')));
+        expect(times, findsWidgets);
+        for (final e in times.evaluate()) {
+          expect(Directionality.of(e), TextDirection.rtl, reason: (e.widget as Text).data);
+        }
+        expect(find.descendant(of: rows, matching: find.byWidgetPredicate((w) => w is Text && RegExp(r'^\d{2}:\d{2}$').hasMatch(w.data ?? ''))),
+            findsNothing, reason: 'لا وقت بساعة ٢٤');
         // البحث ثمّ الطيّ: يُذكر تحت العنوان، ويعود في الحقل حين يُفتح — لا قائمةٌ محصورةٌ ببحثٍ لا يُرى
         await t.enterText(find.descendant(of: rows, matching: find.byType(TextField)), 'زهراء');
         await t.pump(const Duration(milliseconds: 200));

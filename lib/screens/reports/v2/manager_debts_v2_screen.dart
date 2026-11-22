@@ -8,6 +8,7 @@ import '../../../api/company_route.dart';
 import '../../../api/manager_movements_api.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../core/util/ar_date.dart';
+import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_manager_debts.dart';
 import '../../../services/merged_mode.dart';
@@ -352,7 +353,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
           if (_merged) MergedMode.companyOf(e.companyKey ?? '')?.name ?? '',
           e.managerName,
           e.manager.username,
-          '${e.date.toLocal()}'.substring(0, 16),
+          stampAr(e.date.toLocal()),
           e.meta.label,
           e.amount == 0 ? '' : '${e.amount.abs().round()}',
           e.meta.debit ? '-' : '+',

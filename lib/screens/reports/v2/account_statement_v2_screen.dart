@@ -156,14 +156,13 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       _ => (LucideIcons.activity, RpTone.neutral),
     };
     final t = _time(r);
-    String two(int n) => n.toString().padLeft(2, '0');
     return RpRow(
       icon: icon,
       tone: tone,
       title: label,
       detail: [if (desc.isNotEmpty && desc != label) desc, if ((r.adminName ?? '').isNotEmpty) r.adminName!].join(' · '),
       amount: r.amount == 0 ? null : r.amount.abs(),
-      time: t == null ? '' : '${two(t.hour)}:${two(t.minute)}',
+      time: t == null ? '' : clock12Ar(t),
       balanceAfter: r.balanceAfter,
     );
   }
@@ -222,7 +221,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
           _name,
           widget.username,
           r.amount == 0 ? '' : '${r.amount}',
-          exportTime(r.createdAt),
+          exportTimeAr(r.createdAt),
           (r.description ?? '').replaceAll('\n', ' '),
           arabicActionLabel(r.actionType ?? '', r.description ?? ''),
           r.adminName ?? '',

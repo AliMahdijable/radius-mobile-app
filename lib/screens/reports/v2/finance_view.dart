@@ -211,7 +211,6 @@ class FinanceView {
       if (actor.isNotEmpty) actor,
     ].join(' · ');
     final t = timeOf(l);
-    String two(int n) => n.toString().padLeft(2, '0');
     final name = [l.userFullName, l.targetName, l.userUsername].firstWhere((s) => (s ?? '').trim().isNotEmpty, orElse: () => null);
     return RpRow(
       icon: icon,
@@ -220,7 +219,7 @@ class FinanceView {
       detail: detail,
       amount: l.amount.abs(),
       negative: negative && l.amount != 0,
-      time: t == null || _dateOnly(l.createdAt) ? '' : '${two(t.hour)}:${two(t.minute)}',
+      time: t == null || _dateOnly(l.createdAt) ? '' : clock12Ar(t),
       company: company,
       cost: showCost ? FinanceLogs.costLine(l) : null,
       balanceAfter: l.balanceAfter,
