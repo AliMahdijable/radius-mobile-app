@@ -232,17 +232,21 @@ Future<ResponseBody>? _elReply(String path, Future<ResponseBody> Function(Map<St
 }
 
 class _El implements HttpClientAdapter {
-  _El(this.inner, {this.old = false, this.off = false});
+  _El(this.inner, {this.old = false, this.off = false, this.unavailable = false});
   final HttpClientAdapter inner;
   final bool old;
 
   /// المفتاح مطفأٌ لصفحتها: access ⇒ {hasSubAdmins:false, enabled:false}.
   final bool off;
 
+  /// تعذّرت قراءة الحسابات التابعة: access ⇒ {hasSubAdmins:false, unavailable:true}.
+  final bool unavailable;
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
     Future<ResponseBody> ok(Map<String, Object?> body) async => _json(200, {'success': true, ...body});
     if (off && o.uri.path == '/api/admin/manager-debts/access') return ok({'hasSubAdmins': false, 'enabled': false});
+    if (unavailable && o.uri.path == '/api/admin/manager-debts/access') return ok({'hasSubAdmins': false, 'unavailable': true});
     return await _elReply(o.uri.path, ok, old: old) ?? inner.fetch(o, rs, cf);
   }
 
@@ -554,6 +558,20 @@ void main() {
       }
     });
   }
+
+  testWidgets('ايرث لنك وتعذّرت قراءة حساباتها التابعة (unavailable:true) ⇒ «تعذّر» مع «أعد»، لا «بلا مدراء فرعيّين»', (t) async {
+    ApiClient.dio.httpClientAdapter = _El(await visualSetUp(s1Owner), unavailable: true);
+    ManagerDebtsV2Screen.clock = () => _now;
+    try {
+      await open(t);
+      expect(find.text(kSubAdminsUnavailable), findsOneWidget);
+      expect(find.text('بلا مدراء فرعيّين'), findsNothing);
+      expect(find.byType(OutlinedButton), findsOneWidget, reason: '«أعد» — تعذّرٌ مؤقّت لا حال');
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
 
   testWidgets('كل الشركات + ايرث لنك: تُطلب بمفتاحها، «—» في عمودها ومجموع SAS للساس وحده، وأخراها في المجموع', (t) async {
     final srv = _MergedEl(await visualSetUp(s1bSasOwner));

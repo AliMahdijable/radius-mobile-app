@@ -12,6 +12,9 @@ const int kManagerMovementsCap = 300;
 /// ايرث لنك على خادمٍ لا يعرف ديون حساباتها التابعة بعد (لا علامة `sas_debt`).
 const String kElManagerDebtsNotYet = 'ديون مدراء ايرث لنك لم تُفتح بعد';
 
+/// الخادم لم يقرأ الحسابات التابعة الآن (access `unavailable: true`).
+const String kSubAdminsUnavailable = 'تعذّر جلب الحسابات التابعة الآن';
+
 /// حركات كلّ مدير: أقصى ما يعطيه الخادم (500 — `/api/admin/managers/:id/movements`)؛ مديرٌ بلغه قد تنقص أقدم حركاته فيُسمّى.
 const int kManagerMovementsLimit = 500;
 
@@ -81,6 +84,10 @@ Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
   if (access.body == null) return (data: null, error: access.error);
   // ايرث لنك والمفتاح مطفأٌ لصفحتها (`enabled: false`) ⇒ «لم تُفتح بعد» لا «بلا مدراء فرعيّين» ولها حساباتٌ تابعة
   if (earthlink && access.body!['enabled'] == false) return (data: null, error: kElManagerDebtsNotYet);
+  // تعذّرت قراءة الحسابات التابعة (`unavailable: true` — عقد d9 ٢٣ نوفمبر) ⇒ «تعذّرت» باسمها، لا «بلا مدراء فرعيّين»
+  if (access.body!['unavailable'] == true) {
+    return (data: null, error: access.body!['message']?.toString() ?? kSubAdminsUnavailable);
+  }
   if (access.body!['hasSubAdmins'] != true) {
     return (data: const CompanyManagerDebts(noSubAdmins: true), error: null);
   }
