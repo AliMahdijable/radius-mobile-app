@@ -128,6 +128,9 @@ class _Server implements HttpClientAdapter {
   /// شهرٌ مزدحم: السطور كلّها (الأحدث أوّلاً)، والخادم يرسل منها ما في الفترة بسقف 1000 — كالحقيقيّ.
   List<Map<String, Object?>>? month;
 
+  /// مدراء المفتوحة (/api/v2/managers) — null = الحاضنة.
+  List<Map<String, Object?>>? managers;
+
   List<Map<String, Object?>> _slice(Map<String, dynamic> q) {
     final lo = '${q['date_from']}', hi = '${q['date_to']}';
     final limit = int.tryParse('${q['limit_logs']}') ?? 50;
@@ -155,6 +158,7 @@ class _Server implements HttpClientAdapter {
       return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows, debt: debtFor.contains(key)), key);
     }
     if (key != null) return _json({'success': true, 'data': const []}, key);
+    if (managers != null && p == '/api/v2/managers') return _json({'success': true, 'data': managers}, null);
     return inner.fetch(o, body, cancel);
   }
 
@@ -498,6 +502,42 @@ void main() {
     }
 
     RpHeroKpi hero(WidgetTester t) => t.widget<RpHeroKpi>(find.byType(RpHeroKpi));
+
+    testWidgets('«+ الفرعيّين» على الشارة حين ضُمّوا فعلاً — بشجرة parent_id، ولا قبلها', (t) async {
+      for (final tree in [true, false]) {
+        await up(prefs: {
+          'report.v2.finance': jsonEncode({
+            'p': 'thisMonth',
+            'c': false,
+            'm': {
+              'open': ['101'],
+            },
+            's': true,
+            'mm': 'actor',
+            'ot': 'supernet:12',
+          }),
+        });
+        server.managers = [
+          {'id': 101, 'username': 'ali', if (tree) 'parent_id': null},
+          {'id': 102, 'username': 'sub1', if (tree) 'parent_id': 101},
+        ];
+        try {
+          await open(t);
+          final ids = '${server.finance.first.$2['user_ids']}'.split(',');
+          if (tree) {
+            expect(ids.toSet(), {'101', '102'}, reason: 'مع فرعيّه');
+            expect(find.textContaining('+ الفرعيّين'), findsOneWidget);
+          } else {
+            expect(ids, ['101']);
+            expect(find.textContaining('+ الفرعيّين'), findsNothing, reason: 'لا شجرة ⇒ لا فرعيّون ضُمّوا ⇒ لا وعد بهم');
+            expect(find.textContaining('المدير: ali'), findsOneWidget);
+          }
+          expect(t.takeException(), isNull);
+        } finally {
+          await down(t);
+        }
+      }
+    });
 
     testWidgets('شركة منفردة: هذا الشهر حتى اليوم ثمّ الأيّام نفسها من الشهر الماضي بسطرٍ واحد — والصافي وفرقه', (t) async {
       await up();

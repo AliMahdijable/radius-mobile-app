@@ -735,7 +735,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     for (final e in f.managers.entries) {
       if (e.value.isEmpty) continue;
       final names = [for (final id in e.value) _nameOf(e.key, id, manager: true)].join('، ');
-      final subs = !owner && f.withSubs ? ' + الفرعيّين' : '';
+      // «+ الفرعيّين» حين ضُمّوا فعلاً (الشجرة معروفة ولمن اختاره فرعيّون) — لا قبل أن يرسل الخادم parent_id
+      final subs = !owner && f.withSubs && (_actorIds(e.key)?.length ?? 0) > e.value.length ? ' + الفرعيّين' : '';
       out.add(RpChip('${owner ? 'مدير المشترك' : 'المدير'}: $names$subs${_groupName(e.key)}', onRemove: () {
         final m = {...f.managers}..remove(e.key);
         _apply(f.copyWith(managers: m));
