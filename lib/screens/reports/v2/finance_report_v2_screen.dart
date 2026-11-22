@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ import '../widgets/report_export.dart';
 import '../widgets/report_filters.dart';
 import '../widgets/report_permission_gate.dart';
 import '../widgets/scope_helper.dart';
+import 'finance_export.dart';
 import 'finance_view.dart';
 import 'report_kit.dart';
 import 'report_period.dart';
@@ -243,18 +245,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     _scopeIds ??= await loadScopeUserIds();
     if (f.managers.isNotEmpty) await _loadPeople([null]);
     if (!mounted || seq != _seq || _merged) return;
-    final ids = _actorIds(_open);
-    Future<({bool ok, FinanceReport? data, String? error})> fetch(RpRange r, int limit) => ReportsApi.finance(
-          from: r.from,
-          to: r.to,
-          userIds: ids ?? _scopeIds,
-          userManager: _ownerUsername(_open),
-          employeeId: _employeeId(_open),
-          recentLimit: limit,
-          includeArchived: _withArchive,
-          // كلفة الباقات (قرار ٢٠٢٦-١٠-١٨): لمالك الحساب وحده، ولساسٍ بعيد أو ايرث لنك — كالشاشة السابقة.
-          withPackageCost: !Perms.isEmployee && isCostBearingAdminId((_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
-        );
+    Future<({bool ok, FinanceReport? data, String? error})> fetch(RpRange r, int limit) => _fetchSingle(r.from, r.to, limit);
     final cur = await fetch(f.range, 2000);
     if (!mounted || seq != _seq || _merged) return;
     setState(() {
@@ -269,6 +260,23 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     if (!mounted || seq != _seq || _merged) return;
     setState(() => _prev = prev.ok ? prev.data : null);
   }
+
+  /// طلب الشركة المفتوحة بفلاترها الحاليّة — للفترة، ولمقارنتها، ولأجزاء التصدير الكامل ([_exportAll]).
+  Future<({bool ok, FinanceReport? data, String? error})> _fetchSingle(DateTime from, DateTime to, int limit) => ReportsApi.finance(
+        from: from,
+        to: to,
+        userIds: _actorIds(_open) ?? _scopeIds,
+        userManager: _ownerUsername(_open),
+        employeeId: _employeeId(_open),
+        recentLimit: limit,
+        includeArchived: _withArchive,
+        // كلفة الباقات (قرار ٢٠٢٦-١٠-١٨): لمالك الحساب وحده، ولساسٍ بعيد أو ايرث لنك — كالشاشة السابقة.
+        withPackageCost: !Perms.isEmployee && isCostBearingAdminId((_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
+      );
+
+  /// فلاتر شركةٍ في «كل الشركات» — طلبها وطلب مقارنتها وأجزاء تصديرها.
+  FinanceCompanyFilter _companyFilter(String key) =>
+      FinanceCompanyFilter(userIds: _actorIds(key), userManager: _ownerUsername(key), employeeId: _employeeId(key));
 
   List<MergedCompany> get _countable => MergedDashboardApi.countable();
 
@@ -302,7 +310,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       setState(() => _cos[c.key] = _Co(c, reason: MergedMode.noAccess('تقريرها')));
       return;
     }
-    final filter = FinanceCompanyFilter(userIds: _actorIds(c.key), userManager: _ownerUsername(c.key), employeeId: _employeeId(c.key));
+    final filter = _companyFilter(c.key);
     final r = await MergedFinanceApi.one(c, from: f.range.from, to: f.range.to, includeArchived: _withArchive, filter: filter);
     if (!mounted || seq != _seq) return;
     final reason = (!r.ok || r.data == null) ? (r.error ?? 'تعذّر جلب تقريرها') : MergedFinanceApi.gapReason(c, r.data!);
@@ -502,40 +510,177 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         'reports.col_executor'.tr(),
       ];
 
-  List<List<String>> _exportRows(List<FinanceLog> logs, bool showCost) {
-    final m = _merged ? _combined : null;
-    return [
-      for (final l in logs)
-        [
-          if (m != null) MergedMode.companyOf(m.logCompany[l])?.name ?? '',
-          l.userFullName ?? l.targetName ?? l.userUsername ?? '',
-          l.userUsername ?? '',
-          l.amount == 0 ? '' : l.amount.toString(),
-          if (showCost) l.packageCost == null ? '' : FinanceLogs.plainNumber(l.packageCost!),
-          exportTime(l.createdAt),
-          (l.actionDescription ?? '').replaceAll('\n', ' '),
-          arabicActionLabel(l.actionType, l.actionDescription ?? ''),
-          l.actingEmployeeFullName ?? l.adminUsername ?? '',
-        ],
-    ];
-  }
+  /// أوزان أعمدة الـPDF (مطلب 2026-07-12 كالشاشة السابقة): الاسم والوصف أعرض، النوع والمنفّذ أضيق.
+  List<double> _weights(bool showCost) => [
+        if (_merged) 1.4,
+        ...(showCost ? const [2.2, 1.4, 1.2, 1.2, 1.4, 2.6, 1.1, 1.3] : const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3]),
+      ];
+
+  List<List<String>> _exportRows(List<FinanceLog> logs, bool showCost, String? Function(FinanceLog) companyOf) => [
+        for (final l in logs)
+          [
+            if (_merged) MergedMode.companyOf(companyOf(l))?.name ?? '',
+            l.userFullName ?? l.targetName ?? l.userUsername ?? '',
+            l.userUsername ?? '',
+            l.amount == 0 ? '' : l.amount.toString(),
+            if (showCost) l.packageCost == null ? '' : FinanceLogs.plainNumber(l.packageCost!),
+            exportTime(l.createdAt),
+            (l.actionDescription ?? '').replaceAll('\n', ' '),
+            arabicActionLabel(l.actionType, l.actionDescription ?? ''),
+            l.actingEmployeeFullName ?? l.adminUsername ?? '',
+          ],
+      ];
 
   String get _exportSubtitle {
     final r = _f!.range;
     return '${r.name} · ${r.rangeText}';
   }
 
-  Future<void> _export(String how, List<FinanceLog> logs, bool showCost, {String title = ''}) {
+  /// رأس الملفّ: كلّ فلترٍ مختار سطراً (الشركات، المدير، الموظّف، النوع، البحث، الحركة الملموسة)، وعدد الحركات، وما لم يكتمل.
+  List<String> _exportDetails({required int count, String? drill, bool withSearch = true, List<String> gaps = const []}) {
+    final m = _merged ? _combined : null;
+    final q = _q.trim();
+    return [
+      if (m != null) 'الشركات: ${m.included.map((p) => p.company.name).join('، ')}',
+      if (m != null && m.parts.any((p) => !p.included))
+        'خارج الملفّ: ${[for (final p in m.parts) if (!p.included) '${p.company.name} (${p.reason ?? 'تعذّرت'})'].join('، ')}',
+      for (final c in _chips()) c.label,
+      if (drill != null) 'الحركات: $drill',
+      if (withSearch && q.isNotEmpty) 'بحث: «$q»',
+      'عدد الحركات: $count',
+      if (gaps.isNotEmpty) 'ناقص: ${gaps.join('؛ ')}',
+    ];
+  }
+
+  bool get _busy => _merged ? _cos.values.any((c) => c.loading) || _cos.isEmpty : _loading;
+
+  /// التصدير بالفلاتر المختارة حرفاً (المالك ٢٢ نوفمبر: «من يختار فلاتر … ويطبع أو ينقر إكسل أو PDF يطلع على حسب الفلاتر … وملف
+  /// الPDF جاي يظهر مرات مقصوص مو كامل»): كلّ حركات الفترة — ما قصّه سقف الخادم (1000 لكلّ طلب) يُجلب مقسوماً
+  /// ([FinanceExportLoader]) — ثمّ النوع، ثمّ حركات البطاقة الملموسة ([pick])، ثمّ البحث كما على الشاشة؛ ورأس الملفّ يسمّي الفلاتر.
+  Future<void> _exportAll(String how, {String title = '', bool Function(FinanceLog)? pick, String? drill, bool withSearch = true}) async {
+    final v = _view();
+    if (v == null) return;
+    if (_busy) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('انتظر حتى تكتمل الأرقام ثمّ صدّر')));
+      return;
+    }
+    final f = _f!;
+    final m = _merged ? _combined : null;
+    var all = v.allLogs;
+    String? Function(FinanceLog) companyOf = (l) => m?.logCompany[l];
+    final gaps = <String>[];
+    if (v.truncated) {
+      final full = await _loadFullLogs(f, m);
+      if (full == null || !mounted) return;
+      all = full.logs;
+      companyOf = (l) => full.companyOf[l];
+      gaps.addAll(full.gaps);
+    }
+    var logs = FinanceLogs.filter(all, f.types);
+    if (pick != null) logs = logs.where(pick).toList();
+    if (withSearch) logs = FinanceView.search(logs, _q);
     final t = title.isEmpty ? 'reports.financial'.tr() : title;
-    final rows = _exportRows(logs, showCost);
+    final rows = _exportRows(logs, v.showCost, companyOf);
+    final details = _exportDetails(count: rows.length, drill: drill, withSearch: withSearch, gaps: gaps);
     switch (how) {
       case 'pdf':
-        return ReportExportActions.pdf(context, title: t, subtitle: _exportSubtitle, columns: _columns, rows: rows, fileNameBase: 'financial');
+        return ReportExportActions.pdf(context,
+            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial');
       case 'excel':
-        return ReportExportActions.csv(context, title: t, subtitle: _exportSubtitle, columns: _columns, rows: rows, fileNameBase: 'financial');
+        return ReportExportActions.csv(context,
+            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, fileNameBase: 'financial');
       default:
         return ReportExportActions.sharePdf(context,
-            title: t, subtitle: _exportSubtitle, columns: _columns, rows: rows, fileNameBase: 'financial');
+            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial');
+    }
+  }
+
+  /// كلّ حركات الفترة لكلّ شركةٍ داخلة (المقصوصة وحدها تُطلب مقسومة) بنافذة تقدّمٍ تُلغى — null: أُلغي.
+  Future<({List<FinanceLog> logs, Map<FinanceLog, String?> companyOf, List<String> gaps})?> _loadFullLogs(
+      RpFilterValue f, MergedFinanceResult? m) async {
+    final progress = ValueNotifier<int>(0);
+    var cancel = false;
+    final dialog = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: ValueListenableBuilder<int>(
+                valueListenable: progress,
+                builder: (_, n, __) => Text(
+                  'الفترة فيها أكثر من ${PackageCostKpis.recentLogsServerCap} حركة — أجلبها كاملةً على أجزاء${n > 0 ? ' ($n)' : ''}…',
+                  style: AppType.body(color: AppColors.textHi),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              cancel = true;
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('إلغاء'),
+          ),
+        ],
+      ),
+    );
+    var closed = false;
+    unawaited(dialog.then((_) => closed = true));
+    try {
+      final logs = <FinanceLog>[];
+      final companyOf = LinkedHashMap<FinanceLog, String?>.identity();
+      final gaps = <String>[];
+      var requests = 0;
+      void tick(int _) => progress.value = ++requests;
+      if (m == null) {
+        final full = await FinanceExportLoader.load(
+          from: f.range.from,
+          to: f.range.to,
+          first: _cur!,
+          fetch: (a, b) => _fetchSingle(a, b, 2000),
+          onProgress: tick,
+          cancelled: () => cancel,
+        );
+        logs.addAll(full.logs);
+        gaps.addAll(full.gaps);
+      } else {
+        final tagged = <({FinanceLog log, int at, int order})>[];
+        var order = 0;
+        for (final p in m.included) {
+          final c = MergedMode.companyOf(p.company.key) ?? p.company;
+          final rep = p.report!;
+          final full = FinanceExportLoader.capped(rep) || rep.unavailableParts.contains('recent_logs')
+              ? await FinanceExportLoader.load(
+                  from: f.range.from,
+                  to: f.range.to,
+                  first: rep,
+                  fetch: (a, b) => MergedFinanceApi.one(c,
+                      from: a, to: b, includeArchived: _withArchive, filter: _companyFilter(c.key), recentLimit: 2000),
+                  onProgress: tick,
+                  cancelled: () => cancel,
+                )
+              : FinanceFullLogs(logs: rep.recentLogs, gaps: const [], requests: 0);
+          for (final l in full.logs) {
+            companyOf[l] = c.key;
+            tagged.add((log: l, at: FinanceView.timeOf(l)?.millisecondsSinceEpoch ?? 0, order: order++));
+          }
+          gaps.addAll([for (final g in full.gaps) '${c.name} $g']);
+        }
+        // الأحدث أوّلاً بين الشركات — والتعادل بترتيب الشركات ثمّ الخادم (كمجموع الشاشة)
+        tagged.sort((a, b) => a.at != b.at ? b.at.compareTo(a.at) : a.order.compareTo(b.order));
+        logs.addAll([for (final t in tagged) t.log]);
+      }
+      if (cancel) return null;
+      return (logs: logs, companyOf: companyOf, gaps: gaps);
+    } finally {
+      if (!closed && mounted) Navigator.of(context, rootNavigator: true).pop();
+      progress.dispose();
     }
   }
 
@@ -563,7 +708,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
           more: logs.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
           note: v.truncated ? 'من آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة' : null,
         ),
-        onExport: () => _export('share', logs, v.showCost, title: k.label),
+        onExport: () => _exportAll('share', title: k.label, pick: pick, drill: k.label, withSearch: false),
       ),
     );
   }
@@ -843,13 +988,15 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         _q = q;
         _visible = _page;
       }),
-      note: v.truncated ? 'تُعرض آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة — الأرقام أعلاه للفترة كلّها' : null,
+      note: v.truncated
+          ? 'تُعرض آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة — الأرقام أعلاه للفترة كلّها، والتصدير يجلبها كلّها'
+          : null,
       empty: _q.trim().isEmpty ? 'لا حركات بهذه الفترة' : 'لا حركة تطابق «${_q.trim()}»',
     ));
     parts.add(RpExportBar(
-      onPdf: () => _export('pdf', v.logs, v.showCost),
-      onExcel: () => _export('excel', v.logs, v.showCost),
-      onShare: () => _export('share', v.logs, v.showCost),
+      onPdf: () => _exportAll('pdf'),
+      onExcel: () => _exportAll('excel'),
+      onShare: () => _exportAll('share'),
     ));
     return _gapped(parts);
   }

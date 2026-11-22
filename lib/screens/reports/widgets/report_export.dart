@@ -116,19 +116,72 @@ class _ReportExportBarState extends State<ReportExportBar> {
 }
 
 /// أفعال التصدير نفسها لكلّ زرّ — شريط [ReportExportBar] وأزرار التقرير الموحّد (PDF · Excel · واتساب).
+/// ما يُصدَّر بالضبط — يلتقطه [ReportExportActions.debugSink] في الاختبار.
+@immutable
+class ReportExportRequest {
+  const ReportExportRequest({
+    required this.how,
+    required this.title,
+    this.subtitle,
+    this.details = const [],
+    required this.columns,
+    required this.rows,
+    this.columnWeights,
+  });
+
+  /// `csv` · `pdf` (طباعة) · `share` (الملفّ PDF للمشاركة).
+  final String how;
+  final String title;
+  final String? subtitle;
+
+  /// سطور الفلاتر تحت العنوان («المدير: علي»، «بحث: …»، «ناقص: …»).
+  final List<String> details;
+  final List<String> columns;
+  final List<List<String>> rows;
+  final List<double>? columnWeights;
+}
+
 class ReportExportActions {
   ReportExportActions._();
+
+  /// الاختبار: يُلتقط الطلب بدل المشاركة/الطباعة (لا منصّة في flutter test).
+  @visibleForTesting
+  static Future<void> Function(ReportExportRequest r)? debugSink;
+
+  /// سطور الرأس في ملفّ Excel: كلّ سطرٍ خليّةٌ وحده، ثمّ سطرٌ فارغ قبل الجدول — الملفّ يقول فلاتره.
+  static List<List<String>> csvTable({
+    required String title,
+    String? subtitle,
+    List<String> details = const [],
+    required List<String> columns,
+    required List<List<String>> rows,
+  }) =>
+      [
+        if (details.isNotEmpty) ...[
+          [title],
+          if (subtitle != null && subtitle.isNotEmpty) [subtitle],
+          for (final d in details) [d],
+          const <String>[],
+        ],
+        columns,
+        ...rows,
+      ];
 
   static Future<void> csv(
     BuildContext context, {
     required String title,
     String? subtitle,
+    List<String> details = const [],
     required List<String> columns,
     required List<List<String>> rows,
     String fileNameBase = 'report',
   }) async {
+    final sink = debugSink;
+    if (sink != null) {
+      return sink(ReportExportRequest(how: 'csv', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows));
+    }
     // CSV مع BOM لإجبار Excel يفتحه Unicode/UTF-8 (يعرض العربية صح).
-    final data = <List<String>>[columns, ...rows];
+    final data = csvTable(title: title, subtitle: subtitle, details: details, columns: columns, rows: rows);
     final csvString = const ListToCsvConverter().convert(data);
     final withBom = '\uFEFF$csvString';
 
@@ -155,15 +208,22 @@ class ReportExportActions {
     BuildContext context, {
     required String title,
     String? subtitle,
+    List<String> details = const [],
     required List<String> columns,
     required List<List<String>> rows,
     List<double>? columnWeights,
     String fileNameBase = 'report',
   }) async {
+    final sink = debugSink;
+    if (sink != null) {
+      return sink(ReportExportRequest(
+          how: 'pdf', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, columnWeights: columnWeights));
+    }
     try {
       final doc = await ReportPdf.build(
         title: title,
         subtitle: subtitle,
+        details: details,
         columns: columns,
         rows: rows,
         columnWeights: columnWeights,
@@ -188,15 +248,22 @@ class ReportExportActions {
     BuildContext context, {
     required String title,
     String? subtitle,
+    List<String> details = const [],
     required List<String> columns,
     required List<List<String>> rows,
     List<double>? columnWeights,
     String fileNameBase = 'report',
   }) async {
+    final sink = debugSink;
+    if (sink != null) {
+      return sink(ReportExportRequest(
+          how: 'share', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, columnWeights: columnWeights));
+    }
     try {
       final doc = await ReportPdf.build(
         title: title,
         subtitle: subtitle,
+        details: details,
         columns: columns,
         rows: rows,
         columnWeights: columnWeights,
@@ -325,6 +392,7 @@ class ReportPdf {
   static Future<pw.Document> build({
     required String title,
     String? subtitle,
+    List<String> details = const [],
     required List<String> columns,
     required List<List<String>> rows,
     List<double>? columnWeights,
@@ -361,6 +429,14 @@ class ReportPdf {
             pw.Align(
               alignment: pw.Alignment.centerRight,
               child: text(subtitle, pw.TextStyle(font: font, fontSize: 11, color: PdfColors.grey700)),
+            ),
+          ],
+          // الفلاتر المختارة سطراً سطراً — الملفّ المطبوع يقول ما فيه
+          for (final d in details) ...[
+            pw.SizedBox(height: 2),
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: text(d, pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey800)),
             ),
           ],
           pw.SizedBox(height: 12),

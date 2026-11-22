@@ -9,12 +9,14 @@ import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/core/util/ar_date.dart';
+import 'package:rad_mysvcs/screens/reports/v2/finance_export.dart';
 import 'package:rad_mysvcs/screens/reports/v2/finance_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/finance_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_prefs.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
+import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -57,8 +59,8 @@ Map<String, Object?> _companies() => {
       ],
     };
 
-/// تقريرٌ بمقياس [k]: الصافي عند ١ = 11,450,000 − 1,150,000 − 450,000 = 9,850,000.
-Map<String, Object?> _financeBody(double k) {
+/// تقريرٌ بمقياس [k]: الصافي عند ١ = 11,450,000 − 1,150,000 − 450,000 = 9,850,000. [logs] بدل السطور الستّة (شهرٌ مزدحم).
+Map<String, Object?> _financeBody(double k, {List<Map<String, Object?>>? logs}) {
   num r(num v) => (v * k / 1000).round() * 1000;
   Map<String, Object?> log(int id, String type, String desc, num amount, String first, String last, String at, {String? emp}) => {
         'id': id,
@@ -97,7 +99,7 @@ Map<String, Object?> _financeBody(double k) {
       'stacked': [
         {'action_type': 'SUBSCRIBER_ACTIVATE', 'count': 182, 'amount_sum': r(12600000)},
       ],
-      'recentLogs': [
+      'recentLogs': logs ?? [
         log(1, 'SUBSCRIBER_ACTIVATE', 'تفعيل نقدي — FTTH 50 ميغا', 35000, 'محمد', 'عبد الله', '2026-11-22 15:05:00'),
         log(2, 'BALANCE_DEDUCT', 'تسديد دين', 20000, 'سارة', 'علي', '2026-11-22 14:40:00', emp: 'زينب'),
         log(3, 'SUBSCRIBER_ACTIVATE', 'تفعيل غير نقدي — Gaming 100', 45000, 'حسن', 'كاظم', '2026-11-22 13:12:00'),
@@ -119,6 +121,19 @@ class _Server implements HttpClientAdapter {
   /// شركاتٌ يتعذّر تقريرها الآن.
   final failing = <String>{};
 
+  /// شهرٌ مزدحم: السطور كلّها (الأحدث أوّلاً)، والخادم يرسل منها ما في الفترة بسقف 1000 — كالحقيقيّ.
+  List<Map<String, Object?>>? month;
+
+  List<Map<String, Object?>> _slice(Map<String, dynamic> q) {
+    final lo = '${q['date_from']}', hi = '${q['date_to']}';
+    final limit = int.tryParse('${q['limit_logs']}') ?? 50;
+    final cap = limit < 1000 ? limit : 1000;
+    return [
+      for (final l in month!)
+        if ('${l['created_at']}'.compareTo(lo) >= 0 && '${l['created_at']}'.compareTo(hi) <= 0) l,
+    ].take(cap).toList();
+  }
+
   ResponseBody _json(Object body, String? key) => ResponseBody.fromString(jsonEncode(body), 200, headers: {
         Headers.contentTypeHeader: ['application/json'],
         if (key != null) 'x-company-key': [key],
@@ -132,7 +147,8 @@ class _Server implements HttpClientAdapter {
       finance.add((key, Map<String, dynamic>.from(o.queryParameters)));
       if (key != null && failing.contains(key)) return _json({'success': false, 'message': 'انتهت جلستها'}, key);
       final prev = o.queryParameters['limit_logs']?.toString() == '1';
-      return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1)), key);
+      final rows = month == null ? null : _slice(Map<String, dynamic>.from(o.queryParameters));
+      return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows), key);
     }
     if (key != null) return _json({'success': true, 'data': const []}, key);
     return inner.fetch(o, body, cancel);
@@ -351,6 +367,96 @@ void main() {
     });
   });
 
+  // ═══════════════════════════════ ٢ب) التصدير كاملاً ═══════════════════════════════
+
+  group('FinanceExportLoader', () {
+    // شهرٌ مزدحم: [perDay] حركة يوميّاً من ١ إلى ٢٢ نوفمبر، والخادم يرسل من الفترة الأحدثَ بسقف 1000 — كالحقيقيّ
+    List<FinanceLog> busy({int perDay = 60, Map<int, int> extra = const {}}) => [
+          for (var d = 22; d >= 1; d--)
+            for (var k = (perDay + (extra[d] ?? 0)) - 1; k >= 0; k--)
+              _log(d * 10000 + k, 'DEBT_PAY', 1000,
+                  at: '2026-11-${d.toString().padLeft(2, '0')} ${(6 + k ~/ 60 % 12).toString().padLeft(2, '0')}:${(k % 60).toString().padLeft(2, '0')}:00'),
+        ];
+    String key(DateTime d, {bool end = false}) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} ${end ? '23:59:59' : '00:00:00'}';
+    FinanceReport rep(List<FinanceLog> all, DateTime a, DateTime b) => FinanceReport(
+          kpis: const FinanceKPIs(),
+          recentLogs: all
+              .where((l) => l.createdAt.compareTo(key(a)) >= 0 && l.createdAt.compareTo(key(b, end: true)) <= 0)
+              .take(PackageCostKpis.recentLogsServerCap)
+              .toList(),
+        );
+    final from = DateTime(2026, 11, 1), to = DateTime(2026, 11, 22);
+
+    test('مقصوصٌ عند 1000 ⇒ يُجلب كاملاً بأجزاء، الأحدث أوّلاً، بلا تكرارٍ ولا نقص', () async {
+      final all = busy(); // 1320
+      final asked = <String>[];
+      final first = rep(all, from, to);
+      expect(first.recentLogs.length, 1000, reason: 'ما يصل اليوم للشهر كلّه');
+      final r = await FinanceExportLoader.load(
+        from: from,
+        to: to,
+        first: first,
+        fetch: (a, b) async {
+          asked.add('${_d(a)}–${_d(b)}');
+          return (ok: true, data: rep(all, a, b), error: null);
+        },
+      );
+      expect(r.logs.length, all.length);
+      expect([for (final l in r.logs) l.id], [for (final l in all) l.id], reason: 'الترتيب نفسه (الأحدث أوّلاً) بلا تكرار');
+      expect(r.complete, isTrue);
+      expect(r.requests, asked.length);
+      expect(asked, ['2026/11/12–2026/11/22', '2026/11/01–2026/11/11']);
+    });
+
+    test('غير مقصوص ⇒ ما وصل نفسه بلا أيّ طلب', () async {
+      final all = busy(perDay: 10);
+      var calls = 0;
+      final r = await FinanceExportLoader.load(
+          from: from, to: to, first: rep(all, from, to), fetch: (a, b) async => (ok: true, data: null, error: (calls++).toString()));
+      expect(r.logs.length, 220);
+      expect(calls, 0);
+      expect(r.complete, isTrue);
+    });
+
+    test('يومٌ وحده فوق 1000 ⇒ آخر 1000 منه ويُسمّى؛ وبقيّة الأيّام كاملة', () async {
+      final all = busy(perDay: 20, extra: {15: 1100});
+      final r = await FinanceExportLoader.load(
+          from: from, to: to, first: rep(all, from, to), fetch: (a, b) async => (ok: true, data: rep(all, a, b), error: null));
+      expect(r.gaps, ['2026/11/15: آخر 1000 حركة منه فقط']);
+      expect(r.logs.length, all.length - 120);
+      expect(r.logs.where((l) => l.createdAt.startsWith('2026-11-14')).length, 20);
+    });
+
+    test('جزءٌ تعذّر ⇒ يُسمّى بفترته ولا يُسقط غيره؛ وحدّ الطلبات يُسمّى ما بقي', () async {
+      final all = busy();
+      final r = await FinanceExportLoader.load(
+        from: from,
+        to: to,
+        first: rep(all, from, to),
+        fetch: (a, b) async =>
+            a.day == 1 ? (ok: false, data: null, error: 'انتهت الجلسة') : (ok: true, data: rep(all, a, b), error: null),
+      );
+      expect(r.gaps, ['2026/11/01 – 2026/11/11: تعذّر جلبها (انتهت الجلسة)']);
+      expect(r.logs.length, 660);
+      final capped = await FinanceExportLoader.load(
+          from: from, to: to, first: rep(all, from, to), maxRequests: 1, fetch: (a, b) async => (ok: true, data: rep(all, a, b), error: null));
+      expect(capped.gaps.single, startsWith('2026/11/01 – 2026/11/11: لم يُجلب'));
+      expect(capped.logs.length, 660);
+    });
+
+    test('الشركة قالت إنّ سجلّها ناقص ⇒ يُصدَّر ما وصل ويُسمّى', () async {
+      final r = await FinanceExportLoader.load(
+        from: from,
+        to: to,
+        first: FinanceReport(kpis: const FinanceKPIs(), recentLogs: [_log(1, 'DEBT_PAY', 1)], unavailableParts: const ['recent_logs']),
+        fetch: (a, b) async => throw StateError('لا طلب'),
+      );
+      expect(r.logs.length, 1);
+      expect(r.gaps.single, contains('لم يُقرأ كاملاً'));
+    });
+  });
+
   // ═══════════════════════════════ ٣) الشاشة ═══════════════════════════════
 
   group('الشاشة', () {
@@ -497,6 +603,125 @@ void main() {
         expect(table.outside, isNull);
         expect(t.takeException(), isNull);
       } finally {
+        await down(t);
+      }
+    });
+
+    Future<void> tapExport(WidgetTester t, String label) async {
+      await t.scrollUntilVisible(find.text(label), 600, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.text(label));
+      for (var i = 0; i < 16; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    List<Map<String, Object?>> busyMonth() => [
+          for (var d = 22; d >= 1; d--)
+            for (var k = 59; k >= 0; k--)
+              {
+                'id': d * 1000 + k,
+                'action_type': k.isEven ? 'SUBSCRIBER_ACTIVATE' : 'DEBT_PAY',
+                'action_description': k.isEven ? 'تفعيل نقدي — FTTH 50 ميغا' : 'تسديد دين',
+                'amount': k.isEven ? 35000 : 20000,
+                'admin_username': 'admin@sup',
+                'user_username': 'u${d * 1000 + k}',
+                'user_firstname': 'مشترك',
+                'user_lastname': '${d * 1000 + k}',
+                'created_at': '2026-11-${d.toString().padLeft(2, '0')} ${(6 + k ~/ 10).toString().padLeft(2, '0')}:${(k % 10 * 5).toString().padLeft(2, '0')}:00',
+              },
+        ];
+
+    testWidgets('التصدير: شهرٌ فوق 1000 حركة يخرج كاملاً (لا آخر 1000)، بالنوع المختار، ورأسه يسمّي الفلاتر', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          't': ['SUBSCRIBER_ACTIVATE_CASH'],
+        }),
+      });
+      server.month = busyMonth(); // 1320 حركة، نصفها تفعيلٌ نقديّ
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        await tapExport(t, 'Excel');
+        expect(got, hasLength(1));
+        final r = got.single;
+        expect(r.how, 'csv');
+        expect(r.rows.length, 660, reason: 'كلّ تفعيلات الشهر النقديّة — لا ما في آخر 1000 حركة وحدها (500)');
+        expect(r.rows.every((row) => row.contains('تفعيل نقدي — FTTH 50 ميغا')), isTrue);
+        expect(r.details, contains('عدد الحركات: 660'));
+        expect(r.details.any((d) => d.startsWith('النوع: ')), isTrue);
+        expect(r.details.any((d) => d.startsWith('ناقص')), isFalse);
+        expect(r.subtitle, contains('2026/11/01 – 2026/11/22'));
+        expect(server.finance.length, 3, reason: 'الشهر ثمّ نصفاه — لا مقارنة تحت فلتر النوع');
+        // ملفّ Excel نفسه يبدأ بالعنوان والفلاتر ثمّ الجدول
+        final table = ReportExportActions.csvTable(title: r.title, subtitle: r.subtitle, details: r.details, columns: r.columns, rows: r.rows);
+        expect(table.first, [r.title]);
+        expect(table[table.length - r.rows.length - 1], r.columns);
+        expect(t.takeException(), isNull);
+      } finally {
+        ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
+    testWidgets('التصدير يتبع البحث كما على الشاشة، وتصدير بطاقةٍ ملموسة حركاتها وحدها', (t) async {
+      await up();
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        final rows = find.byType(RpRowsCard);
+        await t.scrollUntilVisible(find.descendant(of: rows, matching: find.byType(TextField)), 600,
+            scrollable: find.byType(Scrollable).first);
+        await t.enterText(find.descendant(of: rows, matching: find.byType(TextField)), 'زهراء');
+        await t.pump(const Duration(milliseconds: 200));
+        await tapExport(t, 'PDF');
+        expect(got.single.how, 'pdf');
+        expect(got.single.rows.length, 1);
+        expect(got.single.rows.single, contains('زهراء محمود'));
+        expect(got.single.details, contains('بحث: «زهراء»'));
+        expect(got.single.columnWeights, isNotNull, reason: 'الاسم والوصف أعرض — كالتقرير السابق');
+
+        got.clear();
+        await t.scrollUntilVisible(find.text('تفعيل بالدين'), -600, scrollable: find.byType(Scrollable).first);
+        await t.tap(find.text('تفعيل بالدين'));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
+        expect(find.byType(RpDrillSheet), findsOneWidget);
+        await t.tap(find.text('تصدير هذه الحركات'));
+        for (var i = 0; i < 6; i++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        expect(got.single.how, 'share');
+        expect(got.single.title, 'تفعيل بالدين');
+        expect([for (final r in got.single.rows) r[0]], ['حسن كاظم'], reason: 'حركات البطاقة وحدها، والبحث للقائمة لا للبطاقة');
+        expect(got.single.details, contains('الحركات: تفعيل بالدين'));
+        expect(t.takeException(), isNull);
+      } finally {
+        ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
+    testWidgets('التصدير في كل الشركات: عمود الشركة، والشركات المختارة في رأسه', (t) async {
+      await up();
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await merged(t);
+        await open(t);
+        await tapExport(t, 'Excel');
+        final r = got.single;
+        expect(r.columns.first, isNot('اسم المشترك'));
+        expect(r.rows.length, 12);
+        expect({for (final row in r.rows) row.first}, {'سوبرنت', 'ايرث لنك'});
+        expect(r.details.first, 'الشركات: سوبرنت، ايرث لنك');
+        expect(t.takeException(), isNull);
+      } finally {
+        ReportExportActions.debugSink = null;
         await down(t);
       }
     });
