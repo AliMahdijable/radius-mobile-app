@@ -7,12 +7,15 @@ import 'api_client.dart';
 /// Source of the movement — SAS4 deposit/withdraw records mark
 /// 'sas4' on the row, while custom debt entries leave it null /
 /// 'manual'. The mobile UI prints a subtle "الساس" / "يدوي" badge.
-enum MovementSource { sas4, manual }
+/// [earthlink]: شحن حسابٍ تابع في ايرث لنك (`el_topup` — ٢٣ نوفمبر، «ديون المدراء» لايرث لنك).
+enum MovementSource { sas4, manual, earthlink }
 
 MovementSource? _parseSource(dynamic v) {
   switch (v?.toString().toLowerCase()) {
     case 'sas4':
       return MovementSource.sas4;
+    case 'el_topup':
+      return MovementSource.earthlink;
     case 'manual':
     case 'يدوي':
       return MovementSource.manual;

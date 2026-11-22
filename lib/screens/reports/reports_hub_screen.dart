@@ -74,12 +74,13 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
     if (mounted) setState(() => _balance = me);
   }
 
-  /// «كل الشركات» وفيها شركة ساس صالحة — ديون مدرائها تُقرأ من هنا مهما كانت المفتوحة.
-  /// «كل الصفحات» للموظّف (٩ نوفمبر): صفحة ساسٍ يملك فيها reports.manager_debts بخريطتها (بلا خريطة ⇒ كما كان).
+  /// «كل الشركات» وفيها شركة ساس أو ايرث لنك صالحة — ديون مدرائها تُقرأ من هنا مهما كانت المفتوحة (ايرث لنك منذ ٢٣ نوفمبر:
+  /// حساباتها التابعة). «كل الصفحات» للموظّف (٩ نوفمبر): صفحةٌ يملك فيها reports.manager_debts بخريطتها (بلا خريطة ⇒ كما كان).
   bool get _mergedSas =>
       MergedMode.active.value &&
-      MergedMode.usable
-          .any((c) => c.provider == MergedProvider.sas4 && (MergedMode.pagePerm(c.key, 'reports.manager_debts') ?? true));
+      MergedMode.usable.any((c) =>
+          (c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink) &&
+          (MergedMode.pagePerm(c.key, 'reports.manager_debts') ?? true));
 
   /// «كل الشركات» وفيها شركةٌ تُقرأ ديون محذوفيها (ساس، ايرث لنك، المُضافة).
   bool get _mergedDd =>

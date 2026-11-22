@@ -14,6 +14,7 @@ import '../../../services/merged_manager_debts.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/merged_text.dart';
 import '../../../services/permissions_service.dart';
+import '../../../services/provider_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -150,7 +151,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
           ..[_open] = _Co(null, loading: true);
       });
       // للمفتوحة صراحةً (لا لقسم «المدراء» ظاهرٍ لشركةٍ أخرى ببادئاته)
-      final r = await CompanyRoute.runOpen(() => loadCompanyManagerDebts(from: from, to: to));
+      final r = await CompanyRoute.runOpen(() => loadCompanyManagerDebts(from: from, to: to, earthlink: ProviderService.isEarthlink));
       if (!mounted || seq != _seq || _merged) return;
       setState(() => _cos[_open] = _Co(null, data: r.data, reason: r.data == null ? (r.error ?? 'تعذّر جلب ديون المدراء الآن') : null));
       return;
@@ -166,7 +167,8 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     await Future.wait([
       for (final c in cs)
         (() async {
-          if (c.provider != MergedProvider.sas4) {
+          // ايرث لنك أيضاً (٢٣ نوفمبر — المالك: «ليش الايرثلنك… ما تصير بنفس الصيغة بيها ديون مدراء؟»): مدراؤها حساباتها التابعة
+          if (c.provider != MergedProvider.sas4 && c.provider != MergedProvider.earthlink) {
             setState(() => _cos[c.key] = _Co(c, reason: _noSubAdmins));
             return;
           }
@@ -174,7 +176,8 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
             setState(() => _cos[c.key] = _Co(c, reason: MergedMode.noAccess('ديون مدرائها')));
             return;
           }
-          final r = await CompanyRoute.run(c.key, () => loadCompanyManagerDebts(from: from, to: to));
+          final r = await CompanyRoute.run(
+              c.key, () => loadCompanyManagerDebts(from: from, to: to, earthlink: c.provider == MergedProvider.earthlink));
           if (!mounted || seq != _seq) return;
           setState(() => _cos[c.key] = _Co(c, data: r.data, reason: r.data == null ? (r.error ?? 'تعذّر جلب ديون مدرائها الآن') : null));
         })(),
@@ -188,7 +191,10 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     final f = _f!;
     final seq = _seq;
     unawaited(() async {
-      final r = await CompanyRoute.run(co.c!.key, () => loadCompanyManagerDebts(from: _day(f.range.from), to: _day(f.range.to)));
+      final r = await CompanyRoute.run(
+          co.c!.key,
+          () => loadCompanyManagerDebts(
+              from: _day(f.range.from), to: _day(f.range.to), earthlink: co.c!.provider == MergedProvider.earthlink));
       if (!mounted || seq != _seq) return; // تغيّرت الفلاتر أثناءها ⇒ قراءتها القديمة لا تدخل
       setState(() => _cos[key] = _Co(co.c, data: r.data, reason: r.data == null ? (r.error ?? 'تعذّر جلب ديون مدرائها الآن') : null));
     }());
@@ -209,7 +215,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       _sorted = <MgrEvent>[
         for (final co in _inc)
           ...ManagerDebtsView.eventsOf(co.data!.movements, co.data!.debts,
-              from: _all ? null : f.range.from, to: _all ? null : f.range.to, companyKey: co.c?.key),
+              from: _all ? null : f.range.from, to: _all ? null : f.range.to, companyKey: co.c?.key, sasDebt: co.data!.sasDebt),
       ]..sort((a, b) => b.date.compareTo(a.date));
       _sortedOf = tag;
     }
@@ -224,7 +230,11 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     return true;
   }
 
-  double get _sas => _inc.fold<double>(0, (a, co) => a + ManagerDebtsView.sasOf(co.data!.managers, _q));
+  /// شركاتٌ مقروءة لمدرائها دينٌ عند الساس — ايرث لنك لا (لا تعطي أرصدة حساباتها التابعة) ⇒ بلاها «متبقّي SAS» «—» لا صفر.
+  bool get _hasSas => _inc.any((co) => co.data!.sasDebt);
+  bool get _someNoSas => _inc.any((co) => !co.data!.sasDebt);
+  double get _sas => _inc.fold<double>(0, (a, co) => co.data!.sasDebt ? a + ManagerDebtsView.sasOf(co.data!.managers, _q) : a);
+  static const _noSasNote = 'ايرث لنك لا تعطي أرصدة التوابع';
   double get _custom => _inc.fold<double>(0, (a, co) => a + ManagerDebtsView.customOf(co.data!.summary, _q));
   int get _debtors => _inc.fold<int>(0, (a, co) => a + ManagerDebtsView.debtorsOf(co.data!.managers, co.data!.summary, _q));
 
@@ -357,7 +367,12 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
           e.meta.label,
           e.amount == 0 ? '' : '${e.amount.abs().round()}',
           e.meta.debit ? '-' : '+',
-          e.movement.source == MovementSource.sas4 ? 'الساس' : (e.movement.source != null ? 'يدوي' : ''),
+          switch (e.movement.source) {
+            MovementSource.sas4 => 'الساس',
+            MovementSource.earthlink => 'ايرث لنك',
+            MovementSource.manual => 'يدوي',
+            null => '',
+          },
           (e.movement.note ?? '').trim(),
         ],
     ];
@@ -379,7 +394,8 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       if (drill != null) 'الحركات: $drill',
       if (_q.trim().isNotEmpty) 'المدير: «${_q.trim()}»',
       'إيرادات مستحصَلة: ${ManagerDebtsView.money(ManagerDebtsView.incomingOf(events))}',
-      'المتبقّي: SAS ${ManagerDebtsView.money(_sas)} · أخرى ${ManagerDebtsView.money(_custom)} · الإجمالي ${ManagerDebtsView.money(_sas + _custom)}',
+      'المتبقّي: SAS ${_hasSas ? ManagerDebtsView.money(_sas) : '—'} · أخرى ${ManagerDebtsView.money(_custom)} · الإجمالي ${ManagerDebtsView.money(_sas + _custom)}',
+      if (_someNoSas) _hasSas ? 'SAS بلا ايرث لنك — $_noSasNote' : _noSasNote,
       'عدد الحركات: ${rows.length}',
       for (final w in _warnings) 'ناقص: $w',
     ];
@@ -529,13 +545,22 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       kpi: hero,
       compareWith: '',
       spark: const [],
-      note: 'شحن نقدي + تسديد ديون (SAS + أخرى) — تتبع كلّ الفلاتر',
+      note: _hasSas ? 'شحن نقدي + تسديد ديون (SAS + أخرى) — تتبع كلّ الفلاتر' : 'شحن نقدي + تسديد ديون أخرى — تتبع كلّ الفلاتر',
       notes: _warnings,
       onTap: () => _drillIncoming(hero, events),
     ));
     final total = _sas + _custom;
     parts.add(RpKpiGrid(compareWith: '', kpis: [
-      RpKpi(id: 'sas', label: 'متبقّي SAS', value: _sas, icon: LucideIcons.server, tone: RpTone.debt, upIsGood: false),
+      RpKpi(
+        id: 'sas',
+        label: 'متبقّي SAS',
+        value: _sas,
+        display: _hasSas ? null : '—',
+        hint: !_someNoSas ? null : (_hasSas ? 'بلا ايرث لنك — لا تعطي أرصدة التوابع' : _noSasNote),
+        icon: LucideIcons.server,
+        tone: RpTone.debt,
+        upIsGood: false,
+      ),
       RpKpi(id: 'custom', label: 'متبقّي أخرى', value: _custom, icon: LucideIcons.receipt, tone: RpTone.debt, upIsGood: false),
       RpKpi(id: 'total', label: 'إجمالي المتبقّي', value: total, icon: LucideIcons.wallet, tone: total > 0 ? RpTone.loss : RpTone.money, upIsGood: false),
       RpKpi(id: 'debtors', label: 'المدينون', value: _debtors, unit: 'مدين', isCount: true, icon: LucideIcons.userCog, tone: RpTone.info),
@@ -599,18 +624,20 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
         lines.add(RpCompanyLine(company: _rp(c, note: co.reason), state: RpCompanyState.failed));
         outside.add('${c.name} (${co.reason ?? 'تعذّرت'})');
       } else {
-        final sas = ManagerDebtsView.sasOf(co.data!.managers, _q);
+        // ايرث لنك: «—» في عمود SAS (لا تعطي أرصدة التوابع) لا صفر، والإجمالي «أخرى» وحدها
+        final sas = co.data!.sasDebt ? ManagerDebtsView.sasOf(co.data!.managers, _q) : null;
         final custom = ManagerDebtsView.customOf(co.data!.summary, _q);
-        lines.add(RpCompanyLine(company: _rp(c), a: sas, b: custom, c: sas + custom));
+        lines.add(RpCompanyLine(company: _rp(c, note: sas == null ? _noSasNote : null), a: sas, b: custom, c: (sas ?? 0) + custom));
       }
     }
     final inc = [for (final l in lines) if (l.state == RpCompanyState.ok) l];
+    final sasLines = [for (final l in inc) if (l.a != null) l];
     return RpCompanyTable(
       fold: _fold('companies'),
       heads: const ['متبقّي SAS', 'متبقّي أخرى', 'الإجمالي'],
       lines: lines,
       total: [
-        inc.fold<num>(0, (a, l) => a + (l.a ?? 0)),
+        sasLines.isEmpty && inc.isNotEmpty ? null : sasLines.fold<num>(0, (a, l) => a + (l.a ?? 0)),
         inc.fold<num>(0, (a, l) => a + (l.b ?? 0)),
         inc.fold<num>(0, (a, l) => a + (l.c ?? 0)),
       ],

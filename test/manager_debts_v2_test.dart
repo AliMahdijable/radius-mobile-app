@@ -172,6 +172,110 @@ class _Merged implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+// ═══════════════════════════════ ايرث لنك ═══════════════════════════════
+
+/// عقد d9 (٢٣ نوفمبر — المالك: «ليش الايرثلنك… ما تصير بنفس الصيغة بيها ديون مدراء؟»): المدراء حساباتها التابعة بلا دين ساس
+/// (`sas_debt: false` بأعلى جسم managers/full)، وحركاتهم شحنٌ من سجلّنا (row_type balance، source el_topup، id سالب) والآجل بـdebt_id
+/// صفّه في «ديون أخرى» — والخادم يرسل صفّ الدين نفسه (debt_created) فيُخفى عندنا. [old] = خادمٌ قبل العقد (قائمةٌ فارغة بلا علامة).
+const _kE = 'c00000000000e'; // ايرث لنك في «كل الشركات»
+
+Map<String, Object?> _elRows(String id) => switch (id) {
+      '1025' => {
+          'movements': [
+            {'row_type': 'balance', 'id': -5, 'sub_kind': 'deposit_loan', 'amount': 50000, 'source': 'el_topup', 'debt_id': 77,
+              'note': 'شحن آجل', 'event_at': '2026-11-18T09:30:00.000Z'},
+            {'row_type': 'debt_created', 'id': 77, 'amount': 50000, 'debt_id': 77, 'event_at': '2026-11-18T09:30:00.000Z'},
+            {'row_type': 'debt_payment', 'id': 301, 'amount': 20000, 'debt_id': 77, 'event_at': '2026-11-20T10:00:00.000Z'},
+          ],
+        },
+      '2048' => {
+          'movements': [
+            {'row_type': 'balance', 'id': -6, 'sub_kind': 'deposit_cash', 'amount': 25000, 'source': 'el_topup', 'event_at': '2026-11-21T08:00:00.000Z'},
+          ],
+        },
+      _ => {'movements': const <Object>[]},
+    };
+
+Future<ResponseBody>? _elReply(String path, Future<ResponseBody> Function(Map<String, Object?>) ok, {bool old = false}) {
+  if (path == '/api/admin/manager-debts/access') return ok({'hasSubAdmins': true, 'subAdmins': const []});
+  if (path == '/api/v2/managers/full') {
+    if (old) return ok({'data': const <Object>[], 'total': 0});
+    return ok({
+      'data': [
+        {'id': 1025, 'username': 'najaf40'},
+        {'id': 2048, 'username': 'kufa7'},
+      ],
+      'total': 2,
+      'sas_debt': false,
+    });
+  }
+  if (path == '/api/admin/manager-debts/summary') {
+    return ok({
+      'totals': {'total_remaining': 30000, 'debts_count': 1},
+      'perDebtor': [
+        {'debtor_admin_id': 1025, 'debtor_admin_username': 'najaf40', 'debts_count': 1, 'total_remaining': 30000},
+      ],
+    });
+  }
+  if (path == '/api/admin/manager-debts') {
+    return ok({
+      'debts': [
+        {'id': 77, 'amount': 50000, 'paid_amount': 20000, 'remaining_amount': 30000, 'debtor_admin_id': 1025,
+          'debtor_admin_username': 'najaf40', 'debt_date': '2026-11-18', 'status': 'partial'},
+      ],
+    });
+  }
+  final mv = RegExp(r'^/api/admin/managers/(\d+)/movements$').firstMatch(path);
+  if (mv != null) return ok({'target': {'id': int.parse(mv.group(1)!)}, ..._elRows(mv.group(1)!)});
+  return null;
+}
+
+class _El implements HttpClientAdapter {
+  _El(this.inner, {this.old = false, this.off = false});
+  final HttpClientAdapter inner;
+  final bool old;
+
+  /// المفتاح مطفأٌ لصفحتها: access ⇒ {hasSubAdmins:false, enabled:false}.
+  final bool off;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
+    Future<ResponseBody> ok(Map<String, Object?> body) async => _json(200, {'success': true, ...body});
+    if (off && o.uri.path == '/api/admin/manager-debts/access') return ok({'hasSubAdmins': false, 'enabled': false});
+    return await _elReply(o.uri.path, ok, old: old) ?? inner.fetch(o, rs, cf);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// «كل الشركات»: سوبرنت (ساس — كما في [_Merged]) + ايرث لنك.
+class _MergedEl implements HttpClientAdapter {
+  _MergedEl(this.inner) : sas = _Merged(inner);
+  final HttpClientAdapter inner;
+  final _Merged sas;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
+    final key = o.headers['x-company-key'] as String?;
+    if (key != _kE) return sas.fetch(o, rs, cf);
+    Future<ResponseBody> ok(Map<String, Object?> body) async => _json(200, {'success': true, ...body}, headers: {'x-company-key': [key!]});
+    return await _elReply(o.uri.path, ok) ?? _json(409, {'success': false, 'code': 'COMPANY_ROUTE_NOT_ALLOWED'});
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+Map<String, Object?> _companiesEl() => {
+      'routing': true,
+      'writes': true,
+      'companies': [
+        {'key': _kA, 'code': 'supernet', 'username': 'mahdi', 'name': 'سوبرنت', 'status': 'ok', 'admin_id': 'supernet:12', 'ns': 'nA', 'currency': 'IQD', 'color_index': 0},
+        {'key': _kE, 'code': 'earthlink', 'username': 'agent@el', 'name': 'ايرث لنك', 'provider': 'earthlink', 'status': 'ok', 'admin_id': 'earthlink:1025', 'ns': 'nE', 'currency': 'IQD', 'color_index': 1},
+      ],
+    };
+
 Map<String, Object?> _companies() => {
       'routing': true,
       'writes': true,
@@ -391,6 +495,97 @@ void main() {
       expect(kpis(t)['sas']!.value, 30000);
       expect(hero(t), 0);
       expect(find.textContaining('«فاشلة»'), findsNothing);
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  // ═══════════════════════════════ ايرث لنك (٢٣ نوفمبر) ═══════════════════════════════
+
+  testWidgets('ايرث لنك منفردة: «متبقّي SAS» «—» لا صفر وملاحظتها، الآجل سطرٌ واحد «دين أخرى»، والمستحصَل والتصدير', (t) async {
+    ApiClient.dio.httpClientAdapter = _El(await visualSetUp(s1Owner));
+    ManagerDebtsV2Screen.clock = () => _now;
+    final got = <ReportExportRequest>[];
+    ReportExportActions.debugSink = (r) async => got.add(r);
+    try {
+      await open(t);
+      // شحن نقديّ 25,000 (kufa7) + تسديد أخرى 20,000 (najaf40) — الآجل ليس مستحصَلاً
+      expect(hero(t), 45000);
+      final k = kpis(t);
+      expect(k['sas']!.text, '—', reason: 'ايرث لنك لا تعطي أرصدة التوابع — لا «0 د.ع»');
+      expect(k['sas']!.hint, 'ايرث لنك لا تعطي أرصدة التوابع');
+      expect(k['custom']!.value, 30000);
+      expect(k['total']!.value, 30000);
+      expect(k['debtors']!.value, 1);
+      expect(find.textContaining('لم يُقرأ من الساس'), findsNothing, reason: 'لا «دين مديرٍ لم يُقرأ» لايرث لنك');
+      expect(find.text('شحن نقدي + تسديد ديون أخرى — تتبع كلّ الفلاتر'), findsOneWidget);
+      await unfold(t, RpRowsCard);
+      expect(find.textContaining('شحن آجل — دين أخرى'), findsOneWidget);
+      expect(find.textContaining('دين SAS'), findsNothing);
+      expect(find.textContaining('إضافة دين أخرى'), findsNothing, reason: 'صفّ الدين نفسه لا يُعرض ثانيةً');
+      expect(find.textContaining('تسديد جزئي — دين أخرى'), findsOneWidget);
+      await tapExport(t, 'Excel');
+      final r = got.single;
+      expect(r.rows.length, 3, reason: 'الآجل والتسديد والنقديّ — لا صفّ الدين المكرَّر');
+      expect(r.details, contains('المتبقّي: SAS — · أخرى 30,000 د.ع · الإجمالي 30,000 د.ع'));
+      expect(r.details, contains('ايرث لنك لا تعطي أرصدة التوابع'));
+      final src = r.columns.indexOf('المصدر');
+      expect({for (final row in r.rows) row[src]}, {'ايرث لنك', ''}, reason: 'الشحن «ايرث لنك»، و«ديون أخرى» بلا مصدر');
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  for (final (name, old, off) in [('خادمٌ قبل العقد (قائمةٌ فارغة بلا علامة)', true, false), ('المفتاح مطفأٌ لصفحتها (enabled:false)', false, true)]) {
+    testWidgets('ايرث لنك و$name ⇒ «لم تُفتح بعد» لا «بلا مدراء فرعيّين» ولا تقريرٌ بلا حركاتٍ كأنّه كامل', (t) async {
+      ApiClient.dio.httpClientAdapter = _El(await visualSetUp(s1Owner), old: old, off: off);
+      ManagerDebtsV2Screen.clock = () => _now;
+      try {
+        await open(t);
+        expect(find.text(kElManagerDebtsNotYet), findsOneWidget);
+        expect(find.text('بلا مدراء فرعيّين'), findsNothing);
+        expect(find.byType(RpHeroKpi), findsNothing);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+  }
+
+  testWidgets('كل الشركات + ايرث لنك: تُطلب بمفتاحها، «—» في عمودها ومجموع SAS للساس وحده، وأخراها في المجموع', (t) async {
+    final srv = _MergedEl(await visualSetUp(s1bSasOwner));
+    ApiClient.dio.httpClientAdapter = srv;
+    ManagerDebtsV2Screen.clock = () => _now;
+    AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+    MergedMode.reset();
+    MergedMode.fetchRaw = () async => Map<String, dynamic>.from(_companiesEl());
+    SubscribersApi.clearAllCaches();
+    try {
+      expect(await t.runAsync(() => MergedMode.enter()), isTrue);
+      await open(t);
+      expect(srv.sas.asked.where((a) => a.contains(_kE)), isEmpty, reason: 'طلبات ايرث لنك لا تمرّ بخادم الساس الوهميّ');
+      expect(hero(t), 60000 + 45000, reason: 'سوبرنت 60,000 + ايرث لنك 45,000');
+      final k = kpis(t);
+      expect(k['sas']!.value, 100000, reason: 'm5 وحده — ايرث لنك لا تُجمع صفراً ولا تُحسب');
+      expect(k['sas']!.text, isNot('—'));
+      expect(k['sas']!.hint, 'بلا ايرث لنك — لا تعطي أرصدة التوابع');
+      expect(k['custom']!.value, 50000);
+      expect(k['total']!.value, 150000);
+      expect(find.textContaining('بلا مدراء فرعيّين'), findsNothing, reason: 'ايرث لنك لها مدراء الآن');
+      final table = t.widget<RpCompanyTable>(find.byType(RpCompanyTable));
+      expect([for (final l in table.lines) (l.company.key, l.state, l.a, l.b, l.c)], [
+        (_kA, RpCompanyState.ok, 100000, 20000, 120000),
+        (_kE, RpCompanyState.ok, null, 30000, 30000),
+      ]);
+      expect(table.lines[1].company.note, 'ايرث لنك لا تعطي أرصدة التوابع');
+      expect(table.total, [100000, 50000, 150000]);
+      // ايرث لنك وحدها ⇒ «—» لا صفر
+      table.onTap!(table.lines[1].company);
+      await settleAsync(t);
+      expect(kpis(t)['sas']!.text, '—');
+      expect(t.widget<RpCompanyTable>(find.byType(RpCompanyTable)).total.first, isNull);
       expect(t.takeException(), isNull);
     } finally {
       await down(t);

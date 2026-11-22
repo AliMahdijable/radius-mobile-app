@@ -9,6 +9,9 @@ import '../api/managers_api.dart';
 /// يغيب عن التقرير وتصديره). ما زاد يُسمّى ([CompanyManagerDebts.managersTotal]).
 const int kManagerMovementsCap = 300;
 
+/// ايرث لنك على خادمٍ لا يعرف ديون حساباتها التابعة بعد (لا علامة `sas_debt`).
+const String kElManagerDebtsNotYet = 'ديون مدراء ايرث لنك لم تُفتح بعد';
+
 /// حركات كلّ مدير: أقصى ما يعطيه الخادم (500 — `/api/admin/managers/:id/movements`)؛ مديرٌ بلغه قد تنقص أقدم حركاته فيُسمّى.
 const int kManagerMovementsLimit = 500;
 
@@ -16,6 +19,7 @@ const int kManagerMovementsLimit = 500;
 class CompanyManagerDebts {
   const CompanyManagerDebts({
     this.noSubAdmins = false,
+    this.sasDebt = true,
     this.managers = const [],
     this.managersTotal = 0,
     this.summary,
@@ -27,6 +31,10 @@ class CompanyManagerDebts {
 
   /// الشركة بلا مدراء فرعيّين — لا ديون مدراء فيها أصلاً (لا «تعذّرت» ولا صفر).
   final bool noSubAdmins;
+
+  /// لمدرائها دينٌ عند الساس — ايرث لنك لا تعطي أرصدة حساباتها التابعة (الخادم: `sas_debt: false` بجسم `/api/v2/managers/full`،
+  /// ٢٣ نوفمبر — المالك: «ليش الايرثلنك… ما تصير بنفس الصيغة بيها ديون مدراء؟») ⇒ «متبقّي SAS» لها «—» لا صفر، وآجلها دينٌ في «ديون أخرى».
+  final bool sasDebt;
 
   /// قائمة المدراء الكاملة (`/api/v2/managers/full`): دين الساس لكلّ مدير، و[Manager.debtUnavailable] لمن لم يُقرأ دينه.
   final List<Manager> managers;
@@ -59,14 +67,20 @@ typedef CompanyManagerDebtsResult = ({CompanyManagerDebts? data, String? error})
 /// نفسها التي تطلبها الشاشة وحدها، بنتيجةٍ تفصل «تعذّر» عن «فارغ». أيّ قراءةٍ أساسيّة تتعذّر (المدراء، الملخّص، الديون) ⇒ الشركة
 /// كلّها «تعذّرت» باسمها — لا أرقامٌ ناقصة تُجمع كأنّها كاملة. وحركات كلّ مديرٍ وحدها: ما تعذّر منها يُعدّ ويُسمّى. شركةٌ بلا
 /// مدراء فرعيّين لا تُطلب منها البقيّة.
+///
+/// [earthlink]: شركة ايرث لنك — مدراؤها حساباتها التابعة ولا دين ساسٍ عليهم؛ خادمٌ لم يُحدَّث بعد يردّ قائمةً فارغة بلا علامة
+/// `sas_debt` ⇒ «لم تُفتح بعد» صراحةً، لا تقريرٌ بلا حركاتٍ كأنّه كامل.
 Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
   String? from,
   String? to,
   int movementsLimit = kManagerMovementsLimit,
   int concurrency = 6,
+  bool earthlink = false,
 }) async {
   final access = await _get('/api/admin/manager-debts/access');
   if (access.body == null) return (data: null, error: access.error);
+  // ايرث لنك والمفتاح مطفأٌ لصفحتها (`enabled: false`) ⇒ «لم تُفتح بعد» لا «بلا مدراء فرعيّين» ولها حساباتٌ تابعة
+  if (earthlink && access.body!['enabled'] == false) return (data: null, error: kElManagerDebtsNotYet);
   if (access.body!['hasSubAdmins'] != true) {
     return (data: const CompanyManagerDebts(noSubAdmins: true), error: null);
   }
@@ -84,6 +98,8 @@ Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
   final rawManagers = core[0].body!['data'];
   final rawDebts = core[2].body!['debts'] ?? core[2].body!['data'];
   if (rawManagers is! List || rawDebts is! List) return (data: null, error: null);
+  final sasDebt = core[0].body!['sas_debt'] != false;
+  if (earthlink && sasDebt) return (data: null, error: kElManagerDebtsNotYet);
   final managers = [
     for (final m in rawManagers.whereType<Map>())
       if (Manager.fromJson(Map<String, dynamic>.from(m)) case final x?) x,
@@ -115,6 +131,7 @@ Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
   await Future.wait([for (var w = 0; w < concurrency && w < targets.length; w++) worker()]);
   return (
     data: CompanyManagerDebts(
+      sasDebt: sasDebt,
       managers: List.unmodifiable(managers),
       managersTotal: total < managers.length ? managers.length : total,
       summary: summary,

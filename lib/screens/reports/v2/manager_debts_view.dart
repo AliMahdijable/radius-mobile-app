@@ -16,7 +16,10 @@ import 'report_kit.dart';
 enum MgrKind { depositCash, depositLoan, debtCreated, paymentSas, paymentCustom, withdraw, points, other }
 
 class MgrEvent {
-  const MgrEvent({required this.manager, required this.movement, this.isFullPayment = false, this.companyKey});
+  const MgrEvent({required this.manager, required this.movement, this.isFullPayment = false, this.companyKey, this.loanInCustom = false});
+
+  /// شركةٌ بلا دين ساس (ايرث لنك): «شحن آجل» دينه في «ديون أخرى» لا عند الساس.
+  final bool loanInCustom;
 
   final Manager manager;
   final ManagerMovement movement;
@@ -57,7 +60,7 @@ class MgrEvent {
         MgrKind.debtCreated => (label: 'إضافة دين أخرى', tone: RpTone.loss, debit: true),
         MgrKind.paymentCustom => (label: isFullPayment ? 'تسديد كامل — دين أخرى' : 'تسديد جزئي — دين أخرى', tone: RpTone.money, debit: false),
         MgrKind.depositCash => (label: 'شحن نقدي', tone: RpTone.money, debit: false),
-        MgrKind.depositLoan => (label: 'شحن آجل — دين SAS', tone: RpTone.debt, debit: true),
+        MgrKind.depositLoan => (label: loanInCustom ? 'شحن آجل — دين أخرى' : 'شحن آجل — دين SAS', tone: RpTone.debt, debit: true),
         MgrKind.withdraw => (label: 'سحب رصيد', tone: RpTone.loss, debit: true),
         MgrKind.paymentSas => (label: 'تسديد دين SAS', tone: RpTone.money, debit: false),
         MgrKind.points => (label: 'نقاط مكافأة', tone: RpTone.info, debit: false),
@@ -94,25 +97,38 @@ class ManagerDebtsView {
       };
 
   /// حركات المدراء ⇒ أحداث الفترة (والتسديد الكامل من الديون الأخرى) — [from]/[to] null = كلّ الفترات.
+  ///
+  /// [sasDebt] false (ايرث لنك): «شحن آجل» دينه صفٌّ في «ديون أخرى» ([ManagerMovement.debtId]) ⇒ يُسمّى «دين أخرى»، و«إضافة دين أخرى»
+  /// للدين نفسه لا تُعرض ثانيةً (المال نفسه سطراً واحداً؛ المجاميع لا تمسّها: الآجل ليس مستحصَلاً، والمتبقّي من الملخّص).
   static List<MgrEvent> eventsOf(
     List<({Manager manager, List<ManagerMovement> rows})> moves,
     List<ManagerDebt> debts, {
     DateTime? from,
     DateTime? to,
     String? companyKey,
+    bool sasDebt = true,
   }) {
     final debtsById = {for (final d in debts) d.id: d};
+    final loanDebts = sasDebt
+        ? const <int>{}
+        : {
+            for (final m in moves)
+              for (final mv in m.rows)
+                if (mv.rowType != 'debt_created' && mv.rowType != 'debt_payment' && mv.subKind == 'deposit_loan' && mv.debtId != null)
+                  mv.debtId!,
+          };
     final out = <MgrEvent>[];
     for (final m in moves) {
       for (final mv in m.rows) {
         if (from != null && mv.eventAt.isBefore(from)) continue;
         if (to != null && mv.eventAt.isAfter(to)) continue;
+        if (mv.rowType == 'debt_created' && loanDebts.contains(mv.debtId ?? mv.relatedDebtId)) continue;
         var full = false;
         if (mv.rowType == 'debt_payment') {
           final id = mv.debtId ?? mv.relatedDebtId;
           if (id != null && debtsById[id]?.remainingAmount == 0) full = true;
         }
-        out.add(MgrEvent(manager: m.manager, movement: mv, isFullPayment: full, companyKey: companyKey));
+        out.add(MgrEvent(manager: m.manager, movement: mv, isFullPayment: full, companyKey: companyKey, loanInCustom: !sasDebt));
       }
     }
     out.sort((a, b) => b.date.compareTo(a.date));
