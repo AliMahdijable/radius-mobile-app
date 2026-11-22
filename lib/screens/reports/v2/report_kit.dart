@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -37,8 +38,12 @@ extension RpToneColors on RpTone {
       };
 }
 
-/// المبلغ بالدينار كما يُكتب في التطبيق: «12,450,000 د.ع».
-String rpMoney(num v) => '${formatIQD(v)} د.ع';
+/// الرقم بإشارته: [formatIQD] يأخذ القيمة المطلقة فيضيع «−» صافي ربحٍ بالخسارة (٢٢ نوفمبر). السالب معزولٌ ([iso]) فلا يقفز «−»
+/// يمين الرقم في السطر العربيّ.
+String rpNum(num v) => v < 0 ? iso('−${formatIQD(v)}') : formatIQD(v);
+
+/// المبلغ بالدينار كما يُكتب في التطبيق: «12,450,000 د.ع» — وبإشارته إن كان سالباً.
+String rpMoney(num v) => '${rpNum(v)} د.ع';
 
 /// رقمٌ مختصر لمحور الرسم: «1.5 مليون» · «500 ألف».
 String rpCompact(num v) {
@@ -617,7 +622,7 @@ class RpCompanyTable extends StatelessWidget {
             name: Text('المجموع', style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1),
             cells: [
               for (var i = 0; i < total.length; i++)
-                RpFitText(total[i] == null ? '—' : formatIQD(total[i]!),
+                RpFitText(total[i] == null ? '—' : rpNum(total[i]!),
                     style: AppType.rowValue(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
             ],
           ),
@@ -670,7 +675,7 @@ class RpCompanyTable extends StatelessWidget {
       case RpCompanyState.ok:
         return _row(name: name, cells: [
           for (var i = 0; i < 3; i++)
-            RpFitText([l.a, l.b, l.c][i] == null ? '—' : formatIQD([l.a, l.b, l.c][i]!),
+            RpFitText([l.a, l.b, l.c][i] == null ? '—' : rpNum([l.a, l.b, l.c][i]!),
                 style: AppType.bodyStrong(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
         ]);
       case RpCompanyState.loading:
