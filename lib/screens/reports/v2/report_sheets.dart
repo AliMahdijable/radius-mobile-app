@@ -114,6 +114,7 @@ class RpFilterSheet extends StatefulWidget {
     this.loadingPeople = false,
     this.onDone,
     this.showPeople = true,
+    this.showManagers = true,
     this.showCompare = true,
     this.presets = RpRange.presets,
   });
@@ -123,6 +124,9 @@ class RpFilterSheet extends StatefulWidget {
 
   /// قسما «المدير» و«الموظّف» — كشف حساب مشتركٍ واحد بلاهما.
   final bool showPeople;
+
+  /// قسم «المدير» — توزيع الباقات بالموظّف المنفِّذ وحده (النطاق من الخادم).
+  final bool showManagers;
 
   /// مفتاح «قارن» — سجلّ الحركات وكشف الحساب بلا مقارنة.
   final bool showCompare;
@@ -294,7 +298,7 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
               ),
             ),
           ],
-          if (widget.showPeople) ...[
+          if (widget.showPeople && widget.showManagers) ...[
             const SizedBox(height: Sp.xl),
             SheetSection(
               label: 'المدير',
@@ -320,21 +324,26 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
                 ],
               ),
             ),
+          ],
+          if (widget.showPeople) ...[
             const SizedBox(height: Sp.xl),
             SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(groups, managers: false)),
           ],
-          const SizedBox(height: Sp.xl),
-          SheetSection(
-            label: 'نوع الحركة',
-            child: Wrap(
-              spacing: Sp.sm,
-              runSpacing: Sp.sm,
-              children: [
-                for (final t in widget.types)
-                  SheetQuickChip(label: t.$2, selected: _v.types.contains(t.$1), onTap: () => _toggleType(t.$1)),
-              ],
+          // تقريرٌ بلا أنواع حركة (توزيع الباقات) ⇒ لا قسم فارغ
+          if (widget.types.isNotEmpty) ...[
+            const SizedBox(height: Sp.xl),
+            SheetSection(
+              label: 'نوع الحركة',
+              child: Wrap(
+                spacing: Sp.sm,
+                runSpacing: Sp.sm,
+                children: [
+                  for (final t in widget.types)
+                    SheetQuickChip(label: t.$2, selected: _v.types.contains(t.$1), onTap: () => _toggleType(t.$1)),
+                ],
+              ),
             ),
-          ),
+          ],
           if (widget.payments.isNotEmpty) ...[
             const SizedBox(height: Sp.xl),
             SheetSection(

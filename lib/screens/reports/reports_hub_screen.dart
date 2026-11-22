@@ -18,13 +18,13 @@ import '../../theme/typography.dart';
 import '../el/el_reports.dart';
 import 'balance_reports_screen.dart';
 import 'deleted_debts_screen.dart';
-import 'package_distribution_screen.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import 'v2/activations_report_v2_screen.dart';
 import 'v2/activity_log_v2_screen.dart';
 import 'v2/manager_debts_v2_screen.dart';
+import 'v2/package_dist_v2_screen.dart';
 import 'v2/sessions_v2_screen.dart';
 import 'v2/finance_report_v2_screen.dart';
 
@@ -139,7 +139,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               title: 'reports.packages'.tr(),
               subtitle: 'reports.packages_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PackageDistributionScreen()),
+                MaterialPageRoute(builder: (_) => const PackageDistV2Screen()),
               ),
             ),
           // ⚠️ **المصروفات ليست هنا**، وإنّما في «قوائم أخرى» وحدها.

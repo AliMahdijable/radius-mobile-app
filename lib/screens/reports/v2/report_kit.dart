@@ -95,7 +95,11 @@ class RpKpi {
     this.isCount = false,
     this.unit,
     this.display,
+    this.hint,
   });
+
+  /// سطرٌ صغير تحت الرقم («الفعّالون 120» · «لا يشمل: …») — كاملاً بلا قصّ.
+  final String? hint;
 
   /// نصّ الرقم حين ليس مالاً ولا عدّاً («1.2 GB» في الجلسات) — يغلب [isCount] و[rpMoney].
   final String? display;
@@ -571,7 +575,14 @@ class RpFilterBar extends StatelessWidget {
 /// سطرٌ لكلّ شركة بأرقامها (تصل شركةً شركة)، والتي تعذّرت تُسمّى وتُستثنى من المجموع ومعها «أعد».
 class RpCompanyTable extends StatelessWidget {
   const RpCompanyTable(
-      {super.key, required this.lines, required this.heads, required this.total, this.outside, this.onTap, this.onRetry});
+      {super.key,
+      required this.lines,
+      required this.heads,
+      required this.total,
+      this.outside,
+      this.onTap,
+      this.onRetry,
+      this.tones = const [RpTone.money, RpTone.debt, RpTone.brand]});
   final List<RpCompanyLine> lines;
   final ValueChanged<RpCompany>? onTap;
   final ValueChanged<RpCompany>? onRetry;
@@ -585,7 +596,8 @@ class RpCompanyTable extends StatelessWidget {
   /// «خارج المجموع: …».
   final String? outside;
 
-  static const _tones = [RpTone.money, RpTone.debt, RpTone.brand];
+  /// ألوان الأعمدة الثلاثة (توزيع الباقات: عددٌ ثمّ إيرادٌ ثمّ ربح).
+  final List<RpTone> tones;
 
   @override
   Widget build(BuildContext context) {
@@ -623,7 +635,7 @@ class RpCompanyTable extends StatelessWidget {
             cells: [
               for (var i = 0; i < total.length; i++)
                 RpFitText(total[i] == null ? '—' : rpNum(total[i]!),
-                    style: AppType.rowValue(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
+                    style: AppType.rowValue(color: tones[i].fg), alignment: AlignmentDirectional.centerEnd),
             ],
           ),
           if (outside != null) ...[
@@ -676,7 +688,7 @@ class RpCompanyTable extends StatelessWidget {
         return _row(name: name, cells: [
           for (var i = 0; i < 3; i++)
             RpFitText([l.a, l.b, l.c][i] == null ? '—' : rpNum([l.a, l.b, l.c][i]!),
-                style: AppType.bodyStrong(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
+                style: AppType.bodyStrong(color: tones[i].fg), alignment: AlignmentDirectional.centerEnd),
         ]);
       case RpCompanyState.loading:
         return Row(
@@ -921,6 +933,7 @@ class RpKpiCard extends StatelessWidget {
             RpFitText(kpi.text, style: AppType.statValue(color: kpi.tone.fg)),
             const SizedBox(height: Sp.xxs),
             RpDelta(kpi: kpi, compareWith: compareWith),
+            if (kpi.hint != null) Text(kpi.hint!, style: AppType.micro(color: AppColors.textLow)),
           ],
         ),
       ),
@@ -987,7 +1000,7 @@ class RpCountsRow extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        RpFitText(formatIQD(items[i].value), style: AppType.rowValue(color: AppColors.textHi)),
+                        RpFitText(items[i].display ?? formatIQD(items[i].value), style: AppType.rowValue(color: AppColors.textHi)),
                         Text(items[i].label,
                             style: AppType.micro(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ],
@@ -1180,7 +1193,17 @@ class RpBreakdownCard extends StatelessWidget {
     this.onMore,
     this.unit = 'حركة',
     this.countOnly = false,
+    this.title = 'قسّم حسب',
+    this.icon = LucideIcons.chartPie,
+    this.onShare,
   });
+
+  /// عنوان البطاقة — «الباقات» في توزيع الباقات.
+  final String title;
+  final IconData icon;
+
+  /// لمسة سطرٍ تفتح تفاصيله (رقم السطر في [shares]) — null = لا لمس.
+  final ValueChanged<int>? onShare;
   final List<String> tabs;
   final int selected;
   final List<RpShare> shares;
@@ -1207,7 +1230,7 @@ class RpBreakdownCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const RpTitle(icon: LucideIcons.chartPie, title: 'قسّم حسب', tone: RpTone.brand),
+          RpTitle(icon: icon, title: title, tone: RpTone.brand),
           const SizedBox(height: Sp.md),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1241,7 +1264,7 @@ class RpBreakdownCard extends StatelessWidget {
           if (shares.isEmpty) Text('لا حركات بهذه الفترة', style: AppType.muted(color: AppColors.textMid)),
           for (var i = 0; i < shares.length; i++) ...[
             if (i > 0) const SizedBox(height: Sp.md),
-            _share(shares[i]),
+            if (onShare == null) _share(shares[i]) else _Tap(radius: R.sm, onTap: () => onShare!(i), child: _share(shares[i])),
           ],
           if (more != null) ...[
             const SizedBox(height: Sp.md),

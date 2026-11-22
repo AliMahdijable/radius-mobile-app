@@ -16,7 +16,9 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
-import '../../reports/package_distribution_screen.dart';
+import '../../reports/package_distribution_screen.dart' show packagePartText;
+import '../../reports/v2/package_dist_v2_screen.dart';
+import '../../reports/v2/report_period.dart';
 import '../../reports/widgets/date_range_chip.dart';
 import '../../reports/widgets/scope_helper.dart';
 import 'pill_tabs.dart';
@@ -201,9 +203,16 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
     });
   }
 
+  /// التقرير الموحّد بفترة البطاقة نفسها (لهذا الفتح وحده) — فالرقمان واحد.
   void _openReport() {
+    final preset = switch (_period) {
+      'yesterday' => RpPreset.yesterday,
+      'last_week' => RpPreset.lastWeek,
+      'last_month' => RpPreset.lastMonth,
+      _ => RpPreset.today,
+    };
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PackageDistributionScreen()),
+      MaterialPageRoute(builder: (_) => PackageDistV2Screen(initialPreset: preset)),
     );
   }
 
