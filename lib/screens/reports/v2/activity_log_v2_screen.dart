@@ -207,8 +207,15 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     return t.isEmpty ? (_f!.types.isEmpty ? null : const []) : t;
   }
 
-  /// تُدمج الصرفيّات؟ بلا نوعٍ مختار، أو حين يُختار نوع صرفيّة.
-  bool get _wantExpenses => _f!.types.isEmpty || _f!.types.any(ActivityLogView.expenseTypes.contains);
+  /// تُدمج الصرفيّات؟ بلا نوعٍ مختار، أو حين يُختار نوع صرفيّة — وصرفيّات صاحب الصفحة وحده: لا تُدمج حين يُحصر السجلّ بمدير
+  /// المشترك أو بمديرٍ غير صاحبها (كانت تظهر تحت فلتر مديرٍ فرعيّ وليست له)؛ وبفلتر الموظّف صرفيّاته وحده.
+  bool get _wantExpenses {
+    final f = _f!;
+    if (f.types.isNotEmpty && !f.types.any(ActivityLogView.expenseTypes.contains)) return false;
+    if (_ownerUsername(_open) != null) return false;
+    final actors = _actorIds(_open);
+    return actors == null || actors.any((id) => _scopeIds?.contains(id) ?? false);
+  }
 
   Future<_Rows> _fetch(RpRange r, {required String group, required List<String>? ids}) async {
     final types = _logTypes;
@@ -247,6 +254,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
               to: _day(f.range.to),
               limit: 5000,
               includeArchived: true,
+              employeeId: _employeeId(_open),
             ))
         : Future.value((rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null));
     final (acts, exps) = await (_fetch(f.range, group: _open, ids: ids), expF).wait;

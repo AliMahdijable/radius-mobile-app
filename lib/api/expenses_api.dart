@@ -99,6 +99,7 @@ class ExpensesApi {
     String? to,
     int limit = 500,
     bool includeArchived = false,
+    int? employeeId,
   }) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -108,6 +109,8 @@ class ExpensesApi {
           if (to != null && to.isNotEmpty) 'to': to,
           'limit': limit,
           if (includeArchived) 'include_archived': 1,
+          // صرفيّات موظّفٍ واحد (كصفحة الصرفيّات بالموقع) — سجلّ الحركات بفلتر الموظّف
+          if (employeeId != null) 'employee_id': employeeId,
         },
       );
       final body = r.data ?? const {};

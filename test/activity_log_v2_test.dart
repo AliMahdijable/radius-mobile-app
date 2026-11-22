@@ -106,6 +106,14 @@ class _Server implements HttpClientAdapter {
         'total': 20000,
       }, key);
     }
+    if (key == null && o.method.toUpperCase() == 'GET' && o.uri.path == '/api/v2/managers') {
+      return _json({
+        'success': true,
+        'data': [
+          {'id': 55, 'username': 'm55', 'parent_id': 12},
+        ],
+      }, key);
+    }
     if (key != null) return _json({'success': true, 'data': const []}, key);
     return inner.fetch(o, body, cancel);
   }
@@ -249,6 +257,39 @@ void main() {
         await down(t);
       }
     });
+
+    // الصرفيّات لصاحب الصفحة: بفلتر الموظّف صرفيّاته وحده، وبمديرٍ غير صاحبها أو بمدير المشترك لا صرفيّات (كانت تُدمج تحت أيّ فلتر)
+    for (final (name, extra, want) in <(String, Map<String, Object?>, String)>[
+      ('بالموظّف', {'e': {'open': '7'}}, 'emp'),
+      ('بمديرٍ فرعيّ', {'m': {'open': ['55']}, 'mm': 'actor'}, 'none'),
+      ('بمدير المشترك', {'m': {'open': ['55']}, 'mm': 'owner'}, 'none'),
+      ('بصاحب الصفحة', {'m': {'open': ['supernet:12']}, 'mm': 'actor'}, 'all'),
+    ]) {
+      testWidgets('الصرفيّات تتبع الفلاتر — $name', (t) async {
+        await up(prefs: {
+          'report.v2.activity_log': jsonEncode({'p': 'thisMonth', 'ot': 'supernet:12', ...extra}),
+        });
+        server.rows[null] = _month();
+        try {
+          await open(t);
+          expect(server.asked, isNotEmpty);
+          switch (want) {
+            case 'none':
+              expect(server.expensesAsked, isEmpty);
+              expect(kpis(t)[LogKpiIds.expenses], 0);
+            case 'emp':
+              expect(server.expensesAsked.single.$2['employee_id'], 7);
+            default:
+              expect(server.expensesAsked.single.$2.containsKey('employee_id'), isFalse);
+              expect(kpis(t)[LogKpiIds.expenses], 2);
+          }
+          if (want == 'none' && name == 'بمدير المشترك') expect(server.asked.first.$2['user_manager'], 'm55');
+          expect(t.takeException(), isNull);
+        } finally {
+          await down(t);
+        }
+      });
+    }
 
     testWidgets('كل الشركات: كلّ شركةٍ بمفتاحها، والصرفيّات لا تُخلط (ويُقال)، والمتعذّرة خارج المجموع', (t) async {
       await up();
