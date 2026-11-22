@@ -5,8 +5,12 @@ import '../api/manager_debts_api.dart';
 import '../api/manager_movements_api.dart';
 import '../api/managers_api.dart';
 
-/// حركات أوّل هذا العدد من مدراء كلّ شركة — كالشاشة وحدها (`mgrs.take(60)`).
-const int kManagerMovementsCap = 60;
+/// حركات أوّل هذا العدد من مدراء كلّ شركة (٢٢ نوفمبر: 60 ⇒ 300 — المالك: «الPDF مرات مقصوص مو كامل»؛ كان كلّ ما بعد الستّين
+/// يغيب عن التقرير وتصديره). ما زاد يُسمّى ([CompanyManagerDebts.managersTotal]).
+const int kManagerMovementsCap = 300;
+
+/// حركات كلّ مدير: أقصى ما يعطيه الخادم (500 — `/api/admin/managers/:id/movements`)؛ مديرٌ بلغه قد تنقص أقدم حركاته فيُسمّى.
+const int kManagerMovementsLimit = 500;
 
 /// ديون مدراء شركةٍ واحدة كما تُقرأ وحدها — للتقرير في «كل الشركات».
 class CompanyManagerDebts {
@@ -18,6 +22,7 @@ class CompanyManagerDebts {
     this.debts = const [],
     this.movements = const [],
     this.movementsFailed = 0,
+    this.movementsCapped = 0,
   });
 
   /// الشركة بلا مدراء فرعيّين — لا ديون مدراء فيها أصلاً (لا «تعذّرت» ولا صفر).
@@ -41,6 +46,9 @@ class CompanyManagerDebts {
   /// مدراء لم تُقرأ حركاتهم.
   final int movementsFailed;
 
+  /// مدراء بلغت حركاتهم سقف الخادم ([kManagerMovementsLimit]) — أقدمها قد لا يكون في التقرير.
+  final int movementsCapped;
+
   /// مدراء لم يُقرأ دين الساس عليهم (الخادم: debt_unavailable) — يُسمَّون ولا يُجمعون.
   int get unreadDebts => managers.where((m) => m.debtUnavailable).length;
 }
@@ -54,7 +62,7 @@ typedef CompanyManagerDebtsResult = ({CompanyManagerDebts? data, String? error})
 Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
   String? from,
   String? to,
-  int movementsLimit = 100,
+  int movementsLimit = kManagerMovementsLimit,
   int concurrency = 6,
 }) async {
   final access = await _get('/api/admin/manager-debts/access');
@@ -87,7 +95,7 @@ Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
   ];
   final summary = ManagerDebtsSummary.fromJson(core[1].body!);
 
-  // حركات أوّل ٦٠ مديراً — بضعةٌ معاً لا الستّون دفعةً (والشركات تُقرأ اثنتين اثنتين)
+  // حركات أوّل [kManagerMovementsCap] مديراً — بضعةٌ معاً لا كلّهم دفعةً (والشركات تُقرأ اثنتين اثنتين)
   final targets = managers.take(kManagerMovementsCap).toList();
   final read = List<List<ManagerMovement>?>.filled(targets.length, null);
   var next = 0;
@@ -116,6 +124,7 @@ Future<CompanyManagerDebtsResult> loadCompanyManagerDebts({
           if (read[i] case final rows?) (manager: targets[i], rows: rows),
       ],
       movementsFailed: read.where((r) => r == null).length,
+      movementsCapped: read.where((r) => r != null && r.length >= movementsLimit).length,
     ),
     error: null,
   );

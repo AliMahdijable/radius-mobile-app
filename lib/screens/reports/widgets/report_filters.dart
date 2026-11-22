@@ -24,11 +24,15 @@ class ReportFilters {
     this.actionManagerId,
     this.userManager,
     this.employeeId,
+    this.employeeLabel,
   });
   final List<String>? actionTypes;
   final String? actionManagerId;
   final String? userManager;
   final int? employeeId;
+
+  /// اسم الموظّف المختار كما يظهر في القائمة — لرأس الملفّ المصدَّر (٢٢ نوفمبر: «يطلع على حسب الفلاتر»).
+  final String? employeeLabel;
 
   bool get isEmpty =>
       (actionTypes == null || actionTypes!.isEmpty) &&
@@ -50,6 +54,7 @@ class ReportFilters {
     Object? actionManagerId = _sentinel,
     Object? userManager = _sentinel,
     Object? employeeId = _sentinel,
+    Object? employeeLabel = _sentinel,
   }) {
     return ReportFilters(
       actionTypes: actionTypes == _sentinel
@@ -62,6 +67,7 @@ class ReportFilters {
           userManager == _sentinel ? this.userManager : userManager as String?,
       employeeId:
           employeeId == _sentinel ? this.employeeId : employeeId as int?,
+      employeeLabel: employeeLabel == _sentinel ? this.employeeLabel : employeeLabel as String?,
     );
   }
 
@@ -630,7 +636,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
               title: Text('filters.pick_employee'.tr()),
               children: [
                 _dialogTile(dctx, 'common.all'.tr(), selected == null, () {
-                  widget.onChanged(widget.value.copyWith(employeeId: null));
+                  widget.onChanged(widget.value.copyWith(employeeId: null, employeeLabel: null));
                   Navigator.pop(dctx);
                 }),
                 for (final e in employees)
@@ -639,7 +645,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                     _employeeLabel(e),
                     selected == e.id,
                     () {
-                      widget.onChanged(widget.value.copyWith(employeeId: e.id));
+                      widget.onChanged(widget.value.copyWith(employeeId: e.id, employeeLabel: _employeeLabel(e)));
                       Navigator.pop(dctx);
                     },
                   ),

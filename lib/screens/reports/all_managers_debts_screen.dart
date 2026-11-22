@@ -181,6 +181,10 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   ManagerDebtsSummary? _summary;
   bool _loading = true;
 
+  /// الشركة المفتوحة كما قُرئت (للسقوف وأسباب النقص)، وسبب تعذّرها.
+  CompanyManagerDebts? _single;
+  String? _singleError;
+
   // ── «كل الشركات» (٨ نوفمبر — المالك: «نعم لازم نسوي كلشي»): الشاشة نفسها وشريط الشركات أعلاها، والأرقام مجموع الشركات
   // التي قُرئت — المتعذّرة تُسمّى ولا تُجمع، ودين مديرٍ لم يُقرأ يُسمّى ولا يُعدّ صفراً. كلّ حركةٍ بشارة شركتها، و«حسب
   // الشركة» تحت الملخّص؛ الضغط على شركة يعرضها وحدها. التسديد والإضافة تبقى من «المدراء» للشركة المفتوحة.
@@ -271,6 +275,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       if (d.managers.length > kManagerMovementsCap)
         'حركات أوّل $kManagerMovementsCap مديراً',
       if (d.movementsFailed > 0) 'حركات ${d.movementsFailed} مدير لم تُقرأ',
+      if (d.movementsCapped > 0) 'حركات ${d.movementsCapped} مدير بلغت $kManagerMovementsLimit — أقدمها قد تنقص',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -309,42 +314,51 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       });
       return;
     }
-    // 1) fetch managers + summary + custom debts (لحساب "تسديد كامل" لاحقاً)
-    // تقرير الشركة المفتوحة — لها صراحةً (لا لقسم «المدراء» ظاهرٍ لشركةٍ أخرى ببادئاته)
-    final coreResults = await CompanyRoute.runOpen(() => Future.wait([
-          ManagersApi.listFull(count: 500),
-          ManagerDebtsApi.summary(
-            from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
-            to: _dateTo == null ? null : _fmtDate(_dateTo!),
-          ),
-          ManagerDebtsApi.list(),
-        ]));
-    if (!mounted || gen != _gen || _mergedOn) return;
-    final mgrs = (coreResults[0] as ({List<Manager> rows, int total})).rows;
-    final summary = coreResults[1] as ManagerDebtsSummary?;
-    final customDebts = coreResults[2] as List<ManagerDebt>;
-
-    // 2) concurrent fetch movements — قيد للـtop 60 مدير لتفادي الإرهاق.
-    final targets = mgrs.take(60).toList();
-    final moveResults = await CompanyRoute.runOpen(() => Future.wait(
-          targets.map((m) => ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
+    // الشركة المفتوحة بالمحمّل نفسه الذي يقرأ كلّ شركةٍ في «كل الشركات» (٢٢ نوفمبر): المدراء والملخّص والديون، ثمّ حركات أوّل
+    // [kManagerMovementsCap] مديراً بأقصى ما يعطيه الخادم — كانت أوّل 60 مديراً بآخر 100 حركة فيغيب الباقي عن التقرير وتصديره بصمت.
+    // قراءةٌ أساسيّة تتعذّر ⇒ «تعذّر» لا أصفار. للمفتوحة صراحةً (لا لقسم «المدراء» ظاهرٍ لشركةٍ أخرى ببادئاته).
+    final r = await CompanyRoute.runOpen(() => loadCompanyManagerDebts(
+          from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
+          to: _dateTo == null ? null : _fmtDate(_dateTo!),
         ));
     if (!mounted || gen != _gen || _mergedOn) return;
-
-    // 3+4) اربط الديون بالـid ثمّ flatten + sort + فلتر التاريخ
-    final events = _eventsOf(
-      [for (int i = 0; i < targets.length; i++) (manager: targets[i], rows: moveResults[i])],
-      customDebts,
-    );
-
+    final d = r.data;
     setState(() {
       _merged = null;
       _mergedData = const {};
-      _managers = mgrs;
-      _events = events;
-      _summary = summary;
+      _single = d;
+      _singleError = d == null ? (r.error ?? 'تعذّر جلب ديون المدراء الآن') : null;
+      _managers = d?.managers ?? const [];
+      _events = d == null ? const [] : _eventsOf(d.movements, d.debts);
+      _summary = d?.summary;
       _loading = false;
     });
+  }
+
+  /// رأس الملفّ (المالك ٢٢ نوفمبر: «يطلع على حسب الفلاتر»): الفترة، النوع، بحث المدير، الشركات، وما لم يُقرأ كاملاً.
+  List<String> _exportDetails(int count) {
+    const labels = {
+      _TypeFilter.depositCash: 'شحن نقدي',
+      _TypeFilter.depositLoan: 'شحن آجل',
+      _TypeFilter.debtCreated: 'إضافة دين',
+      _TypeFilter.paymentSas: 'تسديد SAS',
+      _TypeFilter.paymentCustom: 'تسديد أخرى',
+      _TypeFilter.withdraw: 'سحب',
+      _TypeFilter.points: 'نقاط',
+    };
+    final m = _mergedOn ? _merged : null;
+    return [
+      if (m != null)
+        'الشركات: ${[for (final v in _views) if (v.key != null) MergedMode.companyOf(v.key!)?.name ?? ''].where((n) => n.isNotEmpty).join('، ')}',
+      if (_typeFilter != _TypeFilter.all) 'النوع: ${labels[_typeFilter]}',
+      if (_managerFilter.trim().isNotEmpty) 'المدير: «${_managerFilter.trim()}»',
+      'عدد الحركات: $count',
+      for (final w in _summaryWarnings) 'ناقص: $w',
+      if (m != null)
+        for (final v in _views)
+          if (v.key != null && _dataOf(v.key!) != null && _companyNote(_dataOf(v.key!)!) != null)
+            'ناقص («${MergedMode.companyOf(v.key!)?.name ?? ''}»): ${_companyNote(_dataOf(v.key!)!)}',
+    ];
   }
 
   // ─── filtered view ─────────────────────────
@@ -443,6 +457,10 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       if (failed.isNotEmpty) {
         out.add('merged.not_in_sum'.trm(args: [failed.join('، ')]));
       }
+    }
+    // الشركة المفتوحة: ما لم يُقرأ كاملاً منها (مدراء بعد السقف، حركاتٌ تعذّرت أو بلغت سقف الخادم) — باسمه
+    if (!_mergedOn && _single != null) {
+      if (_companyNote(_single!) case final n?) out.add('لم يُقرأ كاملاً: $n');
     }
     for (final v in _views) {
       final n = _filteredOf(v).where((x) => x.debtUnavailable).length;
@@ -617,6 +635,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                     ? DateRange.rangeText(_dateFrom!, _dateTo!)
                     : 'كل الفترات',
                 fileNameBase: 'manager_debts_timeline',
+                details: _exportDetails(visible.length),
                 columns: [
                   if (_mergedOn) 'merged.col_company'.trm(),
                   'المدير',
@@ -685,7 +704,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                         ),
                       ),
                     ),
-                  if (_mergedEmptyReason case final reason?)
+                  if (_mergedEmptyReason ?? (!_mergedOn ? _singleError : null) case final reason?)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: _empty(reason: reason),

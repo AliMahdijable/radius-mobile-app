@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/manager_movements_api.dart';
+import '../../services/merged_manager_debts.dart' show kManagerMovementsLimit;
 import '../../api/managers_api.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
@@ -39,8 +40,8 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list =
-        await ManagerMovementsApi.list(targetAdminId: widget.manager.id);
+    // أقصى ما يعطيه الخادم (٢٢ نوفمبر: كان 200 فيغيب الأقدم عن التصدير بصمت) — بلوغه يُسمّى في رأس الملفّ
+    final list = await ManagerMovementsApi.list(targetAdminId: widget.manager.id, limit: kManagerMovementsLimit);
     if (!mounted) return;
     setState(() {
       _rows = list;
@@ -185,6 +186,10 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
                 title: 'حركات ${widget.manager.username}',
                 subtitle: 'إجمالي ${_rows.length} حركة',
                 fileNameBase: 'manager_movements_${widget.manager.username}',
+                details: [
+                  'المدير: ${widget.manager.username}',
+                  if (_rows.length >= kManagerMovementsLimit) 'ناقص: آخر $kManagerMovementsLimit حركة فقط (حدّ الخادم) — الأقدم ليست في الملفّ',
+                ],
                 columns: const [
                   'التاريخ',
                   'النوع',

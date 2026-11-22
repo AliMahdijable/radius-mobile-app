@@ -40,7 +40,12 @@ class ReportExportBar extends StatefulWidget {
     this.fileNameBase = 'report',
     this.subtitle,
     this.columnWeights,
+    this.details = const [],
   });
+
+  /// سطور الفلاتر المختارة تحت العنوان (٢٢ نوفمبر — المالك: «من يختار فلاتر … ويطبع أو ينقر إكسل أو PDF يطلع على حسب الفلاتر»):
+  /// الملفّ يقول ما فيه وما نقص منه.
+  final List<String> details;
 
   /// يُستعمل في رأس PDF + اسم الملف.
   final String title;
@@ -67,6 +72,7 @@ class _ReportExportBarState extends State<ReportExportBar> {
   List<List<String>> get rows => widget.rows;
   String get fileNameBase => widget.fileNameBase;
   List<double>? get columnWeights => widget.columnWeights;
+  List<String> get details => widget.details;
 
   bool get _hasData => rows.isNotEmpty;
 
@@ -99,6 +105,7 @@ class _ReportExportBarState extends State<ReportExportBar> {
         context,
         title: title,
         subtitle: subtitle,
+        details: details,
         columns: columns,
         rows: rows,
         fileNameBase: fileNameBase,
@@ -108,6 +115,7 @@ class _ReportExportBarState extends State<ReportExportBar> {
         context,
         title: title,
         subtitle: subtitle,
+        details: details,
         columns: columns,
         rows: rows,
         columnWeights: columnWeights,

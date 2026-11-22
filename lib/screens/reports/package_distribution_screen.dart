@@ -213,6 +213,19 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
       ? AppColors.textLow
       : (v < 0 ? AppColors.error : AppColors.success);
 
+  /// رأس الملفّ (٢٢ نوفمبر — «يطلع على حسب الفلاتر»): الموظّف المختار، والشركات، وما يعرف التقرير أنّه ناقص.
+  List<String> get _exportDetails {
+    final m = _mergedOn ? _merged : null;
+    final d = _data;
+    return [
+      if (m != null) 'الشركات: ${[for (final p in m.parts) if (p.ok) p.company.name].join('، ')}',
+      if (m != null && m.parts.any((p) => !p.ok && !p.unsupported))
+        'خارج الملفّ: ${[for (final p in m.parts) if (!p.ok && !p.unsupported) p.company.name].join('، ')}',
+      if (_filters.employeeId != null) 'الموظّف: ${_filters.employeeLabel ?? '#${_filters.employeeId}'}',
+      if (d != null && d.subscribersPartial) 'ناقص: ${'pkgdist.partial'.tr()}',
+    ];
+  }
+
   List<String> get _exportColumns => [
         if (_mergedAllRows != null) 'merged.col_company'.trm(),
         'pkgdist.card_title'.tr(),
@@ -506,6 +519,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
             title: 'pkgdist.title'.tr(),
             subtitle: _range.label,
             fileNameBase: 'package-distribution',
+            details: _exportDetails,
             columns: _exportColumns,
             rows: _exportRows,
           ),
@@ -730,6 +744,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
             title: 'pkgdist.title'.tr(),
             subtitle: _range.label,
             fileNameBase: 'package-distribution',
+            details: _exportDetails,
             columns: _exportColumns,
             rows: _exportRows,
           ),

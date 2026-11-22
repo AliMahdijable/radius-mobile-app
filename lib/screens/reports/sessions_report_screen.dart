@@ -91,6 +91,28 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     if (mounted && _mergedOn) setState(() => _visibleCount = kReportPageStep);
   }
 
+  /// رأس الملفّ (المالك ٢٢ نوفمبر: «يطلع على حسب الفلاتر»): المتّصلون أم السجلّ، البحث، مدير المشترك، الشركات، وما لم يُقرأ كاملاً —
+  /// الساس يعطي حتى 2000 صفّ للطلب، فبلوغها يُقال لا يُصدَّر كأنّه الكلّ.
+  List<String> _exportDetails(int count) {
+    final m = _mergedOn ? _merged : null;
+    final um = _filters.userManager;
+    return [
+      _onlineOnly ? 'المتّصلون الآن' : 'سجلّ الجلسات',
+      if (m != null) 'الشركات: ${[for (final p in m.parts) if (p.ok) p.company.name].join('، ')}',
+      if (m != null && m.parts.any((p) => !p.ok && !p.unsupported))
+        'خارج الملفّ: ${[for (final p in m.parts) if (!p.ok && !p.unsupported) p.company.name].join('، ')}',
+      if (_searchValue.trim().isNotEmpty)
+        'بحث (${_searchField == 'ip' ? 'IP' : (_searchField == 'mac' ? 'MAC' : 'اليوزر')}): «${_searchValue.trim()}»',
+      if (um != null && um.isNotEmpty) 'مدير المشترك: $um',
+      'عدد الصفوف: $count',
+      if (_historyNote != null && !_onlineOnly) 'ملاحظة: $_historyNote',
+      if (m == null && _rows.length >= 2000) 'ناقص: بلغ الحدّ (2000 صفّ من الساس) — ضيّق البحث لترى الباقي',
+      if (m != null)
+        for (final p in m.parts)
+          if (p.ok && (p.rows?.length ?? 0) >= 2000) 'ناقص («${p.company.name}»): بلغت 2000 صفّ من الساس',
+    ];
+  }
+
   List<SessionRow> get _visibleRows {
     final um = _filters.userManager;
     if (um == null || um.isEmpty) return _rows;
@@ -397,6 +419,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                           fileNameBase: _onlineOnly
                                               ? 'sessions_online'
                                               : 'sessions_all',
+                                          details: _exportDetails(visible.length),
                                           columns: [
                                             if (_mergedOn) 'merged.col_company'.trm(),
                                             'reports.col_username'.tr(),
