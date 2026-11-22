@@ -43,6 +43,10 @@ class UbntLivePanel extends StatefulWidget {
 
 class _UbntLivePanelState extends State<UbntLivePanel> {
   UbntStats? _stats;
+
+  /// المعروض القراءةُ الأولى السريعة (بعد mca-status) والكاملة في الطريق — نسبة المعالج تُقاس في الكاملة (نافذة /proc/stat)،
+  /// فغيابها الآن «يُقاس…» لا «لم تُقرأ».
+  bool _partial = false;
   bool _loading = false;
   String? _error;
   Timer? _timer;
@@ -160,6 +164,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 if (!mounted) return;
                 setState(() {
                   _stats = partial;
+                  _partial = true;
                 });
               }
             : null, // ← refresh: تجاهل partial، انتظر البيانات الكاملة
@@ -223,6 +228,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
 
       setState(() {
         _stats = stats;
+        _partial = false;
         DeviceStatsCache.instance.putRaw(widget.device.id, stats);
         _loading = false;
         _error = null;
@@ -247,10 +253,14 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (!mounted) return;
       setState(() {
         _error = msg;
+        _partial = false;
         _loading = false;
       });
     }
   }
+
+  /// سطر خانة المعالج حين لا نسبة: القراءة الكاملة في الطريق ⇒ «يُقاس…»، وإلّا «لم تُقرأ».
+  String? _cpuSub(int? cpu) => cpu != null ? null : (_partial ? 'يُقاس…' : 'لم تُقرأ');
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +357,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     final w = s.wireless;
     final down = _deskTopRate(rx: true), up = _deskTopRate(rx: false);
     return [
-      DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: h.cpuload.toDouble()),
+      DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: h.cpuload?.toDouble(), sub: _cpuSub(h.cpuload)),
       if (s.memUsedPercent case final mem?)
         DeskPercentTile(
           icon: LucideIcons.memoryStick,
@@ -863,7 +873,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               child: _percentCard(
             icon: LucideIcons.cpu,
             label: 'CPU',
-            percent: h.cpuload.toDouble(),
+            percent: h.cpuload?.toDouble(),
+            pending: _partial,
           )),
           const SizedBox(width: 8),
           Expanded(
@@ -888,12 +899,15 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     );
   }
 
+  /// [percent] null: لم تُقرأ ⇒ «—» (أو «…» ما دامت القراءة الكاملة في الطريق [pending]) بلا وحدةٍ ولا شريطٍ ملوّن.
   Widget _percentCard({
     required IconData icon,
     required String label,
-    required double percent,
+    required double? percent,
+    bool pending = false,
   }) {
-    final color = _percentGradeColor(percent);
+    final p = percent;
+    final color = p == null ? AppColors.textLow : _percentGradeColor(p);
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -913,22 +927,24 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text('${percent.round()}',
+            Text(p == null ? (pending ? '…' : '—') : '${p.round()}',
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
+                    color: p == null ? AppColors.textLow : AppColors.textHi,
                     height: 1)),
-            const SizedBox(width: 2),
-            Text('%',
-                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+            if (p != null) ...[
+              const SizedBox(width: 2),
+              Text('%',
+                  style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+            ],
           ],
         ),
         const SizedBox(height: 6),
         ClipRRect(
           borderRadius: BorderRadius.circular(R.pill),
           child: LinearProgressIndicator(
-            value: (percent / 100).clamp(0.0, 1.0),
+            value: p == null ? 0 : (p / 100).clamp(0.0, 1.0),
             minHeight: 4,
             backgroundColor: AppColors.border,
             valueColor: AlwaysStoppedAnimation(color),

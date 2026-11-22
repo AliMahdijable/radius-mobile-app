@@ -29,6 +29,16 @@ class UbntApi {
   @visibleForTesting
   static void resetUdapiHostsForTest() => _udapiHosts.clear();
 
+  /// المسار كاملاً على «طرفيّة» airOS مزيّفة: كلّ أمرٍ يرسله التطبيق للجهاز يمرّ بـ[run] بالنصّ نفسه الذي يذهب في SSH
+  /// (الاختبار يحاكي جهازاً حقيقيّاً بلا شبكة). [run] يرمي ⇒ كما يرمي SSH (مهلة · خطأ).
+  @visibleForTesting
+  static Future<UbntStats> debugCollect(Future<String> Function(String cmd) run,
+      {String ip = '192.0.2.10', void Function(UbntStats partial)? onPartialReady}) async {
+    final r = await _collect((cmd, t) => run(cmd).timeout(t),
+        ip: ip, user: 'ubnt', pass: 'test', timeout: const Duration(seconds: 10), onPartialReady: onPartialReady);
+    return r.stats ?? await r.udapi!;
+  }
+
   /// ناتج أمرٍ لا يحمل بيانات airOS: فارغ، أو «not found» من الطرفيّة، أو بلا سطر `مفتاح=قيمة` واحد.
   @visibleForTesting
   static bool noAirOsOutput(String out) {
@@ -39,6 +49,46 @@ class UbntApi {
       return true;
     }
     return !RegExp(r'[A-Za-z][\w.]*=\S').hasMatch(t);
+  }
+
+  /// نافذة المعالج: سطر `cpu` المجمَّع من `/proc/stat` مرّتين بينهما ثانية. الجلسة خاملةٌ خلالها — مصافحة SSH وأوامرنا
+  /// انتهت أو لم تبدأ — فما يُعدّ انشغال الجهاز بعمله لا بقراءتنا (كلّ جولةٍ جلسةٌ جديدة بمصافحةٍ ثقيلة على معالجٍ ضعيف،
+  /// فالفرق بين جولتين كان سيحسبها عليه).
+  @visibleForTesting
+  static const cpuWindowCmd = 'head -n 1 /proc/stat;sleep 1;head -n 1 /proc/stat';
+
+  /// نسبة انشغال المعالج من لقطتَي [cpuWindowCmd] — كما يحسبها `top`: (الكلّ − الخمول − انتظار القرص) ÷ الكلّ بين اللقطتين.
+  /// سطر `cpu` (لا `cpu0`): user nice system idle [iowait irq softirq steal guest guest_nice] بوحدات USER_HZ؛ guest وguest_nice
+  /// محسوبان داخل user/nice فلا يُجمعان ثانيةً. لقطةٌ ناقصة، عدّادٌ رجع (إعادة تشغيل)، أو نافذةٌ أقصر من 0.2ث ⇒ null («—»).
+  @visibleForTesting
+  static int? cpuPercentFromProcStat(String out) {
+    final rows = <List<int>>[];
+    for (final line in out.split('\n')) {
+      final t = line.trim();
+      if (!t.startsWith('cpu ')) continue;
+      final nums = <int>[];
+      for (final f in t.substring(4).trim().split(RegExp(r'\s+'))) {
+        final v = int.tryParse(f);
+        if (v == null || v < 0) break;
+        nums.add(v);
+      }
+      if (nums.length >= 4) rows.add(nums);
+    }
+    if (rows.length < 2) return null;
+    ({int total, int idle}) sum(List<int> r) {
+      var total = 0;
+      for (var i = 0; i < r.length && i < 8; i++) {
+        total += r[i];
+      }
+      return (total: total, idle: r[3] + (r.length > 4 ? r[4] : 0));
+    }
+
+    final a = sum(rows.first), b = sum(rows.last);
+    final dTotal = b.total - a.total;
+    if (dTotal < 20) return null;
+    final dIdle = b.idle - a.idle;
+    if (dIdle < 0 || dIdle > dTotal) return null;
+    return ((dTotal - dIdle) * 100 / dTotal).round().clamp(0, 100);
   }
 
   /// جلب صورة كاملة عن حالة الجهاز عبر SSH.
@@ -229,318 +279,17 @@ class UbntApi {
       // ننتظر الـauth handshake صراحة — يفشل سريعاً على الـcreds الغلط
       // بدل انتظار timeout الأمر الأوّل. لو auth تمّ، نُكمل بأمان.
       await client.authenticated.timeout(timeout);
-
-      // نجرّب mca-dump أوّلاً (JSON منظّم، أوثق للأجهزة الحديثة airFiber/airMax AC)
-      // ثمّ fallback إلى mca-status (key=value، للـXM/AC القديمة)
-      String output = '';
-      bool isJsonDump = false;
-
-      try {
-        final result = await client.run('mca-dump').timeout(timeout);
-        output = utf8.decode(result, allowMalformed: true).trim();
-        if (output.startsWith('{') || output.startsWith('[')) {
-          isJsonDump = true;
-        }
-      } catch (_) {}
-
-      if (!isJsonDump) {
-        try {
-          final result = await client.run('mca-status').timeout(timeout);
-          output = utf8.decode(result, allowMalformed: true);
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
-          }
-          final result = await client.run('ubntbox status').timeout(timeout);
-          output = utf8.decode(result, allowMalformed: true);
-        }
-      }
-
-      if (!isJsonDump && noAirOsOutput(output)) {
-        // UISP gen3 (Wave · LTU…، فُحص على Wave Long-Range ٢٧ أكتوبر): لا أدوات airOS إطلاقاً — الطرفيّة تطبع
-        // «ash: mca-status: not found» لا فراغاً — وبياناته في خدمة udapi التي تكشفها واجهة الويب؛ نقرؤها بنفس
-        // بيانات الدخول عبر HTTPS ونتذكّر العنوان.
-        String? board;
-        try {
-          board = utf8.decode(
-              await client.run('cat /etc/board.json 2>/dev/null').timeout(const Duration(seconds: 4)),
-              allowMalformed: true);
-        } catch (_) {}
-        if (UbntUdapi.productFromBoardJson(board) != null) {
-          _udapiHosts.add(ip);
-          final s = UbntUdapi.fetch(host: ip, user: user, pass: pass);
-          return s;
-        }
-        throw UbntException('لم نستلم بيانات — تحقّق من صلاحيّات المستخدم');
-      }
-
-      // ⚠️ الحمولة الخام في `trace` وحدها.
-      //
-      // خمسون سطراً لكلّ جهاز UBNT في كلّ نبضة — وهي آخر ما بقي يُغرق
-      // السجلّ بعد إسكات ميكروتك. والسجلّ الذي لا يُقرأ يُخفي العطل
-      // الذي نبحث عنه.
-      //
-      // ارفع `DevLog.level` إلى `verbose` حين تُشخّص جلسةً بعينها.
-      DevLog.trace(() =>
-          '══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════\n'
-          '${output.substring(0, output.length > 2000 ? 2000 : output.length)}\n'
-          '════════════════════════════════');
-
-      // لو JSON: نحوّله لـflat map key=value ليعمل مع نفس الـparser
-      final parsed =
-          isJsonDump ? _flattenMcaDump(output) : _parseMcaStatus(output);
-
-      // airFiber 60: أوامر إضافيّة لجلب wireless info (يفشل بصمت لغير airFiber)
-      try {
-        final afOut = utf8
-            .decode(
-                await client
-                    .run('af-status 2>/dev/null')
-                    .timeout(const Duration(seconds: 4)),
-                allowMalformed: true)
-            .trim();
-        if (afOut.isNotEmpty) {
-          if (kDebugMode) {
-            debugPrint('🔵 af-status output (first 1500 chars):');
-            debugPrint(
-                afOut.substring(0, afOut.length > 1500 ? 1500 : afOut.length));
-          }
-          if (afOut.startsWith('{')) {
-            _mergeFromJson(parsed, afOut);
-          }
-        }
-      } catch (_) {}
-
-      // ⚡ Tier 1 partial: mca-status + af-status جاهز.
-      // UI يعرض device name/CPU/RAM/temp/signal فوراً بدل انتظار wstalist +
-      // ifconfig + link speeds (~1-2s إضافيّة).
-      if (onPartialReady != null) {
-        try {
-          final partial = UbntStats.fromMcaStatus(
-              Map<String, String>.from(parsed), // نسخة عشان لا نعدّلها
-              interfaces: const [],
-              wstalistStations: const [],
-              stationsRead: false);
-          onPartialReady(partial);
-        } catch (_) {}
-      }
-
-      // **Batched command** — بدل 4 SSH round-trips منفصلة (wstalist + uptime +
-      // loadavg + iwconfig + ifconfig) الي كانت تستهلك ~15s على أجهزة بطيئة،
-      // نجمعهم في shell command واحد مع فاصل مُميّز. RouterOS SSH يدعم `;`
-      // لتسلسل الأوامر. الفاصل ==SECTION== يساعد الـparser يفصل الأقسام.
-      //
-      // fallback: لو الأمر المُجمَّع فشل (بعض airOS القديم يقفل shell)،
-      // نرجع لسلوك القديم بأوامر منفصلة.
-      String batchedOut = '';
-      const marker = '===MYSVCS_SECTION===';
-      try {
-        final cmd = [
-          'wstalist 2>/dev/null',
-          'echo $marker',
-          'cat /proc/uptime',
-          'echo $marker',
-          'cat /proc/loadavg',
-          'echo $marker',
-          'iwconfig 2>/dev/null',
-          'echo $marker',
-          'ifconfig',
-        ].join(';');
-        batchedOut = utf8.decode(
-          await client.run(cmd).timeout(const Duration(seconds: 8)),
-          allowMalformed: true,
-        );
-      } catch (_) {
-        batchedOut = '';
-      }
-
-      String wstaOut = '', uptimeOut = '', loadOut = '', iwOut = '', ifOut = '';
-      if (batchedOut.isNotEmpty) {
-        final parts = batchedOut.split(marker);
-        wstaOut = parts.isNotEmpty ? parts[0].trim() : '';
-        uptimeOut = parts.length > 1 ? parts[1].trim() : '';
-        loadOut = parts.length > 2 ? parts[2].trim() : '';
-        iwOut = parts.length > 3 ? parts[3] : '';
-        ifOut = parts.length > 4 ? parts[4] : '';
-      }
-      // 2026-08-20: wstalist recovery — إذا الأمر المُجمَّع نجح لكن wstaOut
-      // فارغ أو مقطوع (بعض airOS firmware تدمج stdout للأوامر المتسلسلة
-      // بشكل يخرّب parsing)، أعد جلب wstalist منفصلاً. بدون هذا: AP
-      // بعملاء متصلين يعرض "لا يوجد عملاء" بلا سبب حقيقي.
-      if (batchedOut.isNotEmpty && !wstaOut.startsWith('[')) {
-        try {
-          final r = utf8
-              .decode(
-                await client
-                    .run('wstalist 2>/dev/null')
-                    .timeout(const Duration(seconds: 5)),
-                allowMalformed: true,
-              )
-              .trim();
-          if (r.startsWith('[')) {
-            wstaOut = r;
-            if (kDebugMode) {
-              debugPrint('🟢 [ubnt] wstalist recovered via fallback fetch');
-            }
-          }
-        } catch (_) {}
-      }
-      if (batchedOut.isEmpty) {
-        // fallback: أوامر منفصلة (سلوك قديم)
-        try {
-          wstaOut = utf8
-              .decode(
-                  await client
-                      .run('wstalist 2>/dev/null')
-                      .timeout(const Duration(seconds: 4)),
-                  allowMalformed: true)
-              .trim();
-        } catch (_) {}
-        try {
-          uptimeOut = utf8
-              .decode(
-                  await client
-                      .run('cat /proc/uptime')
-                      .timeout(const Duration(seconds: 3)),
-                  allowMalformed: true)
-              .trim();
-        } catch (_) {}
-        try {
-          loadOut = utf8
-              .decode(
-                  await client
-                      .run('cat /proc/loadavg')
-                      .timeout(const Duration(seconds: 3)),
-                  allowMalformed: true)
-              .trim();
-        } catch (_) {}
-        try {
-          iwOut = utf8.decode(
-              await client
-                  .run('iwconfig 2>/dev/null')
-                  .timeout(const Duration(seconds: 4)),
-              allowMalformed: true);
-        } catch (_) {}
-        try {
-          ifOut = utf8.decode(
-              await client.run('ifconfig').timeout(const Duration(seconds: 4)),
-              allowMalformed: true);
-        } catch (_) {}
-      }
-
-      // wstalist — نحفظه أوّلاً للاستعمال في الـstations lookup (المكرّر السابق)
-      List<Map<String, dynamic>> stations = const [];
-      // قائمة المحطّات قُرئت فعلاً (المراجعة الثانية): wstalist قائمةٌ صالحة — مهلةٌ أو مخرجٌ مقطوع أو JSON تالف ⇒ لا نعرف (لا «لا أحد»)
-      var wstaRead = false;
-      if (wstaOut.startsWith('[')) {
-        _mergeStationsFromWstalist(parsed, wstaOut);
-        try {
-          final parsedJson = json.decode(wstaOut);
-          if (parsedJson is List) {
-            stations = parsedJson
-                .whereType<Map>()
-                .map((e) => e.cast<String, dynamic>())
-                .toList();
-            wstaRead = true;
-          }
-        } catch (_) {}
-      }
-
-      // uptime
-      if (parsed['uptime'] == null && uptimeOut.isNotEmpty) {
-        parsed['uptime'] = uptimeOut.split(' ').first;
-      }
-
-      // loadavg → cpuload
-      if (parsed['cpuload'] == null && loadOut.isNotEmpty) {
-        final loadParts = loadOut.split(RegExp(r'\s+'));
-        if (loadParts.isNotEmpty) {
-          final load1 = double.tryParse(loadParts[0]) ?? 0;
-          parsed['cpuload'] = (load1 * 100).round().toString();
-        }
-      }
-
-      // iwconfig
-      if (iwOut.isNotEmpty) _enrichFromIwconfig(iwOut, parsed);
-
-      // ifconfig
-      List<Map<String, String>> ifaceRaws = const [];
-      if (ifOut.isNotEmpty) {
-        ifaceRaws = _parseIfconfig(ifOut);
-      }
-
-      // link speed لكل ether — نجرّب عدّة مصادر (تختلف بين إصدارات airOS):
-      //   1. /sys/class/net/eth0/speed (Linux حديث)
-      //   2. mii-tool (airOS القديم — Atheros)
-      //   3. ethtool (لو موجود)
-      //   4. mca-status لو فيه wanSpeed
-      for (final iface in ifaceRaws) {
-        final name = iface['name'] ?? '';
-        if (name.isEmpty || !name.startsWith('eth')) continue;
-
-        // 1) /sys/class/net
-        try {
-          final r = utf8
-              .decode(
-                  await client
-                      .run('cat /sys/class/net/$name/speed 2>/dev/null')
-                      .timeout(const Duration(seconds: 2)),
-                  allowMalformed: true)
-              .trim();
-          if (r.isNotEmpty && int.tryParse(r) != null && int.parse(r) > 0) {
-            iface['speed'] = r;
-            continue;
-          }
-        } catch (_) {}
-
-        // 2) mii-tool — الأشهر على airOS 5/6 القديم
-        try {
-          final r = utf8
-              .decode(
-                  await client
-                      .run('mii-tool $name 2>/dev/null')
-                      .timeout(const Duration(seconds: 2)),
-                  allowMalformed: true)
-              .trim();
-          // نموذج: "eth0: negotiated 100baseTx-FD flow-control, link ok"
-          final m = RegExp(r'(\d+)base').firstMatch(r);
-          if (m != null) {
-            iface['speed'] = m.group(1)!;
-            continue;
-          }
-        } catch (_) {}
-
-        // 3) ethtool
-        try {
-          final r = utf8.decode(
-              await client
-                  .run('ethtool $name 2>/dev/null')
-                  .timeout(const Duration(seconds: 2)),
-              allowMalformed: true);
-          // "Speed: 1000Mb/s"
-          final m = RegExp(r'Speed:\s*(\d+)').firstMatch(r);
-          if (m != null) {
-            iface['speed'] = m.group(1)!;
-            continue;
-          }
-        } catch (_) {}
-      }
-
-      // fallback: mca-status قد يعرض wanSpeed أو lanSpeed
-      if (parsed['wanSpeed'] != null) {
-        final s = int.tryParse(parsed['wanSpeed']!);
-        if (s != null && s > 0) {
-          final eth0 = ifaceRaws.where((i) => i['name'] == 'eth0').toList();
-          if (eth0.isNotEmpty && eth0.first['speed'] == null) {
-            eth0.first['speed'] = s.toString();
-          }
-        }
-      }
-
-      // wstalist سبق واستخرجناه أعلاه من الـbatched command (stations متغيّر
-      // مُعبّأ فوق). لا نُكرّر الأمر — كان يستهلك 4s إضافيّة بلا فائدة.
-      return UbntStats.fromMcaStatus(parsed,
-          interfaces: ifaceRaws, wstalistStations: stations, stationsRead: wstaRead);
+      final c = client;
+      final r = await _collect(
+        (cmd, t) async => utf8.decode(await c.run(cmd).timeout(t), allowMalformed: true),
+        ip: ip,
+        user: user,
+        pass: pass,
+        timeout: timeout,
+        onPartialReady: onPartialReady,
+      );
+      if (r.udapi != null) return r.udapi!;
+      return r.stats!;
     } on SSHAuthAbortError {
       throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
     } on SSHAuthFailError {
@@ -567,6 +316,282 @@ class UbntApi {
         socket?.close();
       } catch (_) {}
     }
+  }
+
+  /// ما بعد الدخول كلّه: أوامر الجهاز وتحليلها. [run] = أمرٌ واحد بمهلته يعيد خرجه نصّاً — جلسة SSH في الإنتاج، وطرفيّة airOS
+  /// مزيّفة في الاختبار ([debugCollect]). gen3 (Wave · LTU) ⇒ `udapi` مستقبلاً يُعاد كما هو.
+  static Future<({UbntStats? stats, Future<UbntStats>? udapi})> _collect(
+    Future<String> Function(String cmd, Duration timeout) run, {
+    required String ip,
+    required String user,
+    required String pass,
+    required Duration timeout,
+    void Function(UbntStats partial)? onPartialReady,
+  }) async {
+    // نجرّب mca-dump أوّلاً (JSON منظّم، أوثق للأجهزة الحديثة airFiber/airMax AC)
+    // ثمّ fallback إلى mca-status (key=value، للـXM/AC القديمة)
+    String output = '';
+    bool isJsonDump = false;
+
+    try {
+      output = (await run('mca-dump', timeout)).trim();
+      if (output.startsWith('{') || output.startsWith('[')) {
+        isJsonDump = true;
+      }
+    } catch (_) {}
+
+    if (!isJsonDump) {
+      try {
+        output = await run('mca-status', timeout);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
+        }
+        output = await run('ubntbox status', timeout);
+      }
+    }
+
+    if (!isJsonDump && noAirOsOutput(output)) {
+      // UISP gen3 (Wave · LTU…، فُحص على Wave Long-Range ٢٧ أكتوبر): لا أدوات airOS إطلاقاً — الطرفيّة تطبع
+      // «ash: mca-status: not found» لا فراغاً — وبياناته في خدمة udapi التي تكشفها واجهة الويب؛ نقرؤها بنفس
+      // بيانات الدخول عبر HTTPS ونتذكّر العنوان.
+      String? board;
+      try {
+        board = await run('cat /etc/board.json 2>/dev/null', const Duration(seconds: 4));
+      } catch (_) {}
+      if (UbntUdapi.productFromBoardJson(board) != null) {
+        _udapiHosts.add(ip);
+        // تُعاد بلا انتظارٍ داخل try الجلسة — أخطاء udapi تصل كما هي (كما كانت).
+        return (stats: null, udapi: UbntUdapi.fetch(host: ip, user: user, pass: pass));
+      }
+      throw UbntException('لم نستلم بيانات — تحقّق من صلاحيّات المستخدم');
+    }
+
+    // ⚠️ الحمولة الخام في `trace` وحدها.
+    //
+    // خمسون سطراً لكلّ جهاز UBNT في كلّ نبضة — وهي آخر ما بقي يُغرق
+    // السجلّ بعد إسكات ميكروتك. والسجلّ الذي لا يُقرأ يُخفي العطل
+    // الذي نبحث عنه.
+    //
+    // ارفع `DevLog.level` إلى `verbose` حين تُشخّص جلسةً بعينها.
+    DevLog.trace(() =>
+        '══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════\n'
+        '${output.substring(0, output.length > 2000 ? 2000 : output.length)}\n'
+        '════════════════════════════════');
+
+    // لو JSON: نحوّله لـflat map key=value ليعمل مع نفس الـparser
+    final parsed =
+        isJsonDump ? _flattenMcaDump(output) : _parseMcaStatus(output);
+
+    // airFiber 60: أوامر إضافيّة لجلب wireless info (يفشل بصمت لغير airFiber)
+    try {
+      final afOut = (await run('af-status 2>/dev/null', const Duration(seconds: 4))).trim();
+      if (afOut.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('🔵 af-status output (first 1500 chars):');
+          debugPrint(
+              afOut.substring(0, afOut.length > 1500 ? 1500 : afOut.length));
+        }
+        if (afOut.startsWith('{')) {
+          _mergeFromJson(parsed, afOut);
+        }
+      }
+    } catch (_) {}
+
+    // المعالج (٢٢ نوفمبر — المالك: «الـcpu الوهمي»): نسبةٌ يسمّيها الجهاز نسبة معالج صراحةً (`cpuUsage` — airFiber 60 GP،
+    // من خرجٍ حقيقيّ) تكفي؛ وإلّا نقيسها نحن من `/proc/stat` في الأمر المجمَّع. ما جاء باسم `cpuload` يُنحّى حتى يفشل
+    // قياسنا: معناه لم يُتحقَّق منه على كلّ إصدار، فلا يظهر في القراءة الأولى رقمٌ قد لا يكون نسبة معالج.
+    final reportedCpuload = parsed.remove('cpuload');
+    final measureCpu = UbntStats.cpuPercentOf(parsed['cpuUsage']) == null;
+
+    // ⚡ Tier 1 partial: mca-status + af-status جاهز.
+    // UI يعرض device name/CPU/RAM/temp/signal فوراً بدل انتظار wstalist +
+    // ifconfig + link speeds (~1-2s إضافيّة).
+    if (onPartialReady != null) {
+      try {
+        final partial = UbntStats.fromMcaStatus(
+            Map<String, String>.from(parsed), // نسخة عشان لا نعدّلها
+            interfaces: const [],
+            wstalistStations: const [],
+            stationsRead: false);
+        onPartialReady(partial);
+      } catch (_) {}
+    }
+
+    // **Batched command** — بدل 4 SSH round-trips منفصلة (wstalist + uptime +
+    // المعالج + iwconfig + ifconfig) الي كانت تستهلك ~15s على أجهزة بطيئة،
+    // نجمعهم في shell command واحد مع فاصل مُميّز. RouterOS SSH يدعم `;`
+    // لتسلسل الأوامر. الفاصل ==SECTION== يساعد الـparser يفصل الأقسام.
+    // القسم الثالث كان `cat /proc/loadavg` — صار نافذة المعالج ([cpuWindowCmd]) أو `true` حين يذكر الجهاز نسبته.
+    //
+    // fallback: لو الأمر المُجمَّع فشل (بعض airOS القديم يقفل shell)،
+    // نرجع لسلوك القديم بأوامر منفصلة.
+    String batchedOut = '';
+    const marker = '===MYSVCS_SECTION===';
+    try {
+      final cmd = [
+        'wstalist 2>/dev/null',
+        'echo $marker',
+        'cat /proc/uptime',
+        'echo $marker',
+        measureCpu ? cpuWindowCmd : 'true',
+        'echo $marker',
+        'iwconfig 2>/dev/null',
+        'echo $marker',
+        'ifconfig',
+      ].join(';');
+      // ثانية النافذة فوق السقف القديم (8ث) — لا تُسقط جهازاً بطيئاً كان يلحق.
+      batchedOut = await run(cmd, Duration(seconds: measureCpu ? 9 : 8));
+    } catch (_) {
+      batchedOut = '';
+    }
+
+    String wstaOut = '', uptimeOut = '', cpuOut = '', iwOut = '', ifOut = '';
+    if (batchedOut.isNotEmpty) {
+      final parts = batchedOut.split(marker);
+      wstaOut = parts.isNotEmpty ? parts[0].trim() : '';
+      uptimeOut = parts.length > 1 ? parts[1].trim() : '';
+      cpuOut = parts.length > 2 ? parts[2].trim() : '';
+      iwOut = parts.length > 3 ? parts[3] : '';
+      ifOut = parts.length > 4 ? parts[4] : '';
+    }
+    // 2026-08-20: wstalist recovery — إذا الأمر المُجمَّع نجح لكن wstaOut
+    // فارغ أو مقطوع (بعض airOS firmware تدمج stdout للأوامر المتسلسلة
+    // بشكل يخرّب parsing)، أعد جلب wstalist منفصلاً. بدون هذا: AP
+    // بعملاء متصلين يعرض "لا يوجد عملاء" بلا سبب حقيقي.
+    if (batchedOut.isNotEmpty && !wstaOut.startsWith('[')) {
+      try {
+        final r = (await run('wstalist 2>/dev/null', const Duration(seconds: 5))).trim();
+        if (r.startsWith('[')) {
+          wstaOut = r;
+          if (kDebugMode) {
+            debugPrint('🟢 [ubnt] wstalist recovered via fallback fetch');
+          }
+        }
+      } catch (_) {}
+    }
+    if (batchedOut.isEmpty) {
+      // fallback: أوامر منفصلة (سلوك قديم)
+      try {
+        wstaOut = (await run('wstalist 2>/dev/null', const Duration(seconds: 4))).trim();
+      } catch (_) {}
+      try {
+        uptimeOut = (await run('cat /proc/uptime', const Duration(seconds: 3))).trim();
+      } catch (_) {}
+      if (measureCpu) {
+        try {
+          cpuOut = (await run(cpuWindowCmd, const Duration(seconds: 4))).trim();
+        } catch (_) {}
+      }
+      try {
+        iwOut = await run('iwconfig 2>/dev/null', const Duration(seconds: 4));
+      } catch (_) {}
+      try {
+        ifOut = await run('ifconfig', const Duration(seconds: 4));
+      } catch (_) {}
+    }
+
+    // wstalist — نحفظه أوّلاً للاستعمال في الـstations lookup (المكرّر السابق)
+    List<Map<String, dynamic>> stations = const [];
+    // قائمة المحطّات قُرئت فعلاً (المراجعة الثانية): wstalist قائمةٌ صالحة — مهلةٌ أو مخرجٌ مقطوع أو JSON تالف ⇒ لا نعرف (لا «لا أحد»)
+    var wstaRead = false;
+    if (wstaOut.startsWith('[')) {
+      _mergeStationsFromWstalist(parsed, wstaOut);
+      try {
+        final parsedJson = json.decode(wstaOut);
+        if (parsedJson is List) {
+          stations = parsedJson
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList();
+          wstaRead = true;
+        }
+      } catch (_) {}
+    }
+
+    // uptime
+    if (parsed['uptime'] == null && uptimeOut.isNotEmpty) {
+      parsed['uptime'] = uptimeOut.split(' ').first;
+    }
+
+    // المعالج: انشغاله في الثانية الهادئة كما عدّه الجهاز نفسه — وإن تعذّر القياس فما سمّاه الجهاز `cpuload`، وإلّا «—».
+    // ⛔ لا `/proc/loadavg` بعد اليوم: متوسّط الحِمل ليس نسبة معالج ([UbntStats.fromMcaStatus]).
+    if (measureCpu) {
+      final pct = cpuPercentFromProcStat(cpuOut);
+      if (pct != null) parsed[UbntStats.cpuMeasuredKey] = '$pct';
+    }
+    if (parsed[UbntStats.cpuMeasuredKey] == null && reportedCpuload != null) {
+      parsed['cpuload'] = reportedCpuload;
+    }
+
+    // iwconfig
+    if (iwOut.isNotEmpty) _enrichFromIwconfig(iwOut, parsed);
+
+    // ifconfig
+    List<Map<String, String>> ifaceRaws = const [];
+    if (ifOut.isNotEmpty) {
+      ifaceRaws = _parseIfconfig(ifOut);
+    }
+
+    // link speed لكل ether — نجرّب عدّة مصادر (تختلف بين إصدارات airOS):
+    //   1. /sys/class/net/eth0/speed (Linux حديث)
+    //   2. mii-tool (airOS القديم — Atheros)
+    //   3. ethtool (لو موجود)
+    //   4. mca-status لو فيه wanSpeed
+    for (final iface in ifaceRaws) {
+      final name = iface['name'] ?? '';
+      if (name.isEmpty || !name.startsWith('eth')) continue;
+
+      // 1) /sys/class/net
+      try {
+        final r = (await run('cat /sys/class/net/$name/speed 2>/dev/null', const Duration(seconds: 2))).trim();
+        if (r.isNotEmpty && int.tryParse(r) != null && int.parse(r) > 0) {
+          iface['speed'] = r;
+          continue;
+        }
+      } catch (_) {}
+
+      // 2) mii-tool — الأشهر على airOS 5/6 القديم
+      try {
+        final r = (await run('mii-tool $name 2>/dev/null', const Duration(seconds: 2))).trim();
+        // نموذج: "eth0: negotiated 100baseTx-FD flow-control, link ok"
+        final m = RegExp(r'(\d+)base').firstMatch(r);
+        if (m != null) {
+          iface['speed'] = m.group(1)!;
+          continue;
+        }
+      } catch (_) {}
+
+      // 3) ethtool
+      try {
+        final r = await run('ethtool $name 2>/dev/null', const Duration(seconds: 2));
+        // "Speed: 1000Mb/s"
+        final m = RegExp(r'Speed:\s*(\d+)').firstMatch(r);
+        if (m != null) {
+          iface['speed'] = m.group(1)!;
+          continue;
+        }
+      } catch (_) {}
+    }
+
+    // fallback: mca-status قد يعرض wanSpeed أو lanSpeed
+    if (parsed['wanSpeed'] != null) {
+      final s = int.tryParse(parsed['wanSpeed']!);
+      if (s != null && s > 0) {
+        final eth0 = ifaceRaws.where((i) => i['name'] == 'eth0').toList();
+        if (eth0.isNotEmpty && eth0.first['speed'] == null) {
+          eth0.first['speed'] = s.toString();
+        }
+      }
+    }
+
+    // wstalist سبق واستخرجناه أعلاه من الـbatched command (stations متغيّر
+    // مُعبّأ فوق). لا نُكرّر الأمر — كان يستهلك 4s إضافيّة بلا فائدة.
+    return (
+      stats: UbntStats.fromMcaStatus(parsed,
+          interfaces: ifaceRaws, wstalistStations: stations, stationsRead: wstaRead),
+      udapi: null,
+    );
   }
 
   /// mca-dump JSON — للـairFiber والأجهزة الحديثة. نُسطّح لصيغة key=value
@@ -1098,6 +1123,16 @@ class UbntStats {
   /// مفتاحٌ داخليّ في خريطة mca-dump المسطّحة: الجهاز أعاد قائمة محطّاته (ولو فارغة).
   static const staListKey = '_staList';
 
+  /// مفتاحٌ داخليّ: نسبة المعالج كما قسناها من `/proc/stat` ([UbntApi.cpuPercentFromProcStat]).
+  static const cpuMeasuredKey = '_cpuMeasured';
+
+  /// قيمةٌ نصّيّة ⇒ نسبةٌ صحيحة 0–100، أو null (غائبة · غير رقم · خارج المدى) — لا صفر بديلاً عن المجهول.
+  static int? cpuPercentOf(String? v) {
+    final d = double.tryParse((v ?? '').trim());
+    if (d == null || d.isNaN || d < 0 || d > 100.5) return null;
+    return d.round().clamp(0, 100);
+  }
+
   // 2026-08-18: أقواس صريحة — `??` أدنى precedence من `||` فالكود الأصلي
   // كان يقرأ: `contains('ap') ?? (false || contains('master'))` → الـfallback
   // ما يعمل إلا لو wireless == null (مستحيل — الـgetters عبر ?.).
@@ -1172,22 +1207,14 @@ class UbntStats {
     // wlanConnections, wlanTxPower
     // + إذا AP: station1_mac, station1_signal, station1_ccq, station1_ip, ...
 
-    // CPU:
-    // - airOS 5/6/7/8 traditional: cpuload=12 (int) أو cpuLoadAvg=(0.05 0.03 0.00)
-    // - airFiber 60 GP: cpuUsage=12.5 (float مباشرة كنسبة مئويّة)
-    //   بينما loadavg=54 (نسبة مئويّة أيضاً، NOT decimal load)
-    int cpuValue = 0;
-    if (m['cpuUsage'] != null) {
-      cpuValue = (double.tryParse(m['cpuUsage']!) ?? 0).round();
-    } else if (m['cpuload'] != null) {
-      cpuValue = _n(m['cpuload']);
-    } else if (m['loadavg'] != null) {
-      final la = double.tryParse(m['loadavg']!) ?? 0;
-      // heuristic: لو > 10 فهي نسبة مئويّة، وإلا decimal load (×100)
-      cpuValue = la > 10 ? la.round() : (la * 100).round();
-    } else {
-      cpuValue = _cpuFromLoadAvg(m['cpuLoadAvg']) ?? 0;
-    }
+    // المعالج (٢٢ نوفمبر — المالك: «الـcpu الوهمي»، Rocket M5 «85٪» أحمر): نسبةٌ حقيقيّة وحدها، وإلّا null («—») لا صفر.
+    // الترتيب: ما يسمّيه الجهاز نسبة معالج (`cpuUsage` — airFiber 60 GP) ⇒ ما قسناه من /proc/stat ([cpuMeasuredKey]) ⇒
+    // `cpuload` (mca-dump/الواجهة، حين تعذّر قياسنا).
+    // ⛔ متوسّط الحِمل (`loadavg` · `cpuLoadAvg` · /proc/loadavg) **ليس** نسبة معالج: عدد المهامّ الجاهزة والعالقة في
+    // الانتظار، وairOS يبقيه قرب 1 ومعالجه شبه خامل — فكان «0.85 × 100» يظهر «85٪» ويطلق تنبيه «المعالج» كاذباً. والجهاز
+    // نفسه يفضحه: خرج airFiber 60 GP الحقيقيّ يحمل `cpuUsage=12.5` بجانب `loadavg=54`.
+    final cpuValue =
+        cpuPercentOf(m['cpuUsage']) ?? cpuPercentOf(m[cpuMeasuredKey]) ?? cpuPercentOf(m['cpuload']);
 
     final host = UbntHost(
       hostname: m['deviceName'] ?? m['hostname'] ?? m['essid'] ?? '',
@@ -1628,16 +1655,6 @@ class UbntStats {
     return v;
   }
 
-  static int? _cpuFromLoadAvg(String? loadAvg) {
-    if (loadAvg == null || loadAvg.isEmpty) return null;
-    // Format: "0.05 0.03 0.00" أو "(0.05 0.03 0.00)"
-    final cleaned = loadAvg.replaceAll(RegExp(r'[()]'), '').trim();
-    final parts = cleaned.split(RegExp(r'[,\s]+'));
-    if (parts.isEmpty) return null;
-    final load = double.tryParse(parts.first);
-    return load == null ? null : (load * 100).round();
-  }
-
   /// airFiber X: `afOpmode=master|slave` ⇒ الصيغة الموحّدة (وصلة PtP دائماً).
   static String _afMode(String? raw) {
     final low = (raw ?? '').toLowerCase();
@@ -1665,7 +1682,9 @@ class UbntHost {
   final String devmodel;
   final String fwversion;
   final int uptime;
-  final int cpuload;
+
+  /// انشغال المعالج ٪ — null: لم يُقرأ (يُعرض «—»؛ لا صفر ولا متوسّط حِمل — [UbntStats.fromMcaStatus]).
+  final int? cpuload;
   final int temperature;
 
   const UbntHost({
