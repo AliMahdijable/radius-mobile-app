@@ -52,6 +52,7 @@ class RpFilterValue {
     this.managerMode = RpManagerMode.actor,
     this.employees = const {},
     this.types = const [],
+    this.packages = const {},
   });
 
   final RpRange range;
@@ -67,6 +68,11 @@ class RpFilterValue {
   final Map<String, String> employees;
   final List<String> types;
 
+  /// الباقات المختارة (بند المقترح ١٢: «الباقات تظهر باسم كلّ باقة وشركتها») — «مفتاح الشركة|اسم الباقة» (المفتوحة: «|اسمها»).
+  final Set<String> packages;
+
+  static String packageKey(String? company, String name) => '${company ?? ''}|$name';
+
   RpFilterValue copyWith({
     RpRange? range,
     bool? compare,
@@ -76,6 +82,7 @@ class RpFilterValue {
     RpManagerMode? managerMode,
     Map<String, String>? employees,
     List<String>? types,
+    Set<String>? packages,
   }) =>
       RpFilterValue(
         range: range ?? this.range,
@@ -86,10 +93,11 @@ class RpFilterValue {
         managerMode: managerMode ?? this.managerMode,
         employees: employees ?? this.employees,
         types: types ?? this.types,
+        packages: packages ?? this.packages,
       );
 
-  /// بلا مدير ولا موظّف ولا نوع (الفترة والشركات والمقارنة ليست «فلاتر»).
-  RpFilterValue cleared() => copyWith(managers: const {}, employees: const {}, types: const []);
+  /// بلا مدير ولا موظّف ولا نوع ولا باقة (الفترة والشركات والمقارنة ليست «فلاتر»).
+  RpFilterValue cleared() => copyWith(managers: const {}, employees: const {}, types: const [], packages: const {});
 
   bool get hasPeople => managers.values.any((s) => s.isNotEmpty) || employees.isNotEmpty;
 }
@@ -115,6 +123,7 @@ class RpFilterSheet extends StatefulWidget {
     this.onDone,
     this.showPeople = true,
     this.showManagers = true,
+    this.packages = const [],
     this.showCompare = true,
     this.presets = RpRange.presets,
   });
@@ -127,6 +136,9 @@ class RpFilterSheet extends StatefulWidget {
 
   /// قسم «المدير» — توزيع الباقات بالموظّف المنفِّذ وحده (النطاق من الخادم).
   final bool showManagers;
+
+  /// قسم «الباقة»: (مفتاح [RpFilterValue.packageKey]، الاسم كما يُعرض — مع شركته في «كل الشركات»). فارغ = لا قسم.
+  final List<(String, String)> packages;
 
   /// مفتاح «قارن» — سجلّ الحركات وكشف الحساب بلا مقارنة.
   final bool showCompare;
@@ -210,6 +222,12 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
     final t = [..._v.types];
     t.contains(key) ? t.remove(key) : t.add(key);
     _set(_v.copyWith(types: t));
+  }
+
+  void _togglePackage(String key) {
+    final p = {..._v.packages};
+    p.contains(key) ? p.remove(key) : p.add(key);
+    _set(_v.copyWith(packages: p));
   }
 
   bool _payOn(RpPayShortcut s) => s.types.every(_v.types.contains);
@@ -328,6 +346,21 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
           if (widget.showPeople) ...[
             const SizedBox(height: Sp.xl),
             SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(groups, managers: false)),
+          ],
+          if (widget.packages.isNotEmpty) ...[
+            const SizedBox(height: Sp.xl),
+            SheetSection(
+              label: 'الباقة',
+              hint: 'باقات هذه الفترة',
+              child: Wrap(
+                spacing: Sp.sm,
+                runSpacing: Sp.sm,
+                children: [
+                  for (final p in widget.packages)
+                    SheetQuickChip(label: p.$2, selected: _v.packages.contains(p.$1), onTap: () => _togglePackage(p.$1)),
+                ],
+              ),
+            ),
           ],
           // تقريرٌ بلا أنواع حركة (توزيع الباقات) ⇒ لا قسم فارغ
           if (widget.types.isNotEmpty) ...[

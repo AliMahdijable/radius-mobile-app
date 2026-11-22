@@ -44,6 +44,11 @@ class RpPrefs {
         managerMode: j['mm'] == 'owner' ? RpManagerMode.owner : RpManagerMode.actor,
         employees: employees,
         types: [for (final x in (j['t'] is List ? j['t'] as List : const [])) '$x'],
+        // باقات المفتوحة («|اسمها») لصفحتها وحدها — كمدرائها
+        packages: {
+          for (final x in (j['pk'] is List ? j['pk'] as List : const []))
+            if (sameOpen || !'$x'.startsWith('|')) '$x',
+        },
       );
     } catch (_) {
       return RpFilterValue(range: RpRange.of(fallback, now: now));
@@ -64,6 +69,7 @@ class RpPrefs {
           'mm': v.managerMode.name,
           'e': v.employees,
           't': v.types,
+          'pk': v.packages.toList(),
           'ot': openTag ?? '',
         }),
       );

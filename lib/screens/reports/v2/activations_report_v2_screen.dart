@@ -328,6 +328,50 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
 
   // ═══════════════ ما يُرسم ═══════════════
 
+  /// اسم الباقة كما في «قسّم حسب الباقة» — وما بلا باقةٍ اسمٌ صريح يُختار أيضاً.
+  static String _pkgName(ActivityRow r) => (r.packageName ?? '').isNotEmpty
+      ? r.packageName!
+      : (ActivationsView.kindOf(r) == ActKind.extend ? 'تمديد (بلا باقة)' : 'بلا باقة');
+
+  /// فلتر الباقة (بند المقترح ١٢) على سطور شركةٍ واحدة ([company] null = المفتوحة) — السطور كاملةٌ للفترة فالرقم صادق.
+  List<ActivityRow> _byPackage(List<ActivityRow> rows, String? company) {
+    final want = _f!.packages;
+    if (want.isEmpty) return rows;
+    return [for (final r in rows) if (want.contains(RpFilterValue.packageKey(company, _pkgName(r)))) r];
+  }
+
+  /// باقات الفترة لورقة الفلاتر — من السطور المقروءة (لا باقةٌ بلا حركة)، وفي «كل الشركات» باسم شركتها.
+  List<(String, String)> get _packagesInPeriod {
+    final out = <String, String>{};
+    if (!_merged) {
+      for (final r in _rows ?? const <ActivityRow>[]) {
+        final n = _pkgName(r);
+        out[RpFilterValue.packageKey(null, n)] = n;
+      }
+    } else {
+      for (final co in _cos.values) {
+        if (!co.included) continue;
+        for (final r in co.rows!) {
+          final n = _pkgName(r);
+          out[RpFilterValue.packageKey(co.c.key, n)] = '$n · ${co.c.name}';
+        }
+      }
+    }
+    // المختارة قبلُ تبقى ظاهرةً ولو غابت عن هذه الفترة — لتُزال
+    for (final k in _f!.packages) {
+      out.putIfAbsent(k, () => _packageLabel(k));
+    }
+    final list = [for (final e in out.entries) (e.key, e.value)]..sort((a, b) => a.$2.compareTo(b.$2));
+    return list;
+  }
+
+  String _packageLabel(String key) {
+    final i = key.indexOf('|');
+    final company = i <= 0 ? null : MergedMode.companyOf(key.substring(0, i))?.name;
+    final name = i < 0 ? key : key.substring(i + 1);
+    return company == null ? name : '$name · $company';
+  }
+
   /// سطور الشاشة بعد النوع، وشركة كلّ سطر، والسابقة (null: لا مقارنة)، وهل اكتملت.
   ({List<ActivityRow> rows, Map<ActivityRow, String?> co, List<ActivityRow>? prev, bool complete})? _view() {
     final kinds = _f!.types;
@@ -335,9 +379,9 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       final r = _rows;
       if (r == null) return null;
       return (
-        rows: ActivationsView.filter(r, kinds),
+        rows: _byPackage(ActivationsView.filter(r, kinds), null),
         co: LinkedHashMap<ActivityRow, String?>.identity(),
-        prev: _prev == null ? null : ActivationsView.filter(_prev!, kinds),
+        prev: _prev == null ? null : _byPackage(ActivationsView.filter(_prev!, kinds), null),
         complete: _complete,
       );
     }
@@ -349,7 +393,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     final tagged = <({ActivityRow r, String key, int at, int order})>[];
     var order = 0;
     for (final co in inc) {
-      for (final r in co.rows!) {
+      for (final r in _byPackage(co.rows!, co.c.key)) {
         tagged.add((r: r, key: co.c.key, at: ActivationsView.timeOf(r)?.millisecondsSinceEpoch ?? 0, order: order++));
       }
     }
@@ -362,7 +406,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     return (
       rows: ActivationsView.filter([for (final t in tagged) t.r], kinds),
       co: map,
-      prev: prevReady ? ActivationsView.filter([for (final co in inc) ...co.prev!], kinds) : null,
+      prev: prevReady ? ActivationsView.filter([for (final co in inc) ..._byPackage(co.prev!, co.c.key)], kinds) : null,
       complete: inc.every((co) => co.complete),
     );
   }
@@ -409,6 +453,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
               ),
           ],
           types: [for (final e in ActivationsView.kindKeys.entries) (e.key, ActivationsView.kindLabel(e.value))],
+          packages: _packagesInPeriod,
         );
       }),
     );
@@ -588,6 +633,10 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
           if (f.types.contains(e.key)) ActivationsView.kindLabel(e.value),
       ];
       out.add(RpChip('النوع: ${labels.join('، ')}', onRemove: () => _apply(f.copyWith(types: const []))));
+    }
+    if (f.packages.isNotEmpty) {
+      out.add(RpChip('الباقة: ${[for (final k in f.packages) _packageLabel(k)].join('، ')}',
+          onRemove: () => _apply(f.copyWith(packages: const {}))));
     }
     return out;
   }
@@ -774,7 +823,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
         lines.add(RpCompanyLine(company: _rp(co.c, note: co.reason), state: RpCompanyState.failed));
         outside.add('${co.c.name} (${co.reason ?? 'تعذّرت'})');
       } else {
-        final t = ActivationsView.totals(ActivationsView.filter(co.rows!, _f!.types));
+        final t = ActivationsView.totals(ActivationsView.filter(_byPackage(co.rows!, co.c.key), _f!.types));
         lines.add(RpCompanyLine(
           company: _rp(co.c),
           a: t.known ? t.cash : null,

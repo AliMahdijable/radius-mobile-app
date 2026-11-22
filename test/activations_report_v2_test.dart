@@ -11,6 +11,7 @@ import 'package:rad_mysvcs/screens/reports/v2/activations_report_v2_screen.dart'
 import 'package:rad_mysvcs/screens/reports/v2/activations_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
@@ -371,6 +372,43 @@ void main() {
         await tapExport(t, 'PDF');
         expect(got.single.rows.length, 1);
         expect(got.single.details, contains('بحث: «11031»'));
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('فلتر الباقة (بند المقترح ١٢): الأرقام والملفّ لباقتها وحدها، وورقة الفلاتر بباقات الفترة', (t) async {
+      await up(prefs: {
+        'report.v2.activations': jsonEncode({
+          'p': 'thisMonth',
+          'c': false,
+          'pk': ['|Gaming 100'],
+          'ot': 'supernet:12',
+        }),
+      });
+      server.rows[null] = _month();
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        final k = kpis(t);
+        expect(k[ActKpiIds.activations]!.value, 22 * 2, reason: 'الجزئيّ وغير النقديّ كلّ يوم');
+        expect(k[ActKpiIds.cash]!.value, 22 * 20000);
+        expect(k[ActKpiIds.debt]!.value, 22 * 60000, reason: 'بالدين + غير المدفوع من الجزئيّ');
+        expect(find.text('الباقة: Gaming 100'), findsOneWidget);
+        // الورقة: باقات الفترة كلّها (والتمديد بلا باقة اسمٌ صريح)
+        await t.tap(find.byType(RpPeriodBar));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 500));
+        final sheet = t.widget<RpFilterSheet>(find.byType(RpFilterSheet));
+        expect([for (final p in sheet.packages) p.$2], ['FTTH 50', 'Gaming 100', 'تمديد (بلا باقة)']);
+        Navigator.of(t.element(find.byType(RpFilterSheet))).pop();
+        await t.pump(const Duration(milliseconds: 500));
+        await tapExport(t, 'Excel');
+        final r = got.single;
+        expect(r.rows.length, 44);
+        expect(r.details, contains('الباقة: Gaming 100'));
         expect(t.takeException(), isNull);
       } finally {
         await down(t);
