@@ -10,6 +10,7 @@ import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activity_log_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activity_log_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -290,6 +291,48 @@ void main() {
         }
       });
     }
+
+    testWidgets('التعديل بما تغيّر «من … إلى …» (المالك ٢٢ نوفمبر)، والسطر القديم بأسماء حقوله، وبحثٌ في نافذة الرقم', (t) async {
+      await up();
+      server.rows[null] = [
+        {
+          ..._row(9001, 'SUBSCRIBER_EDIT', 'تعديل المشترك — phone', '2026-11-22 15:57:00'),
+          'action_data': jsonEncode({
+            'diff': [
+              {'f': 'phone', 'from': '07701234567', 'to': '07809876543'},
+              {'f': 'password', 'secret': true},
+            ],
+          }),
+        },
+        {
+          ..._row(9002, 'SUBSCRIBER_EDIT', 'تعديل المشترك — profile → 6, phone', '2026-11-21 10:00:00'),
+          'action_data': jsonEncode({
+            'changes': ['profile → 6', 'phone'],
+          }),
+        },
+        ..._day(20),
+      ];
+      try {
+        await open(t);
+        String plain(String s) => s.replaceAll(RegExp('[\u2066-\u2069]'), '');
+        final texts = [for (final e in find.byType(Text).evaluate()) plain((e.widget as Text).data ?? '')];
+        expect(texts.any((x) => x.startsWith('رقم الهاتف: من 07701234567 إلى 07809876543 · كلمة المرور: تغيّرت')), isTrue, reason: '$texts');
+        expect(texts.any((x) => x.startsWith('عُدّل: الباقة، رقم الهاتف')), isTrue);
+        expect(texts.any((x) => x.contains('— phone')), isFalse, reason: 'لا «تعديل المشترك — phone»');
+        // نافذة «الحركات» خلف الرقم: بحثٌ يحصرها
+        await t.tap(find.text('الحركات').first);
+        await settleAsync(t, 3);
+        final sheet = find.byType(RpDrillSheet);
+        expect(sheet, findsOneWidget);
+        await t.enterText(find.descendant(of: sheet, matching: find.byType(TextField)), 'مشترك 9001');
+        await t.pump(const Duration(milliseconds: 200));
+        final rows = t.widget<RpRowsCard>(find.descendant(of: sheet, matching: find.byType(RpRowsCard)));
+        expect(rows.total, 1);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
 
     testWidgets('كل الشركات: كلّ شركةٍ بمفتاحها، والصرفيّات لا تُخلط (ويُقال)، والمتعذّرة خارج المجموع', (t) async {
       await up();

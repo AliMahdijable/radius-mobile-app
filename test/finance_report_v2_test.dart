@@ -584,8 +584,20 @@ void main() {
         expect(sheet, findsOneWidget);
         expect(find.descendant(of: sheet, matching: find.text('حسن كاظم')), findsOneWidget);
         expect(find.descendant(of: sheet, matching: find.text('محمد عبد الله')), findsNothing);
+        // بحثٌ داخل حركات الرقم (المالك ٢٢ نوفمبر: «أضف إمكانيّة بحث هنا»)
+        final field = find.descendant(of: sheet, matching: find.byType(TextField));
+        expect(field, findsOneWidget);
+        await t.enterText(field, 'لا أحد بهذا الاسم');
+        await t.pump(const Duration(milliseconds: 200));
+        expect(find.descendant(of: sheet, matching: find.text('حسن كاظم')), findsNothing);
+        expect(find.descendant(of: sheet, matching: find.text('لا حركة تطابق «لا أحد بهذا الاسم»')), findsOneWidget);
+        await t.enterText(field, 'حسن');
+        await t.pump(const Duration(milliseconds: 200));
+        expect(find.descendant(of: sheet, matching: find.text('حسن كاظم')), findsOneWidget);
         Navigator.of(t.element(sheet)).pop();
         await t.pump(const Duration(milliseconds: 400));
+        await t.pump(const Duration(seconds: 1));
+        expect(find.byType(RpDrillSheet), findsNothing);
 
         await unfold(t, RpRowsCard);
         final rows = find.byType(RpRowsCard);

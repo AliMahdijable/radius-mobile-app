@@ -589,17 +589,32 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (ctx) => RpDrillSheet(
-        kpi: k,
-        scope: scope,
-        chips: [for (final c in _chips()) RpChip(c.label)],
-        rows: RpRowsCard(
-          total: rows.length,
-          days: ActivationsView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80),
-          more: rows.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
-        ),
-        onExport: () => _exportAll('share', title: k.label, pick: pick, drill: k.label, withSearch: false),
-      ),
+      builder: (ctx) {
+        var q = '';
+      // بحثٌ داخل حركات الرقم (المالك ٢٢ نوفمبر: «أضف إمكانيّة بحث هنا») — يحصر القائمة والتصدير، ورأس الملفّ يسمّيه
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final s = q.trim();
+          final shown = s.isEmpty ? rows : ActivationsView.search(rows, s);
+          return RpDrillSheet(
+            kpi: k,
+            scope: scope,
+            chips: [for (final c in _chips()) RpChip(c.label)],
+            rows: RpRowsCard(
+              query: q,
+              total: shown.length,
+              days: ActivationsView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80),
+              more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
+              onSearch: (x) => setLocal(() => q = x),
+              empty: s.isEmpty ? null : 'لا حركة تطابق «$s»',
+            ),
+            onExport: () => _exportAll('share',
+                title: k.label,
+                pick: s.isEmpty ? pick : (r) => pick(r) && ActivationsView.search([r], s).isNotEmpty,
+                drill: s.isEmpty ? k.label : '${k.label} — بحث «$s»',
+                withSearch: false),
+          );
+        });
+      },
     );
   }
 
@@ -769,19 +784,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       parts.add(Text('مبالغ التفعيل لا تصل من هذا الخادم بعد — الأعداد وحدها', style: AppType.micro(color: AppColors.textMid)));
     }
     parts.add(RpCountsRow(items: ActivationsView.counts(v.rows)));
-    final trend = ActivationsView.trend(v.rows, f.range);
-    if (trend.length > 1) {
-      parts.add(RpTrendCard(
-        fold: _fold('trend'),
-        title: f.range.days > 62 ? 'العدد شهراً بشهر' : 'العدد يوماً بيوم',
-        monthly: f.range.days > 62,
-        points: trend,
-        aLabel: 'تفعيل',
-        bLabel: 'تمديد',
-        aTone: RpTone.brand,
-        bTone: RpTone.info,
-      ));
-    }
+    // «يوماً بيوم» أُلغي من كلّ التقارير (المالك ٢٢ نوفمبر: «كراف يوماً بيوم من جميع التقارير حذفه»)
     final shares = _breakdown(v);
     final cap = _tabAll ? shares.length : 6;
     parts.add(RpBreakdownCard(

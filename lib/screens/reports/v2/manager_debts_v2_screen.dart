@@ -407,17 +407,31 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (ctx) => RpDrillSheet(
-        kpi: k,
-        scope: _f!.range.name,
-        chips: _chips(),
-        rows: RpRowsCard(
-          total: rows.length,
-          days: ManagerDebtsView.days(rows, companyOf: _merged ? _coOf : null, limit: 80),
-          more: rows.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
-        ),
-        onExport: () => _export('share', pick: (e) => e.incoming, drill: k.label),
-      ),
+      builder: (ctx) {
+        var q = '';
+      // بحثٌ داخل حركات الرقم (المالك ٢٢ نوفمبر: «أضف إمكانيّة بحث هنا») — يحصر القائمة والتصدير، ورأس الملفّ يسمّيه
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final s = q.trim();
+          final shown = s.isEmpty ? rows : ManagerDebtsView.filter(rows, const [], s);
+          return RpDrillSheet(
+            kpi: k,
+            scope: _f!.range.name,
+            chips: _chips(),
+            rows: RpRowsCard(
+              query: q,
+              total: shown.length,
+              days: ManagerDebtsView.days(shown, companyOf: _merged ? _coOf : null, limit: 80),
+              more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
+              searchHint: 'ابحث باسم المدير أو يوزره',
+              onSearch: (x) => setLocal(() => q = x),
+              empty: s.isEmpty ? null : 'لا مدير يطابق «$s»',
+            ),
+            onExport: () => _export('share',
+                pick: s.isEmpty ? (e) => e.incoming : (e) => e.incoming && ManagerDebtsView.filter([e], const [], s).isNotEmpty,
+                drill: s.isEmpty ? k.label : '${k.label} — بحث «$s»'),
+          );
+        });
+      },
     );
   }
 

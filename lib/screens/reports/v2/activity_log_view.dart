@@ -104,8 +104,9 @@ class ActivityLogView {
       _ => (LucideIcons.pencil, RpTone.neutral),
     };
     final tm = timeOf(r);
+    // التعديل بما تغيّر «من … إلى …» (المالك ٢٢ نوفمبر) — لا «تعديل المشترك — phone»
     final detail = [
-      desc.isNotEmpty ? desc : label,
+      r.editSummary ?? (desc.isNotEmpty ? desc : label),
       if (actorOf(r).isNotEmpty) actorOf(r),
     ].join(' · ');
     return RpRow(

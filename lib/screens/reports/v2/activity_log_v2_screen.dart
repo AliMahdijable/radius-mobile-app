@@ -447,7 +447,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
             r.userUsername ?? '',
             ActivityLogView.moneyOf(r) == null ? '' : '${ActivityLogView.moneyOf(r)}',
             exportTimeAr(r.createdAt),
-            (r.actionDescription ?? '').replaceAll('\n', ' '),
+            r.editSummary ?? (r.actionDescription ?? '').replaceAll('\n', ' '),
             arabicActionLabel(r.actionType, r.actionDescription ?? ''),
             ActivityLogView.actorOf(r),
           ],
@@ -517,17 +517,32 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (ctx) => RpDrillSheet(
-        kpi: k,
-        scope: scope,
-        chips: [for (final c in _chips()) RpChip(c.label)],
-        rows: RpRowsCard(
-          total: rows.length,
-          days: ActivityLogView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80),
-          more: rows.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
-        ),
-        onExport: () => _exportAll('share', title: k.label, pick: pick, drill: k.label, withSearch: false),
-      ),
+      builder: (ctx) {
+        var q = '';
+      // بحثٌ داخل حركات الرقم (المالك ٢٢ نوفمبر: «أضف إمكانيّة بحث هنا») — يحصر القائمة والتصدير، ورأس الملفّ يسمّيه
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final s = q.trim();
+          final shown = s.isEmpty ? rows : ActivityLogView.search(rows, s);
+          return RpDrillSheet(
+            kpi: k,
+            scope: scope,
+            chips: [for (final c in _chips()) RpChip(c.label)],
+            rows: RpRowsCard(
+              query: q,
+              total: shown.length,
+              days: ActivityLogView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80),
+              more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
+              onSearch: (x) => setLocal(() => q = x),
+              empty: s.isEmpty ? null : 'لا حركة تطابق «$s»',
+            ),
+            onExport: () => _exportAll('share',
+                title: k.label,
+                pick: s.isEmpty ? pick : (r) => pick(r) && ActivityLogView.search([r], s).isNotEmpty,
+                drill: s.isEmpty ? k.label : '${k.label} — بحث «$s»',
+                withSearch: false),
+          );
+        });
+      },
     );
   }
 
@@ -680,17 +695,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       parts.add(Text('الصرفيّات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تُفتح وحدها',
           style: AppType.micro(color: AppColors.textMid), maxLines: 2));
     }
-    final trend = ActivityLogView.trend(v.rows, f.range);
-    if (trend.length > 1) {
-      parts.add(RpTrendCard(
-        fold: _fold('trend'),
-        title: f.range.days > 62 ? 'الحركات شهراً بشهر' : 'الحركات يوماً بيوم',
-        monthly: f.range.days > 62,
-        points: trend,
-        aLabel: 'حركة',
-        aTone: RpTone.brand,
-      ));
-    }
+    // «يوماً بيوم» أُلغي من كلّ التقارير (المالك ٢٢ نوفمبر: «كراف يوماً بيوم من جميع التقارير حذفه»)
     final shares = _breakdown(v);
     final cap = _tabAll ? shares.length : 6;
     parts.add(RpBreakdownCard(

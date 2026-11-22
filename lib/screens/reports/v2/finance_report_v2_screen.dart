@@ -708,18 +708,33 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (ctx) => RpDrillSheet(
-        kpi: k,
-        scope: scope,
-        chips: [for (final c in _chips()) RpChip(c.label)],
-        rows: RpRowsCard(
-          total: logs.length,
-          days: FinanceView.days(logs, companyOf: m == null ? null : (l) => _coOf(l, m), showCost: v.showCost, limit: 80),
-          more: logs.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
-          note: v.truncated ? 'من آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة' : null,
-        ),
-        onExport: () => _exportAll('share', title: k.label, pick: pick, drill: k.label, withSearch: false),
-      ),
+      builder: (ctx) {
+        var q = '';
+      // بحثٌ داخل حركات الرقم (المالك ٢٢ نوفمبر: «أضف إمكانيّة بحث هنا») — يحصر القائمة والتصدير، ورأس الملفّ يسمّيه
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final s = q.trim();
+          final shown = s.isEmpty ? logs : FinanceView.search(logs, s);
+          return RpDrillSheet(
+            kpi: k,
+            scope: scope,
+            chips: [for (final c in _chips()) RpChip(c.label)],
+            rows: RpRowsCard(
+              query: q,
+              total: shown.length,
+              days: FinanceView.days(shown, companyOf: m == null ? null : (l) => _coOf(l, m), showCost: v.showCost, limit: 80),
+              more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
+              note: v.truncated ? 'من آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة' : null,
+              onSearch: (x) => setLocal(() => q = x),
+              empty: s.isEmpty ? null : 'لا حركة تطابق «$s»',
+            ),
+            onExport: () => _exportAll('share',
+                title: k.label,
+                pick: s.isEmpty ? pick : (l) => pick(l) && FinanceView.search([l], s).isNotEmpty,
+                drill: s.isEmpty ? k.label : '${k.label} — بحث «$s»',
+                withSearch: false),
+          );
+        });
+      },
     );
   }
 

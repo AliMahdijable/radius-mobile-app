@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/util/bidi.dart';
+import '../core/util/edit_summary.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
 
@@ -652,6 +653,7 @@ class ActivityRow {
     this.fromSas = false,
     this.packageName,
     this.partialUnpaid = 0,
+    this.editSummary,
   });
 
   /// مبلغ الحركة بقاعدة التقرير الماليّ نفسها (الخادم `money_amount` = moneySql.amount — ٢٢ نوفمبر، da6fec4): المُزامَن من الساس
@@ -663,6 +665,9 @@ class ActivityRow {
 
   /// الباقة من action_data (`package_name`) — التمديد لا يحملها.
   final String? packageName;
+
+  /// سطر تعديلٍ بما تغيّر «من … إلى …» (action_data — edit_summary.dart)؛ null = لا تفاصيل.
+  final String? editSummary;
 
   /// غير المدفوع من «نقدي جزئي» = (user_price أو price) − partial_cash_amount، لا أقلّ من صفر — partialUnpaidExpr الخادم حرفاً؛
   /// يدخل «بالدين» كما يضمّه التقرير الماليّ إلى «تفعيل بالدين».
@@ -720,6 +725,7 @@ class ActivityRow {
       fromSas: FinanceLog._truthy(j['from_sas']),
       packageName: _str(_data(j)['package_name']),
       partialUnpaid: partialUnpaidOf(_data(j), j['action_description']?.toString() ?? ''),
+      editSummary: editSummaryOf(_data(j)),
     );
   }
 

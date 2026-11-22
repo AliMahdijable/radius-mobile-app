@@ -323,9 +323,7 @@ void main() {
         expect(k[ActKpiIds.cash]!.value, 22 * 125000);
         expect(k[ActKpiIds.debt]!.value, 22 * 60000);
         expect(k[ActKpiIds.activations]!.delta, closeTo((132 - 110) / 110, 1e-9));
-        final trend = t.widget<RpTrendCard>(find.byType(RpTrendCard));
-        expect(trend.points.length, 22);
-        expect(trend.bLabel, 'تمديد');
+        expect(find.byType(RpTrendCard), findsNothing, reason: '«يوماً بيوم» أُلغي من كلّ التقارير (المالك ٢٢ نوفمبر)');
         expect(t.takeException(), isNull);
       } finally {
         await down(t);
