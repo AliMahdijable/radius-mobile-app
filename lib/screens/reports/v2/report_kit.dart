@@ -592,7 +592,11 @@ class RpCompanyTable extends StatelessWidget {
           RpTitle(
             icon: LucideIcons.building2,
             title: 'حسب الشركة',
-            trailing: Text('لمسة على شركة تحصر التقرير عليها', style: AppType.micro(color: AppColors.textLow), maxLines: 1),
+            // سطران عند الضيق (320) — لا يزاحم العنوان حتى يُقصّ
+            trailing: Flexible(
+              child: Text('لمسة على شركة تحصر التقرير عليها',
+                  style: AppType.micro(color: AppColors.textLow), maxLines: 2, textAlign: TextAlign.end),
+            ),
           ),
           const SizedBox(height: Sp.md),
           _row(
@@ -630,7 +634,8 @@ class RpCompanyTable extends StatelessWidget {
                 children: [
                   Icon(LucideIcons.info, size: 14, color: AppColors.warningOnSoft),
                   const SizedBox(width: Sp.x6),
-                  Expanded(child: Text(outside!, style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 2)),
+                  // كاملاً مهما طال — هنا سبب كلّ شركةٍ متعذّرة بنصّه (خانتها في الجدول «تعذّرت» وحدها)
+                  Expanded(child: Text(outside!, style: AppType.micro(color: AppColors.warningOnSoft))),
                 ],
               ),
             ),
@@ -698,10 +703,8 @@ class RpCompanyTable extends StatelessWidget {
                 children: [
                   Icon(LucideIcons.circleAlert, size: 14, color: AppColors.error),
                   const SizedBox(width: Sp.xs),
-                  Flexible(
-                    child: Text(l.company.note ?? 'تعذّرت القراءة',
-                        style: AppType.muted(color: AppColors.dangerOnSoft), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
+                  // «تعذّرت» وحدها — السبب بنصّه كاملاً في «خارج المجموع» تحت الجدول (لا «…» على 320)
+                  Flexible(child: Text('تعذّرت', style: AppType.muted(color: AppColors.dangerOnSoft), maxLines: 1)),
                   const SizedBox(width: Sp.sm),
                   _Tap(
                     onTap: onRetry == null ? null : () => onRetry!(l.company),
@@ -812,7 +815,8 @@ class RpHeroKpi extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
+                // «›» = لمسةٌ تفتح حركاته — لا سهم لبطاقةٍ لا تُفتح
+                if (onTap != null) Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
               ],
             ),
             const SizedBox(height: Sp.sm),
@@ -905,7 +909,7 @@ class RpKpiCard extends StatelessWidget {
                 RpIconBox(icon: kpi.icon, tone: kpi.tone),
                 const SizedBox(width: Sp.sm),
                 Expanded(child: Text(kpi.label, style: AppType.label(color: AppColors.textMid), maxLines: 2)),
-                Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+                if (onTap != null) Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
               ],
             ),
             const SizedBox(height: Sp.sm),
@@ -1318,9 +1322,20 @@ class RpBreakdownCard extends StatelessWidget {
 
 class RpRowsCard extends StatelessWidget {
   const RpRowsCard(
-      {super.key, required this.total, required this.days, this.more, this.onMore, this.onSearch, this.note, this.empty});
+      {super.key,
+      required this.total,
+      required this.days,
+      this.more,
+      this.onMore,
+      this.onSearch,
+      this.note,
+      this.empty,
+      this.searchHint = 'ابحث باسم المشترك أو يوزره أو رقمه'});
   final int total;
   final List<RpDay> days;
+
+  /// نصّ حقل البحث (ديون المدراء: باسم المدير).
+  final String searchHint;
 
   /// «عرض المزيد (٤٨)».
   final String? more;
@@ -1364,7 +1379,7 @@ class RpRowsCard extends StatelessWidget {
                 const SizedBox(width: Sp.sm),
                 Expanded(
                   child: onSearch == null
-                      ? Text('ابحث باسم المشترك أو يوزره أو رقمه',
+                      ? Text(searchHint,
                           style: AppType.body(color: AppColors.textPlaceholder), maxLines: 1, overflow: TextOverflow.ellipsis)
                       : TextField(
                           onChanged: onSearch,
@@ -1372,7 +1387,7 @@ class RpRowsCard extends StatelessWidget {
                           decoration: InputDecoration(
                             isCollapsed: true,
                             border: InputBorder.none,
-                            hintText: 'ابحث باسم المشترك أو يوزره أو رقمه',
+                            hintText: searchHint,
                             hintStyle: AppType.body(color: AppColors.textPlaceholder),
                           ),
                         ),

@@ -115,7 +115,11 @@ class RpFilterSheet extends StatefulWidget {
     this.onDone,
     this.showPeople = true,
     this.showCompare = true,
+    this.presets = RpRange.presets,
   });
+
+  /// الفترات الجاهزة في الورقة — ديون المدراء يضيف «كل الفترات» ([RpPreset.all]).
+  final List<RpPreset> presets;
 
   /// قسما «المدير» و«الموظّف» — كشف حساب مشتركٍ واحد بلاهما.
   final bool showPeople;
@@ -255,7 +259,7 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
                   spacing: Sp.sm,
                   runSpacing: Sp.sm,
                   children: [
-                    for (final p in RpRange.presets)
+                    for (final p in widget.presets)
                       SheetQuickChip(
                         label: RpRange.of(p, now: widget.now).name,
                         selected: _v.range.preset == p,

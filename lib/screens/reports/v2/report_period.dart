@@ -3,7 +3,8 @@ import '../../../core/util/ar_date.dart';
 // فترات التقرير الموحّد (٢٢ نوفمبر — بند المقترح ٣ و٤): تسع فتراتٍ جاهزة + مخصّص، ولكلّ فترةٍ «ما قبلها» للمقارنة.
 // الأسبوع يبدأ الإثنين كبقيّة التطبيق ([DateRange.thisWeek]). كلّ شيءٍ هنا حسابٌ صرف بساعةٍ تُمرَّر (للاختبار).
 
-enum RpPreset { today, yesterday, thisWeek, lastWeek, thisMonth, lastMonth, last30, last90, thisYear, custom }
+/// [all] «كل الفترات» — لتقريرٍ رصيده حالٌ لا فترة (ديون المدراء) وحده؛ ليس في [RpRange.presets].
+enum RpPreset { today, yesterday, thisWeek, lastWeek, thisMonth, lastMonth, last30, last90, thisYear, all, custom }
 
 class RpRange {
   const RpRange._(this.preset, this.from, this.to);
@@ -47,6 +48,8 @@ class RpRange {
         return RpRange._(p, t.subtract(const Duration(days: 89)), _end(t));
       case RpPreset.thisYear:
         return RpRange._(p, DateTime(t.year, 1, 1), _end(t));
+      case RpPreset.all:
+        return RpRange._(p, DateTime(2000, 1, 1), _end(t));
       case RpPreset.custom:
         final a = _day(from ?? t), b = _day(to ?? t);
         return a.isAfter(b) ? RpRange._(p, b, _end(a)) : RpRange._(p, a, _end(b));
@@ -76,6 +79,8 @@ class RpRange {
         return RpRange._(RpPreset.custom, a, _end(DateTime(from.year, from.month, 0)));
       case RpPreset.thisYear:
         return RpRange._(RpPreset.custom, DateTime(from.year - 1, 1, 1), _end(_clampDay(from.year - 1, to.month, to.day)));
+      case RpPreset.all:
+        return this; // لا شيء قبل «كلّ ما سُجّل» — لا مقارنة
       case RpPreset.last30:
       case RpPreset.last90:
       case RpPreset.custom:
@@ -95,11 +100,13 @@ class RpRange {
         RpPreset.last30 => 'آخر 30 يوماً',
         RpPreset.last90 => 'آخر 90 يوماً',
         RpPreset.thisYear => 'هذه السنة',
+        RpPreset.all => 'كل الفترات',
         RpPreset.custom => 'فترة مخصّصة',
       };
 
   /// تاريخاها أرقاماً («2026/11/01 – 2026/11/22»؛ اليوم الواحد تاريخٌ واحد).
   String get rangeText {
+    if (preset == RpPreset.all) return 'كلّ ما سُجّل حتى ${iqDateOf(to)}';
     final a = iqDateOf(from), b = iqDateOf(to);
     return a == b ? a : '$a – $b';
   }
@@ -115,6 +122,7 @@ class RpRange {
         RpPreset.last30 => 'عن الـ30 يوماً قبلها',
         RpPreset.last90 => 'عن الـ90 يوماً قبلها',
         RpPreset.thisYear => 'عن السنة الماضية',
+        RpPreset.all => '',
         RpPreset.custom => 'عن الفترة السابقة',
       };
 
@@ -129,6 +137,7 @@ class RpRange {
         RpPreset.last30 => 'بالـ30 يوماً قبلها',
         RpPreset.last90 => 'بالـ90 يوماً قبلها',
         RpPreset.thisYear => 'بالسنة الماضية',
+        RpPreset.all => '',
         RpPreset.custom => 'بالفترة السابقة',
       };
 

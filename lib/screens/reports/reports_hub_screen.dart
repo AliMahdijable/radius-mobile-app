@@ -16,7 +16,6 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../el/el_reports.dart';
-import 'all_managers_debts_screen.dart';
 import 'balance_reports_screen.dart';
 import 'deleted_debts_screen.dart';
 import 'package_distribution_screen.dart';
@@ -25,6 +24,7 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import 'v2/activations_report_v2_screen.dart';
 import 'v2/activity_log_v2_screen.dart';
+import 'v2/manager_debts_v2_screen.dart';
 import 'v2/sessions_v2_screen.dart';
 import 'v2/finance_report_v2_screen.dart';
 
@@ -172,12 +172,9 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               merged: true,
               title: 'reports.manager_debts'.tr(),
               subtitle: 'reports.manager_debts_hint'.tr(),
-              // 2026-07-14: كانت stub بس (رسالة "افتح من مكان ثاني").
-              // بُنيت الآن كتقرير حقيقي — summary + list + فلاتر حالة.
+              // على الشكل الموحّد (٢٢ نوفمبر — «اكمل كلشي»).
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const AllManagersDebtsScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const ManagerDebtsV2Screen()),
               ),
             ),
           // «كل الشركات» (٨ نوفمبر): ديون محذوفي كلّ الشركات — العنوان الفرعيّ عامّ (عدد المفتوحة وحدها يضلّل)
