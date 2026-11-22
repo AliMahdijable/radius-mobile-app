@@ -384,6 +384,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
               ),
           ],
           types: ActivityLogView.typeOptions,
+          showCompare: false,
         );
       }),
     );

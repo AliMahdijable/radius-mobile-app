@@ -113,7 +113,15 @@ class RpFilterSheet extends StatefulWidget {
     required this.now,
     this.loadingPeople = false,
     this.onDone,
+    this.showPeople = true,
+    this.showCompare = true,
   });
+
+  /// قسما «المدير» و«الموظّف» — كشف حساب مشتركٍ واحد بلاهما.
+  final bool showPeople;
+
+  /// مفتاح «قارن» — سجلّ الحركات وكشف الحساب بلا مقارنة.
+  final bool showCompare;
 
   /// «التقرير الماليّ · هذا الشهر».
   final String subtitle;
@@ -165,7 +173,9 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
   }
 
   void _toggleManager(String group, RpPerson p) {
-    final map = {for (final e in _v.managers.entries) e.key: {...e.value}};
+    final map = {
+      for (final e in _v.managers.entries) e.key: {...e.value}
+    };
     final set = map[group] ?? <String>{};
     if (_v.managerMode == RpManagerMode.owner) {
       // «مدير المشترك» يُسأل بمديرٍ واحد لكلّ شركة
@@ -258,9 +268,11 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: Sp.sm),
-                _switchRow('قارن بالفترة السابقة', 'تحت كلّ رقم: فرقه ${_v.range.vsText}', _v.compare,
-                    (on) => _set(_v.copyWith(compare: on))),
+                if (widget.showCompare) ...[
+                  const SizedBox(height: Sp.sm),
+                  _switchRow('قارن بالفترة السابقة', 'تحت كلّ رقم: فرقه ${_v.range.vsText}', _v.compare,
+                      (on) => _set(_v.copyWith(compare: on))),
+                ],
               ],
             ),
           ),
@@ -273,39 +285,40 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
                 spacing: Sp.sm,
                 runSpacing: Sp.sm,
                 children: [
-                  for (final c in cos)
-                    _CompanyPick(company: c, selected: _companyOn(c.key), onTap: () => _toggleCompany(c)),
+                  for (final c in cos) _CompanyPick(company: c, selected: _companyOn(c.key), onTap: () => _toggleCompany(c)),
                 ],
               ),
             ),
           ],
-          const SizedBox(height: Sp.xl),
-          SheetSection(
-            label: 'المدير',
-            hint: cos != null ? 'مدراء كلّ شركة تحت اسمها' : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SheetSegmented(
-                  labels: const ['من نفّذ الحركة', 'مدير المشترك'],
-                  selectedIndex: _v.managerMode == RpManagerMode.actor ? 0 : 1,
-                  onSelect: (i) => _set(_v.copyWith(
-                    managerMode: i == 0 ? RpManagerMode.actor : RpManagerMode.owner,
-                    managers: const {},
-                  )),
-                ),
-                const SizedBox(height: Sp.sm),
-                _groups(groups, managers: true),
-                if (anyTree && _v.managerMode == RpManagerMode.actor) ...[
+          if (widget.showPeople) ...[
+            const SizedBox(height: Sp.xl),
+            SheetSection(
+              label: 'المدير',
+              hint: cos != null ? 'مدراء كلّ شركة تحت اسمها' : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SheetSegmented(
+                    labels: const ['من نفّذ الحركة', 'مدير المشترك'],
+                    selectedIndex: _v.managerMode == RpManagerMode.actor ? 0 : 1,
+                    onSelect: (i) => _set(_v.copyWith(
+                      managerMode: i == 0 ? RpManagerMode.actor : RpManagerMode.owner,
+                      managers: const {},
+                    )),
+                  ),
                   const SizedBox(height: Sp.sm),
-                  _switchRow('مع مدرائه الفرعيّين', 'حركاتهم تدخل مع حركات من تختاره', _v.withSubs,
-                      (on) => _set(_v.copyWith(withSubs: on))),
+                  _groups(groups, managers: true),
+                  if (anyTree && _v.managerMode == RpManagerMode.actor) ...[
+                    const SizedBox(height: Sp.sm),
+                    _switchRow('مع مدرائه الفرعيّين', 'حركاتهم تدخل مع حركات من تختاره', _v.withSubs,
+                        (on) => _set(_v.copyWith(withSubs: on))),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: Sp.xl),
-          SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(groups, managers: false)),
+            const SizedBox(height: Sp.xl),
+            SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(groups, managers: false)),
+          ],
           const SizedBox(height: Sp.xl),
           SheetSection(
             label: 'نوع الحركة',
@@ -313,7 +326,8 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
               spacing: Sp.sm,
               runSpacing: Sp.sm,
               children: [
-                for (final t in widget.types) SheetQuickChip(label: t.$2, selected: _v.types.contains(t.$1), onTap: () => _toggleType(t.$1)),
+                for (final t in widget.types)
+                  SheetQuickChip(label: t.$2, selected: _v.types.contains(t.$1), onTap: () => _toggleType(t.$1)),
               ],
             ),
           ),
@@ -326,7 +340,8 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
                 spacing: Sp.sm,
                 runSpacing: Sp.sm,
                 children: [
-                  for (final s in widget.payments) SheetQuickChip(label: s.label, selected: _payOn(s), onTap: () => _togglePay(s)),
+                  for (final s in widget.payments)
+                    SheetQuickChip(label: s.label, selected: _payOn(s), onTap: () => _togglePay(s)),
                 ],
               ),
             ),
@@ -419,7 +434,8 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
     if (widget.loadingPeople && groups.every((g) => (managers ? g.managers : g.employees).isEmpty)) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: Sp.md),
-        child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))),
+        child: Center(
+            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))),
       );
     }
     final rows = <Widget>[];
@@ -435,7 +451,8 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
               Container(width: 8, height: 8, decoration: BoxDecoration(color: grp.company!.color, shape: BoxShape.circle)),
               const SizedBox(width: Sp.x6),
               Expanded(
-                child: Text(grp.company!.name, style: AppType.labelBold(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: Text(grp.company!.name,
+                    style: AppType.labelBold(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
@@ -496,7 +513,8 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
                   const SizedBox(width: Sp.xs),
                 ],
                 Expanded(
-                  child: Text(p.name, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child: Text(p.name,
+                      style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
                 if (p.sub != null) ...[
                   const SizedBox(width: Sp.sm),

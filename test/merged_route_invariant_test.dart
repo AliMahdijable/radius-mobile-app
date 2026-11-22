@@ -418,13 +418,14 @@ void main() {
       expect(v, isEmpty, reason: v.join('\n'));
     });
 
-    test('كشف الحساب لا يُفتح بلا قرار شركة: كلّ `AccountStatementScreen(` يمرّر companyKey (التحقّق الثالث من 179)', () {
+    test('كشف الحساب لا يُفتح بلا قرار شركة: كلّ `AccountStatementScreen(` و`AccountStatementV2Screen(` (الشكل الموحّد، ٢٢ نوفمبر) يمرّر companyKey (التحقّق الثالث من 179)', () {
       final sites = <String>[];
       final bad = <String>[];
       for (final e in lib.entries) {
         if (e.key == 'lib/screens/reports/account_statement_screen.dart') continue; // تعريفه
+        if (e.key == 'lib/screens/reports/v2/account_statement_v2_screen.dart') continue; // تعريفه
         final code = e.value.code;
-        for (final m in RegExp(r'\bAccountStatementScreen\s*\(').allMatches(code)) {
+        for (final m in RegExp(r'\bAccountStatement(?:V2)?Screen\s*\(').allMatches(code)) {
           final open = m.end - 1;
           final at = '${e.key}:${lineOf(code, m.start)}';
           sites.add(at);

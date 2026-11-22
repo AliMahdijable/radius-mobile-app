@@ -31,7 +31,7 @@ import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../reports/account_statement_screen.dart';
+import '../reports/v2/account_statement_v2_screen.dart';
 import '../reports/sessions_report_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
@@ -1004,7 +1004,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       case SubscriberAutoAction.statement:
         if (!_autoAllowed('reports.account_statement', 'كشف الحساب')) return;
         await Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => AccountStatementScreen(
+          builder: (_) => AccountStatementV2Screen(
             username: sub.username,
             // كشفه من شركته («كل الشركات» — التحقّق الثالث من 179)
             companyKey: sub.companyKey,
@@ -1741,7 +1741,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 ? null
                 : () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => AccountStatementScreen(
+                        builder: (_) => AccountStatementV2Screen(
                           username: sub.username,
                           // كشفه من شركته («كل الشركات» — التحقّق الثالث من 179)
                           companyKey: sub.companyKey,

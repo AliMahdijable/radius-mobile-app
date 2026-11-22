@@ -3,7 +3,7 @@ import '../../../core/util/ar_date.dart';
 // فترات التقرير الموحّد (٢٢ نوفمبر — بند المقترح ٣ و٤): تسع فتراتٍ جاهزة + مخصّص، ولكلّ فترةٍ «ما قبلها» للمقارنة.
 // الأسبوع يبدأ الإثنين كبقيّة التطبيق ([DateRange.thisWeek]). كلّ شيءٍ هنا حسابٌ صرف بساعةٍ تُمرَّر (للاختبار).
 
-enum RpPreset { today, yesterday, thisWeek, lastWeek, thisMonth, lastMonth, last30, thisYear, custom }
+enum RpPreset { today, yesterday, thisWeek, lastWeek, thisMonth, lastMonth, last30, last90, thisYear, custom }
 
 class RpRange {
   const RpRange._(this.preset, this.from, this.to);
@@ -42,6 +42,9 @@ class RpRange {
         return RpRange._(p, DateTime(t.year, t.month - 1, 1), _end(DateTime(t.year, t.month, 0)));
       case RpPreset.last30:
         return RpRange._(p, t.subtract(const Duration(days: 29)), _end(t));
+      case RpPreset.last90:
+        // «آخر 90 يوماً» (كشف حساب المشترك: افتراضه القديم ثلاثة أشهر)
+        return RpRange._(p, t.subtract(const Duration(days: 89)), _end(t));
       case RpPreset.thisYear:
         return RpRange._(p, DateTime(t.year, 1, 1), _end(t));
       case RpPreset.custom:
@@ -74,6 +77,7 @@ class RpRange {
       case RpPreset.thisYear:
         return RpRange._(RpPreset.custom, DateTime(from.year - 1, 1, 1), _end(_clampDay(from.year - 1, to.month, to.day)));
       case RpPreset.last30:
+      case RpPreset.last90:
       case RpPreset.custom:
         final b = from.subtract(const Duration(days: 1));
         return RpRange._(RpPreset.custom, b.subtract(Duration(days: days - 1)), _end(b));
@@ -89,6 +93,7 @@ class RpRange {
         RpPreset.thisMonth => 'هذا الشهر',
         RpPreset.lastMonth => 'الشهر الماضي',
         RpPreset.last30 => 'آخر 30 يوماً',
+        RpPreset.last90 => 'آخر 90 يوماً',
         RpPreset.thisYear => 'هذه السنة',
         RpPreset.custom => 'فترة مخصّصة',
       };
@@ -108,6 +113,7 @@ class RpRange {
         RpPreset.thisMonth => 'عن الشهر الماضي',
         RpPreset.lastMonth => 'عن الشهر الذي قبله',
         RpPreset.last30 => 'عن الـ30 يوماً قبلها',
+        RpPreset.last90 => 'عن الـ90 يوماً قبلها',
         RpPreset.thisYear => 'عن السنة الماضية',
         RpPreset.custom => 'عن الفترة السابقة',
       };
@@ -121,6 +127,7 @@ class RpRange {
         RpPreset.thisMonth => 'بالشهر الماضي',
         RpPreset.lastMonth => 'بالشهر الذي قبله',
         RpPreset.last30 => 'بالـ30 يوماً قبلها',
+        RpPreset.last90 => 'بالـ90 يوماً قبلها',
         RpPreset.thisYear => 'بالسنة الماضية',
         RpPreset.custom => 'بالفترة السابقة',
       };
@@ -155,6 +162,7 @@ class RpRange {
     RpPreset.thisMonth,
     RpPreset.lastMonth,
     RpPreset.last30,
+    RpPreset.last90,
     RpPreset.thisYear,
   ];
 
