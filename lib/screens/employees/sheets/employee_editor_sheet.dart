@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/el_managers_api.dart';
 import '../../../api/employee_limits_api.dart';
 import '../../../api/employees_api.dart';
 import '../../../api/subscribers_api.dart';
@@ -29,11 +30,16 @@ import '../employee_form_kit.dart';
 /// لها هناك)، ويقول تحت أيّ شركة سيعمل الموظف، وبعد الإنشاء يبقى مفتوحاً
 /// على لوحة بيانات الدخول. [onCreated] يُستدعى لحظة الإنشاء عندها، فتُحدَّث
 /// القائمة خلف اللوحة (قد تُغلق بالسحب فلا يرجع الشيت `true`).
+///
+/// [elScope] (٢٢ نوفمبر — المالك: «اضافة موظف لايرثلنك ليش مايظهر جوة ليا صفحه… نكدر نخلي تابع اله»): ايرث لنك وحدها (لا فايبر
+/// اكس ولا الشركات المُضافة) — حقل «مقيَّد بمدير فرعي» كالساس، قائمته حسابات الموزّع التابعة («المدراء») والقيمة
+/// `earthlink:<رقمه>`؛ الموظّف يعمل بجلسة ذلك الحساب ورصيده (الخادم 521d86b يتحقّق أنّه تابعٌ له ودخل النظام مرّة).
 Future<bool?> showEmployeeEditorSheet(
   BuildContext context, {
   required PermissionsCatalog catalog,
   Employee? employee,
   bool isEarthlink = false,
+  bool elScope = false,
   VoidCallback? onCreated,
 }) {
   return showAppSheet<bool>(
@@ -46,6 +52,7 @@ Future<bool?> showEmployeeEditorSheet(
       catalog: catalog,
       employee: employee,
       isEarthlink: isEarthlink,
+      elScope: isEarthlink && elScope,
       onCreated: onCreated,
     ),
   );
@@ -77,11 +84,13 @@ class _EmployeeEditorSheet extends StatefulWidget {
     required this.catalog,
     this.employee,
     this.isEarthlink = false,
+    this.elScope = false,
     this.onCreated,
   });
   final PermissionsCatalog catalog;
   final Employee? employee;
   final bool isEarthlink;
+  final bool elScope;
   final VoidCallback? onCreated;
 
   @override
@@ -103,9 +112,12 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   /// null = يشاهد بيانات الأب كاملة (الافتراضي).
   String? _scopeAdminId;
 
-  /// قائمة المدراء الفرعيّين للـdropdown — تُحمَّل في initState.
-  List<({int id, String username, String firstname, String lastname})>?
-      _managers;
+  /// خيارات الـdropdown (القيمة المُرسَلة + نصّها) — تُحمَّل في initState: مدراء الساس الفرعيّون، أو حسابات موزّع
+  /// ايرث لنك التابعة (`earthlink:<رقمه>`). null = تُحمَّل، [] = لا حقل.
+  List<({String value, String label})>? _scopeOptions;
+
+  /// الحقل يُعرض ويُرسَل: الساس، وايرث لنك وحدها من مزوّدي «البرو».
+  bool get _scopeOn => !_el || widget.elScope;
 
   /// رسالة الخطأ المعروضة بأعلى الـsheet. تنمسح عند بدء الكتابة في
   /// أي حقل عشان المستخدم ما يشوف خطأ قديم بعد ما يصحّح. لو null لا
@@ -191,8 +203,24 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       if (e != null) ...e.permissions,
     };
     if (_el) {
-      // ايرث لنك: لا قيد بمدير فرعي فلا قائمة مدراء. ويوزر المالك احتياطاً
-      // لسطر «سيعمل الموظف على» إن لم تعرفه الشركة المفتوحة.
+      // ايرث لنك/فايبر اكس/المُضافة: يوزر المالك احتياطاً لسطر «سيعمل الموظف على» إن لم تعرفه الشركة المفتوحة.
+      // ايرث لنك وحدها (٢٢ نوفمبر): «مقيَّد بمدير فرعي» من حسابات الموزّع التابعة — تعذّرها ⇒ لا حقل (لا «تحميل» دائم).
+      if (widget.elScope) {
+        () async {
+          List<({String value, String label})> opts = const [];
+          try {
+            final r = await ElManagersApi.list();
+            if (r.enabled && r.message == null) {
+              opts = [
+                for (final m in r.rows)
+                  if (m.index > 0 && m.name.trim().isNotEmpty)
+                    (value: 'earthlink:${m.index}', label: m.name.trim()),
+              ];
+            }
+          } catch (_) {/* لا حقل */}
+          if (mounted) setState(() => _scopeOptions = opts);
+        }();
+      }
       if ((ActiveCompany.current?.shownUsername.trim() ?? '').isEmpty) {
         () async {
           try {
@@ -209,7 +237,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         try {
           final list = await SubscribersApi.loadManagers();
           if (mounted && list != null) {
-            setState(() => _managers = list);
+            setState(() => _scopeOptions = [
+                  for (final m in list) (value: m.id.toString(), label: _managerLabel(m)),
+                ]);
           }
         } catch (_) {/* fallback: hide dropdown */}
       }();
@@ -359,9 +389,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     if (_isEdit) {
       // scopeAdminId ثلاثيّ: null (لا تغيير)، '' (مسح)، id (تحديد).
       // نستفسر: هل الـscope تغيّر عن الأصلي؟
-      // ايرث لنك: لا قيد بمدير فرعي أبداً — لا يُرسَل الحقل.
+      // فايبر اكس والمُضافة: لا قيد بمدير فرعي — لا يُرسَل الحقل؛ ايرث لنك منذ ٢٢ نوفمبر كالساس.
       final currentEditScope = widget.employee!.scopeAdminId;
-      final scopeChanged = !_el && _scopeAdminId != currentEditScope;
+      final scopeChanged = _scopeOn && _scopeAdminId != currentEditScope;
       final r = await EmployeesApi.update(
         id: widget.employee!.id,
         fullName: _fullNameCtrl.text.trim(),
@@ -387,7 +417,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         isActive: _isActive,
         permissions: perms,
         permsShownOnly: _el,
-        scopeAdminId: _el ? null : _scopeAdminId,
+        scopeAdminId: _scopeOn ? _scopeAdminId : null,
       );
       ok = r.ok;
       message = r.message;
@@ -602,8 +632,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         ),
         const SizedBox(height: Sp.md),
         // 2026-08-26: قيد الـscope — الموظّف مقيَّد بمدير فرعي؟
-        // ايرث لنك: لا شجرة مدراء ساس، والخادم يرفض القيد هناك — لا يُعرض.
-        if (!_el) ...[
+        // ايرث لنك (٢٢ نوفمبر): حسابات الموزّع التابعة؛ فايبر اكس والمُضافة: لا مدراء فرعيّون — لا يُعرض.
+        if (_scopeOn) ...[
           _scopePicker(),
           const SizedBox(height: Sp.md),
         ],
@@ -1125,7 +1155,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   /// الأخرى (اسم/باسورد/هاتف). أيقونة يمين + Dropdown ملء العرض + شرح
   /// hint صغير تحت. تصميم نظيف بلا Row مزدوج.
   Widget _scopePicker() {
-    final list = _managers;
+    final list = _scopeOptions;
     if (list == null) {
       // Loading skeleton بنفس ارتفاع الحقول الأخرى
       return _fieldContainer(
@@ -1147,6 +1177,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     }
     if (list.isEmpty) return const SizedBox.shrink();
     final selected = _scopeAdminId;
+    // قيدٌ محفوظ لمديرٍ لم يعد في القائمة: يبقى ظاهراً باسمه (لا يُمسح صامتاً، ولا يتعطّل الـdropdown بقيمةٍ بلا عنصر)
+    final keep = selected != null && !list.any((o) => o.value == selected)
+        ? (value: selected, label: widget.employee?.scopeAdminUsername ?? selected)
+        : null;
+    final options = [...list, if (keep != null) keep];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1180,11 +1215,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      for (final m in list)
+                      for (final o in options)
                         DropdownMenuItem<String?>(
-                          value: m.id.toString(),
+                          value: o.value,
                           child: Text(
-                            _managerLabel(m),
+                            o.label,
                             style: TextStyle(
                               fontFamily: AppType.family,
                               fontSize: 13, height: 1.35,
@@ -1208,9 +1243,13 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         Padding(
           padding: const EdgeInsetsDirectional.only(start: 4, top: 5),
           child: Text(
-            selected == null
-                ? 'الموظّف يشاهد كل مشتركين ومدراء حسابك.'
-                : 'الموظّف مقيَّد — يرى بيانات المدير الفرعي المختار فقط.',
+            widget.elScope
+                ? (selected == null
+                    ? 'الموظّف يعمل بحسابك أنت: كلّ مشتركيك ورصيدك.'
+                    : 'الموظّف تابع — يعمل بحساب المدير الفرعي المختار: مشتركوه ورصيده فقط.')
+                : (selected == null
+                    ? 'الموظّف يشاهد كل مشتركين ومدراء حسابك.'
+                    : 'الموظّف مقيَّد — يرى بيانات المدير الفرعي المختار فقط.'),
             style: TextStyle(
               fontFamily: AppType.family,
               fontSize: 10.5, height: 1.3,

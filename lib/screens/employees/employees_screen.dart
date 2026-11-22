@@ -170,6 +170,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       ActiveCompany.current?.sasCode == 'earthlink' ||
       ActiveCompany.current?.sasCode == 'fiberx';
 
+  /// ايرث لنك وحدها (لا فايبر اكس ولا المُضافة) — ٢٢ نوفمبر: «مقيَّد بمدير فرعي» بحسابات الموزّع التابعة كالساس
+  /// (المالك: «اضافة موظف لايرثلنك ليش مايظهر جوة ليا صفحه… نكدر نخلي تابع اله»).
+  static bool get _isEarthlinkOnly =>
+      !ProviderService.isFiberx &&
+      !ProviderService.isKit &&
+      (ProviderService.isEarthlink || ActiveCompany.current?.sasCode == 'earthlink');
+
   @override
   void initState() {
     super.initState();
@@ -244,6 +251,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       catalog: cat,
       employee: employee,
       isEarthlink: _isEarthlink,
+      elScope: _isEarthlinkOnly,
       onCreated: () {
         reloaded = true;
         _load();
@@ -351,6 +359,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             focusedProvider == MergedProvider.fiberx ||
             focusedProvider == MergedProvider.kit)
         : _isEarthlink;
+    // شارة «مقيَّد» على البطاقة: الساس وايرث لنك (٢٢ نوفمبر) — فايبر اكس والمُضافة بلا مدراء فرعيّين
+    final scopeShown = !isEl ||
+        (routed && focusedProvider != null ? focusedProvider == MergedProvider.earthlink : _isEarthlinkOnly);
     final canManage = Perms.has('employees.manage') && !viewOnly;
     // «حركات الموظف»: للشركة المفتوحة وحدها
     final ledgerOn = _ledgerOn && !viewOnly;
@@ -443,11 +454,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                 _EmployeeTile(
                                   emp: e,
                                   // ايرث لنك: ما يملكه الموظف فعلاً — مفاتيح
-                                  // ايرث لنك وحدها؛ لا قيد بمدير فرعي هناك.
+                                  // ايرث لنك وحدها.
                                   permsCount: isEl
                                       ? ElEmployeePerms.activeCount(e.permissions)
                                       : e.activePermsCount,
-                                  showScope: !isEl,
+                                  showScope: scopeShown,
                                   onTap: canManage
                                       ? () => _openEditor(employee: e)
                                       : null,
@@ -936,7 +947,11 @@ class _EmployeeTile extends StatelessWidget {
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
-                              'مقيَّد بـ@${emp.scopeAdminUsername ?? emp.scopeAdminId}',
+                              // يوزر ايرث لنك فيه @ أصلاً (admin@najaf40) — لا @@
+                              () {
+                                final who = emp.scopeAdminUsername ?? emp.scopeAdminId ?? '';
+                                return 'مقيَّد بـ${who.contains('@') ? who : '@$who'}';
+                              }(),
                               style: AppType.microBold(color: AppColors.brandAccent),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,

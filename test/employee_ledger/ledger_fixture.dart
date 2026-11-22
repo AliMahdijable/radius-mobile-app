@@ -371,6 +371,9 @@ class LedgerServer implements HttpClientAdapter {
   /// الموظّف ٩ معطَّل في قائمة الموظفين (شارة «معطّل» بالرأس).
   bool withDisabledEmployee = false;
 
+  /// قائمة موظّفين بديلة لـ`GET /api/v2/employees` (٢٢ نوفمبر — شارة «مقيَّد» لايرث لنك) — null = الثلاثة المعتادون.
+  List<Map<String, dynamic>>? employeesList;
+
   /// `/me` يردّ كموظّفٍ بهذا الرقم (صاحب صلاحيّة الرواتب حين [meCanManage]) — null = المدير.
   int? meAsEmployee;
   bool meCanManage = true;
@@ -459,6 +462,8 @@ class LedgerServer implements HttpClientAdapter {
       reply = accountFails ? (409, {'success': false, 'message': 'تعذّر تحميل حساب الموظف الآن'}) : (200, {'success': true, 'data': _account()});
     } else if (p == '$base/9' && m == 'GET') {
       reply = (200, {'success': true, 'data': ledgerAccountJson()..['employee'] = {'id': 9, 'username': 'cashier', 'name': 'صراف'}});
+    } else if (p == '/api/v2/employees' && m == 'GET' && employeesList != null) {
+      reply = (200, {'success': true, 'data': employeesList});
     } else if (p == '/api/v2/employees' && m == 'GET') {
       reply = (200, {
         'success': true,
