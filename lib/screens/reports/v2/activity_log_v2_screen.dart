@@ -652,12 +652,13 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
   List<Widget> _parts() {
     final f = _f!;
     final parts = <Widget>[
-      // سجلّ تدقيق: لا مقارنة (أعدادٌ لا أداء) — الفترة وحدها
-      RpPeriodBar(
+      // سجلّ تدقيق: لا مقارنة (أعدادٌ لا أداء) — الفترة و«الفلاتر» بسطرٍ واحد (المالك ٢٢ نوفمبر)، وشاراتها تحته
+      RpHeader(
         period: RpPeriod(name: f.range.name, range: f.range.rangeText),
-        compareOn: false,
-        compareWith: '',
         onPeriod: _openFilters,
+        chips: _chips(),
+        onFilters: _openFilters,
+        onClear: () => _apply(f.cleared()),
       ),
     ];
     if (_merged) {
@@ -669,7 +670,6 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
         onToggle: _toggleCompany,
       ));
     }
-    parts.add(RpFilterBar(chips: _chips(), onOpen: _openFilters, onClear: () => _apply(f.cleared())));
     if (_merged) parts.add(_companyTable());
 
     if (!_merged && _loading && _rows == null) {

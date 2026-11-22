@@ -572,8 +572,15 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
 
   List<Widget> _body() {
     final f = _f!;
+    // الرأس بسطرٍ واحد (المالك ٢٢ نوفمبر): الفترة و«الفلاتر»، وشاراتها تحته
     final out = <Widget>[
-      RpPeriodBar(period: RpPeriod(name: f.range.name, range: f.range.rangeText), compareOn: false, compareWith: '', onPeriod: _openFilters),
+      RpHeader(
+        period: RpPeriod(name: f.range.name, range: f.range.rangeText),
+        onPeriod: _openFilters,
+        chips: _chips(),
+        onFilters: _openFilters,
+        onClear: () => _apply(f.cleared()),
+      ),
     ];
     if (_merged) {
       final picked = {for (final c in _picked) c.key};
@@ -584,7 +591,6 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
         onToggle: _toggleCompany,
       ));
     }
-    out.add(RpFilterBar(chips: _chips(), onOpen: _openFilters, onClear: () => _apply(f.cleared())));
     final parts = _parts;
     final t = PackageDistView.totals(parts, unread: _failed);
     if (_merged) {

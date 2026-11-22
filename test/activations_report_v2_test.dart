@@ -341,7 +341,9 @@ void main() {
             reason: 'لا شهر ولا مقارنة');
         expect(kpis(t)[ActKpiIds.activations]!.value, 6);
         expect(kpis(t)[ActKpiIds.activations]!.delta, isNull);
-        expect(t.widget<RpPeriodBar>(find.byType(RpPeriodBar)).onPeriod, isNull);
+        // الرأس بسطرٍ واحد (٢٢ نوفمبر): الفترة لا تُلمس لصلاحيّة اليوميّة وحدها، ولا «قارن»
+        expect(t.widget<RpHeader>(find.byType(RpHeader)).onPeriod, isNull);
+        expect(find.byKey(const ValueKey('rp-head-compare')), findsNothing);
         expect(find.textContaining('صلاحيّتك «التفعيلات اليوميّة»'), findsOneWidget);
         expect(t.takeException(), isNull);
       } finally {
@@ -405,7 +407,7 @@ void main() {
         expect(k[ActKpiIds.debt]!.value, 22 * 60000, reason: 'بالدين + غير المدفوع من الجزئيّ');
         expect(find.text('الباقة: Gaming 100'), findsOneWidget);
         // الورقة: باقات الفترة كلّها (والتمديد بلا باقة اسمٌ صريح)
-        await t.tap(find.byType(RpPeriodBar));
+        await t.tap(find.byKey(const ValueKey('rp-head-period')));
         await t.pump();
         await t.pump(const Duration(milliseconds: 500));
         final sheet = t.widget<RpFilterSheet>(find.byType(RpFilterSheet));

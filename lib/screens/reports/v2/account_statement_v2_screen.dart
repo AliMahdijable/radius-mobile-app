@@ -308,8 +308,14 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
     final f = _f!;
     final parts = <Widget>[
       if (widget.companyKey != null && MergedMode.active.value) CompanyTag(companyKey: widget.companyKey!, fontSize: 11),
-      RpPeriodBar(period: RpPeriod(name: f.range.name, range: f.range.rangeText), compareOn: false, compareWith: '', onPeriod: _openFilters),
-      RpFilterBar(chips: _chips(), onOpen: _openFilters, onClear: () => _apply(f.cleared())),
+      // الرأس بسطرٍ واحد (المالك ٢٢ نوفمبر): الفترة و«الفلاتر»، وشاراتها تحته
+      RpHeader(
+        period: RpPeriod(name: f.range.name, range: f.range.rangeText),
+        onPeriod: _openFilters,
+        chips: _chips(),
+        onFilters: _openFilters,
+        onClear: () => _apply(f.cleared()),
+      ),
     ];
     final d = _data;
     if (_loading && d == null) {

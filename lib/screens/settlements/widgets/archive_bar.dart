@@ -28,7 +28,12 @@ class ArchiveBar extends StatelessWidget {
     required this.includeArchived,
     required this.onChanged,
     this.padding,
+    this.compact = false,
   });
+
+  /// سطرٌ مختصر فوق رأس التقرير الموحّد (المالك ٢٢ نوفمبر: «الأرشيف يصير فوق وصورة مختصرة»): «ما بعد تسوية #n · تاريخها» ومفتاح
+  /// «مع الأرشيف» بجانبه — بلا صندوقٍ ولا زرّ «تسوية الحساب».
+  final bool compact;
 
   final ArchiveInfo? archive;
 
@@ -45,6 +50,32 @@ class ArchiveBar extends StatelessWidget {
 
     final a = archive;
     if (a == null || !a.show) return const SizedBox.shrink();
+
+    if (compact) {
+      final at = a.lastCutAt?.toLocal();
+      final day = at == null ? '' : ' · ${iso('${at.year}/${at.month.toString().padLeft(2, '0')}/${at.day.toString().padLeft(2, '0')}')}';
+      final line = includeArchived ? 'تُعرض كلّ الحركات مع المسوّاة (${a.settlements} تسوية)' : 'ما بعد آخر تسوية #${a.lastNumber ?? a.settlements}$day';
+      return Padding(
+        key: const ValueKey('archive-compact'),
+        padding: padding ?? EdgeInsets.zero,
+        child: Row(
+          children: [
+            Icon(LucideIcons.archive, size: 13, color: AppColors.textLow),
+            const SizedBox(width: Sp.xs),
+            // ⚠️ `maxLines` + `ellipsis` إلزاميّان بجانب أيقونةٍ ثابتة (حارسا text_crush_test و flex_text_guard_test) — سطران يكفيان النصّ القصير
+            Expanded(child: Text(line, style: AppType.micro(color: AppColors.textLow), maxLines: 2, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: Sp.sm),
+            ToneChip(
+              label: 'archive.tab_all'.tr(),
+              icon: includeArchived ? LucideIcons.squareCheck : LucideIcons.square,
+              tone: includeArchived ? AppTone.brand : AppTone.neutral,
+              dense: true,
+              onTap: () => onChanged(!includeArchived),
+            ),
+          ],
+        ),
+      );
+    }
 
     // ⚠️ التاريخ يُعزَل بـ`iso`: «#2 · الخميس 2026-10-03 21:27» داخل
     // جملةٍ عربيّة يُفكّك محرّك BiDi ترتيبَه بلا العزل.

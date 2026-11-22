@@ -988,26 +988,30 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
 
   List<Widget> _parts() {
     final f = _f!;
+    final archive = _merged ? _combined.report?.archive : _cur?.archive;
+    // الرأس بسطرٍ واحد (المالك ٢٢ نوفمبر): الأرشيف مختصراً فوقه، ثمّ الفترة و«قارن» و«الفلاتر»، وشاراتها تحته
     final parts = <Widget>[
-      RpPeriodBar(
+      RpHeader(
         period: RpPeriod(name: f.range.name, range: f.range.rangeText),
-        compareOn: f.compare,
-        compareWith: f.range.compareText,
         onPeriod: _openFilters,
+        compareOn: f.compare,
         onCompare: () => _apply(f.copyWith(compare: !f.compare)),
+        chips: _chips(),
+        onFilters: _openFilters,
+        onClear: () => _apply(f.cleared()),
+        top: !(archive?.show ?? false)
+            ? null
+            : ArchiveBar(
+                compact: true,
+                archive: archive,
+                includeArchived: _withArchive,
+                onChanged: (v) {
+                  setState(() => _withArchive = v);
+                  _load();
+                },
+              ),
       ),
     ];
-    final archive = _merged ? _combined.report?.archive : _cur?.archive;
-    if (archive != null) {
-      parts.add(ArchiveBar(
-        archive: archive,
-        includeArchived: _withArchive,
-        onChanged: (v) {
-          setState(() => _withArchive = v);
-          _load();
-        },
-      ));
-    }
     if (_merged) {
       final picked = {for (final c in _picked) c.key};
       parts.add(RpCompanyChips(
@@ -1017,7 +1021,6 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         onToggle: _toggleCompany,
       ));
     }
-    parts.add(RpFilterBar(chips: _chips(), onOpen: _openFilters, onClear: () => _apply(f.cleared())));
 
     if (_merged) parts.add(_companyTable());
 

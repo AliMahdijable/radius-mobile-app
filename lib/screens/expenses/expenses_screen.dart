@@ -72,10 +72,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   /// مقفلة: شركةٌ موجَّهة لم يفتح الخادم كتابتها (أو لم يصل ردّها بعد).
   /// «كل الصفحات» للموظّف (٩ نوفمبر): وصفحةٌ كتابتها مغلقةٌ له من هنا (غير صفحته الحاليّة) — ولو فتحها الخادم لمالكها.
-  bool get _locked =>
-      _section != null &&
-      _section!.routed &&
-      (_routedWrites != true || MergedOps.writeLockAt(_section!.company?.key) != null);
+  bool get _locked => _section != null && _section!.routed && (_routedWrites != true || MergedOps.writeLockAt(_section!.company?.key) != null);
 
   String get _lockText => 'merged.section_locked'.trm(args: [_section?.company?.name ?? '—']);
   // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب). شريط الفترة نفسه الذي في التقارير الموحّدة (٢٢ نوفمبر — بند المقترح:
@@ -205,9 +202,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       builder: (dialogCtx) => AlertDialog(
         title: Text('exp.delete_title'.tr()),
         content: Text(
-          'exp.delete_body'.tr(namedArgs: {
-            'amt': '${formatIQD(row.amount)} ${'common.currency'.tr()}'
-          }),
+          'exp.delete_body'.tr(namedArgs: {'amt': '${formatIQD(row.amount)} ${'common.currency'.tr()}'}),
         ),
         actions: [
           TextButton(
@@ -227,9 +222,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result.ok
-            ? 'exp.deleted'.tr()
-            : (result.message ?? 'subscribers.delete_failed'.tr())),
+        content: Text(result.ok ? 'exp.deleted'.tr() : (result.message ?? 'subscribers.delete_failed'.tr())),
         backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -266,19 +259,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       floatingActionButton: DesktopScope.of(context)
           ? null
           : FloatingActionButton.extended(
-        backgroundColor: accent,
-        foregroundColor: AppColors.onBrand,
-        onPressed: _openAdd,
-        icon: const Icon(LucideIcons.plus, size: 16),
-        label: Text('common.add'.tr()),
-      ),
+              backgroundColor: accent,
+              foregroundColor: AppColors.onBrand,
+              onPressed: _openAdd,
+              icon: const Icon(LucideIcons.plus, size: 16),
+              label: Text('common.add'.tr()),
+            ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
           color: accent,
           child: ListView(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.paddingOf(context).bottom + 96),
+            padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 96),
             children: [
               // «كل الشركات»: الشركات ومن تُعرض (والمقفلة بسببها)
               MergedSectionBar(lockedText: _locked && !_loading ? _lockText : null),
@@ -289,7 +281,22 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    RpPeriodBar(period: RpPeriod(name: _range.name, range: _range.rangeText), compareOn: false, compareWith: '', onPeriod: _pickRange),
+                    // الرأس بسطرٍ واحد (المالك ٢٢ نوفمبر): الأرشيف مختصراً فوق الفترة
+                    RpHeader(
+                      period: RpPeriod(name: _range.name, range: _range.rangeText),
+                      onPeriod: _pickRange,
+                      top: !(_archive?.show ?? false)
+                          ? null
+                          : ArchiveBar(
+                              compact: true,
+                              archive: _archive,
+                              includeArchived: _withArchive,
+                              onChanged: (v) {
+                                setState(() => _withArchive = v);
+                                _load();
+                              },
+                            ),
+                    ),
                     const SizedBox(height: Sp.md),
                     RpHeroKpi(
                       key: const ValueKey('exp-total'),
@@ -308,14 +315,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   reloadToken: _recurringToken,
                   onExpensesChanged: () => _load(withRecurring: false),
                 ),
-              ArchiveBar(
-                archive: _archive,
-                includeArchived: _withArchive,
-                onChanged: (v) {
-                  setState(() => _withArchive = v);
-                  _load();
-                },
-              ),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
@@ -341,7 +340,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   /// المصاريف ببطاقة التقارير الموحّدة: العنوان وعددها، البحث، ثمّ تحت كلّ يومٍ مصاريفه ومجموعه.
   Widget _listCard() {
     final q = _q.trim();
-    final shown = q.isEmpty ? _rows : [for (final r in _rows) if (_matches(r, q)) r];
+    final shown = q.isEmpty
+        ? _rows
+        : [
+            for (final r in _rows)
+              if (_matches(r, q)) r
+          ];
     final groups = <({String day, List<ExpenseRow> rows})>[];
     for (final r in shown) {
       final day = r.expenseDate;
@@ -405,8 +409,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           const SizedBox(height: 10),
           Text(
             'exp.empty_range'.tr(),
-            style:
-                AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
+            style: AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
@@ -494,9 +497,8 @@ class _ExpenseTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       ToneChip(
                         // «ثابتة · 2026/10» — الشهر بالشارة لا بلاحقة الملاحظة.
-                        label: (row.recurringPeriod ?? '').isEmpty
-                            ? 'rexp.badge'.tr()
-                            : '${'rexp.badge'.tr()} · ${iqPeriodLabel(row.recurringPeriod)}',
+                        label:
+                            (row.recurringPeriod ?? '').isEmpty ? 'rexp.badge'.tr() : '${'rexp.badge'.tr()} · ${iqPeriodLabel(row.recurringPeriod)}',
                         icon: LucideIcons.repeat,
                         tone: AppTone.info,
                         dense: true,
@@ -508,7 +510,8 @@ class _ExpenseTile extends StatelessWidget {
               const SizedBox(width: Sp.sm),
               Text(
                 '${formatIQD(row.amount)} د.ع',
-                style: AppType.bodyStrong(color: AppColors.error).copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
+                style: AppType.bodyStrong(color: AppColors.error)
+                    .copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
               ),
               // صرفيةٌ داخل تسوية: مقفلة — شارة رقمها بدل زرّ الحذف.
               if (row.isLocked)

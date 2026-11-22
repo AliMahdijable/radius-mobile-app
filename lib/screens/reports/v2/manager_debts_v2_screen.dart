@@ -469,8 +469,15 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
 
   List<Widget> _parts() {
     final f = _f!;
+    // الرأس بسطرٍ واحد (المالك ٢٢ نوفمبر): الفترة و«الفلاتر»، وشاراتها تحته
     final parts = <Widget>[
-      RpPeriodBar(period: RpPeriod(name: f.range.name, range: f.range.rangeText), compareOn: false, compareWith: '', onPeriod: _openFilters),
+      RpHeader(
+        period: RpPeriod(name: f.range.name, range: f.range.rangeText),
+        onPeriod: _openFilters,
+        chips: _chips(),
+        onFilters: _openFilters,
+        onClear: () => _apply(f.cleared()),
+      ),
     ];
     if (_merged) {
       final picked = {for (final c in _picked) c.key};
@@ -481,7 +488,6 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
         onToggle: _toggleCompany,
       ));
     }
-    parts.add(RpFilterBar(chips: _chips(), onOpen: _openFilters, onClear: () => _apply(f.cleared())));
     if (_merged) {
       parts.add(_companyTable());
       final none = [

@@ -400,10 +400,11 @@ class RpPeriodBar extends StatelessWidget {
 }
 
 class _Pill extends StatelessWidget {
-  const _Pill({required this.child, required this.selected, this.onTap});
+  const _Pill({super.key, required this.child, required this.selected, this.onTap, this.padding = const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm)});
   final Widget child;
   final bool selected;
   final VoidCallback? onTap;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
@@ -415,7 +416,7 @@ class _Pill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.icon),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+          padding: padding,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.icon),
             border: Border.all(
@@ -518,10 +519,13 @@ class RpChip {
 
 /// الفلاتر الفعّالة رقائق تُحذف بلمسة، و«الفلاتر» يفتح الورقة الكاملة.
 class RpFilterBar extends StatelessWidget {
-  const RpFilterBar({super.key, required this.chips, this.onOpen, this.onClear});
+  const RpFilterBar({super.key, required this.chips, this.onOpen, this.onClear, this.showButton = true});
   final List<RpChip> chips;
   final VoidCallback? onOpen;
   final VoidCallback? onClear;
+
+  /// false: الشارات الفعّالة وحدها (زرّ «الفلاتر» في سطر [RpHeader]).
+  final bool showButton;
 
   @override
   Widget build(BuildContext context) {
@@ -530,6 +534,7 @@ class RpFilterBar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
+          if (showButton)
           _Tap(
             onTap: onOpen,
             child: Container(
@@ -558,7 +563,7 @@ class RpFilterBar extends StatelessWidget {
             ),
           ),
           for (final c in chips) ...[
-            const SizedBox(width: Sp.sm),
+            if (showButton || c != chips.first) const SizedBox(width: Sp.sm),
             _Tap(
               onTap: c.onRemove,
               child: Container(
@@ -592,6 +597,146 @@ class RpFilterBar extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// رأس التقرير الموحّد بسطرٍ واحد (المالك ٢٢ نوفمبر على لقطة الماليّ: «الفلاتر والشهر وذني كلّهن يصيرون بسطر واحد حتى لا تاخذ هو من
+/// مساحة التصميم، كلّ التقارير لازم» + «الأرشيف يصير فوق وصورة مختصرة»): [top] سطرٌ مختصر أعلاه (الأرشيف)، ثمّ الفترة و«قارن»
+/// و«الفلاتر» صفّاً واحداً، والشارات الفعّالة تحته حين توجد وحدها. على الضيّق (< 380) «الفلاتر» أيقونةٌ وعددها فلا تأكل الفترة.
+class RpHeader extends StatelessWidget {
+  const RpHeader({
+    super.key,
+    required this.period,
+    this.onPeriod,
+    this.compareOn = false,
+    this.onCompare,
+    this.chips = const [],
+    this.onFilters,
+    this.onClear,
+    this.top,
+  });
+  final RpPeriod period;
+  final VoidCallback? onPeriod;
+  final bool compareOn;
+
+  /// null وبلا مقارنة ⇒ لا زرّ «قارن» (تقريرٌ بلا مقارنة).
+  final VoidCallback? onCompare;
+  final List<RpChip> chips;
+
+  /// null ⇒ لا زرّ «الفلاتر» (الفترة وحدها — المصاريف).
+  final VoidCallback? onFilters;
+  final VoidCallback? onClear;
+
+  /// سطرٌ مختصر فوق الصفّ (الأرشيف) — null ⇒ لا شيء.
+  final Widget? top;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final compare = onCompare != null || compareOn;
+    const pad = EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: Sp.xs);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final narrow = box.maxWidth < 380;
+        final row = SizedBox(
+          height: 44,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Pill(
+                  key: const ValueKey('rp-head-period'),
+                  selected: false,
+                  onTap: onPeriod,
+                  padding: pad,
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.calendarDays, size: 16, color: AppColors.brand),
+                      const SizedBox(width: Sp.x6),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            RpFitText(period.name, style: AppType.pillBold(color: AppColors.textHi)),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: RpFitText(period.range,
+                                  style: AppType.micro(color: AppColors.textMid), alignment: AlignmentDirectional.centerEnd),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronDown, size: 14, color: AppColors.textLow),
+                    ],
+                  ),
+                ),
+              ),
+              if (compare) ...[
+                const SizedBox(width: Sp.x6),
+                _Pill(
+                  key: const ValueKey('rp-head-compare'),
+                  selected: compareOn,
+                  onTap: onCompare,
+                  padding: pad,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(compareOn ? LucideIcons.squareCheck : LucideIcons.square,
+                          size: 15, color: compareOn ? AppColors.brand : AppColors.textLow),
+                      const SizedBox(width: Sp.xs),
+                      Text('قارن', style: AppType.pillBold(color: compareOn ? AppColors.brand : AppColors.textHi), maxLines: 1),
+                    ],
+                  ),
+                ),
+              ],
+              if (onFilters != null) ...[
+                const SizedBox(width: Sp.x6),
+                _Tap(
+                  onTap: onFilters,
+                  radius: R.icon,
+                  child: Container(
+                    key: const ValueKey('rp-head-filters'),
+                    padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+                    decoration: BoxDecoration(color: AppColors.brand, borderRadius: BorderRadius.circular(R.icon)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.slidersHorizontal, size: 15, color: AppColors.onBrand),
+                        if (!narrow) ...[
+                          const SizedBox(width: Sp.x6),
+                          Text('الفلاتر', style: AppType.pillBold(color: AppColors.onBrand)),
+                        ],
+                        if (chips.isNotEmpty) ...[
+                          const SizedBox(width: Sp.x6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: Sp.x6),
+                            decoration: BoxDecoration(color: AppColors.onBrandFill2, borderRadius: BorderRadius.circular(R.pill)),
+                            child: Text('${chips.length}', style: AppType.microBold(color: AppColors.onBrand)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (top != null) ...[top!, const SizedBox(height: Sp.sm)],
+            row,
+            if (chips.isNotEmpty) ...[
+              const SizedBox(height: Sp.sm),
+              RpFilterBar(chips: chips, onOpen: onFilters, onClear: onClear, showButton: false),
+            ],
+          ],
+        );
+      },
     );
   }
 }

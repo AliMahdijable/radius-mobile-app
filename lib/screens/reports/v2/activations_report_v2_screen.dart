@@ -735,13 +735,16 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
 
   List<Widget> _parts() {
     final f = _f!;
+    // الرأس بسطرٍ واحد (المالك ٢٢ نوفمبر): الفترة و«قارن» و«الفلاتر»، وشاراتها تحته
     final parts = <Widget>[
-      RpPeriodBar(
+      RpHeader(
         period: RpPeriod(name: f.range.name, range: f.range.rangeText),
-        compareOn: f.compare,
-        compareWith: f.range.compareText,
         onPeriod: _todayOnly ? null : _openFilters,
+        compareOn: f.compare,
         onCompare: _todayOnly ? null : () => _apply(f.copyWith(compare: !f.compare)),
+        chips: _chips(),
+        onFilters: _openFilters,
+        onClear: () => _apply(f.cleared()),
       ),
     ];
     if (_todayOnly) {
@@ -757,7 +760,6 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
         onToggle: _toggleCompany,
       ));
     }
-    parts.add(RpFilterBar(chips: _chips(), onOpen: _openFilters, onClear: () => _apply(f.cleared())));
     if (_merged) parts.add(_companyTable());
 
     if (!_merged && _loading && _rows == null) {
