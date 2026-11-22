@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -15,6 +15,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_section.dart';
+import '../reports/v2/report_kit.dart';
+import '../reports/v2/report_prefs.dart';
 
 /// «الصرفيات الثابتة» (٢٣ أكتوبر ٢٠٢٦) — قسمٌ أعلى شاشة الصرفيات: القوالب، والمعلَّقة بانتظار التأكيد، والإنشاء
 /// والتعديل والإيقاف و«دفعتها الآن» والحذف. كلّ استحقاقٍ صرفيّةٌ عاديّة تظهر بالقائمة تحته بشارة «ثابتة». يظهر حين يفتحه
@@ -45,6 +47,10 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
   RecurringPage? _page;
   String? _busyKey;
 
+  /// قسمٌ فرعيّ يُطوى ويُتذكّر (المالك ٢٢ نوفمبر: «الفرعيّة خلّيها مقفولة — المهمّات تظهر»): القوالب تحت العنوان، و«بانتظار
+  /// تأكيدك» ظاهرةٌ دائماً لأنّها تنتظر فعله.
+  final _folds = RpFolds('expenses', const {'recurring': false});
+
   /// «كل الشركات» (٩ نوفمبر — مراجعة 179): شركة القسم لحظة الإجراء أو فتح الشيت — صراحةً (null = المفتوحة؛ القسم لا يُعرض لشركةٍ
   /// موجَّهة أصلاً)، فلا يأخذ وجهته ممّا يتبدّل تحته وهو مفتوح.
   String? get _companyKey => MergedSection.routeKeyOf(context);
@@ -53,6 +59,9 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
   void initState() {
     super.initState();
     _load();
+    _folds.load().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -116,6 +125,17 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
     if (done == true) _changed();
   }
 
+  /// أقرب استحقاقٍ قادم بين القوالب الفعّالة — سطر القسم المطويّ.
+  static RecurringTemplate? _nextDue(List<RecurringTemplate> ts) {
+    RecurringTemplate? next;
+    for (final t in ts) {
+      final d = t.nextDueDate;
+      if (!t.isActive || d == null || d.isEmpty) continue;
+      if (next == null || d.compareTo(next.nextDueDate!) < 0) next = t;
+    }
+    return next;
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -123,128 +143,146 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
     if (page == null || !page.visible) return const SizedBox.shrink();
     final enabled = page.enabled;
     final busy = _busyKey != null;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 0),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.sm),
-            child: Row(
-              children: [
+    final fold = _folds.fold('recurring', setState);
+    final next = _nextDue(page.templates);
+    // بطاقة التقارير الموحّدة (المالك ٢٣ نوفمبر على لقطة المصاريف: «ذني القسمين هم يحتاج ترتب التصميم مالتهم»): بعرض البطاقات
+    // الأخرى، عنوانٌ يُطوى وعدد القوالب، وسطرٌ بأقرب استحقاق حين تُطوى — والقوالب سطوراً بشكل سطور المصاريف.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+      child: RpCard(
+        key: const ValueKey('rexp-card'),
+        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            RpTitle(
+              icon: LucideIcons.repeat,
+              title: 'rexp.title'.tr(),
+              tone: RpTone.loss,
+              trailing: page.templates.isEmpty
+                  ? null
+                  : Text('${page.templates.length} ${'rexp.badge'.tr()}', style: AppType.pillBold(color: AppColors.textMid)),
+              fold: fold,
+            ),
+            if (!fold.open && next != null) ...[
+              const SizedBox(height: Sp.x6),
+              Text(
+                '${'rexp.next_n'.tr(namedArgs: {'d': recurringDateLabel(next.nextDueDate)})} · ${next.name} · ${_money(next.amount)}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.micro(color: AppColors.textMid),
+              ),
+            ],
+            if (fold.open) ...[
+              const SizedBox(height: Sp.x6),
+              Text('rexp.subtitle'.tr(), maxLines: 3, style: AppType.micro(color: AppColors.textMid)),
+            ],
+            if (page.pending.isNotEmpty) ...[
+              const SizedBox(height: Sp.md),
+              _pendingBox(page, enabled: enabled && !busy),
+            ],
+            if (fold.open) ...[
+              if (!enabled) ...[
+                const SizedBox(height: Sp.sm),
                 Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
-                  child: Icon(LucideIcons.repeat, size: 16, color: AppColors.brand),
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+                  decoration: BoxDecoration(color: AppColors.warningSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+                  child: Text('rexp.off_note'.tr(), style: AppType.micro(color: AppTone.warning.onSoft)),
                 ),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('rexp.title'.tr(), style: AppType.bodyStrong(color: AppColors.textHi)),
-                      Text(
-                        'rexp.subtitle'.tr(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11),
-                      ),
-                    ],
-                  ),
+              ],
+              if (page.templates.isEmpty) ...[
+                const SizedBox(height: Sp.md),
+                Text(
+                  'rexp.empty'.tr(),
+                  textAlign: TextAlign.center,
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
                 ),
-                const SizedBox(width: Sp.sm),
-                FilledButton.icon(
+              ],
+              for (var i = 0; i < page.templates.length; i++) ...[
+                SizedBox(height: i == 0 ? Sp.sm : 0),
+                if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+                _TemplateTile(
+                  template: page.templates[i],
+                  enabled: enabled && !busy,
+                  busyKey: _busyKey,
+                  onEdit: () => _openTemplate(page.templates[i]),
+                  onDelete: () => _delete(page.templates[i]),
+                  onToggle: () {
+                    final t = page.templates[i];
+                    _act(
+                      'st${t.id}',
+                      () => t.isActive
+                          ? RecurringExpensesApi.pause(t.id, companyKey: _companyKey)
+                          : RecurringExpensesApi.resume(t.id, companyKey: _companyKey),
+                      (t.isActive ? 'rexp.paused_done' : 'rexp.resumed_done').tr(),
+                    );
+                  },
+                  onPayNow: () async {
+                    final done =
+                        await _sheet<bool>(context, _PayNowSheet(template: page.templates[i], today: page.today, companyKey: _companyKey));
+                    if (done == true) _changed();
+                  },
+                ),
+              ],
+              const SizedBox(height: Sp.sm),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: FilledButton.tonalIcon(
                   onPressed: enabled && !busy ? () => _openTemplate(null) : null,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    foregroundColor: AppColors.onBrand,
+                    backgroundColor: AppColors.brandSoftBg,
+                    foregroundColor: AppColors.brand,
                     padding: const EdgeInsets.symmetric(horizontal: Sp.md),
                     minimumSize: const Size(0, 36),
                   ),
                   icon: const Icon(LucideIcons.plus, size: 15),
-                  label: Text('rexp.add'.tr(), style: AppType.labelBold(color: AppColors.onBrand)),
+                  label: Text('rexp.add'.tr(), style: AppType.labelBold(color: enabled && !busy ? AppColors.brand : AppColors.textLow)),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// «بانتظار تأكيدك» — ظاهرةٌ مطويّاً ومفتوحاً: لكلٍّ سطرٌ بمبلغه واستحقاقه، و«أضفها» / «تخطَّ».
+  Widget _pendingBox(RecurringPage page, {required bool enabled}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.sm),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppTone.warning.fill.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.bellRing, size: 14, color: AppTone.warning.onSoft),
+              const SizedBox(width: Sp.xs),
+              Expanded(
+                child: Text(
+                  'rexp.pending_n'.tr(namedArgs: {'n': '${page.pending.length}'}),
+                  style: AppType.labelBold(color: AppTone.warning.onSoft),
+                ),
+              ),
+            ],
           ),
-          if (!enabled)
-            Container(
-              color: AppColors.warningSoftBg,
-              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
-              child: Text(
-                'rexp.off_note'.tr(),
-                style: AppType.muted(color: AppTone.warning.onSoft).copyWith(fontSize: 12.5),
-              ),
+          for (final r in page.pending) ...[
+            const SizedBox(height: Sp.sm),
+            _PendingTile(
+              run: r,
+              enabled: enabled,
+              busySkip: _busyKey == 'skip${r.id}',
+              onConfirm: () async {
+                final done = await _sheet<bool>(context, _ConfirmRunSheet(run: r, companyKey: _companyKey));
+                if (done == true) _changed();
+              },
+              onSkip: () => _skip(r),
             ),
-          if (page.pending.isNotEmpty)
-            Container(
-              color: AppColors.warningSoftBg.withValues(alpha: 0.6),
-              padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.sm),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Icon(LucideIcons.bellRing, size: 14, color: AppTone.warning.onSoft),
-                      const SizedBox(width: Sp.xs),
-                      Text(
-                        'rexp.pending_n'.tr(namedArgs: {'n': '${page.pending.length}'}),
-                        style: AppType.labelBold(color: AppTone.warning.onSoft),
-                      ),
-                    ],
-                  ),
-                  for (final r in page.pending) ...[
-                    const SizedBox(height: Sp.sm),
-                    _PendingTile(
-                      run: r,
-                      enabled: enabled && !busy,
-                      busySkip: _busyKey == 'skip${r.id}',
-                      onConfirm: () async {
-                        final done = await _sheet<bool>(context, _ConfirmRunSheet(run: r, companyKey: _companyKey));
-                        if (done == true) _changed();
-                      },
-                      onSkip: () => _skip(r),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          if (page.templates.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.md),
-              child: Text(
-                'rexp.empty'.tr(),
-                textAlign: TextAlign.center,
-                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
-              ),
-            )
-          else
-            for (final t in page.templates)
-              _TemplateTile(
-                template: t,
-                enabled: enabled && !busy,
-                busyKey: _busyKey,
-                onEdit: () => _openTemplate(t),
-                onDelete: () => _delete(t),
-                onToggle: () => _act(
-                  'st${t.id}',
-                  () => t.isActive
-                      ? RecurringExpensesApi.pause(t.id, companyKey: _companyKey)
-                      : RecurringExpensesApi.resume(t.id, companyKey: _companyKey),
-                  (t.isActive ? 'rexp.paused_done' : 'rexp.resumed_done').tr(),
-                ),
-                onPayNow: () async {
-                  final done = await _sheet<bool>(context, _PayNowSheet(template: t, today: page.today, companyKey: _companyKey));
-                  if (done == true) _changed();
-                },
-              ),
+          ],
         ],
       ),
     );
@@ -272,29 +310,33 @@ class _PendingTile extends StatelessWidget {
       padding: const EdgeInsets.all(Sp.sm),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  run.name ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.bodyStrong(color: AppColors.textHi),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(run.name ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                    Text(
+                      '${recurringPeriodLabel(run.period)} · ${'rexp.due_on'.tr(namedArgs: {'d': recurringDateLabel(run.dueDate)})}',
+                      style: AppType.micro(color: AppColors.textMid),
+                    ),
+                  ],
                 ),
               ),
-              Text(_money(run.amount), style: AppType.labelBold(color: AppColors.error)),
+              const SizedBox(width: Sp.sm),
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(formatIQD(run.amount), maxLines: 1, style: AppType.bodyStrong(color: AppColors.error)),
+              ),
             ],
-          ),
-          const SizedBox(height: Sp.xxs),
-          Text(
-            '${recurringPeriodLabel(run.period)} · ${'rexp.due_on'.tr(namedArgs: {'d': recurringDateLabel(run.dueDate)})}',
-            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
           ),
           const SizedBox(height: Sp.sm),
           Row(
@@ -302,7 +344,7 @@ class _PendingTile extends StatelessWidget {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: enabled ? onConfirm : null,
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.brand, foregroundColor: AppColors.onBrand, minimumSize: const Size(0, 36)),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.brand, foregroundColor: AppColors.onBrand, minimumSize: const Size(0, 34)),
                   icon: const Icon(LucideIcons.circleCheck, size: 15),
                   label: Text('rexp.confirm_btn'.tr(), style: AppType.labelBold(color: AppColors.onBrand)),
                 ),
@@ -311,7 +353,7 @@ class _PendingTile extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: enabled ? onSkip : null,
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36)),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 34)),
                   icon: busySkip
                       ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(LucideIcons.skipForward, size: 15),
@@ -348,100 +390,105 @@ class _TemplateTile extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final t = template;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.sm, Sp.sm),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border, width: 0.5))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+    final busy = busyKey == 'st${t.id}' || busyKey == 'del${t.id}';
+    // سطرٌ بشكل سطور المصاريف: مربّع الأيقونة، الاسم وطريقته وحاله، الجدول والقادمة وآخرها — المبلغ بطرفه، ولمسة السطر تعدّله،
+    // و«⋮» لبقيّة الأفعال (دفعتها الآن، إيقاف/تشغيل، تعديل، حذف) بدل صفّ الأزرار الأربعة.
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        key: ValueKey('rexp-row-${t.id}'),
+        onTap: enabled ? onEdit : null,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Flexible(
+              RpIconBox(icon: LucideIcons.repeat, tone: t.isActive ? RpTone.loss : RpTone.neutral, size: 36),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: Sp.x6,
+                      runSpacing: Sp.xxs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(t.name, style: AppType.bodyBold(color: t.isActive ? AppColors.textHi : AppColors.textMid)),
+                        ToneChip(
+                          label: (t.isAuto ? 'rexp.mode_auto' : 'rexp.mode_confirm').tr(),
+                          tone: t.isAuto ? AppTone.info : AppTone.warning,
+                          dense: true,
+                        ),
+                        if (!t.isActive) ToneChip(label: (t.isPaused ? 'rexp.paused' : 'rexp.ended').tr(), dense: true),
+                      ],
+                    ),
+                    Text(
+                      [
+                        recurringScheduleText(every: t.every, day: t.day, endPeriod: t.endPeriod),
+                        if (t.isActive && t.nextDueDate != null) 'rexp.next_n'.tr(namedArgs: {'d': recurringDateLabel(t.nextDueDate)}),
+                      ].join(' · '),
+                      style: AppType.micro(color: AppColors.textMid),
+                    ),
+                    if (t.last != null)
+                      Text('rexp.last_n'.tr(namedArgs: {'t': recurringLastText(t.last!)}), style: AppType.micro(color: AppColors.textLow)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Directionality(
+                textDirection: TextDirection.ltr,
                 child: Text(
-                  t.name,
+                  formatIQD(t.amount),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.bodyStrong(color: AppColors.textHi),
+                  style: AppType.bodyStrong(color: t.isActive ? AppColors.error : AppColors.textLow),
                 ),
               ),
-              const SizedBox(width: Sp.x6),
-              ToneChip(
-                label: (t.isAuto ? 'rexp.mode_auto' : 'rexp.mode_confirm').tr(),
-                tone: t.isAuto ? AppTone.info : AppTone.warning,
-                dense: true,
-              ),
-              if (!t.isActive) ...[
-                const SizedBox(width: Sp.x6),
-                ToneChip(label: (t.isPaused ? 'rexp.paused' : 'rexp.ended').tr(), dense: true),
-              ],
-              const Spacer(),
-              Text(_money(t.amount), style: AppType.labelBold(color: AppColors.error)),
-            ],
-          ),
-          const SizedBox(height: Sp.xxs),
-          Text(
-            [
-              recurringScheduleText(every: t.every, day: t.day, endPeriod: t.endPeriod),
-              if (t.isActive && t.nextDueDate != null) 'rexp.next_n'.tr(namedArgs: {'d': recurringDateLabel(t.nextDueDate)}),
-            ].join(' · '),
-            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
-          ),
-          if (t.last != null)
-            Text(
-              'rexp.last_n'.tr(namedArgs: {'t': recurringLastText(t.last!)}),
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
-            ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (!t.isEnded)
-                _Act(icon: LucideIcons.handCoins, tooltip: 'rexp.pay_now'.tr(), enabled: enabled, onTap: onPayNow),
-              if (!t.isEnded)
-                _Act(
-                  icon: t.isActive ? LucideIcons.pause : LucideIcons.play,
-                  tooltip: (t.isActive ? 'rexp.pause' : 'rexp.resume').tr(),
-                  enabled: enabled,
-                  busy: busyKey == 'st${t.id}',
-                  onTap: onToggle,
-                ),
-              _Act(icon: LucideIcons.pencil, tooltip: 'rexp.edit'.tr(), enabled: enabled, onTap: onEdit),
-              _Act(
-                icon: LucideIcons.trash2,
-                tooltip: 'common.delete'.tr(),
-                enabled: enabled,
-                busy: busyKey == 'del${t.id}',
-                color: AppColors.error,
-                onTap: onDelete,
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: busy
+                    ? const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : PopupMenuButton<String>(
+                        key: ValueKey('rexp-menu-${t.id}'),
+                        enabled: enabled,
+                        tooltip: 'common.more'.tr(),
+                        padding: EdgeInsets.zero,
+                        icon: Icon(LucideIcons.ellipsisVertical, size: 17, color: enabled ? AppColors.textBody : AppColors.textLow),
+                        onSelected: (v) => switch (v) {
+                          'pay' => onPayNow(),
+                          'toggle' => onToggle(),
+                          'edit' => onEdit(),
+                          _ => onDelete(),
+                        },
+                        itemBuilder: (_) => [
+                          if (!t.isEnded) _item('pay', LucideIcons.handCoins, 'rexp.pay_now'.tr()),
+                          if (!t.isEnded)
+                            _item('toggle', t.isActive ? LucideIcons.pause : LucideIcons.play, (t.isActive ? 'rexp.pause' : 'rexp.resume').tr()),
+                          _item('edit', LucideIcons.pencil, 'rexp.edit'.tr()),
+                          _item('delete', LucideIcons.trash2, 'common.delete'.tr(), color: AppColors.error),
+                        ],
+                      ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
-}
 
-class _Act extends StatelessWidget {
-  const _Act({required this.icon, required this.tooltip, required this.enabled, required this.onTap, this.busy = false, this.color});
-  final IconData icon;
-  final String tooltip;
-  final bool enabled;
-  final bool busy;
-  final Color? color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: enabled ? onTap : null,
-      icon: busy
-          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-          : Icon(icon, size: 17, color: enabled ? (color ?? AppColors.textBody) : AppColors.textLow),
-      visualDensity: VisualDensity.compact,
-    );
-  }
+  static PopupMenuItem<String> _item(String v, IconData icon, String label, {Color? color}) => PopupMenuItem<String>(
+        value: v,
+        height: 42,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: color ?? AppColors.textBody),
+            const SizedBox(width: Sp.sm),
+            Text(label, style: AppType.body(color: color ?? AppColors.textHi)),
+          ],
+        ),
+      );
 }
 
 // ═══════════════════════════ الشيتات ═══════════════════════════

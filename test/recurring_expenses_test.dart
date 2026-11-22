@@ -21,6 +21,9 @@ class _RecServer implements HttpClientAdapter {
   final HttpClientAdapter inner;
   bool enabled = true;
   bool empty = false;
+
+  /// فترةٌ بلا مصاريف (القائمة فارغة) — حالة البطاقة الفارغة.
+  bool noExpenses = false;
   final posts = <(String, String, Map<String, dynamic>)>[];
 
   static Map<String, dynamic> run(int id, int tid, String period, String due, String status, {String? how, num amount = 75000, String? name}) => {
@@ -45,6 +48,7 @@ class _RecServer implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     final m = o.method.toUpperCase();
     if (o.path == '/api/admin/expenses' && m == 'GET') {
+      if (noExpenses) return _json(200, {'success': true, 'total': 0, 'expenses': const []});
       return _json(200, {
         'success': true,
         'total': 265000,
@@ -171,7 +175,12 @@ void main() {
       await settle(t, seconds: 2);
       expect(t.takeException(), isNull);
       expect(find.text('المصاريف الثابتة'), findsOneWidget);
-      expect(find.text('بانتظار تأكيدك (1)'), findsOneWidget);
+      expect(find.text('بانتظار تأكيدك (1)'), findsOneWidget, reason: 'المعلَّقة ظاهرةٌ والقسم مطويّ — تنتظر فعله');
+      // قسمٌ فرعيّ مطويّ (الشكل الموحّد ٢٣ نوفمبر): أقرب استحقاقٍ سطرٌ تحت عنوانه، والقوالب بلمسة
+      expect(find.text('موقوفة'), findsNothing);
+      expect(find.textContaining('القادمة 2026/11/01 · '), findsOneWidget);
+      await t.tap(find.text('المصاريف الثابتة'));
+      await settle(t);
       expect(find.text('موقوفة'), findsOneWidget);
       expect(find.textContaining('كلّ ٣ أشهر · يوم 15 · حتى 2027/07'), findsOneWidget);
       expect(find.textContaining('القادمة 2026/11/01'), findsOneWidget);
@@ -189,11 +198,59 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
+    // الشكل الموحّد (المالك ٢٣ نوفمبر على لقطة المصاريف: «ذني القسمين هم يحتاج ترتب التصميم مالتهم»): «المصاريف الثابتة» بطاقةٌ بعرض
+    // البطاقات الأخرى، مطويّةٌ بسطر أقرب استحقاق، والقوالب سطوراً بـ«⋮»؛ والفترة الفارغة داخل بطاقة المصاريف — لا صندوقٌ وحده.
+    for (final width in [320.0, 360.0, 480.0]) {
+      testWidgets('الشكل الموحّد @$width ×1.2: مطويّاً ومفتوحاً وبلا مصاريف — بلا فيض ولا قصّ', (t) async {
+        final server = _RecServer(await visualSetUp(s1bSasOwner));
+        ApiClient.dio.httpClientAdapter = server;
+        Future<void> pump() async {
+          await pumpVisual(
+            t,
+            VisualDevice('', Size(width, 2400), 2, dark: width == 320),
+            home: (_) => const ExpensesScreen(),
+            wrap: (child) => Builder(
+              builder: (ctx) => MediaQuery(data: MediaQuery.of(ctx).copyWith(textScaler: const TextScaler.linear(1.2)), child: child),
+            ),
+          );
+          await settle(t, seconds: 2);
+        }
+
+        await pump();
+        expect(t.takeException(), isNull);
+        final card = t.getRect(find.byKey(const ValueKey('rexp-card')));
+        final list = t.getRect(find.byKey(const ValueKey('exp-list')));
+        expect((card.left, card.right), (list.left, list.right), reason: 'بعرض بطاقة المصاريف — كانت أعرض منها');
+        expect(find.byKey(const ValueKey('rexp-row-1')), findsNothing, reason: 'مطويّة');
+        await t.tap(find.text('المصاريف الثابتة'));
+        await settle(t);
+        expect(find.byKey(const ValueKey('rexp-row-1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('rexp-menu-1')), findsOneWidget, reason: '«⋮» بدل صفّ الأزرار الأربعة');
+        expect(t.takeException(), isNull);
+        // قائمة «⋮»: دفعتها الآن · إيقاف · تعديل · حذف
+        await t.tap(find.byKey(const ValueKey('rexp-menu-1')));
+        await settle(t);
+        for (final w in ['دفعتها الآن', 'إيقاف', 'تعديل', 'حذف']) {
+          expect(find.text(w), findsOneWidget, reason: w);
+        }
+        await t.tapAt(const Offset(5, 5));
+        await settle(t);
+        server.noExpenses = true;
+        await t.pumpWidget(const SizedBox());
+        await pump();
+        expect(t.takeException(), isNull);
+        expect(find.descendant(of: find.byKey(const ValueKey('exp-list')), matching: find.text('لا مصاريف في هذه الفترة')), findsOneWidget);
+        expect(find.byKey(const ValueKey('exp-search')), findsNothing, reason: 'لا بحث في قائمةٍ فارغة');
+      });
+    }
+
     testWidgets('إنشاء قالب: الطريقة إجباريّة، ثمّ «تلقائيّاً» يُرسل هذا الشهر والمرجع', (t) async {
       final server = _RecServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phoneTall, home: (_) => const ExpensesScreen());
       await settle(t, seconds: 2);
+      await t.tap(find.text('المصاريف الثابتة'));
+      await settle(t);
       await t.tap(find.text('ثابتة جديدة'));
       await settle(t, seconds: 1);
       final fields = find.descendant(of: find.byType(DesignSheet), matching: find.byType(TextField));
@@ -235,6 +292,8 @@ void main() {
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phoneTall, home: (_) => const ExpensesScreen());
       await settle(t, seconds: 2);
+      await t.tap(find.text('المصاريف الثابتة'));
+      await settle(t);
       expect(find.textContaining('موقوفة لحسابك الآن'), findsOneWidget);
       final btn = t.widget<FilledButton>(find.ancestor(of: find.text('ثابتة جديدة'), matching: find.byWidgetPredicate((w) => w is FilledButton)));
       expect(btn.onPressed, isNull);

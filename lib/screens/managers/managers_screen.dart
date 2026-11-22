@@ -6,7 +6,10 @@ import '../../widgets/reveal_password_sheet.dart';
 
 import '../../api/manager_debts_api.dart';
 import '../../api/managers_api.dart';
+import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/design_sheet.dart';
+import '../reports/v2/report_kit.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -55,7 +58,6 @@ class _ManagersScreenState extends State<ManagersScreen> {
   List<Manager> _rows = const [];
   int _total = 0;
   bool _loading = true;
-  final _searchCtrl = TextEditingController();
   String _query = '';
 
   /// مطلب 2026-06-12: sort UI مطابق v1 — 5 خيارات + اتجاه.
@@ -72,11 +74,6 @@ class _ManagersScreenState extends State<ManagersScreen> {
   void initState() {
     super.initState();
     _load();
-    _searchCtrl.addListener(() {
-      final q = _searchCtrl.text.trim();
-      if (q == _query) return;
-      setState(() => _query = q);
-    });
     // أعد التحميل تلقائياً لمّا أيّ شاشة ثانية تُغيّر بيانات (إضافة
     // مدير، تسديد دين، شحن، إلخ.) — مطابق سلوك شاشة المشتركين.
     SubscriberEvents.dataChanged.addListener(_onExternalChange);
@@ -90,7 +87,6 @@ class _ManagersScreenState extends State<ManagersScreen> {
   @override
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onExternalChange);
-    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -352,35 +348,13 @@ class _ManagersScreenState extends State<ManagersScreen> {
           onRefresh: _load,
           color: accent,
           child: ListView(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.paddingOf(context).bottom + 96),
+            // الشكل الموحّد (المالك ٢٣ نوفمبر: «المدراء والخصومات والسعر الثابت كذلك»): بطاقتا أرقام، ثمّ بطاقة القائمة بعنوانها
+            // وعددها، البحث والترتيب داخلها، وسطرٌ لكلّ مدير بشكل سطور التقارير — اللمسة تفتح إجراءاته كما كانت.
+            padding: EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, MediaQuery.paddingOf(context).bottom + 96),
             children: [
-              DeskSection(children: [_compactHero(accent)]),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                child: _searchField(),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: _sortBar(accent),
-              ),
-              const SizedBox(height: 4),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (filtered.isEmpty)
-                DeskSection(children: [_empty()])
-              else
-                DeskSection(children: [
-                  for (final m in filtered)
-                    _ManagerTile(
-                      manager: m,
-                      extraDebt: _customDebtByManager[m.id] ?? 0,
-                      onTap: viewOnly ? null : () => _openActions(m),
-                    ),
-                ]),
+              _kpis(),
+              const SizedBox(height: Sp.md),
+              _listCard(filtered, viewOnly),
             ],
           ),
         ),
@@ -388,122 +362,114 @@ class _ManagersScreenState extends State<ManagersScreen> {
     );
   }
 
-  /// 2026-08-26 redesign: hero compact بلا gradient. عدد المدراء يسار،
-  /// إجمالي الرصيد يمين. صفّ واحد.
-  Widget _compactHero(Color accent) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.border, width: 0.5),
-        ),
-      ),
+  /// إجمالي الأرصدة (بإشارته: رصيدٌ سالب دَين) وعدد المدراء — بطاقتا التقارير الموحّدة بارتفاعٍ واحد.
+  Widget _kpis() {
+    final off = _rows.where((m) => !m.isActive).length;
+    return IntrinsicHeight(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'إجمالي الأرصدة',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMid,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${formatIQD(_totalBalance)} د.ع',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                    letterSpacing: -0.4,
-                    height: 1.1,
-                  ),
-                ),
-              ],
+            child: RpKpiCard(
+              key: const ValueKey('mgr-kpi-balance'),
+              kpi: RpKpi(
+                label: 'إجمالي الأرصدة',
+                value: _totalBalance,
+                icon: LucideIcons.wallet,
+                tone: _totalBalance < 0 ? RpTone.loss : RpTone.money,
+              ),
+              compareWith: '',
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Text(
-              '$_total مدير',
-              style: AppType.bodyBold(color: accent),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _searchField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-      child: Row(
-        children: [
-          Icon(LucideIcons.search, color: AppColors.textMid, size: 18),
           const SizedBox(width: Sp.sm),
           Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              style: AppType.input(color: AppColors.textHi),
-              decoration: InputDecoration(
-                hintText: 'mgr.search_hint'.tr(),
-                hintStyle: AppType.input(color: AppColors.textLow),
-                border: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: Sp.md),
+            child: RpKpiCard(
+              key: const ValueKey('mgr-kpi-count'),
+              kpi: RpKpi(
+                label: 'mgr.title'.tr(),
+                value: _total,
+                isCount: true,
+                unit: 'مدير',
+                icon: LucideIcons.users,
+                tone: RpTone.info,
+                hint: off > 0 ? '${_rows.length - off} ${'mgr.active'.tr()} · $off معطّل' : null,
               ),
+              compareWith: '',
             ),
           ),
-          if (_searchCtrl.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(LucideIcons.x, size: 16),
-              color: AppColors.textMid,
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                _searchCtrl.clear();
-                setState(() => _query = '');
-              },
-            ),
         ],
       ),
     );
   }
 
-  Widget _sortBar(Color accent) {
-    return SizedBox(
-      height: 30,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+  Widget _listCard(List<Manager> filtered, bool viewOnly) {
+    return RpCard(
+      key: const ValueKey('mgr-list'),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final s in _ManagerSort.values) ...[
-            _sortChip(s, accent),
-            const SizedBox(width: 6),
+          RpTitle(
+            icon: LucideIcons.listOrdered,
+            title: 'mgr.title'.tr(),
+            tone: RpTone.neutral,
+            trailing: Text('${formatIQD(filtered.length)} مدير', style: AppType.pillBold(color: AppColors.textMid)),
+          ),
+          const SizedBox(height: Sp.md),
+          RpSearchBox(
+            key: const ValueKey('mgr-search'),
+            query: _query,
+            hint: 'mgr.search_hint'.tr(),
+            onChanged: (v) => setState(() => _query = v.trim()),
+          ),
+          const SizedBox(height: Sp.sm),
+          _sortBar(),
+          if (_loading) ...[
+            const SizedBox(height: Sp.xl),
+            const Center(child: CircularProgressIndicator()),
+            const SizedBox(height: Sp.xl),
+          ] else if (filtered.isEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Icon(LucideIcons.userX, size: 30, color: AppColors.textLow),
+            const SizedBox(height: Sp.sm),
+            Text(
+              _query.isEmpty ? 'mgr.empty_none'.tr() : 'subscribers.no_search_results'.tr(namedArgs: {'q': _query}),
+              textAlign: TextAlign.center,
+              style: AppType.muted(color: AppColors.textMid),
+            ),
+            const SizedBox(height: Sp.md),
+          ] else ...[
+            const SizedBox(height: Sp.x6),
+            for (var i = 0; i < filtered.length; i++) ...[
+              if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+              _ManagerTile(
+                manager: filtered[i],
+                extraDebt: _customDebtByManager[filtered[i].id] ?? 0,
+                onTap: viewOnly ? null : () => _openActions(filtered[i]),
+              ),
+            ],
           ],
         ],
       ),
     );
   }
 
-  Widget _sortChip(_ManagerSort s, Color accent) {
+  /// الترتيب: شرائح صغيرة تلتفّ (لا شريطٌ يُقصّ آخره على الهاتف) — لمسة النشطة تقلب الاتّجاه.
+  Widget _sortBar() {
+    return Wrap(
+      spacing: Sp.x6,
+      runSpacing: Sp.x6,
+      children: [for (final s in _ManagerSort.values) _sortChip(s)],
+    );
+  }
+
+  Widget _sortChip(_ManagerSort s) {
     final active = _sort == s;
+    final fg = active ? AppColors.brand : AppColors.textMid;
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        key: ValueKey('mgr-sort-${s.name}'),
         onTap: () {
           setState(() {
             if (_sort == s) {
@@ -514,61 +480,27 @@ class _ManagersScreenState extends State<ManagersScreen> {
             }
           });
         },
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.pill),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: 5),
           decoration: BoxDecoration(
-            color:
-                active ? accent.withValues(alpha: 0.1) : AppColors.surfaceInput,
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(
-                color:
-                    active ? accent.withValues(alpha: 0.4) : AppColors.border),
+            color: active ? AppColors.brandSoftBg : AppColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: active ? AppColors.brand.withValues(alpha: 0.35) : AppColors.border),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(s.icon,
-                  size: 12, color: active ? accent : AppColors.textMid),
-              const SizedBox(width: 4),
-              Text(
-                s.label,
-                style: AppType.pillBold(color: active ? accent : AppColors.textMid),
-              ),
+              Icon(s.icon, size: 12, color: fg),
+              const SizedBox(width: Sp.xs),
+              Text(s.label, style: AppType.pillBold(color: fg)),
               if (active) ...[
                 const SizedBox(width: 3),
-                Icon(
-                  _sortAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown,
-                  size: 10,
-                  color: accent,
-                ),
+                Icon(_sortAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 11, color: fg),
               ],
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _empty() {
-    return Container(
-      padding: const EdgeInsets.all(Sp.huge),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          Icon(LucideIcons.userX, size: 36, color: AppColors.textLow),
-          const SizedBox(height: 10),
-          Text(
-            _query.isEmpty
-                ? 'mgr.empty_none'.tr()
-                : 'subscribers.no_search_results'.tr(namedArgs: {'q': _query}),
-            style:
-                AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
-          ),
-        ],
       ),
     );
   }
@@ -595,263 +527,78 @@ class _ManagerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final balance = manager.balance;
-    // 2026-07-14: نفصل SAS عن الديون الأخرى في العرض بدل الدمج تحت رقم
-    // واحد — يخفي الديون الأخرى في الـchip الموحّد.
-    final sasDebt = manager.debt;
+    final m = manager;
+    final balance = m.balance;
+    // دين الساس والديون الأخرى منفصلان (٢٠٢٦-٠٧-١٤) — سطرٌ بلون الدين تحت المدير بدل حبّتين
+    final sasDebt = m.debt;
     final otherDebt = extraDebt;
-    final points = manager.rewardPoints;
+    final points = m.rewardPoints;
+    final hasName = m.fullName.isNotEmpty && m.fullName != m.username;
+    final info = [
+      if ((m.aclName ?? '').isNotEmpty) m.aclName!,
+      if (m.mobile.isNotEmpty) iso(m.mobile),
+      if (m.company.isNotEmpty) m.company,
+    ];
+    final counts = [
+      '${formatIQD(m.usersCount)} مشترك',
+      if (points > 0) '${'sheets.points'.tr()} ${formatIQD(points)}',
+    ];
+    final debts = [
+      if (sasDebt > 0) '${'mgr.sas_debt'.tr()} ${rpMoney(sasDebt)}',
+      if (otherDebt > 0) '${'mgr.other_debts'.tr()} ${rpMoney(otherDebt)}',
+    ];
+    // سطرٌ بشكل سطور التقارير الموحّدة (٢٣ نوفمبر): مربّع الحال (أخضر نشط، أحمر معطّل)، اليوزر واسمه، صلاحيّته وهاتفه، مشتركوه ونقاطه،
+    // ديونه بلونها — والرصيد بإشارته بطرفه (كان «350,000» لرصيدٍ سالب).
     return Material(
-      color: AppColors.surface,
+      type: MaterialType.transparency,
       child: InkWell(
+        key: ValueKey('mgr-row-${m.id}'),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsetsDirectional.only(
-              start: 12, end: 12, top: 10, bottom: 10),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: AppColors.border, width: 0.5),
-            ),
-          ),
-          child: Column(
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header — rail + avatar + name/full + status
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // 3dp status rail — أخضر مفعّل / أحمر معطّل
-                  Container(
-                    width: 3,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color:
-                          manager.isActive ? AppColors.brand : AppColors.error,
-                      borderRadius: BorderRadius.circular(R.pill),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Avatar 36dp (كان 40 + status dot زخرفي)
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.brandSoftBg,
-                      borderRadius: BorderRadius.circular(R.card),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(LucideIcons.shield,
-                        size: 16, color: AppColors.brandAccent),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              RpIconBox(icon: m.isActive ? LucideIcons.shield : LucideIcons.shieldOff, tone: m.isActive ? RpTone.brand : RpTone.loss, size: 36),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: Sp.x6,
+                      runSpacing: Sp.xxs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                manager.username,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textHi,
-                                  height: 1.15,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (!manager.isActive) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: AppColors.dangerSoftBg,
-                                  borderRadius: BorderRadius.circular(R.pill),
-                                ),
-                                child: Text(
-                                  'معطّل',
-                                  style: AppType.daysWordBold(color: AppColors.error),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (manager.fullName != manager.username) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            manager.fullName,
-                            style: TextStyle(
-                              fontSize: 11, height: 1.25,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMid,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                        Text(m.username, style: AppType.bodyBold(color: AppColors.textHi)),
+                        if (!m.isActive) const ToneChip(label: 'معطّل', tone: AppTone.danger, dense: true),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              // Info badges (ACL / phone / company / enabled status)
-              if (_hasInfoBadges) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 5,
-                  children: [
-                    _badge(
-                      icon: manager.isActive
-                          ? LucideIcons.circleCheck
-                          : LucideIcons.circleX,
-                      label: manager.isActive
-                          ? 'mgr.active'.tr()
-                          : 'subscribers.status_disabled'.tr(),
-                      color:
-                          manager.isActive ? AppColors.brand : AppColors.error,
-                    ),
-                    if ((manager.aclName ?? '').isNotEmpty)
-                      _badge(
-                        icon: LucideIcons.shieldCheck,
-                        label: manager.aclName!,
-                        color: AppColors.brandAccent,
-                      ),
-                    if (manager.mobile.isNotEmpty)
-                      _badge(
-                        icon: LucideIcons.phone,
-                        label: manager.mobile,
-                        color: AppColors.success,
-                      ),
-                    if (manager.company.isNotEmpty)
-                      _badge(
-                        icon: LucideIcons.briefcase,
-                        label: manager.company,
-                        color: AppColors.warning,
-                      ),
+                    if (hasName) Text(m.fullName, style: AppType.micro(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (info.isNotEmpty) Text(info.join(' · '), style: AppType.micro(color: AppColors.textLow), maxLines: 2),
+                    Text(counts.join(' · '), style: AppType.micro(color: AppColors.textMid)),
+                    if (debts.isNotEmpty) Text(debts.join(' · '), style: AppType.microBold(color: AppColors.warning)),
                   ],
                 ),
-              ],
-              // Stats chips — رصيد / دين الساس / نقاط / مشتركون
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 5,
-                runSpacing: 5,
+              ),
+              const SizedBox(width: Sp.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  _statChip(
-                    icon: LucideIcons.wallet,
-                    label: 'dashboard.balance'.tr(),
-                    value: '${formatIQD(balance)} د.ع',
-                    color: balance > 0 ? AppColors.brand : AppColors.textMid,
+                  Text(
+                    rpNum(balance),
+                    maxLines: 1,
+                    style: AppType.bodyStrong(
+                      color: balance < 0 ? AppColors.error : (balance > 0 ? AppColors.textHi : AppColors.textMid),
+                    ),
                   ),
-                  _statChip(
-                    icon: LucideIcons.users,
-                    label: 'nav.subscribers'.tr(),
-                    value: '${manager.usersCount}',
-                    color: AppColors.brandAccent,
-                  ),
-                  if (points > 0)
-                    _statChip(
-                      icon: LucideIcons.star,
-                      label: 'sheets.points'.tr(),
-                      value: '${points.toInt()}',
-                      color: AppColors.brandAccent,
-                    ),
-                  if (sasDebt > 0)
-                    _statChip(
-                      icon: LucideIcons.alertTriangle,
-                      label: 'mgr.sas_debt'.tr(),
-                      value: '${formatIQD(sasDebt)} د.ع',
-                      color: AppColors.warning,
-                    ),
-                  if (otherDebt > 0)
-                    _statChip(
-                      icon: LucideIcons.receipt,
-                      label: 'mgr.other_debts'.tr(),
-                      value: '${formatIQD(otherDebt)} د.ع',
-                      color: AppColors.brandAccent,
-                    ),
+                  Text('dashboard.balance'.tr(), style: AppType.micro(color: AppColors.textLow)),
                 ],
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  bool get _hasInfoBadges =>
-      (manager.aclName ?? '').isNotEmpty ||
-      manager.mobile.isNotEmpty ||
-      manager.company.isNotEmpty;
-
-  /// 2026-08-26: badge flat (بلا حدود) — لون خلفيّة خفيف + نصّ ملوّن.
-  Widget _badge({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(R.sm),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: color),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: AppType.microBold(color: color),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 2026-08-26: chip إحصاء flat. عرض الأرقام tabular للـalignment.
-  Widget _statChip({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(R.sm),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5, height: 1.3,
-              fontWeight: FontWeight.w600,
-              color: color.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 11.5, height: 1.35,
-              fontWeight: FontWeight.w700,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
       ),
     );
   }

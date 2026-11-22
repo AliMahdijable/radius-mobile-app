@@ -615,6 +615,41 @@ void main() {
       await visualTearDown();
     });
 
+    // الشكل الموحّد (المالك ٢٣ نوفمبر: «ذني القسمين هم يحتاج ترتب التصميم مالتهم»): الفترة سطرٌ واحد، والبيوع بطاقةٌ واحدة بأيّامها
+    // وبحثها — بدل بطاقةٍ كبيرة لكلّ بيع؛ ولا فيض ولا قصّ على أضيق هاتف بخطٍّ ×1.2.
+    for (final width in [320.0, 360.0, 480.0]) {
+      testWidgets('الشكل الموحّد @$width ×1.2: الرأس سطرٌ، البيوع ببطاقةٍ واحدة تحت يومها، والبحث يحصرها', (t) async {
+        final server = _SalesServer(await visualSetUp(s1bSasOwner));
+        ApiClient.dio.httpClientAdapter = server;
+        await pumpVisual(
+          t,
+          VisualDevice('', Size(width, 2400), 2),
+          home: (_) => const SalesScreen(),
+          wrap: (child) => Builder(
+            builder: (ctx) => MediaQuery(data: MediaQuery.of(ctx).copyWith(textScaler: const TextScaler.linear(1.2)), child: child),
+          ),
+        );
+        await settle(t, seconds: 2);
+        expect(t.takeException(), isNull);
+        expect(find.byKey(const ValueKey('rp-head-period')), findsOneWidget, reason: 'الفترة برأس التقارير الموحّد');
+        expect(find.byKey(const ValueKey('sales-list')), findsOneWidget);
+        expect(find.text('2026/10/23'), findsOneWidget, reason: 'رأس يومها مرّةً واحدة فوق بيوعه');
+        expect(find.text('4 بيع'), findsWidgets);
+        for (final id in [9, 10, 11, 12]) {
+          expect(find.byKey(ValueKey('sale-row-$id')), findsOneWidget);
+        }
+        await t.enterText(find.descendant(of: find.byKey(const ValueKey('sales-search')), matching: find.byType(TextField)), 'زبون');
+        await settle(t, seconds: 1);
+        expect(find.byKey(const ValueKey('sale-row-9')), findsOneWidget);
+        expect(find.byKey(const ValueKey('sale-row-12')), findsNothing, reason: 'البحث يحصر البيوع');
+        await t.enterText(find.descendant(of: find.byKey(const ValueKey('sales-search')), matching: find.byType(TextField)), '#11');
+        await settle(t, seconds: 1);
+        expect(find.byKey(const ValueKey('sale-row-11')), findsOneWidget, reason: 'برقم البيع');
+        expect(find.byKey(const ValueKey('sale-row-9')), findsNothing);
+        expect(t.takeException(), isNull);
+      });
+    }
+
     testWidgets('المبيعات: المجاميع، «لم يُحسم»، الإلغاء للنقديّ و«احسم» للمجهول؛ والموادّ بالمخزون', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;

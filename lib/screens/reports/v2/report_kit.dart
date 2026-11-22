@@ -1642,21 +1642,46 @@ class RpDayHead extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final d = day;
+    // اليوم وعدده يميناً ومجموعه يساراً بسطرٍ واحد؛ وحين لا يتّسعان (٣٢٠ أو خطٌّ مكبَّر) ينزل المجموع سطراً تحته — كان العدد يُقصّ
+    // إلى «1» بلا «مصروف» (لقطة ٢٣ نوفمبر).
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.x6),
       decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.sm)),
-      child: Row(
-        children: [
-          Icon(LucideIcons.calendar, size: 14, color: AppColors.textMid),
-          const SizedBox(width: Sp.x6),
-          Directionality(textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
-          const SizedBox(width: Sp.sm),
-          Expanded(child: Text('${d.count} $unit', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
-          if (d.sum != null) ...[
-            Text('$sumLabel ', style: AppType.micro(color: AppColors.textMid)),
-            Text(rpMoney(d.sum!), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: Sp.xxs,
+          children: [
+            // والعدد نفسه ينزل تحت التاريخ حين لا يتّسع بجانبه (أضيق هاتف بخطٍّ ×1.2) — لا فيض ولا قصّ
+            Wrap(
+              spacing: Sp.sm,
+              runSpacing: Sp.xxs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.calendar, size: 14, color: AppColors.textMid),
+                    const SizedBox(width: Sp.x6),
+                    Directionality(textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
+                  ],
+                ),
+                Text('${d.count} $unit', style: AppType.micro(color: AppColors.textMid), maxLines: 1),
+              ],
+            ),
+            if (d.sum != null)
+              Wrap(
+                spacing: Sp.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(sumLabel, style: AppType.micro(color: AppColors.textMid)),
+                  Text(rpMoney(d.sum!), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
+                ],
+              ),
           ],
-        ],
+        ),
       ),
     );
   }

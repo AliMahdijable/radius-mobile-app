@@ -11,6 +11,7 @@ import '../../core/util/ar_date.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/util/server_time.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
@@ -27,7 +28,10 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
-import '../reports/widgets/date_range_chip.dart';
+import '../reports/v2/report_kit.dart';
+import '../reports/v2/report_period.dart';
+import '../reports/v2/report_prefs.dart';
+import '../reports/v2/report_sheets.dart';
 import '../reports/widgets/report_permission_gate.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../../services/merged_text.dart';
@@ -56,7 +60,10 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   final _search = TextEditingController();
   int _tab = 0;
-  DateRange _range = DateRange.thisMonth();
+  /// الفترة بشريط التقارير الموحّدة (المالك ٢٢ نوفمبر: «ذني القسمين هم يحتاج ترتّب التصميم مالتهم» + «الفلاتر والشهر… سطر واحد»): تسع
+  /// فتراتٍ جاهزة + مخصّصة من ورقة الفلاتر، وتُتذكّر — بدل صفّي الشرائح وشريط التاريخ.
+  RpRange _range = RpRange.of(RpPreset.thisMonth, now: DateTime.now());
+  static const _prefsId = 'sales';
   bool _showInactive = false;
 
   SaleItemsPage? _items;
@@ -87,12 +94,23 @@ class _SalesScreenState extends State<SalesScreen> {
   int _gen = 0;
   int _ovSeq = 0;
 
+  /// آخر جلبٍ لقائمة المبيعات — الأقدم منه يُهمل.
+  int _salesSeq = 0;
+
+  /// بحث بطاقة البيوع (الزبون، يوزره، المادّة، رقم البيع) — على القائمة المقروءة.
+  String _saleQ = '';
+
   /// الشركة التي تعرض الشاشة بياناتها (null = المفتوحة أو الوضع العاديّ).
   String? _shownKey;
 
   @override
   void initState() {
     super.initState();
+    unawaited(RpPrefs.load(_prefsId, now: DateTime.now()).then((f) {
+      if (!mounted || f.range.key == _range.key) return;
+      setState(() => _range = f.range);
+      if (Perms.has('sales.view')) unawaited(_refresh());
+    }));
     if (Perms.has('sales.view')) {
       if (MergedMode.active.value) {
         _loadingOverview = true;
@@ -263,16 +281,7 @@ class _SalesScreenState extends State<SalesScreen> {
   /// «الكل»: مجموع الفترة، ثمّ بطاقةٌ لكلّ شركة — الضغط يعرضها وحدها. شركةٌ لم تُقرأ تُسمّى ولا تُجمع صفراً.
   List<Widget> _overviewContent() {
     final parts = _overview;
-    final rangeBar = DateRangeChipBar(
-      value: _range,
-      onChanged: (r) {
-        setState(() {
-          _range = r;
-          _loadingOverview = true;
-        });
-        unawaited(_loadOverview());
-      },
-    );
+    final rangeBar = RpHeader(period: RpPeriod(name: _range.name, range: _range.rangeText), onPeriod: _pickRange);
     if (parts == null) {
       return [
         rangeBar,
@@ -387,9 +396,11 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> _loadSales() async {
     final gen = _gen;
+    final seq = ++_salesSeq;
     final key = _co;
     final r = await SalesApi.list(from: _day(_range.from), to: _day(_range.to), companyKey: key);
-    if (!mounted || gen != _gen) return;
+    // ردُّ فترةٍ سابقة (تغيّرت الفترة أو وصلت المحفوظة بعد أوّل جلب) لا يُعرض تحت اسم الفترة الجديدة
+    if (!mounted || gen != _gen || seq != _salesSeq) return;
     setState(() {
       _loadingSales = false;
       if (r.page != null) {
@@ -491,6 +502,41 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
+  /// الفترة من ورقة الفلاتر الموحّدة (الفترات الجاهزة والمخصّصة) — وتُحفظ.
+  Future<void> _pickRange() async {
+    final v = await showModalBottomSheet<RpFilterValue>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      builder: (ctx) => RpFilterSheet(
+        subtitle: '${'sales.title'.tr()} · ${_range.name}',
+        initial: RpFilterValue(range: _range, compare: false),
+        now: DateTime.now(),
+        people: const [],
+        showPeople: false,
+        showCompare: false,
+        types: const [],
+      ),
+    );
+    if (v == null || !mounted) return;
+    setState(() {
+      _range = v.range;
+      if (_overviewMode) {
+        _loadingOverview = true;
+      } else {
+        _loadingSales = true;
+      }
+    });
+    unawaited(RpPrefs.save(_prefsId, RpFilterValue(range: v.range, compare: false)));
+    if (_overviewMode) {
+      unawaited(_loadOverview());
+    } else {
+      _loadSales();
+    }
+  }
+
   /// زرّ الحاسبة: نفس فعل الزرّ العائم للتبويب المفتوح.
   Widget _deskPrimary() {
     final ro = _readOnlyCompany;
@@ -542,13 +588,17 @@ class _SalesScreenState extends State<SalesScreen> {
 
   /// أرقام المبيعات: على الحاسبة الأربعة بصفٍّ واحد، وعلى الهاتف صفّان من اثنين.
   List<Widget> _kpiRows(List<Widget> kpis) {
-    Widget row(List<Widget> ks) => Row(
-          children: [
-            for (int i = 0; i < ks.length; i++) ...[
-              if (i > 0) const SizedBox(width: Sp.sm),
-              Expanded(child: ks[i]),
+    // بطاقات التقارير الموحّدة: ارتفاعٌ واحد لكلّ صفّ
+    Widget row(List<Widget> ks) => IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (int i = 0; i < ks.length; i++) ...[
+                if (i > 0) const SizedBox(width: Sp.sm),
+                Expanded(child: ks[i]),
+              ],
             ],
-          ],
+          ),
         );
     if (DesktopScope.of(context)) return [row(kpis)];
     return [row(kpis.sublist(0, 2)), const SizedBox(height: Sp.sm), row(kpis.sublist(2))];
@@ -649,16 +699,7 @@ class _SalesScreenState extends State<SalesScreen> {
     final canVoid = Perms.has('sales.void') && _enabled && ro == null;
     final canResolve = Perms.has('sales.sell') && _enabled && ro == null;
     return [
-      DateRangeChipBar(
-        value: _range,
-        onChanged: (r) {
-          setState(() {
-            _range = r;
-            _loadingSales = true;
-          });
-          _loadSales();
-        },
-      ),
+      RpHeader(period: RpPeriod(name: _range.name, range: _range.rangeText), onPeriod: _pickRange),
       const SizedBox(height: Sp.md),
       if (page == null)
         _Notice(icon: LucideIcons.shoppingCart, text: _salesError ?? 'sales.load_failed'.tr())
@@ -710,22 +751,8 @@ class _SalesScreenState extends State<SalesScreen> {
             padding: EdgeInsets.symmetric(vertical: Sp.xl),
             child: Center(child: CircularProgressIndicator()),
           )
-        else if (page.sales.isEmpty)
-          _Notice(icon: LucideIcons.shoppingCart, text: 'sales.empty'.tr())
         else
-          ..._cards([
-            for (final sale in page.sales)
-              _SaleTile(
-                sale: sale,
-                debt: _debts[sale.id],
-                canVoid: canVoid,
-                canResolve: canResolve,
-                lockMessage: ro == null ? null : _lockText(ro),
-                printCompany: _routedCompany?.key,
-                onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale, companyKey: _co))),
-                onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale, companyKey: _co))),
-              ),
-          ]),
+          _salesList(page.sales, canVoid: canVoid, canResolve: canResolve, lockMessage: ro == null ? null : _lockText(ro)),
         if (page.truncated) ...[
           const SizedBox(height: Sp.md),
           Text(
@@ -736,6 +763,82 @@ class _SalesScreenState extends State<SalesScreen> {
         ],
       ],
     ];
+  }
+
+  static bool _saleMatches(Sale s, String q) {
+    final n = q.toLowerCase().replaceFirst('#', '');
+    if ('${s.id}' == n) return true;
+    bool has(String? v) => (v ?? '').toLowerCase().contains(n);
+    return has(s.customerName) || has(s.username) || has(s.customerLabel) || s.lines.any((l) => has(l.name));
+  }
+
+  /// البيوع ببطاقة التقارير الموحّدة (المالك ٢٣ نوفمبر: «ذني القسمين هم يحتاج ترتب التصميم مالتهم»): العنوان وعددها، البحث، ثمّ
+  /// تحت كلّ يومٍ بيوعه سطوراً — بدل بطاقةٍ كبيرة لكلّ بيع.
+  Widget _salesList(List<Sale> sales, {required bool canVoid, required bool canResolve, String? lockMessage}) {
+    final q = _saleQ.trim();
+    final shown = q.isEmpty ? sales : [for (final s in sales) if (_saleMatches(s, q)) s];
+    final groups = <({String day, List<Sale> rows})>[];
+    for (final s in shown) {
+      final at = s.createdAt;
+      final day = at == null ? '' : iqDateOf(at);
+      if (groups.isEmpty || groups.last.day != day) {
+        groups.add((day: day, rows: [s]));
+      } else {
+        groups.last.rows.add(s);
+      }
+    }
+    return RpCard(
+      key: const ValueKey('sales-list'),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RpTitle(
+            icon: LucideIcons.listOrdered,
+            title: 'البيوع',
+            tone: RpTone.neutral,
+            trailing: Text('${formatIQD(sales.length)} بيع', style: AppType.pillBold(color: AppColors.textMid)),
+          ),
+          if (sales.isEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Center(
+              child: Text('sales.empty'.tr(), textAlign: TextAlign.center, style: AppType.muted(color: AppColors.textMid)),
+            ),
+            const SizedBox(height: Sp.sm),
+          ] else ...[
+            const SizedBox(height: Sp.md),
+            RpSearchBox(
+              key: const ValueKey('sales-search'),
+              query: _saleQ,
+              hint: 'ابحث بالزبون أو المادّة أو رقم البيع',
+              onChanged: (v) => setState(() => _saleQ = v),
+            ),
+            if (shown.isEmpty) ...[
+              const SizedBox(height: Sp.lg),
+              Center(child: Text('لا بيع يطابق «$q»', style: AppType.muted(color: AppColors.textMid))),
+              const SizedBox(height: Sp.sm),
+            ],
+            for (final g in groups) ...[
+              const SizedBox(height: Sp.md),
+              if (g.day.isNotEmpty) RpDayHead(day: RpDay(date: g.day, count: g.rows.length, sum: null, rows: const []), unit: 'بيع'),
+              for (final (i, sale) in g.rows.indexed) ...[
+                if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+                _SaleTile(
+                  sale: sale,
+                  debt: _debts[sale.id],
+                  canVoid: canVoid,
+                  canResolve: canResolve,
+                  lockMessage: lockMessage,
+                  printCompany: _routedCompany?.key,
+                  onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale, companyKey: _co))),
+                  onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale, companyKey: _co))),
+                ),
+              ],
+            ],
+          ],
+        ],
+      ),
+    );
   }
 
   // ─────────────────────────── الموادّ ───────────────────────────
@@ -925,55 +1028,21 @@ class _Kpi extends StatelessWidget {
   final String? sub;
   final AppTone tone;
 
+  static RpTone _rp(AppTone t) => switch (t) {
+        AppTone.success => RpTone.money,
+        AppTone.warning => RpTone.debt,
+        AppTone.danger => RpTone.loss,
+        AppTone.brand => RpTone.brand,
+        AppTone.info => RpTone.info,
+        _ => RpTone.neutral,
+      };
+
+  /// بطاقة رقمٍ بشكل التقارير الموحّدة (RpKpiCard): مربّع أيقونةٍ بلون عائلته، والرقم يصغر ولا يُقصّ، وسطره تحته كاملاً.
   @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: tone.fill),
-              const SizedBox(width: Sp.xs),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.micro(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.x6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              value,
-              style: AppType.label(color: tone.fill).copyWith(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (sub != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              sub!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RpKpiCard(
+        kpi: RpKpi(label: label, value: 0, display: value, icon: icon, tone: _rp(tone), hint: sub),
+        compareWith: '',
+      );
 }
 
 class _Notice extends StatelessWidget {
@@ -1251,12 +1320,16 @@ class _ActionButton extends StatelessWidget {
     required this.locked,
     required this.onTap,
     this.lockMessage,
+    this.dense = false,
   });
   final String label;
   final IconData icon;
   final AppTone tone;
   final bool locked;
   final VoidCallback onTap;
+
+  /// أصغر (سطر البيع الموحّد) — ٣٢ بدل ٣٦.
+  final bool dense;
 
   /// سبب القفل إن لم يكن الصلاحيّة («كل الشركات»: شركةٌ للعرض).
   final String? lockMessage;
@@ -1272,17 +1345,17 @@ class _ActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.md),
         onTap: locked ? () => showNoPermission(context, action: true, message: lockMessage) : onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+          padding: EdgeInsets.symmetric(horizontal: dense ? Sp.sm + 2 : Sp.md),
           child: SizedBox(
-            height: 36,
+            height: dense ? 32 : 36,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(locked ? LucideIcons.lock : icon, size: 15, color: fg),
+                Icon(locked ? LucideIcons.lock : icon, size: dense ? 14 : 15, color: fg),
                 const SizedBox(width: Sp.x6),
                 Text(
                   label,
-                  style: AppType.label(color: fg).copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+                  style: AppType.label(color: fg).copyWith(fontSize: dense ? 12.5 : 13, fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -1353,6 +1426,26 @@ class _SaleTile extends StatelessWidget {
   final VoidCallback onVoid;
   final VoidCallback onResolve;
 
+  /// مربّع السطر بحال البيع: نقدٌ أخضر، دينٌ كهرمانيّ، مُلغى رماديّ، ما لم يُحسم تحذير.
+  static IconData _icon(Sale s, SaleDebtStatus? debt) {
+    if (s.isVoid) return LucideIcons.undo2;
+    if (s.isFailed) return LucideIcons.x;
+    if (!s.isDone) return LucideIcons.triangleAlert;
+    if (s.isDebt) return debt != null && debt.isPaid ? LucideIcons.circleCheck : LucideIcons.handCoins;
+    return LucideIcons.wallet;
+  }
+
+  static RpTone _tone(Sale s, AppTone t) {
+    if (s.isVoid) return RpTone.neutral;
+    return switch (t) {
+      AppTone.success => RpTone.money,
+      AppTone.danger => RpTone.loss,
+      AppTone.info => RpTone.info,
+      AppTone.brand => RpTone.brand,
+      _ => RpTone.debt,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -1360,138 +1453,161 @@ class _SaleTile extends StatelessWidget {
     final st = _saleState(sale, debtNow);
     final dim = sale.isVoid || sale.isFailed;
     final who = sale.employeeId == null ? 'sales.manager'.tr() : (sale.by ?? 'settle.employee'.tr());
-    const dimStyle = TextDecoration.lineThrough;
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+    final strike = dim ? TextDecoration.lineThrough : null;
+    final at = sale.createdAt;
+    final tone = _tone(sale, st.tone);
+    final printable = sale.isDone || sale.isVoid;
+    // سطرٌ بشكل التقارير الموحّدة (٢٣ نوفمبر): مربّع الحال، الزبون ورقمه، الموادّ، المنفّذ — والمبلغ وساعته بطرفه، واليوم في رأس
+    // مجموعته؛ ثمّ سطر الحال والربح والأفعال (الوصل، الإلغاء، الحسم) تحت النصّ.
+    return Padding(
+      key: ValueKey('sale-row-${sale.id}'),
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('#${sale.id}', style: AppType.micro(color: AppColors.textLow).copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(width: Sp.x6),
-              Expanded(
-                child: Text(
-                  iso(sale.customerLabel),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label(color: dim ? AppColors.textMid : AppColors.textHi)
-                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: Sp.x6),
-              _Chip(st.label, st.tone),
-            ],
-          ),
-          const SizedBox(height: Sp.x6),
-          Text(
-            _linesText(sale.lines),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.muted(color: dim ? AppColors.textLow : AppColors.textBody)
-                .copyWith(fontSize: 13, height: 1.5, decoration: dim ? dimStyle : null),
-          ),
-          const SizedBox(height: Sp.xs),
-          Text(
-            [
-              if (sale.customerKind == 'subscriber' && sale.username != null && sale.customerName != null)
-                iso(sale.username!),
-              who,
-              iso(_time(sale.createdAt)),
-            ].join(' · '),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
-          ),
-          if (debtNow != null && !debtNow.isPaid) ...[
-            const SizedBox(height: Sp.xs),
-            Text(
-              debtNow.isPartial
-                  ? 'sales.debt_partial_n'.tr(namedArgs: {'paid': _money(debtNow.paid), 'left': _money(debtNow.unpaid)})
-                  : 'sales.debt_now_n'.tr(namedArgs: {'amount': _money(debtNow.balance.abs())}),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.muted(color: debtNow.isPartial ? AppColors.warningFill : AppColors.textMid).copyWith(fontSize: 11.5),
-            ),
-          ],
-          if (sale.isVoid && sale.voidReason != null) ...[
-            const SizedBox(height: Sp.xs),
-            Text(
-              'sales.void_reason_n'.tr(namedArgs: {'reason': sale.voidReason!}),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
-            ),
-          ],
-          if (sale.isVoid && sale.isDebt && sale.voidMode != null) ...[
-            const SizedBox(height: Sp.xxs),
-            Text(
-              _voidDoneText(sale),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
-            ),
-          ],
-          const SizedBox(height: Sp.sm),
-          Row(
-            children: [
+              RpIconBox(icon: _icon(sale, debtNow), tone: tone, size: 36),
+              const SizedBox(width: Sp.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _money(sale.total),
-                      style: AppType.label(color: dim ? AppColors.textLow : AppColors.textHi).copyWith(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        decoration: dim ? dimStyle : null,
-                      ),
+                    Text.rich(
+                      TextSpan(children: [
+                        TextSpan(
+                          text: iso(sale.customerLabel),
+                          style: AppType.bodyBold(color: dim ? AppColors.textMid : AppColors.textHi),
+                        ),
+                        TextSpan(text: '  #${sale.id}', style: AppType.micro(color: AppColors.textLow)),
+                      ]),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (!dim)
+                    Text(
+                      _linesText(sale.lines),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.micro(color: dim ? AppColors.textLow : AppColors.textBody).copyWith(decoration: strike),
+                    ),
+                    Text(
+                      [
+                        who,
+                        if (sale.customerKind == 'subscriber' && sale.username != null && sale.customerName != null)
+                          iso(sale.username!),
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.micro(color: AppColors.textMid),
+                    ),
+                    if (debtNow != null && !debtNow.isPaid)
                       Text(
-                        'sales.profit_n'.tr(namedArgs: {'amount': _signedMoney(sale.profit)}),
-                        style: AppType.muted(color: sale.profit < 0 ? AppColors.error : AppColors.success)
-                            .copyWith(fontSize: 11.5),
+                        debtNow.isPartial
+                            ? 'sales.debt_partial_n'.tr(namedArgs: {'paid': _money(debtNow.paid), 'left': _money(debtNow.unpaid)})
+                            : 'sales.debt_now_n'.tr(namedArgs: {'amount': _money(debtNow.balance.abs())}),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.micro(color: debtNow.isPartial ? AppColors.warningFill : AppColors.textMid),
+                      ),
+                    if (sale.isVoid && sale.voidReason != null)
+                      Text(
+                        'sales.void_reason_n'.tr(namedArgs: {'reason': sale.voidReason!}),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.micro(color: AppColors.textMid),
+                      ),
+                    if (sale.isVoid && sale.isDebt && sale.voidMode != null)
+                      Text(
+                        _voidDoneText(sale),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.micro(color: AppColors.textMid),
                       ),
                   ],
                 ),
               ),
-              // وصل البيع (PDF بورق الطباعة نفسه) — للمكتمل والمُلغى (بختمه).
-              if (sale.isDone || sale.isVoid)
-                IconButton(
-                  tooltip: 'sales.print_receipt'.tr(),
-                  onPressed: () async {
-                    final r = await SalePrint.printReceipt(sale, companyKey: printCompany);
-                    if (context.mounted) showPrintResult(context, r);
-                  },
-                  icon: Icon(LucideIcons.printer, size: 17, color: AppColors.textBody),
-                  visualDensity: VisualDensity.compact,
-                ),
-              if (sale.voidable)
-                _ActionButton(
-                  label: 'sales.void'.tr(),
-                  icon: LucideIcons.undo2,
-                  tone: AppTone.danger,
-                  locked: !canVoid,
-                  lockMessage: lockMessage,
-                  onTap: onVoid,
-                ),
-              if (sale.resolvable())
-                _ActionButton(
-                  label: 'sales.resolve'.tr(),
-                  icon: LucideIcons.triangleAlert,
-                  tone: AppTone.warning,
-                  // حسم إلغاءٍ «غير مؤكَّد» بصلاحيّة الإلغاء، وحسم بيعٍ بصلاحيّة البيع.
-                  locked: sale.resolvesVoid ? !canVoid : !canResolve,
-                  lockMessage: lockMessage,
-                  onTap: onResolve,
-                ),
+              const SizedBox(width: Sp.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      formatIQD(sale.total),
+                      maxLines: 1,
+                      style: AppType.bodyStrong(color: dim ? AppColors.textLow : AppColors.textHi).copyWith(decoration: strike),
+                    ),
+                  ),
+                  if (at != null) Text(clock12Ar(at), maxLines: 1, style: AppType.micro(color: AppColors.textLow)),
+                ],
+              ),
             ],
+          ),
+          const SizedBox(height: Sp.x6),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 36 + Sp.md),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: Sp.sm,
+                    runSpacing: Sp.xxs,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _Chip(st.label, st.tone),
+                      if (!dim)
+                        Text(
+                          'sales.profit_n'.tr(namedArgs: {'amount': _signedMoney(sale.profit)}),
+                          style: AppType.microBold(color: sale.profit < 0 ? AppColors.error : AppColors.success),
+                        ),
+                    ],
+                  ),
+                ),
+                // وصل البيع (PDF بورق الطباعة نفسه) — للمكتمل والمُلغى (بختمه).
+                if (printable)
+                  Tooltip(
+                    message: 'sales.print_receipt'.tr(),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(R.md),
+                      onTap: () async {
+                        final r = await SalePrint.printReceipt(sale, companyKey: printCompany);
+                        if (context.mounted) showPrintResult(context, r);
+                      },
+                      child: SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: Icon(LucideIcons.printer, size: 16, color: AppColors.textBody),
+                      ),
+                    ),
+                  ),
+                if (sale.voidable) ...[
+                  const SizedBox(width: Sp.xs),
+                  _ActionButton(
+                    label: 'sales.void'.tr(),
+                    icon: LucideIcons.undo2,
+                    tone: AppTone.danger,
+                    locked: !canVoid,
+                    lockMessage: lockMessage,
+                    onTap: onVoid,
+                    dense: true,
+                  ),
+                ],
+                if (sale.resolvable()) ...[
+                  const SizedBox(width: Sp.xs),
+                  _ActionButton(
+                    label: 'sales.resolve'.tr(),
+                    icon: LucideIcons.triangleAlert,
+                    tone: AppTone.warning,
+                    // حسم إلغاءٍ «غير مؤكَّد» بصلاحيّة الإلغاء، وحسم بيعٍ بصلاحيّة البيع.
+                    locked: sale.resolvesVoid ? !canVoid : !canResolve,
+                    lockMessage: lockMessage,
+                    onTap: onResolve,
+                    dense: true,
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),

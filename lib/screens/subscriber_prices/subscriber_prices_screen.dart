@@ -21,6 +21,7 @@ import '../desktop/desk_bulk_picker.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../widgets/merged_section.dart';
 import '../../widgets/list_kit.dart';
+import '../reports/v2/report_kit.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -352,27 +353,38 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  Row(children: [
-                    Expanded(
-                      child: ListKpiTile(
-                        icon: LucideIcons.banknote,
-                        tone: ListTone.success,
-                        label: 'sp.fixed_count_label'.tr(),
-                        value: '${_prices.length}',
-                        active: _deskFilter == 1,
-                        onTap: () => setState(() => _deskFilter = _deskFilter == 1 ? 0 : 1),
+                  // الشكل الموحّد (المالك ٢٣ نوفمبر: «المدراء والخصومات والسعر الثابت كذلك»): بطاقتا أرقام كالتقارير، ثمّ «الأسعار
+                  // الحاليّة» بطاقة، والقائمة ببطاقةٍ تحت البحث والشرائح.
+                  IntrinsicHeight(
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Expanded(
+                        child: RpKpiCard(
+                          kpi: RpKpi(
+                            label: 'sp.fixed_count_label'.tr(),
+                            value: _prices.length,
+                            isCount: true,
+                            icon: LucideIcons.banknote,
+                            tone: RpTone.money,
+                          ),
+                          compareWith: '',
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: Sp.sm),
-                    Expanded(
-                      child: ListKpiTile(
-                        icon: LucideIcons.triangleAlert,
-                        tone: ListTone.warning,
-                        label: 'sp.needs_repricing_short'.tr(),
-                        value: _big ? '—' : '$reprice',
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: RpKpiCard(
+                          kpi: RpKpi(
+                            label: 'sp.needs_repricing_short'.tr(),
+                            value: reprice,
+                            isCount: true,
+                            display: _big ? '—' : null,
+                            icon: LucideIcons.triangleAlert,
+                            tone: RpTone.debt,
+                          ),
+                          compareWith: '',
+                        ),
                       ),
-                    ),
-                  ]),
+                    ]),
+                  ),
                   if (_loadFailed) ...[
                     const SizedBox(height: Sp.sm),
                     Text('sp.load_failed'.tr(), style: AppType.micro(color: AppColors.error)),
@@ -437,6 +449,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(R.lg),
                     border: Border.all(color: AppColors.border),
+                    boxShadow: AppColors.isDark ? Sh.deskRestDark : Sh.deskRest,
                   ),
                   sliver: SliverList.separated(
                     itemCount: rows.length,
@@ -782,63 +795,36 @@ class _ActionCard extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
+  /// بطاقةٌ بشكل التقارير الموحّدة (RpCard + مربّع الأيقونة): الاسم وعدده و«›».
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final disabled = onTap == null;
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: disabled
-                      ? AppColors.surfaceInput
-                      : color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.sm),
+    return RpCard(
+      padding: const EdgeInsets.all(Sp.sm),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Padding(
+            padding: const EdgeInsets.all(Sp.xs),
+            child: Row(
+              children: [
+                RpIconBox(icon: icon, tone: disabled ? RpTone.neutral : RpTone.money, size: 34),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: AppType.bodyBold(color: disabled ? AppColors.textLow : AppColors.textHi), maxLines: 2),
+                      Text(sub, style: AppType.micro(color: AppColors.textMid), maxLines: 1),
+                    ],
+                  ),
                 ),
-                alignment: Alignment.center,
-                child: Icon(icon,
-                    color: disabled ? AppColors.textLow : color, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: AppType.label(
-                              color: disabled ? AppColors.textLow : AppColors.textHi)
-                          .copyWith(fontWeight: FontWeight.w700, fontSize: 12.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      sub,
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 10.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16, color: disabled ? AppColors.textLow : AppColors.textMid),
-            ],
+                Icon(LucideIcons.chevronLeft, size: 16, color: disabled ? AppColors.textLow : AppColors.textMid),
+              ],
+            ),
           ),
         ),
       ),

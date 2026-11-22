@@ -19,6 +19,7 @@ import '../desktop/desk_bulk_picker.dart';
 import '../../widgets/merged_section.dart';
 import '../../services/merged_mode.dart';
 import '../../widgets/list_kit.dart';
+import '../reports/v2/report_kit.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -436,70 +437,54 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  Row(children: [
-                    Expanded(
-                      child: ListKpiTile(
-                        icon: LucideIcons.percent,
-                        tone: ListTone.success,
-                        label: 'عليهم خصم',
-                        value: '${_existing.length}',
-                        active: _deskFilter == 1,
-                        onTap: () => setState(() => _deskFilter = _deskFilter == 1 ? 0 : 1),
+                  // الشكل الموحّد (المالك ٢٣ نوفمبر: «المدراء والخصومات والسعر الثابت كذلك»): بطاقتا أرقام كالتقارير، ثمّ بطاقةٌ واحدة
+                  // لـ«الخصومات الحاليّة» و«حذف الكلّ» — والقائمة ببطاقةٍ بعنوانها تحت البحث والشرائح.
+                  IntrinsicHeight(
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Expanded(
+                        child: RpKpiCard(
+                          kpi: RpKpi(label: 'عليهم خصم', value: _existing.length, isCount: true, unit: 'مشترك', icon: LucideIcons.percent, tone: RpTone.money),
+                          compareWith: '',
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: Sp.sm),
-                    Expanded(
-                      child: ListKpiTile(
-                        icon: LucideIcons.wallet,
-                        tone: ListTone.warning,
-                        label: 'مجموع الخصومات',
-                        value: _fmt(_totalDiscount.round()).isEmpty ? '0' : _fmt(_totalDiscount.round()),
-                        unit: 'د.ع',
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: Sp.sm),
-                  Row(children: [
-                    Expanded(
-                      child: _ActionCard(
-                        icon: LucideIcons.list,
-                        label: 'الخصومات الحالية',
-                        sub: '${_existing.length} مطبّق',
-                        color: accent,
-                        onTap: _openExistingDiscounts,
-                      ),
-                    ),
-                    if (_canManage) ...[
                       const SizedBox(width: Sp.sm),
-                      // زرٌّ مربّع بكلمته (لا نصف عرض): «الخصومات الحالية» تأخذ الباقي فلا تُقصّ على ٣٢٠–٣٦٠
-                      SizedBox(
-                        width: 84,
-                        child: Material(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(R.lg),
-                          child: InkWell(
+                      Expanded(
+                        child: RpKpiCard(
+                          kpi: RpKpi(label: 'مجموع الخصومات', value: _totalDiscount.round(), icon: LucideIcons.wallet, tone: RpTone.debt),
+                          compareWith: '',
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                  _ActionCard(
+                    icon: LucideIcons.list,
+                    label: 'الخصومات الحالية',
+                    sub: '${_existing.length} مطبّق',
+                    color: accent,
+                    onTap: _openExistingDiscounts,
+                    trailing: !_canManage
+                        ? null
+                        : InkWell(
                             key: const ValueKey('discounts-delete-all'),
                             onTap: _existing.isNotEmpty ? _confirmDeleteAll : null,
-                            borderRadius: BorderRadius.circular(R.lg),
+                            borderRadius: BorderRadius.circular(R.md),
                             child: Container(
-                              constraints: const BoxConstraints(minHeight: 60),
+                              padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: Sp.x6),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(R.lg),
-                                border: Border.all(color: _existing.isNotEmpty ? AppColors.dangerSoftBorder : AppColors.border),
+                                color: _existing.isNotEmpty ? AppColors.dangerSoftBg : AppColors.surfaceSunken,
+                                borderRadius: BorderRadius.circular(R.md),
                               ),
-                              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(LucideIcons.trash2, size: 18, color: _existing.isNotEmpty ? AppColors.error : AppColors.textHint),
-                                const SizedBox(height: 4),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(LucideIcons.trash2, size: 15, color: _existing.isNotEmpty ? AppColors.error : AppColors.textHint),
+                                const SizedBox(width: Sp.xs),
                                 Text('حذف الكل',
                                     maxLines: 1,
                                     style: AppType.labelBold(color: _existing.isNotEmpty ? AppColors.error : AppColors.textHint)),
                               ]),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  ]),
+                  ),
                   const SizedBox(height: Sp.xs),
                 ]),
               ),
@@ -552,6 +537,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(R.lg),
                     border: Border.all(color: AppColors.border),
+                    boxShadow: AppColors.isDark ? Sh.deskRestDark : Sh.deskRest,
                   ),
                   sliver: SliverList.separated(
                     itemCount: rows.length,
@@ -1026,6 +1012,7 @@ class _ActionCard extends StatelessWidget {
     required this.sub,
     required this.color,
     required this.onTap,
+    this.trailing,
   });
 
   final IconData icon;
@@ -1034,70 +1021,49 @@ class _ActionCard extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
+  /// زرٌّ بطرف البطاقة («حذف الكلّ»).
+  final Widget? trailing;
+
+  /// بطاقةٌ بشكل التقارير الموحّدة (RpCard + مربّع الأيقونة): الاسم وعدده و«›»، وما بطرفها.
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final disabled = onTap == null;
-    final fg = disabled ? AppColors.textLow : AppColors.textHi;
-    final iconBg =
-        disabled ? AppColors.surfaceInput : color.withValues(alpha: 0.14);
-    final iconFg = disabled ? AppColors.textLow : color;
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, color: iconFg, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: AppType.label(color: fg).copyWith(
-                          fontWeight: FontWeight.w700, fontSize: 12.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      sub,
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 10.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+    return RpCard(
+      padding: const EdgeInsets.all(Sp.sm),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(R.md),
+                child: Padding(
+                  padding: const EdgeInsets.all(Sp.xs),
+                  child: Row(
+                    children: [
+                      RpIconBox(icon: icon, tone: disabled ? RpTone.neutral : RpTone.money, size: 34),
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label, style: AppType.bodyBold(color: disabled ? AppColors.textLow : AppColors.textHi), maxLines: 2),
+                            Text(sub, style: AppType.micro(color: AppColors.textMid), maxLines: 1),
+                          ],
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronLeft, size: 16, color: disabled ? AppColors.textLow : AppColors.textMid),
+                    ],
+                  ),
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16,
-                  color: disabled ? AppColors.textLow : AppColors.textMid),
-            ],
+            ),
           ),
-        ),
+          if (trailing != null) ...[const SizedBox(width: Sp.sm), trailing!],
+        ],
       ),
     );
   }
 }
-
-

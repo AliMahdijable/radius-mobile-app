@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -320,11 +320,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   padding: EdgeInsets.symmetric(vertical: 32),
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (_rows.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(Sp.lg),
-                  child: _emptyState(),
-                )
               else
                 Padding(
                   padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
@@ -367,9 +362,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             tone: RpTone.neutral,
             trailing: Text('${formatIQD(_rows.length)} مصروف', style: AppType.pillBold(color: AppColors.textMid)),
           ),
+          // لا مصاريف بالفترة: داخل البطاقة نفسها لا صندوقٌ كبير وحده (لقطة المالك ٢٣ نوفمبر)
+          if (_rows.isEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Icon(LucideIcons.receiptText, size: 30, color: AppColors.textLow),
+            const SizedBox(height: Sp.sm),
+            Text('exp.empty_range'.tr(), textAlign: TextAlign.center, style: AppType.bodyBold(color: AppColors.textHi)),
+            const SizedBox(height: Sp.xxs),
+            Text('exp.empty_hint'.tr(), textAlign: TextAlign.center, style: AppType.micro(color: AppColors.textMid)),
+            const SizedBox(height: Sp.md),
+          ] else ...[
           const SizedBox(height: Sp.md),
           RpSearchBox(key: const ValueKey('exp-search'), query: _q, hint: 'ابحث بالبيان أو المنفّذ', onChanged: (v) => setState(() => _q = v)),
-          if (shown.isEmpty) ...[
+          ],
+          if (_rows.isNotEmpty && shown.isEmpty) ...[
             const SizedBox(height: Sp.lg),
             Center(child: Text('لا مصروف يطابق «$q»', style: AppType.muted(color: AppColors.textMid))),
             const SizedBox(height: Sp.sm),
@@ -390,32 +396,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ),
             ],
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _emptyState() {
-    return Container(
-      padding: const EdgeInsets.all(Sp.huge),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          Icon(LucideIcons.receiptText, size: 36, color: AppColors.textLow),
-          const SizedBox(height: 10),
-          Text(
-            'exp.empty_range'.tr(),
-            style: AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'exp.empty_hint'.tr(),
-            style: AppType.muted().copyWith(fontSize: 11),
-          ),
         ],
       ),
     );
@@ -482,7 +462,7 @@ class _ExpenseTile extends StatelessWidget {
                       ),
                     if (row.isPayslip) ...[
                       const SizedBox(height: 3),
-                      ToneChip(
+                      _Tag(
                         key: ValueKey('exp-payslip-${row.id}'),
                         // «كشف راتب 3 · أحمد» — صرفيّةٌ كتبها صرف الراتب
                         label: (row.payslipEmployee ?? '').isEmpty
@@ -490,28 +470,31 @@ class _ExpenseTile extends StatelessWidget {
                             : '${'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'})} · ${row.payslipEmployee}',
                         icon: LucideIcons.users,
                         tone: AppTone.brand,
-                        dense: true,
                       ),
                     ],
                     if (row.isRecurring) ...[
                       const SizedBox(height: 3),
-                      ToneChip(
+                      _Tag(
                         // «ثابتة · 2026/10» — الشهر بالشارة لا بلاحقة الملاحظة.
                         label:
                             (row.recurringPeriod ?? '').isEmpty ? 'rexp.badge'.tr() : '${'rexp.badge'.tr()} · ${iqPeriodLabel(row.recurringPeriod)}',
                         icon: LucideIcons.repeat,
                         tone: AppTone.info,
-                        dense: true,
                       ),
                     ],
                   ],
                 ),
               ),
               const SizedBox(width: Sp.sm),
-              Text(
-                '${formatIQD(row.amount)} د.ع',
-                style: AppType.bodyStrong(color: AppColors.error)
-                    .copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
+              // المبلغ بلا «د.ع» كسطور التقارير الموحّدة (مجموع اليوم فوقه بعملته) — فيتّسع البيان وشارته على ٣٢٠
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(
+                  formatIQD(row.amount),
+                  maxLines: 1,
+                  style: AppType.bodyStrong(color: AppColors.error)
+                      .copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
               ),
               // صرفيةٌ داخل تسوية: مقفلة — شارة رقمها بدل زرّ الحذف.
               if (row.isLocked)
@@ -541,6 +524,35 @@ class _ExpenseTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// شارةٌ صغيرة بلون نغمتها نصُّها يلتفّ ولا يُختصر «…» (ToneChip يختصر — كان «ثابتة · 2026/10» يصير «ثابتة · 2…» على ٣٢٠).
+class _Tag extends StatelessWidget {
+  const _Tag({super.key, required this.label, required this.icon, required this.tone});
+  final String label;
+  final IconData icon;
+  final AppTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: tone.fill),
+          const SizedBox(width: Sp.xs),
+          Flexible(child: Text(label, style: AppType.pillLabel(color: tone.onSoft).copyWith(letterSpacing: 0))),
+        ],
       ),
     );
   }
