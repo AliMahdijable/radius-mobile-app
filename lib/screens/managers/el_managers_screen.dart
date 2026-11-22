@@ -377,7 +377,7 @@ class _ElManagerTile extends StatelessWidget {
                   icon: topupLocked ? const PermLockIcon(size: 15) : const Icon(LucideIcons.arrowUpToLine, size: 15),
                   label: const FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Text('شحن رصيد', maxLines: 1, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                    child: Text('شحن رصيد', maxLines: 1, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, height: 1.35)),
                   ),
                 ),
               ),
@@ -397,7 +397,8 @@ class _ElManagerTile extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     child: Text('ديون أخرى',
                         maxLines: 1,
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: debtsLocked ? LockedStyle.title : null)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13.5, height: 1.35, color: debtsLocked ? LockedStyle.title : null)),
                   ),
                 ),
               ),
