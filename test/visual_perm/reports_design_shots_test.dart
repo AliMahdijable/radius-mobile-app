@@ -12,7 +12,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
+import 'package:rad_mysvcs/screens/reports/v2/finance_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
@@ -107,17 +109,9 @@ const _sharesMerged = [
   RpShare(name: 'حيدر الموسوي', company: _sup, amount: 2000000, count: 31, share: 0.10),
 ];
 
-const _periods = ['اليوم', 'أمس', 'هذا الأسبوع', 'الأسبوع الماضي', 'هذا الشهر', 'الشهر الماضي', 'آخر 30 يوماً', 'هذه السنة', 'مخصّص…'];
-const _types = [
-  ('تفعيل نقدي', true),
-  ('تفعيل بالدين', false),
-  ('تمديد', false),
-  ('تسديد دين', true),
-  ('إضافة دين', false),
-  ('صرفيّة', false),
-  ('بيع مواد', false),
-];
-const _payments = [('نقد', true), ('دين', false), ('من الرصيد', false)];
+
+
+
 
 // ═══════════════════════════════ الصفحات ═══════════════════════════════
 
@@ -144,7 +138,7 @@ Widget _pageNow(String title, List<Widget> parts) => Scaffold(
 
 Widget _financeSingle() => _page('التقرير الماليّ', [
       const RpPeriodBar(period: _period, compareOn: true, compareWith: _cmp),
-      const RpFilterBar(chips: ['المدير: علي حسن + الفرعيّين', 'النوع: تفعيل نقدي، تسديد', 'الدفع: نقد']),
+      const RpFilterBar(chips: [RpChip('المدير: علي حسن + الفرعيّين'), RpChip('النوع: تفعيل نقدي، تسديد'), RpChip('الدفع: نقد')]),
       RpHeroKpi(kpi: _profit(merged: false), compareWith: _vs, spark: [for (final p in _trend()) p.a - p.b * 0.6], note: 'الواصل − الصرفيّات − كلفة الباقات'),
       RpKpiGrid(kpis: _kpis(merged: false), compareWith: _vs),
       RpCountsRow(items: _counts(merged: false)),
@@ -157,7 +151,7 @@ Widget _financeSingle() => _page('التقرير الماليّ', [
 Widget _financeMerged() => _page('التقرير الماليّ · كل الشركات', [
       const RpPeriodBar(period: _period, compareOn: true, compareWith: _cmp),
       const RpCompanyChips(companies: _companies),
-      const RpFilterBar(chips: ['المدير: علي (سوبرنت)، حيدر (ايرث لنك)', 'الموظّف: زينب (سوبرنت)']),
+      const RpFilterBar(chips: [RpChip('المدير: علي (سوبرنت)، حيدر (ايرث لنك)'), RpChip('الموظّف: زينب (سوبرنت)')]),
       const RpCompanyTable(
         heads: ['الواصل', 'الدين', 'الربح'],
         lines: [
@@ -180,7 +174,7 @@ Widget _financeMerged() => _page('التقرير الماليّ · كل الشر
 
 Widget _activations() => _page('التفعيلات والتمديدات', [
       const RpPeriodBar(period: _period, compareOn: true, compareWith: _cmp),
-      const RpFilterBar(chips: ['الباقة: FTTH 50 ميغا', 'الموظّف: زينب']),
+      const RpFilterBar(chips: [RpChip('الباقة: FTTH 50 ميغا'), RpChip('الموظّف: زينب')]),
       const RpKpiGrid(compareWith: _vs, kpis: [
         RpKpi(label: 'التفعيلات', value: 182, unit: 'تفعيل', isCount: true, icon: LucideIcons.zap, tone: RpTone.brand, delta: 0.06),
         RpKpi(label: 'التمديدات', value: 64, unit: 'تمديد', isCount: true, icon: LucideIcons.repeat, tone: RpTone.info, delta: 0.12),
@@ -213,48 +207,72 @@ Widget _activations() => _page('التفعيلات والتمديدات', [
       const RpExportBar(),
     ]);
 
+final _fixedNow = DateTime(2026, 11, 22, 18);
+
 RpFilterSheet _filterSheet({required bool merged}) => RpFilterSheet(
       subtitle: merged ? 'التقرير الماليّ · كل الشركات' : 'التقرير الماليّ · سوبرنت',
-      periods: _periods,
-      period: 'هذا الشهر',
-      compareOn: true,
-      companies: merged ? _companies : null,
-      managers: merged
+      now: _fixedNow,
+      initial: RpFilterValue(
+        range: RpRange.of(RpPreset.thisMonth, now: _fixedNow),
+        companies: merged ? const {'s', 'e', 'f', 'h'} : const {},
+        managers: merged ? const {'s': {'1'}, 'e': {'5'}} : const {'open': {'1'}},
+        employees: merged ? const {'s': '7'} : const {'open': '7'},
+        types: const ['SUBSCRIBER_ACTIVATE_CASH', 'BALANCE_DEDUCT'],
+      ),
+      companies: merged
           ? const [
-              RpPickGroup(company: _sup, items: [
-                RpPick('علي حسن', on: true),
-                RpPick('مصطفى كريم', depth: 1, sub: 'فرعيّ'),
-                RpPick('حيدر الموسوي'),
+              RpCompany(key: 's', name: 'سوبرنت', colorIndex: 0),
+              RpCompany(key: 'e', name: 'ايرث لنك', colorIndex: 1),
+              RpCompany(key: 'f', name: 'فايبر لنك', colorIndex: 2),
+              RpCompany(key: 'h', name: 'هالة سات', colorIndex: 3),
+              RpCompany(key: 'a', name: 'أمواج', colorIndex: 4),
+            ]
+          : null,
+      people: merged
+          ? const [
+              RpPeopleGroup(key: 's', company: _sup, managers: [
+                RpPerson('1', 'علي حسن'),
+                RpPerson('2', 'مصطفى كريم', parentId: '1'),
+                RpPerson('3', 'حيدر الموسوي'),
+              ], employees: [
+                RpPerson('7', 'زينب'),
+                RpPerson('8', 'حسين'),
               ]),
-              RpPickGroup(company: _earth, items: [RpPick('حيدر جاسم', on: true), RpPick('سجاد علي')]),
-              RpPickGroup(company: _fiber, items: [RpPick('كرار سعد')]),
+              RpPeopleGroup(key: 'e', company: _earth, managers: [RpPerson('5', 'حيدر جاسم'), RpPerson('6', 'سجاد علي')], employees: [
+                RpPerson('9', 'مريم'),
+              ]),
+              RpPeopleGroup(key: 'f', company: _fiber, managers: [RpPerson('10', 'كرار سعد')]),
             ]
           : const [
-              RpPickGroup(items: [
-                RpPick('علي حسن', on: true),
-                RpPick('مصطفى كريم', depth: 1, sub: 'فرعيّ'),
-                RpPick('كرار حيدر', depth: 1, sub: 'فرعيّ'),
-                RpPick('حيدر الموسوي'),
+              RpPeopleGroup(key: 'open', managers: [
+                RpPerson('1', 'علي حسن'),
+                RpPerson('2', 'مصطفى كريم', parentId: '1'),
+                RpPerson('4', 'كرار حيدر', parentId: '1'),
+                RpPerson('3', 'حيدر الموسوي'),
+              ], employees: [
+                RpPerson('7', 'زينب'),
+                RpPerson('8', 'حسين'),
+                RpPerson('9', 'مريم'),
               ]),
             ],
-      withSubs: true,
-      employees: merged
-          ? const [
-              RpPickGroup(company: _sup, items: [RpPick('زينب', on: true, sub: 'موظّفة'), RpPick('حسين', sub: 'موظّف')]),
-              RpPickGroup(company: _earth, items: [RpPick('مريم', sub: 'موظّفة')]),
-            ]
-          : const [
-              RpPickGroup(items: [RpPick('زينب', on: true, sub: 'موظّفة'), RpPick('حسين', sub: 'موظّف'), RpPick('مريم', sub: 'موظّفة')]),
-            ],
-      types: _types,
-      payments: _payments,
-      results: merged ? 124 : 71,
+      types: const [
+        ('SUBSCRIBER_ACTIVATE_CASH', 'تفعيل نقدي'),
+        ('SUBSCRIBER_ACTIVATE_NON_CASH', 'تفعيل بالدين'),
+        ('SUBSCRIBER_EXTEND', 'تمديد'),
+        ('BALANCE_DEDUCT', 'تسديد دين'),
+        ('BALANCE_ADD', 'إضافة دين'),
+        ('ADMIN_EXPENSE', 'صرفيّة'),
+      ],
+      payments: const [
+        RpPayShortcut('نقد', ['SUBSCRIBER_ACTIVATE_CASH', 'BALANCE_DEDUCT']),
+        RpPayShortcut('بالدين', ['SUBSCRIBER_ACTIVATE_NON_CASH', 'BALANCE_ADD']),
+      ],
     );
 
 RpDrillSheet _drill() => RpDrillSheet(
       kpi: _kpis(merged: true)[2],
       scope: 'هذا الشهر · سوبرنت، ايرث لنك',
-      chips: const ['المدير: علي (سوبرنت)، حيدر (ايرث لنك)'],
+      chips: const [RpChip('المدير: علي (سوبرنت)، حيدر (ايرث لنك)')],
       rows: const RpRowsCard(total: 41, more: 'عرض المزيد (37)', days: [
         RpDay(date: '2026/11/22', count: 3, sum: 125000, rows: [
           RpRow(icon: LucideIcons.creditCard, tone: RpTone.debt, title: 'حسن كاظم', detail: 'تفعيل بالدين · Gaming 100 · علي حسن', amount: 45000, time: '16:12', company: _sup),
@@ -309,6 +327,27 @@ Map<String, Object?> _financeBody(double k) {
         'activations_count': (182 * k).round(),
         'extend_count': (64 * k).round(),
       },
+      'perAdmin': [
+        {'admin_id': '11', 'admin_username': 'admin@sup', 'revenue_total': r(7150000), 'debt_total': r(2100000), 'expenses_total': r(1150000), 'net_balance': r(3900000), 'activations_count': (118 * k).round(), 'extend_count': (40 * k).round(), 'total_count': (190 * k).round()},
+        {'admin_id': '101', 'admin_username': 'ali.h', 'revenue_total': r(2900000), 'debt_total': r(1000000), 'expenses_total': 0, 'net_balance': r(1900000), 'activations_count': (44 * k).round(), 'extend_count': (16 * k).round(), 'total_count': (70 * k).round()},
+        {'admin_id': '102', 'admin_username': 'mustafa.k', 'revenue_total': r(1400000), 'debt_total': r(600000), 'expenses_total': 0, 'net_balance': r(800000), 'activations_count': (20 * k).round(), 'extend_count': (8 * k).round(), 'total_count': (33 * k).round()},
+      ],
+      'timeseries': [
+        for (var d = 1; d <= 22; d++)
+          {
+            'date': '2026-11-${d.toString().padLeft(2, '0')}',
+            'payments_sum': r([520, 610, 480, 700, 830, 560, 450, 620, 760, 880, 540, 470, 650, 720, 910, 600, 530, 690, 780, 940, 610, 560][d - 1] * 1000),
+            'payments_count': 9 + d % 5,
+            'debt_sum': r([140, 120, 180, 90, 160, 210, 130, 110, 170, 150, 190, 120, 100, 160, 140, 220, 130, 150, 120, 170, 110, 160][d - 1] * 1000),
+          },
+      ],
+      'stacked': [
+        {'action_type': 'SUBSCRIBER_ACTIVATE', 'count': (182 * k).round(), 'amount_sum': r(12600000)},
+        {'action_type': 'BALANCE_DEDUCT', 'count': (61 * k).round(), 'amount_sum': r(2100000)},
+        {'action_type': 'SUBSCRIBER_EXTEND', 'count': (64 * k).round(), 'amount_sum': r(1600000)},
+        {'action_type': 'ADMIN_EXPENSE', 'count': (23 * k).round(), 'amount_sum': r(1150000)},
+        {'action_type': 'BALANCE_ADD', 'count': (12 * k).round(), 'amount_sum': r(450000)},
+      ],
       'recentLogs': [
         log(1, 'SUBSCRIBER_ACTIVATE', 'تفعيل نقدي — FTTH 50 ميغا', 35000, 'محمد', 'عبد الله', '2026-11-22 18:05:00'),
         log(2, 'BALANCE_DEDUCT', 'تسديد دين', 20000, 'سارة', 'علي', '2026-11-22 17:40:00', emp: 'زينب'),
@@ -335,7 +374,10 @@ class _BeforeServer implements HttpClientAdapter {
     final p = o.uri.path;
     final key = o.headers['x-company-key']?.toString();
     final get = o.method.toUpperCase() == 'GET';
-    if (get && p == '/api/reports/finance') return _json(_financeBody(key == _kEarth ? 0.73 : 1), key);
+    if (get && p == '/api/reports/finance') {
+      final prev = o.queryParameters['limit_logs']?.toString() == '1';
+      return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1)), key);
+    }
     if (get && p == '/api/v2/managers') {
       return _json({
         'success': true,
@@ -753,7 +795,7 @@ void main() {
           'subs': (s) => find.descendant(of: s, matching: find.text('مع مدرائه الفرعيّين')),
           'employees': (s) => find.descendant(of: s, matching: find.text('الموظّف')),
           'types': (s) => find.descendant(of: s, matching: find.text('نوع الحركة')),
-          'footer': (s) => find.descendant(of: s, matching: find.text('عرض النتائج · 124')),
+          'footer': (s) => find.descendant(of: s, matching: find.text('عرض النتائج')),
         }));
     testWidgets('06_filters_single', (t) async => sheet(t, '06_filters_single', _financeSingle(), _filterSheet(merged: false), {
           'periods': (s) => find.descendant(of: s, matching: find.text('الفترة')),
@@ -761,7 +803,7 @@ void main() {
           'tree': (s) => find.descendant(of: s, matching: find.text('مصطفى كريم')),
           'employees': (s) => find.descendant(of: s, matching: find.text('الموظّف')),
           'payments': (s) => find.descendant(of: s, matching: find.text('طريقة الدفع')),
-          'footer': (s) => find.descendant(of: s, matching: find.text('عرض النتائج · 71')),
+          'footer': (s) => find.descendant(of: s, matching: find.text('عرض النتائج')),
         }));
     testWidgets('07_drill', (t) async => sheet(t, '07_drill', _financeMerged(), _drill(), {
           'head': (s) => find.descendant(of: s, matching: find.text('الدين الجديد')),
@@ -770,6 +812,35 @@ void main() {
           'rows': (s) => find.descendant(of: s, matching: find.byType(RpRowsCard)),
           'footer': (s) => find.descendant(of: s, matching: find.text('تصدير هذه الحركات')),
         }));
+
+    // الشاشة الحقيقيّة الجديدة نفسها أمام الخادم الوهميّ (لا النموذج)
+    testWidgets('11_v2_single', (t) async {
+      await up();
+      FinanceReportV2Screen.clock = () => DateTime(2026, 11, 22, 18);
+      final d = _dev(480, h: 3400);
+      await pumpVisual(t, d, home: (_) => const FinanceReportV2Screen());
+      await settle(t, seconds: 5);
+      final cut = _cut(t);
+      expect(cut, isEmpty, reason: 'نصٌّ مقصوص: $cut');
+      await _savePhone(t, '11_v2_single', d, {'period': find.byType(RpPeriodBar)}, bottom: find.byType(RpExportBar));
+      await down(t);
+    });
+
+    testWidgets('12_v2_merged', (t) async {
+      await up();
+      FinanceReportV2Screen.clock = () => DateTime(2026, 11, 22, 18);
+      AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+      MergedMode.reset();
+      MergedMode.fetchRaw = () async => Map<String, dynamic>.from(_mergedCompanies());
+      await t.runAsync(() => MergedMode.enter());
+      final d = _dev(480, h: 3800);
+      await pumpVisual(t, d, home: (_) => const FinanceReportV2Screen());
+      await settle(t, seconds: 6);
+      final cut = _cut(t);
+      expect(cut, isEmpty, reason: 'نصٌّ مقصوص: $cut');
+      await _savePhone(t, '12_v2_merged', d, {'period': find.byType(RpPeriodBar)}, bottom: find.byType(RpExportBar));
+      await down(t);
+    });
 
     // «قبل» — التقرير الماليّ الحاليّ نفسه
     testWidgets('01_before_single', (t) async {

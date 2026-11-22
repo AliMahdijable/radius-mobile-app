@@ -95,11 +95,42 @@ class _ReportExportBarState extends State<ReportExportBar> {
     );
   }
 
-  Future<void> _exportCsv(BuildContext context) async {
+  Future<void> _exportCsv(BuildContext context) => ReportExportActions.csv(
+        context,
+        title: title,
+        subtitle: subtitle,
+        columns: columns,
+        rows: rows,
+        fileNameBase: fileNameBase,
+      );
+
+  Future<void> _printPdf(BuildContext context) => ReportExportActions.pdf(
+        context,
+        title: title,
+        subtitle: subtitle,
+        columns: columns,
+        rows: rows,
+        columnWeights: columnWeights,
+        fileNameBase: fileNameBase,
+      );
+}
+
+/// أفعال التصدير نفسها لكلّ زرّ — شريط [ReportExportBar] وأزرار التقرير الموحّد (PDF · Excel · واتساب).
+class ReportExportActions {
+  ReportExportActions._();
+
+  static Future<void> csv(
+    BuildContext context, {
+    required String title,
+    String? subtitle,
+    required List<String> columns,
+    required List<List<String>> rows,
+    String fileNameBase = 'report',
+  }) async {
     // CSV مع BOM لإجبار Excel يفتحه Unicode/UTF-8 (يعرض العربية صح).
     final data = <List<String>>[columns, ...rows];
     final csvString = const ListToCsvConverter().convert(data);
-    final withBom = '﻿$csvString';
+    final withBom = '\uFEFF$csvString';
 
     try {
       final dir = await getTemporaryDirectory();
@@ -120,7 +151,15 @@ class _ReportExportBarState extends State<ReportExportBar> {
     }
   }
 
-  Future<void> _printPdf(BuildContext context) async {
+  static Future<void> pdf(
+    BuildContext context, {
+    required String title,
+    String? subtitle,
+    required List<String> columns,
+    required List<List<String>> rows,
+    List<double>? columnWeights,
+    String fileNameBase = 'report',
+  }) async {
     try {
       final doc = await ReportPdf.build(
         title: title,
@@ -139,6 +178,41 @@ class _ReportExportBarState extends State<ReportExportBar> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('فشل الطباعة: $e')),
+        );
+      }
+    }
+  }
+
+  /// الملفّ نفسه (PDF) إلى ورقة المشاركة — واتساب أو غيره، بلا طباعة.
+  static Future<void> sharePdf(
+    BuildContext context, {
+    required String title,
+    String? subtitle,
+    required List<String> columns,
+    required List<List<String>> rows,
+    List<double>? columnWeights,
+    String fileNameBase = 'report',
+  }) async {
+    try {
+      final doc = await ReportPdf.build(
+        title: title,
+        subtitle: subtitle,
+        columns: columns,
+        rows: rows,
+        columnWeights: columnWeights,
+      );
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${fileNameBase}_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      await file.writeAsBytes(await doc.save());
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        subject: title,
+        text: subtitle ?? title,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل إرسال الملفّ: $e')),
         );
       }
     }

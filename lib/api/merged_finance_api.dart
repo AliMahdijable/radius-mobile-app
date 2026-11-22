@@ -22,6 +22,20 @@ class MergedFinancePart {
   bool get included => report != null && reason == null;
 }
 
+/// فلاتر شركةٍ واحدة في التقرير الموحّد — null في كلٍّ منها = بلا ذلك الفلتر.
+class FinanceCompanyFilter {
+  const FinanceCompanyFilter({this.userIds, this.userManager, this.employeeId});
+
+  /// مدراءٌ اختارهم (مع فرعيّيهم حين يُطلب) — بدل «مديرها وحده».
+  final List<String>? userIds;
+
+  /// يوزر مدير المشترك (الخادم يسأل بواحد).
+  final String? userManager;
+  final int? employeeId;
+
+  bool get isEmpty => (userIds == null || userIds!.isEmpty) && userManager == null && employeeId == null;
+}
+
 /// التقارير ومجموعها.
 class MergedFinanceResult {
   const MergedFinanceResult({required this.parts, required this.report, required this.logCompany});
@@ -70,20 +84,25 @@ class MergedFinanceResult {
 class MergedFinanceApi {
   MergedFinanceApi._();
 
-  /// تقرير شركةٍ واحدة موجَّهاً — طلب الشاشة العاديّة نفسه لشركتها.
+  /// تقرير شركةٍ واحدة موجَّهاً — طلب الشاشة العاديّة نفسه لشركتها. [filter] (التقرير الموحّد، ٢٢ نوفمبر): مدراؤها المختارون
+  /// ومدير المشترك وموظّفها — كلّ شركةٍ بفلاترها هي؛ بلاه مديرها وحده كما كان. [recentLimit] ١ لطلب المقارنة (الأرقام وحدها).
   static Future<({bool ok, FinanceReport? data, String? error})> one(
     MergedCompany c, {
     DateTime? from,
     DateTime? to,
     bool includeArchived = false,
+    FinanceCompanyFilter? filter,
+    int recentLimit = 2000,
   }) =>
       CompanyRoute.run(
         c.key,
         () => ReportsApi.finance(
           from: from,
           to: to,
-          userIds: [c.adminId],
-          recentLimit: 2000,
+          userIds: (filter?.userIds?.isNotEmpty ?? false) ? filter!.userIds : [c.adminId],
+          userManager: filter?.userManager,
+          employeeId: filter?.employeeId,
+          recentLimit: recentLimit,
           includeArchived: includeArchived,
           withPackageCost: isCostBearingAdminId(c.adminId),
         ),

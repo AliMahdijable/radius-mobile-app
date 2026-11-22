@@ -55,10 +55,10 @@ import 'widgets/section_header.dart';
 import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
-import '../reports/financial_report_screen.dart';
 import '../../services/merged_text.dart';
 import '../../widgets/employee_limits_card.dart';
 import '../employees/employee_my_ledger_screen.dart' show EmployeeLedgerCard;
+import '../reports/v2/finance_report_v2_screen.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -1218,7 +1218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       label: 'desktop.revenue_header'.tr(),
                                       trailingLabel: _canMoney ? 'desktop.financial_report'.tr() : null,
                                       onTrailingTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute(builder: (_) => const FinancialReportScreen()),
+                                        MaterialPageRoute(builder: (_) => const FinanceReportV2Screen()),
                                       ),
                                     ),
                                     if (revenueSection != null) revenueSection,

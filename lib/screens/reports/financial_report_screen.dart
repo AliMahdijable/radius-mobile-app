@@ -16,6 +16,7 @@ import '../../widgets/company_tag.dart';
 import '../../widgets/merged_company_strip.dart';
 import 'widgets/action_labels.dart';
 import 'widgets/date_range_chip.dart';
+import 'widgets/finance_logs.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
@@ -227,7 +228,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         filtered: mine,
       );
       unavailable = unavailable || cost.unavailable;
-      parts.add(_kpisFromLogs(mine, packageCost: cost.cost));
+      parts.add(FinanceLogs.kpisFromLogs(mine, packageCost: cost.cost));
     }
     return (kpis: MergedFinanceApi.sumKpis(parts), costUnavailable: unavailable);
   }
@@ -312,7 +313,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                   Builder(builder: (_) {
                     final hasTypeFilter = _filters.actionTypes != null &&
                         _filters.actionTypes!.isNotEmpty;
-                    final filtered = _filterLogs(_data!.recentLogs);
+                    final filtered = _filterLogsOf(_data!.recentLogs);
                     final all = _mergedAll;
                     // «كل الشركات»: تحت فلتر النوع كلّ شركةٍ من سطورها ثمّ المجموع
                     final mergedTyped = hasTypeFilter && all != null
@@ -328,7 +329,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                         : null;
                     final effectiveKpis = mergedTyped?.kpis ??
                         (hasTypeFilter
-                            ? _kpisFromLogs(filtered,
+                            ? FinanceLogs.kpisFromLogs(filtered,
                                 packageCost: filterCost?.cost)
                             : _data!.kpis);
                     return Column(
@@ -828,123 +829,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  /// virtual types: SUBSCRIBER_ACTIVATE_CASH / _NON_CASH يتفكّكان بحسب
-  /// description (مطابق backend FinanceReportController).
-  bool _matchesFinancialType(FinanceLog l, String type) {
-    final at = l.actionType.toUpperCase().trim();
-    final desc = (l.actionDescription ?? '');
-    final isNonCash = desc.contains('غير نقدي');
-    final isCash = desc.contains('نقدي') && !isNonCash;
-    switch (type) {
-      case 'SUBSCRIBER_ACTIVATE_CASH':
-        return (at == 'SUBSCRIBER_ACTIVATE' ||
-                (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'))) &&
-            isCash;
-      case 'SUBSCRIBER_ACTIVATE_NON_CASH':
-        return (at == 'SUBSCRIBER_ACTIVATE' ||
-                (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'))) &&
-            isNonCash;
-      case 'ADMIN_EXPENSE':
-        return at == 'ADMIN_EXPENSE' || at == 'EXPENSE_ADD';
-      default:
-        return at == type;
-    }
-  }
-
-  // مطلب المستخدم 2026-07-12: إشعارات الانتهاء الآلية ما تخص التقرير
-  // المالي — نستثنيها قبل أي فلترة إضافية.
-  static const _excludedTypes = {
-    'EXPIRY_NOTIFICATION',
-    'NEAR_EXPIRY_NOTIFICATION',
-    'AUTO_NOTIFICATION',
-  };
-
-  List<FinanceLog> _filterLogs(List<FinanceLog> logs) {
-    final base = logs.where(
-        (l) => !_excludedTypes.contains(l.actionType.toUpperCase().trim()));
-    final types = _filters.actionTypes;
-    if (types == null || types.isEmpty) return base.toList();
-    return base
-        .where((l) => types.any((t) => _matchesFinancialType(l, t)))
-        .toList();
-  }
-
-  /// نحسب KPIs من قائمة FinanceLog — يُستدعى عند تفعيل فلتر لعرض
-  /// قيم مطابقة للفلتر بدلاً من فترة كاملة. عند "الكل" نستعمل قيم
-  /// backend مباشرةً (أدقّ لأنها من الاستعلام الكامل بلا حد).
-  /// [packageCost] كلفة السطور نفسها ([PackageCostKpis.forFilteredLogs]).
-  FinanceKPIs _kpisFromLogs(
-    List<FinanceLog> logs, {
-    PackageCostKpis? packageCost,
-  }) {
-    num activateCash = 0,
-        activateNonCash = 0,
-        partialUnpaid = 0,
-        debtPay = 0,
-        balanceDeduct = 0,
-        balanceAdd = 0,
-        balanceAddSales = 0,
-        creditCash = 0,
-        creditComp = 0,
-        expenses = 0;
-    int activationsCount = 0, extendCount = 0, expensesCount = 0;
-    for (final l in logs) {
-      final at = l.actionType.toUpperCase().trim();
-      final desc = l.actionDescription ?? '';
-      final isNonCash = desc.contains('غير نقدي');
-      final isCash = desc.contains('نقدي') && !isNonCash;
-      if (at == 'SUBSCRIBER_ACTIVATE' ||
-          (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'))) {
-        activationsCount++;
-        if (isNonCash) {
-          activateNonCash += l.amount;
-        } else if (isCash) {
-          activateCash += l.amount;
-          // غير المدفوع من «نقدي جزئي» — يدخل المبيعات (صافي الربح بعد الكلفة)
-          // كما يضمّه الخادم إلى «الديون الجديدة».
-          partialUnpaid += l.partialUnpaid;
-        }
-      } else if (at == 'SUBSCRIBER_EXTEND') {
-        extendCount++;
-      } else if (at == 'DEBT_PAY') {
-        debtPay += l.amount;
-      } else if (at == 'BALANCE_DEDUCT') {
-        balanceDeduct += l.amount;
-      } else if (at == 'BALANCE_ADD' && l.isCredit) {
-        // «إضافة رصيد» (١٧ نوفمبر — كالخادم): المقدّم نقداً نقدٌ محصَّل (داخل «تسديد الديون» كـdebt_pay_sum)، والتعويض يُطرح من
-        // الصافي بعد الكلفة؛ وما قبله بلا نوع لا نقد — ولا شيء منها «إضافة دين».
-        if (l.creditKind == 'cash') {
-          debtPay += l.amount.abs();
-          creditCash += l.amount.abs();
-        } else if (l.creditKind == 'comp') {
-          creditComp += l.amount.abs();
-        }
-      } else if (at == 'BALANCE_ADD') {
-        balanceAdd += l.amount;
-        // دين البيع وإنقاصه عند الإلغاء — ثمن مادّة لا «إضافة دين يدويّة» ([FinanceKPIs.manualDebtAddSum]).
-        if (l.isSaleDebtLine) balanceAddSales += l.amount;
-      } else if (at == 'EXPENSE_ADD' || at == 'ADMIN_EXPENSE') {
-        expenses += l.amount;
-        expensesCount++;
-      }
-    }
-    return FinanceKPIs(
-      activateCashSum: activateCash,
-      activateNonCashSum: activateNonCash,
-      debtPaySum: debtPay,
-      balanceDeductSum: balanceDeduct,
-      balanceAddSum: balanceAdd,
-      expensesSum: expenses,
-      expensesCount: expensesCount,
-      activationsCount: activationsCount,
-      extendCount: extendCount,
-      packageCost: packageCost,
-      partialUnpaidFromLogs: partialUnpaid,
-      balanceAddSalesSum: balanceAddSales,
-      creditCashSum: creditCash,
-      creditCompSum: creditComp,
-    );
-  }
+  List<FinanceLog> _filterLogsOf(List<FinanceLog> logs) => FinanceLogs.filter(logs, _filters.actionTypes);
 
   /// [showCost]: الخادم أرسل كلفة الباقات للمالك — سطر الكلفة تحت كلّ عمليّة
   /// بيع وعمودٌ في التصدير. بلاها القائمة والملفّ كما كانا.
@@ -964,7 +849,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         ),
       );
     }
-    final filtered = _filterLogs(logs);
+    final filtered = _filterLogsOf(logs);
     final shown = _visibleCount.clamp(0, filtered.length);
     final remaining = filtered.length - shown;
     final pageRows = filtered.isEmpty
@@ -985,7 +870,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               l.userUsername ?? '',
               l.amount == 0 ? '' : l.amount.toString(),
               if (showCost)
-                l.packageCost == null ? '' : _plainNumber(l.packageCost!),
+                l.packageCost == null ? '' : FinanceLogs.plainNumber(l.packageCost!),
               exportTime(l.createdAt),
               (l.actionDescription ?? '').replaceAll('\n', ' '),
               arabicActionLabel(l.actionType, l.actionDescription ?? ''),
@@ -1065,7 +950,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             targetName: l.targetName ?? l.userUsername,
             createdAt: l.createdAt,
 balanceAfter: l.balanceAfter,
-            costLine: showCost ? _costLine(l) : null,
+            costLine: showCost ? FinanceLogs.costLine(l) : null,
             costLineWarn: showCost && l.packageCostUnknown,
           ),
           const SizedBox(height: 4),
@@ -1085,24 +970,6 @@ balanceAfter: l.balanceAfter,
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
 
-  /// سطر كلفة الباقة تحت الحركة — `null` لما لا كلفة له (تسديد، صرفية،
-  /// المُزامَن من الساس، أو سطرٌ لم يرسل الخادم كلفته).
-  static String? _costLine(FinanceLog l) {
-    final c = l.packageCost;
-    if (c != null) {
-      final line = 'reports.log_package_cost'
-          .tr(namedArgs: {'amount': formatIQD(c)});
-      return l.packageCostEstimated
-          ? '$line · ${'reports.package_cost_estimated_tag'.tr()}'
-          : line;
-    }
-    if (l.packageCostUnknown) return 'reports.log_package_cost_unknown'.tr();
-    return null;
-  }
-
-  /// رقمٌ للتصدير بلا «.0» الزائدة (DECIMAL يصل من الخادم نصّاً كـ"20000.00").
-  static String _plainNumber(num v) =>
-      v == v.roundToDouble() ? v.round().toString() : v.toString();
 }
 
 class _KpiItem {

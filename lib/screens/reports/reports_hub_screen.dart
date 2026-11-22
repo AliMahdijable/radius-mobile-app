@@ -22,12 +22,12 @@ import 'all_managers_debts_screen.dart';
 import 'balance_reports_screen.dart';
 import 'daily_activations_report_screen.dart';
 import 'deleted_debts_screen.dart';
-import 'financial_report_screen.dart';
 import 'package_distribution_screen.dart';
 import 'sessions_report_screen.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import 'v2/finance_report_v2_screen.dart';
 
 /// شاشة hub للتقارير — 7 كروت تنقل لكل تقرير منفصل.
 /// تستبدل reports_screen.dart placeholder "تأتي قريباً".
@@ -125,7 +125,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               subtitle: 'reports.financial_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                    builder: (_) => const FinancialReportScreen()),
+                    builder: (_) => const FinanceReportV2Screen()),
               ),
             ),
           // «توزيع الباقات والأرباح» (#٥، ٢٥ أكتوبر): بمفتاحه «توزيع الباقات» (الخادم يفرضه)، SAS4 وايرث لنك — لا

@@ -1,76 +1,237 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'report_kit.dart';
+import 'report_period.dart';
 
-// ورقتا التقرير الموحّد (٢٢ نوفمبر — نموذج المقترح، انظر report_kit.dart): الفلاتر كلّها في ورقةٍ واحدة بالترتيب نفسه لكلّ تقرير،
-// وحركات رقمٍ لُمست بطاقته. ⏳ غير مربوطتين بعد.
+// ورقتا التقرير الموحّد (٢٢ نوفمبر): الفلاتر كلّها في ورقةٍ واحدة بالترتيب نفسه لكلّ تقرير — وفي «كل الشركات» كلّ شركةٍ بمدرائها
+// وموظّفيها تحت اسمها — وحركات رقمٍ لُمست بطاقته.
 
-/// اختيارٌ في قائمة (مدير، موظّف): [depth] ١ = مدير فرعيّ تحت من فوقه.
-class RpPick {
-  const RpPick(this.name, {this.on = false, this.depth = 0, this.sub});
+/// شخصٌ في قائمة (مدير أو موظّف) — [parentId] مدير المدير (شجرة المدراء الفرعيّين) حين يعرفه الخادم.
+class RpPerson {
+  const RpPerson(this.id, this.name, {this.parentId, this.sub, this.username});
+  final String id;
   final String name;
-  final bool on;
-  final int depth;
+  final String? parentId;
 
-  /// «مدير فرعيّ» · «موظّفة».
+  /// «موظّفة» · «محذوف».
   final String? sub;
+
+  /// يوزره (لفلتر «مدير المشترك» الذي يُسأل باليوزر).
+  final String? username;
 }
 
-/// قائمة شركةٍ واحدة («كل الشركات» — كلّ شركةٍ بمدرائها هي)؛ [company] null في الشركة المنفردة.
-class RpPickGroup {
-  const RpPickGroup({this.company, required this.items});
+/// مدراء وموظّفو شركةٍ واحدة — [key] «open» للشركة المفتوحة، ومفتاح الشركة في «كل الشركات».
+class RpPeopleGroup {
+  const RpPeopleGroup({required this.key, this.company, this.managers = const [], this.employees = const [], this.error});
+  final String key;
   final RpCompany? company;
-  final List<RpPick> items;
+  final List<RpPerson> managers;
+  final List<RpPerson> employees;
+
+  /// تعذّر جلب قوائمها.
+  final String? error;
 }
 
-class RpFilterSheet extends StatelessWidget {
+/// «المدير» = من نفّذ الحركة (الافتراض)، أو مدير المشترك صاحب الحركة.
+enum RpManagerMode { actor, owner }
+
+/// ما اختاره الوكيل في الورقة — ولكلّ شركةٍ اختيارها ([managers]/[employees] بمفتاح الشركة أو «open»).
+class RpFilterValue {
+  const RpFilterValue({
+    required this.range,
+    this.compare = true,
+    this.companies = const {},
+    this.managers = const {},
+    this.withSubs = true,
+    this.managerMode = RpManagerMode.actor,
+    this.employees = const {},
+    this.types = const [],
+  });
+
+  final RpRange range;
+  final bool compare;
+
+  /// «كل الشركات»: المختارة (فارغ = كلّها).
+  final Set<String> companies;
+  final Map<String, Set<String>> managers;
+  final bool withSubs;
+  final RpManagerMode managerMode;
+
+  /// موظّفٌ واحد لكلّ شركة (الخادم يسأل بموظّفٍ واحد).
+  final Map<String, String> employees;
+  final List<String> types;
+
+  RpFilterValue copyWith({
+    RpRange? range,
+    bool? compare,
+    Set<String>? companies,
+    Map<String, Set<String>>? managers,
+    bool? withSubs,
+    RpManagerMode? managerMode,
+    Map<String, String>? employees,
+    List<String>? types,
+  }) =>
+      RpFilterValue(
+        range: range ?? this.range,
+        compare: compare ?? this.compare,
+        companies: companies ?? this.companies,
+        managers: managers ?? this.managers,
+        withSubs: withSubs ?? this.withSubs,
+        managerMode: managerMode ?? this.managerMode,
+        employees: employees ?? this.employees,
+        types: types ?? this.types,
+      );
+
+  /// بلا مدير ولا موظّف ولا نوع (الفترة والشركات والمقارنة ليست «فلاتر»).
+  RpFilterValue cleared() => copyWith(managers: const {}, employees: const {}, types: const []);
+
+  bool get hasPeople => managers.values.any((s) => s.isNotEmpty) || employees.isNotEmpty;
+}
+
+/// شريحة «طريقة الدفع» = اختصارٌ لأنواع الحركة نفسها (لا فلترٌ ثانٍ بمعنى آخر).
+class RpPayShortcut {
+  const RpPayShortcut(this.label, this.types);
+  final String label;
+  final List<String> types;
+}
+
+class RpFilterSheet extends StatefulWidget {
   const RpFilterSheet({
     super.key,
     required this.subtitle,
-    required this.periods,
-    required this.period,
-    required this.compareOn,
-    this.companies,
-    required this.managers,
-    required this.withSubs,
-    required this.employees,
+    required this.initial,
+    required this.people,
     required this.types,
-    required this.payments,
-    required this.results,
+    this.payments = const [],
+    this.companies,
+    required this.now,
+    this.loadingPeople = false,
+    this.onDone,
   });
 
   /// «التقرير الماليّ · هذا الشهر».
   final String subtitle;
-  final List<String> periods;
-  final String period;
-  final bool compareOn;
+  final RpFilterValue initial;
+  final List<RpPeopleGroup> people;
+  final List<(String key, String label)> types;
+  final List<RpPayShortcut> payments;
 
-  /// «كل الشركات» وحده.
+  /// «كل الشركات» وحده: الشركات القابلة للاختيار (بلا [RpCompany.selected] — الاختيار من [initial]).
   final List<RpCompany>? companies;
-  final List<RpPickGroup> managers;
-  final bool withSubs;
-  final List<RpPickGroup> employees;
-  final List<(String, bool)> types;
-  final List<(String, bool)> payments;
+  final DateTime now;
+  final bool loadingPeople;
 
-  /// عدد الحركات بالاختيار الحاليّ — على زرّ «عرض النتائج».
-  final int results;
+  /// يُنادى بالقيمة عند «عرض النتائج» (وإلّا تُعاد بـNavigator.pop).
+  final ValueChanged<RpFilterValue>? onDone;
+
+  @override
+  State<RpFilterSheet> createState() => _RpFilterSheetState();
+}
+
+class _RpFilterSheetState extends State<RpFilterSheet> {
+  late RpFilterValue _v = widget.initial;
+
+  void _set(RpFilterValue v) => setState(() => _v = v);
+
+  bool _companyOn(String key) => _v.companies.isEmpty || _v.companies.contains(key);
+
+  Future<void> _custom() async {
+    final r = await showAppDateRangePicker(
+      context: context,
+      firstDate: DateTime(widget.now.year - 3),
+      lastDate: widget.now,
+      initialDateRange: DateTimeRange(start: _v.range.from, end: _v.range.to),
+    );
+    if (r == null || !mounted) return;
+    _set(_v.copyWith(range: RpRange.of(RpPreset.custom, now: widget.now, from: r.start, to: r.end)));
+  }
+
+  void _toggleCompany(RpCompany c) {
+    final all = widget.companies ?? const [];
+    final picked = _v.companies.isEmpty ? {for (final x in all) x.key} : {..._v.companies};
+    if (picked.contains(c.key)) {
+      if (picked.length == 1) return; // شركةٌ واحدة على الأقلّ
+      picked.remove(c.key);
+    } else {
+      picked.add(c.key);
+    }
+    _set(_v.copyWith(companies: picked.length == all.length ? const {} : picked));
+  }
+
+  void _toggleManager(String group, RpPerson p) {
+    final map = {for (final e in _v.managers.entries) e.key: {...e.value}};
+    final set = map[group] ?? <String>{};
+    if (_v.managerMode == RpManagerMode.owner) {
+      // «مدير المشترك» يُسأل بمديرٍ واحد لكلّ شركة
+      map[group] = set.contains(p.id) ? <String>{} : {p.id};
+    } else {
+      set.contains(p.id) ? set.remove(p.id) : set.add(p.id);
+      map[group] = set;
+    }
+    map.removeWhere((_, s) => s.isEmpty);
+    _set(_v.copyWith(managers: map));
+  }
+
+  void _toggleEmployee(String group, RpPerson p) {
+    final map = {..._v.employees};
+    if (map[group] == p.id) {
+      map.remove(group);
+    } else {
+      map[group] = p.id;
+    }
+    _set(_v.copyWith(employees: map));
+  }
+
+  void _toggleType(String key) {
+    final t = [..._v.types];
+    t.contains(key) ? t.remove(key) : t.add(key);
+    _set(_v.copyWith(types: t));
+  }
+
+  bool _payOn(RpPayShortcut s) => s.types.every(_v.types.contains);
+
+  void _togglePay(RpPayShortcut s) {
+    final t = [..._v.types];
+    if (_payOn(s)) {
+      t.removeWhere(s.types.contains);
+    } else {
+      for (final x in s.types) {
+        if (!t.contains(x)) t.add(x);
+      }
+    }
+    _set(_v.copyWith(types: t));
+  }
+
+  void _done() {
+    final cb = widget.onDone;
+    if (cb != null) {
+      cb(_v);
+    } else {
+      Navigator.of(context).pop(_v);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final cos = companies;
+    final cos = widget.companies;
+    final groups = [
+      for (final g in widget.people)
+        if (cos == null || _companyOn(g.key)) g,
+    ];
+    final anyTree = groups.any((g) => g.managers.any((m) => m.parentId != null));
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.slidersHorizontal,
         title: 'الفلاتر',
-        subtitle: subtitle,
-        onClose: () {},
+        subtitle: widget.subtitle,
+        onClose: () => Navigator.of(context).maybePop(),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -83,10 +244,23 @@ class RpFilterSheet extends StatelessWidget {
                 Wrap(
                   spacing: Sp.sm,
                   runSpacing: Sp.sm,
-                  children: [for (final p in periods) SheetQuickChip(label: p, selected: p == period, onTap: () {})],
+                  children: [
+                    for (final p in RpRange.presets)
+                      SheetQuickChip(
+                        label: RpRange.of(p, now: widget.now).name,
+                        selected: _v.range.preset == p,
+                        onTap: () => _set(_v.copyWith(range: RpRange.of(p, now: widget.now))),
+                      ),
+                    SheetQuickChip(
+                      label: _v.range.preset == RpPreset.custom ? _v.range.rangeText : 'مخصّص…',
+                      selected: _v.range.preset == RpPreset.custom,
+                      onTap: _custom,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: Sp.sm),
-                _switchRow('قارن بالفترة السابقة', 'تحت كلّ رقم: فرقه عن الفترة السابقة ونسبته', compareOn),
+                _switchRow('قارن بالفترة السابقة', 'تحت كلّ رقم: فرقه ${_v.range.vsText}', _v.compare,
+                    (on) => _set(_v.copyWith(compare: on))),
               ],
             ),
           ),
@@ -98,67 +272,95 @@ class RpFilterSheet extends StatelessWidget {
               child: Wrap(
                 spacing: Sp.sm,
                 runSpacing: Sp.sm,
-                children: [for (final c in cos) _companyChip(c)],
+                children: [
+                  for (final c in cos)
+                    _CompanyPick(company: c, selected: _companyOn(c.key), onTap: () => _toggleCompany(c)),
+                ],
               ),
             ),
           ],
           const SizedBox(height: Sp.xl),
           SheetSection(
             label: 'المدير',
-            hint: cos != null ? 'مدراء كلّ شركة تحت اسمها' : 'المدير ومدراؤه الفرعيّون',
+            hint: cos != null ? 'مدراء كلّ شركة تحت اسمها' : null,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _groups(managers),
+                SheetSegmented(
+                  labels: const ['من نفّذ الحركة', 'مدير المشترك'],
+                  selectedIndex: _v.managerMode == RpManagerMode.actor ? 0 : 1,
+                  onSelect: (i) => _set(_v.copyWith(
+                    managerMode: i == 0 ? RpManagerMode.actor : RpManagerMode.owner,
+                    managers: const {},
+                  )),
+                ),
                 const SizedBox(height: Sp.sm),
-                _switchRow('مع مدرائه الفرعيّين', 'حركاتهم تدخل مع حركات من تختاره', withSubs),
+                _groups(groups, managers: true),
+                if (anyTree && _v.managerMode == RpManagerMode.actor) ...[
+                  const SizedBox(height: Sp.sm),
+                  _switchRow('مع مدرائه الفرعيّين', 'حركاتهم تدخل مع حركات من تختاره', _v.withSubs,
+                      (on) => _set(_v.copyWith(withSubs: on))),
+                ],
               ],
             ),
           ),
           const SizedBox(height: Sp.xl),
-          SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(employees)),
+          SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(groups, managers: false)),
           const SizedBox(height: Sp.xl),
           SheetSection(
             label: 'نوع الحركة',
             child: Wrap(
               spacing: Sp.sm,
               runSpacing: Sp.sm,
-              children: [for (final t in types) SheetQuickChip(label: t.$1, selected: t.$2, onTap: () {})],
+              children: [
+                for (final t in widget.types) SheetQuickChip(label: t.$2, selected: _v.types.contains(t.$1), onTap: () => _toggleType(t.$1)),
+              ],
             ),
           ),
-          const SizedBox(height: Sp.xl),
-          SheetSection(
-            label: 'طريقة الدفع',
-            child: Wrap(
-              spacing: Sp.sm,
-              runSpacing: Sp.sm,
-              children: [for (final t in payments) SheetQuickChip(label: t.$1, selected: t.$2, onTap: () {})],
+          if (widget.payments.isNotEmpty) ...[
+            const SizedBox(height: Sp.xl),
+            SheetSection(
+              label: 'طريقة الدفع',
+              hint: 'اختصارٌ لأنواع الحركة',
+              child: Wrap(
+                spacing: Sp.sm,
+                runSpacing: Sp.sm,
+                children: [
+                  for (final s in widget.payments) SheetQuickChip(label: s.label, selected: _payOn(s), onTap: () => _togglePay(s)),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
       footer: SheetFooterBar(
-        label: 'عرض النتائج · $results',
+        label: 'عرض النتائج',
         icon: LucideIcons.check,
-        onPressed: () {},
+        onPressed: _done,
         leading: SizedBox(
           height: H.button,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
+          child: Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.button),
+            child: InkWell(
+              onTap: () => _set(_v.cleared()),
               borderRadius: BorderRadius.circular(R.button),
-              border: Border.all(color: AppColors.dangerSoftBorder),
+              child: Ink(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.button),
+                  border: Border.all(color: AppColors.dangerSoftBorder),
+                ),
+                child: Center(child: Text('مسح الكلّ', style: AppType.buttonBold(color: AppColors.error))),
+              ),
             ),
-            child: Text('مسح الكلّ', style: AppType.buttonBold(color: AppColors.error)),
           ),
         ),
       ),
     );
   }
 
-  Widget _switchRow(String title, String hint, bool on) => Container(
+  Widget _switchRow(String title, String hint, bool on, ValueChanged<bool> onChanged) => Container(
         padding: const EdgeInsetsDirectional.only(start: Sp.md, end: Sp.xs, top: Sp.xs, bottom: Sp.xs),
         decoration: BoxDecoration(
           color: AppColors.surface,
@@ -176,103 +378,187 @@ class RpFilterSheet extends StatelessWidget {
                 ],
               ),
             ),
-            Switch(
-              value: on,
-              onChanged: (_) {},
-              activeThumbColor: AppColors.onBrand,
-              activeTrackColor: AppColors.brand,
-            ),
+            Switch(value: on, onChanged: onChanged, activeThumbColor: AppColors.onBrand, activeTrackColor: AppColors.brand),
           ],
         ),
       );
 
-  Widget _companyChip(RpCompany c) => Container(
-        height: H.chip,
-        padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-        decoration: BoxDecoration(
-          color: c.selected ? c.color.withValues(alpha: 0.12) : AppColors.surface,
-          borderRadius: BorderRadius.circular(R.pill),
-          border: Border.all(color: c.selected ? c.color : AppColors.border, width: c.selected ? BW.selected : BW.normal),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (c.selected)
-              Icon(LucideIcons.check, size: 14, color: c.color)
-            else
-              Container(width: 8, height: 8, decoration: BoxDecoration(color: c.color, shape: BoxShape.circle)),
-            const SizedBox(width: Sp.x6),
-            Text(c.name, style: AppType.pillBold(color: c.selected ? AppColors.textHi : AppColors.textMid), maxLines: 1),
-          ],
-        ),
-      );
+  /// المدراء بشجرتهم: الرئيسيّ ثمّ فرعيّوه تحته (من يعرفه الخادم)، والبقيّة كما وصلوا.
+  static List<(RpPerson, int)> _tree(List<RpPerson> people) {
+    final ids = {for (final p in people) p.id};
+    final kids = <String, List<RpPerson>>{};
+    final roots = <RpPerson>[];
+    for (final p in people) {
+      final parent = p.parentId;
+      if (parent != null && parent != p.id && ids.contains(parent)) {
+        (kids[parent] ??= []).add(p);
+      } else {
+        roots.add(p);
+      }
+    }
+    final out = <(RpPerson, int)>[];
+    final seen = <String>{};
+    void walk(RpPerson p, int depth) {
+      if (!seen.add(p.id)) return;
+      out.add((p, depth));
+      for (final k in kids[p.id] ?? const <RpPerson>[]) {
+        walk(k, depth + 1);
+      }
+    }
 
-  Widget _groups(List<RpPickGroup> groups) => Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(R.lg),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var g = 0; g < groups.length; g++) ...[
-              if (g > 0) Divider(height: 1, color: AppColors.divider),
-              if (groups[g].company != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.xxs),
-                  child: Row(
-                    children: [
-                      Container(
-                          width: 8, height: 8, decoration: BoxDecoration(color: groups[g].company!.color, shape: BoxShape.circle)),
-                      const SizedBox(width: Sp.x6),
-                      Text(groups[g].company!.name, style: AppType.labelBold(color: AppColors.textMid)),
-                    ],
-                  ),
-                ),
-              for (final p in groups[g].items) _pick(p),
-            ],
-          ],
-        ),
-      );
+    for (final r in roots) {
+      walk(r, 0);
+    }
+    for (final p in people) {
+      walk(p, 0); // دورةٌ في البيانات: لا يضيع أحد
+    }
+    return out;
+  }
 
-  Widget _pick(RpPick p) => Padding(
-        padding: EdgeInsetsDirectional.only(start: Sp.md + p.depth * Sp.xl, end: Sp.md, top: Sp.sm, bottom: Sp.sm),
-        child: Row(
-          children: [
-            Container(
-              width: H.checkbox,
-              height: H.checkbox,
-              decoration: BoxDecoration(
-                color: p.on ? AppColors.brand : AppColors.surface,
-                borderRadius: BorderRadius.circular(R.check),
-                border: Border.all(color: p.on ? AppColors.brand : AppColors.borderStrong, width: BW.selected),
+  Widget _groups(List<RpPeopleGroup> groups, {required bool managers}) {
+    if (widget.loadingPeople && groups.every((g) => (managers ? g.managers : g.employees).isEmpty)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Sp.md),
+        child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))),
+      );
+    }
+    final rows = <Widget>[];
+    for (var g = 0; g < groups.length; g++) {
+      final grp = groups[g];
+      final list = managers ? grp.managers : grp.employees;
+      if (rows.isNotEmpty) rows.add(Divider(height: 1, color: AppColors.divider));
+      if (grp.company != null) {
+        rows.add(Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.xxs),
+          child: Row(
+            children: [
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: grp.company!.color, shape: BoxShape.circle)),
+              const SizedBox(width: Sp.x6),
+              Expanded(
+                child: Text(grp.company!.name, style: AppType.labelBold(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
-              child: p.on ? const Icon(LucideIcons.check, size: 14, color: AppColors.onBrand) : null,
-            ),
-            const SizedBox(width: Sp.md),
-            if (p.depth > 0) ...[
-              Icon(LucideIcons.cornerDownLeft, size: 14, color: AppColors.textLow),
-              const SizedBox(width: Sp.xs),
             ],
-            Expanded(
-              child: Text(p.name, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ));
+      }
+      if (grp.error != null) {
+        rows.add(Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.md, Sp.xs, Sp.md, Sp.sm),
+          child: Text(grp.error!, style: AppType.micro(color: AppColors.dangerOnSoft)),
+        ));
+        continue;
+      }
+      if (list.isEmpty) {
+        rows.add(Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.md, Sp.xs, Sp.md, Sp.sm),
+          child: Text(managers ? 'لا مدراء فرعيّون' : 'لا موظّفون', style: AppType.micro(color: AppColors.textLow)),
+        ));
+        continue;
+      }
+      final items = managers ? _tree(list) : [for (final p in list) (p, 0)];
+      for (final (p, depth) in items) {
+        final on = managers ? (_v.managers[grp.key]?.contains(p.id) ?? false) : _v.employees[grp.key] == p.id;
+        rows.add(_pick(p, depth, on, () => managers ? _toggleManager(grp.key, p) : _toggleEmployee(grp.key, p)));
+      }
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+    );
+  }
+
+  Widget _pick(RpPerson p, int depth, bool on, VoidCallback onTap) => Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsetsDirectional.only(start: Sp.md + depth * Sp.xl, end: Sp.md, top: Sp.sm, bottom: Sp.sm),
+            child: Row(
+              children: [
+                Container(
+                  width: H.checkbox,
+                  height: H.checkbox,
+                  decoration: BoxDecoration(
+                    color: on ? AppColors.brand : AppColors.surface,
+                    borderRadius: BorderRadius.circular(R.check),
+                    border: Border.all(color: on ? AppColors.brand : AppColors.borderStrong, width: BW.selected),
+                  ),
+                  child: on ? const Icon(LucideIcons.check, size: 14, color: AppColors.onBrand) : null,
+                ),
+                const SizedBox(width: Sp.md),
+                if (depth > 0) ...[
+                  Icon(LucideIcons.cornerDownLeft, size: 14, color: AppColors.textLow),
+                  const SizedBox(width: Sp.xs),
+                ],
+                Expanded(
+                  child: Text(p.name, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                if (p.sub != null) ...[
+                  const SizedBox(width: Sp.sm),
+                  Text(p.sub!, style: AppType.micro(color: AppColors.textLow), maxLines: 1),
+                ],
+              ],
             ),
-            if (p.sub != null) Text(p.sub!, style: AppType.micro(color: AppColors.textLow), maxLines: 1),
-          ],
+          ),
         ),
       );
 }
 
+class _CompanyPick extends StatelessWidget {
+  const _CompanyPick({required this.company, required this.selected, required this.onTap});
+  final RpCompany company;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final c = company.color;
+    return Material(
+      color: selected ? c.withValues(alpha: 0.12) : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.pill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.pill),
+        child: Ink(
+          height: H.chip,
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: selected ? c : AppColors.border, width: selected ? BW.selected : BW.normal),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected)
+                Icon(LucideIcons.check, size: 14, color: c)
+              else
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+              const SizedBox(width: Sp.x6),
+              Text(company.name, style: AppType.pillBold(color: selected ? AppColors.textHi : AppColors.textMid), maxLines: 1),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// لمسة بطاقة رقم ⇒ الحركات التي صنعته، بالفترة والفلاتر نفسها — وتُصدَّر وحدها.
 class RpDrillSheet extends StatelessWidget {
-  const RpDrillSheet({super.key, required this.kpi, required this.scope, required this.chips, required this.rows});
+  const RpDrillSheet({super.key, required this.kpi, required this.scope, required this.chips, required this.rows, this.onExport});
   final RpKpi kpi;
 
   /// «هذا الشهر · سوبرنت، ايرث لنك».
   final String scope;
-  final List<String> chips;
+  final List<RpChip> chips;
   final RpRowsCard rows;
+  final VoidCallback? onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +568,7 @@ class RpDrillSheet extends StatelessWidget {
         icon: kpi.icon,
         title: kpi.label,
         subtitle: scope,
-        onClose: () {},
+        onClose: () => Navigator.of(context).maybePop(),
         tint: kpi.tone.fg,
         tintBg: kpi.tone.soft,
       ),
@@ -321,7 +607,7 @@ class RpDrillSheet extends StatelessWidget {
           rows,
         ],
       ),
-      footer: SheetFooterBar(label: 'تصدير هذه الحركات', icon: LucideIcons.share2, onPressed: () {}),
+      footer: SheetFooterBar(label: 'تصدير هذه الحركات', icon: LucideIcons.share2, onPressed: onExport),
     );
   }
 }

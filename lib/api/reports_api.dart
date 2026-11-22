@@ -506,6 +506,89 @@ class FinanceLog {
   }
 }
 
+/// سطر «حسب المدير» من الخادم (`perAdmin`: الحركات مجمّعةً بمنفّذها — المدير الرئيسيّ أو الفرعيّ): مقيسٌ على الفترة كلّها لا على
+/// السطور المعروضة.
+class FinanceAdminRow {
+  const FinanceAdminRow({
+    required this.adminId,
+    required this.username,
+    required this.revenue,
+    required this.debt,
+    required this.expenses,
+    required this.net,
+    required this.activations,
+    required this.extends_,
+    required this.count,
+  });
+  final String adminId;
+  final String username;
+
+  /// الواصل (`revenue_total`: النقد + تسديد الديون + بيع المواد نقداً).
+  final num revenue;
+
+  /// الدين الجديد (`debt_total`).
+  final num debt;
+  final num expenses;
+  final num net;
+  final int activations;
+  final int extends_;
+  final int count;
+
+  static FinanceAdminRow? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = '${raw['admin_id'] ?? ''}'.trim();
+    if (id.isEmpty) return null;
+    return FinanceAdminRow(
+      adminId: id,
+      username: '${raw['admin_name'] ?? raw['admin_username'] ?? id}'.trim(),
+      revenue: FinanceKPIs._n(raw['revenue_total']),
+      debt: FinanceKPIs._n(raw['debt_total']),
+      expenses: FinanceKPIs._n(raw['expenses_total']),
+      net: FinanceKPIs._n(raw['net_balance']),
+      activations: FinanceKPIs._i(raw['activations_count']),
+      extends_: FinanceKPIs._i(raw['extend_count']),
+      count: FinanceKPIs._i(raw['total_count']),
+    );
+  }
+}
+
+/// يومٌ من السلسلة (`timeseries`: بتوقيت بغداد، ومجموعها = الإيراد المعروض). [debt] حين يرسله خادمٌ أحدث، وإلّا null.
+class FinanceDayRow {
+  const FinanceDayRow({required this.day, required this.revenue, required this.count, this.debt});
+  final DateTime day;
+  final num revenue;
+  final int count;
+  final num? debt;
+
+  static FinanceDayRow? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final s = '${raw['date'] ?? ''}'.trim();
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+    if (m == null) return null;
+    return FinanceDayRow(
+      day: DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!)),
+      revenue: FinanceKPIs._n(raw['payments_sum']),
+      count: FinanceKPIs._i(raw['payments_count']),
+      debt: raw['debt_sum'] == null ? null : FinanceKPIs._n(raw['debt_sum']),
+    );
+  }
+}
+
+/// نوعٌ من الحركات (`stacked`: عددها ومجموع مبالغها بالفترة كلّها).
+class FinanceTypeRow {
+  const FinanceTypeRow({required this.type, required this.count, required this.amount});
+  final String type;
+  final int count;
+  final num amount;
+
+  static FinanceTypeRow? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final t = '${raw['action_type'] ?? ''}'.trim();
+    if (t.isEmpty) return null;
+    return FinanceTypeRow(type: t, count: FinanceKPIs._i(raw['count']), amount: FinanceKPIs._n(raw['amount_sum']));
+  }
+}
+
 class FinanceReport {
   const FinanceReport({
     required this.kpis,
@@ -513,9 +596,17 @@ class FinanceReport {
     this.archive,
     this.unavailable = false,
     this.unavailableParts = const [],
+    this.perAdmin = const [],
+    this.series = const [],
+    this.byType = const [],
   });
   final FinanceKPIs kpis;
   final List<FinanceLog> recentLogs;
+
+  /// «حسب المدير» و«يوماً بيوم» و«حسب النوع» من الخادم نفسه (التقرير الموحّد، ٢٢ نوفمبر) — فارغةٌ من خادمٍ لا يرسلها.
+  final List<FinanceAdminRow> perAdmin;
+  final List<FinanceDayRow> series;
+  final List<FinanceTypeRow> byType;
 
   /// وصف ما أخفته التسويات عن هذا التقرير — `data.archive` لا الجذر.
   /// `null` على خادمٍ قديم، وصفرُ تسوياتٍ لا يُعرض (§٤).
@@ -909,6 +1000,8 @@ class ReportsApi {
           if (src is List)
             for (final x in src) '$x',
       };
+      List<T> rows<T>(Object? raw, T? Function(Object?) f) =>
+          raw is List ? [for (final x in raw) f(x)].whereType<T>().toList() : <T>[];
       return (
         ok: true,
         data: FinanceReport(
@@ -917,6 +1010,9 @@ class ReportsApi {
           archive: ArchiveInfo.fromJson(data['archive']),
           unavailable: body['unavailable'] == true || data['unavailable'] == true,
           unavailableParts: parts.toList(),
+          perAdmin: rows(data['perAdmin'], FinanceAdminRow.fromJson),
+          series: rows(data['timeseries'], FinanceDayRow.fromJson),
+          byType: rows(data['stacked'], FinanceTypeRow.fromJson),
         ),
         error: null,
       );

@@ -64,7 +64,10 @@ class RpPeriod {
 }
 
 class RpCompany {
-  const RpCompany({required this.name, required this.colorIndex, this.selected = false, this.note});
+  const RpCompany({required this.name, required this.colorIndex, this.selected = false, this.note, this.key = ''});
+
+  /// مفتاح الشركة في «كل الشركات» (`c…`) — فارغٌ في صور التصميم.
+  final String key;
   final String name;
   final int colorIndex;
   final bool selected;
@@ -77,6 +80,7 @@ class RpCompany {
 
 class RpKpi {
   const RpKpi({
+    this.id = '',
     required this.label,
     required this.value,
     required this.icon,
@@ -87,6 +91,8 @@ class RpKpi {
     this.unit,
   });
 
+  /// اسم البطاقة الثابت (حركاتها عند اللمس) — فارغٌ في صور التصميم.
+  final String id;
   final String label;
   final num value;
   final IconData icon;
@@ -147,10 +153,14 @@ class RpRow {
     required this.time,
     this.company,
     this.negative = false,
+    this.cost,
   });
 
   final IconData icon;
   final RpTone tone;
+
+  /// سطر كلفة الباقة تحت الحركة (للمالك) — null بلا كلفة.
+  final String? cost;
 
   /// اسم المشترك (أو بند الصرفيّة).
   final String title;
@@ -265,12 +275,15 @@ class RpFitText extends StatelessWidget {
 
 /// الفترة (لمسة ⇒ تسع فتراتٍ جاهزة + مخصّص) ومفتاح المقارنة بالفترة السابقة.
 class RpPeriodBar extends StatelessWidget {
-  const RpPeriodBar({super.key, required this.period, required this.compareOn, required this.compareWith});
+  const RpPeriodBar(
+      {super.key, required this.period, required this.compareOn, required this.compareWith, this.onPeriod, this.onCompare});
   final RpPeriod period;
   final bool compareOn;
 
   /// «بالشهر الماضي».
   final String compareWith;
+  final VoidCallback? onPeriod;
+  final VoidCallback? onCompare;
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +295,7 @@ class RpPeriodBar extends StatelessWidget {
           Expanded(
             child: _Pill(
               selected: false,
+              onTap: onPeriod,
               child: Row(
                 children: [
                   Icon(LucideIcons.calendarDays, size: 18, color: AppColors.brand),
@@ -308,6 +322,7 @@ class RpPeriodBar extends StatelessWidget {
           const SizedBox(width: Sp.sm),
           _Pill(
             selected: compareOn,
+            onTap: onCompare,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -332,38 +347,66 @@ class RpPeriodBar extends StatelessWidget {
 }
 
 class _Pill extends StatelessWidget {
-  const _Pill({required this.child, required this.selected});
+  const _Pill({required this.child, required this.selected, this.onTap});
   final Widget child;
   final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.brandSoftBg : AppColors.surface,
+    return Material(
+      color: selected ? AppColors.brandSoftBg : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.icon),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(R.icon),
-        border: Border.all(
-          color: selected ? AppColors.brand : AppColors.border,
-          width: selected ? BW.selected : BW.normal,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.icon),
+            border: Border.all(
+              color: selected ? AppColors.brand : AppColors.border,
+              width: selected ? BW.selected : BW.normal,
+            ),
+          ),
+          child: child,
         ),
       ),
-      child: child,
+    );
+  }
+}
+
+/// زرٌّ بلا شكلٍ إضافيّ (لمسة على شريحة أو بطاقة) — بلا [onTap] لا يتفاعل.
+class _Tap extends StatelessWidget {
+  const _Tap({required this.child, this.onTap, this.radius = R.pill});
+  final Widget child;
+  final VoidCallback? onTap;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onTap == null) return child;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(radius), child: child),
     );
   }
 }
 
 /// «كل الشركات»: الشركات المختارة (أكثر من واحدة) — كلّ شركةٍ بلونها، و«الكل» أوّلاً.
 class RpCompanyChips extends StatelessWidget {
-  const RpCompanyChips({super.key, required this.companies, this.allSelected = false});
+  const RpCompanyChips({super.key, required this.companies, this.allSelected = false, this.onAll, this.onToggle});
   final List<RpCompany> companies;
   final bool allSelected;
+  final VoidCallback? onAll;
+  final ValueChanged<RpCompany>? onToggle;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final picked = companies.where((c) => c.selected).length;
+    // «الكل» = كلّ الشركات داخلة ولو لم تُعلَّم واحدةً واحدة (كانت «0 من 2»)
+    final picked = allSelected ? companies.length : companies.where((c) => c.selected).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -373,10 +416,14 @@ class RpCompanyChips extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _chip(label: 'الكل', color: AppColors.brand, selected: allSelected, dot: false),
+              _Tap(onTap: onAll, child: _chip(label: 'الكل', color: AppColors.brand, selected: allSelected, dot: false)),
               for (final c in companies) ...[
                 const SizedBox(width: Sp.sm),
-                _chip(label: c.name, color: c.color, selected: c.selected, dot: true),
+                _Tap(
+                  onTap: onToggle == null ? null : () => onToggle!(c),
+                  child: _chip(
+                      label: c.note == null ? c.name : '${c.name} · ${c.note}', color: c.color, selected: c.selected, dot: true),
+                ),
               ],
             ],
           ),
@@ -409,10 +456,19 @@ class RpCompanyChips extends StatelessWidget {
   }
 }
 
+/// فلترٌ فعّال: نصّه وما يزيله.
+class RpChip {
+  const RpChip(this.label, {this.onRemove});
+  final String label;
+  final VoidCallback? onRemove;
+}
+
 /// الفلاتر الفعّالة رقائق تُحذف بلمسة، و«الفلاتر» يفتح الورقة الكاملة.
 class RpFilterBar extends StatelessWidget {
-  const RpFilterBar({super.key, required this.chips});
-  final List<String> chips;
+  const RpFilterBar({super.key, required this.chips, this.onOpen, this.onClear});
+  final List<RpChip> chips;
+  final VoidCallback? onOpen;
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -421,53 +477,65 @@ class RpFilterBar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          Container(
-            height: H.chip,
-            padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-            decoration: BoxDecoration(
-              color: AppColors.brand,
-              borderRadius: BorderRadius.circular(R.pill),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.slidersHorizontal, size: 15, color: AppColors.onBrand),
-                const SizedBox(width: Sp.x6),
-                Text('الفلاتر', style: AppType.pillBold(color: AppColors.onBrand)),
-                if (chips.isNotEmpty) ...[
-                  const SizedBox(width: Sp.x6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: Sp.x6),
-                    decoration: BoxDecoration(color: AppColors.onBrandFill2, borderRadius: BorderRadius.circular(R.pill)),
-                    child: Text('${chips.length}', style: AppType.microBold(color: AppColors.onBrand)),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          for (final c in chips) ...[
-            const SizedBox(width: Sp.sm),
-            Container(
+          _Tap(
+            onTap: onOpen,
+            child: Container(
               height: H.chip,
-              padding: const EdgeInsetsDirectional.only(start: Sp.md, end: Sp.sm),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md),
               decoration: BoxDecoration(
-                color: AppColors.brandSoftBg,
+                color: AppColors.brand,
                 borderRadius: BorderRadius.circular(R.pill),
-                border: Border.all(color: AppColors.brandSoftBorder),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(c, style: AppType.pillLabel(color: AppColors.brandOnSoft), maxLines: 1),
+                  const Icon(LucideIcons.slidersHorizontal, size: 15, color: AppColors.onBrand),
                   const SizedBox(width: Sp.x6),
-                  Icon(LucideIcons.x, size: 14, color: AppColors.brandOnSoft),
+                  Text('الفلاتر', style: AppType.pillBold(color: AppColors.onBrand)),
+                  if (chips.isNotEmpty) ...[
+                    const SizedBox(width: Sp.x6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: Sp.x6),
+                      decoration: BoxDecoration(color: AppColors.onBrandFill2, borderRadius: BorderRadius.circular(R.pill)),
+                      child: Text('${chips.length}', style: AppType.microBold(color: AppColors.onBrand)),
+                    ),
+                  ],
                 ],
+              ),
+            ),
+          ),
+          for (final c in chips) ...[
+            const SizedBox(width: Sp.sm),
+            _Tap(
+              onTap: c.onRemove,
+              child: Container(
+                height: H.chip,
+                padding: const EdgeInsetsDirectional.only(start: Sp.md, end: Sp.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.brandSoftBg,
+                  borderRadius: BorderRadius.circular(R.pill),
+                  border: Border.all(color: AppColors.brandSoftBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(c.label, style: AppType.pillLabel(color: AppColors.brandOnSoft), maxLines: 1),
+                    const SizedBox(width: Sp.x6),
+                    Icon(LucideIcons.x, size: 14, color: AppColors.brandOnSoft),
+                  ],
+                ),
               ),
             ),
           ],
           if (chips.isNotEmpty) ...[
             const SizedBox(width: Sp.md),
-            Text('مسح الكلّ', style: AppType.pillBold(color: AppColors.error)),
+            _Tap(
+              onTap: onClear,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Sp.sm, horizontal: Sp.xs),
+                child: Text('مسح الكلّ', style: AppType.pillBold(color: AppColors.error)),
+              ),
+            ),
           ],
         ],
       ),
@@ -479,8 +547,11 @@ class RpFilterBar extends StatelessWidget {
 
 /// سطرٌ لكلّ شركة بأرقامها (تصل شركةً شركة)، والتي تعذّرت تُسمّى وتُستثنى من المجموع ومعها «أعد».
 class RpCompanyTable extends StatelessWidget {
-  const RpCompanyTable({super.key, required this.lines, required this.heads, required this.total, this.outside});
+  const RpCompanyTable(
+      {super.key, required this.lines, required this.heads, required this.total, this.outside, this.onTap, this.onRetry});
   final List<RpCompanyLine> lines;
+  final ValueChanged<RpCompany>? onTap;
+  final ValueChanged<RpCompany>? onRetry;
 
   /// عناوين الأعمدة الثلاثة («الواصل» · «الدين» · «الربح»).
   final List<String> heads;
@@ -511,14 +582,19 @@ class RpCompanyTable extends StatelessWidget {
           const SizedBox(height: Sp.xs),
           for (final l in lines) ...[
             Divider(height: Sp.md, color: AppColors.divider),
-            _line(l),
+            _Tap(
+              radius: R.sm,
+              onTap: onTap == null || l.state != RpCompanyState.ok ? null : () => onTap!(l.company),
+              child: _line(l),
+            ),
           ],
           Divider(height: Sp.lg, color: AppColors.dividerStrong),
           _row(
             name: Text('المجموع', style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1),
             cells: [
               for (var i = 0; i < total.length; i++)
-                RpFitText(formatIQD(total[i]), style: AppType.rowValue(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
+                RpFitText(formatIQD(total[i]),
+                    style: AppType.rowValue(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
             ],
           ),
           if (outside != null) ...[
@@ -557,16 +633,20 @@ class RpCompanyTable extends StatelessWidget {
   Widget _line(RpCompanyLine l) {
     final name = Row(
       children: [
-        Container(width: 4, height: 30, decoration: BoxDecoration(color: l.company.color, borderRadius: BorderRadius.circular(R.pill))),
+        Container(
+            width: 4, height: 30, decoration: BoxDecoration(color: l.company.color, borderRadius: BorderRadius.circular(R.pill))),
         const SizedBox(width: Sp.sm),
-        Expanded(child: Text(l.company.name, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        Expanded(
+            child: Text(l.company.name,
+                style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis)),
       ],
     );
     switch (l.state) {
       case RpCompanyState.ok:
         return _row(name: name, cells: [
           for (var i = 0; i < 3; i++)
-            RpFitText(formatIQD([l.a, l.b, l.c][i] ?? 0), style: AppType.bodyStrong(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
+            RpFitText(formatIQD([l.a, l.b, l.c][i] ?? 0),
+                style: AppType.bodyStrong(color: _tones[i].fg), alignment: AlignmentDirectional.centerEnd),
         ]);
       case RpCompanyState.loading:
         return Row(
@@ -598,22 +678,28 @@ class RpCompanyTable extends StatelessWidget {
                 children: [
                   Icon(LucideIcons.circleAlert, size: 14, color: AppColors.error),
                   const SizedBox(width: Sp.xs),
-                  Flexible(child: Text('تعذّرت القراءة', style: AppType.muted(color: AppColors.dangerOnSoft), maxLines: 1)),
+                  Flexible(
+                    child: Text(l.company.note ?? 'تعذّرت القراءة',
+                        style: AppType.muted(color: AppColors.dangerOnSoft), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
                   const SizedBox(width: Sp.sm),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(R.pill),
-                      border: Border.all(color: AppColors.dangerSoftBorder),
-                      color: AppColors.dangerSoftBg,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.rotateCw, size: 12, color: AppColors.dangerOnSoft),
-                        const SizedBox(width: Sp.xs),
-                        Text('أعد', style: AppType.microBold(color: AppColors.dangerOnSoft)),
-                      ],
+                  _Tap(
+                    onTap: onRetry == null ? null : () => onRetry!(l.company),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(R.pill),
+                        border: Border.all(color: AppColors.dangerSoftBorder),
+                        color: AppColors.dangerSoftBg,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.rotateCw, size: 12, color: AppColors.dangerOnSoft),
+                          const SizedBox(width: Sp.xs),
+                          Text('أعد', style: AppType.microBold(color: AppColors.dangerOnSoft)),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -663,7 +749,18 @@ class RpDelta extends StatelessWidget {
 
 /// الرقم الأهمّ بعرض الصفّ (صافي الربح) — ومعه خطّ الفترة الصغير.
 class RpHeroKpi extends StatelessWidget {
-  const RpHeroKpi({super.key, required this.kpi, required this.compareWith, required this.spark, this.note});
+  const RpHeroKpi(
+      {super.key,
+      required this.kpi,
+      required this.compareWith,
+      required this.spark,
+      this.note,
+      this.notes = const [],
+      this.onTap});
+
+  /// تنبيهاتٌ تحت الصيغة (كلفةٌ ناقصة، تقديريّة…).
+  final List<String> notes;
+  final VoidCallback? onTap;
   final RpKpi kpi;
   final String compareWith;
   final List<num> spark;
@@ -674,38 +771,53 @@ class RpHeroKpi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return RpCard(
-      tint: kpi.tone.fg,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              RpIconBox(icon: kpi.icon, tone: kpi.tone, size: 36),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(kpi.label, style: AppType.label(color: AppColors.textMid), maxLines: 1),
-                    RpFitText(kpi.text, style: AppType.amount(color: kpi.tone.fg)),
-                  ],
+    return _Tap(
+      radius: R.lg,
+      onTap: onTap,
+      child: RpCard(
+        tint: kpi.tone.fg,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                RpIconBox(icon: kpi.icon, tone: kpi.tone, size: 36),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(kpi.label, style: AppType.label(color: AppColors.textMid), maxLines: 1),
+                      RpFitText(kpi.text, style: AppType.amount(color: kpi.tone.fg)),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
-            ],
-          ),
-          const SizedBox(height: Sp.sm),
-          RpDelta(kpi: kpi, compareWith: compareWith),
-          if (spark.length > 1) ...[
+                Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
+              ],
+            ),
             const SizedBox(height: Sp.sm),
-            SizedBox(height: 40, child: _Spark(values: spark, color: kpi.tone.fg)),
+            RpDelta(kpi: kpi, compareWith: compareWith),
+            if (spark.length > 1) ...[
+              const SizedBox(height: Sp.sm),
+              SizedBox(height: 40, child: _Spark(values: spark, color: kpi.tone.fg)),
+            ],
+            if (note != null) ...[
+              const SizedBox(height: Sp.xs),
+              Text(note!, style: AppType.micro(color: AppColors.textLow), maxLines: 3),
+            ],
+            for (final n in notes) ...[
+              const SizedBox(height: Sp.xs),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(LucideIcons.info, size: 13, color: AppColors.warning),
+                  const SizedBox(width: Sp.xs),
+                  Expanded(child: Text(n, style: AppType.micro(color: AppColors.textMid), maxLines: 3)),
+                ],
+              ),
+            ],
           ],
-          if (note != null) ...[
-            const SizedBox(height: Sp.xs),
-            Text(note!, style: AppType.micro(color: AppColors.textLow), maxLines: 2),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -752,31 +864,36 @@ class _Spark extends StatelessWidget {
 
 /// بطاقة رقم: لونٌ يعرّفه، والفرق عن الفترة السابقة، و«›» = لمسة تفتح حركاته.
 class RpKpiCard extends StatelessWidget {
-  const RpKpiCard({super.key, required this.kpi, required this.compareWith});
+  const RpKpiCard({super.key, required this.kpi, required this.compareWith, this.onTap});
   final RpKpi kpi;
   final String compareWith;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return RpCard(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              RpIconBox(icon: kpi.icon, tone: kpi.tone),
-              const SizedBox(width: Sp.sm),
-              Expanded(child: Text(kpi.label, style: AppType.label(color: AppColors.textMid), maxLines: 2)),
-              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
-            ],
-          ),
-          const SizedBox(height: Sp.sm),
-          RpFitText(kpi.text, style: AppType.statValue(color: kpi.tone.fg)),
-          const SizedBox(height: Sp.xxs),
-          RpDelta(kpi: kpi, compareWith: compareWith),
-        ],
+    return _Tap(
+      radius: R.lg,
+      onTap: onTap,
+      child: RpCard(
+        padding: const EdgeInsets.all(Sp.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                RpIconBox(icon: kpi.icon, tone: kpi.tone),
+                const SizedBox(width: Sp.sm),
+                Expanded(child: Text(kpi.label, style: AppType.label(color: AppColors.textMid), maxLines: 2)),
+                Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            RpFitText(kpi.text, style: AppType.statValue(color: kpi.tone.fg)),
+            const SizedBox(height: Sp.xxs),
+            RpDelta(kpi: kpi, compareWith: compareWith),
+          ],
+        ),
       ),
     );
   }
@@ -784,9 +901,10 @@ class RpKpiCard extends StatelessWidget {
 
 /// البطاقات بعمودين وارتفاعٍ واحد لكلّ صفّ.
 class RpKpiGrid extends StatelessWidget {
-  const RpKpiGrid({super.key, required this.kpis, required this.compareWith});
+  const RpKpiGrid({super.key, required this.kpis, required this.compareWith, this.onTap});
   final List<RpKpi> kpis;
   final String compareWith;
+  final ValueChanged<RpKpi>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -797,9 +915,14 @@ class RpKpiGrid extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: RpKpiCard(kpi: kpis[i], compareWith: compareWith)),
+            Expanded(
+                child: RpKpiCard(kpi: kpis[i], compareWith: compareWith, onTap: onTap == null ? null : () => onTap!(kpis[i]))),
             const SizedBox(width: Sp.sm),
-            Expanded(child: i + 1 < kpis.length ? RpKpiCard(kpi: kpis[i + 1], compareWith: compareWith) : const SizedBox.shrink()),
+            Expanded(
+              child: i + 1 < kpis.length
+                  ? RpKpiCard(kpi: kpis[i + 1], compareWith: compareWith, onTap: onTap == null ? null : () => onTap!(kpis[i + 1]))
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ));
@@ -836,7 +959,8 @@ class RpCountsRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         RpFitText(formatIQD(items[i].value), style: AppType.rowValue(color: AppColors.textHi)),
-                        Text(items[i].label, style: AppType.micro(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(items[i].label,
+                            style: AppType.micro(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   ),
@@ -857,23 +981,41 @@ class RpTrendCard extends StatelessWidget {
     super.key,
     required this.points,
     required this.aLabel,
-    required this.bLabel,
+    this.bLabel,
     this.title = 'يوماً بيوم',
     this.aTone = RpTone.money,
     this.bTone = RpTone.debt,
+    this.monthly = false,
   });
 
   final List<RpTrendPoint> points;
   final String title;
   final String aLabel;
-  final String bLabel;
+
+  /// الخطّ الثاني — `null` حين لا يعرفه الخادم: لا يُرسم صفراً كاذباً.
+  final String? bLabel;
   final RpTone aTone;
   final RpTone bTone;
+
+  /// نقطةٌ لكلّ شهر (رقمه تحت المحور) لا لكلّ يوم.
+  final bool monthly;
+
+  /// المحور بترتيب النقاط لا برقم اليوم: فترةٌ تعبر الشهر (25…31 ثمّ 1…22) كانت ترجع للخلف.
+  bool _labelAt(int i) {
+    if (i < 0 || i >= points.length) return false;
+    if (monthly) {
+      final step = (points.length / 6).ceil().clamp(1, 12);
+      return i % step == 0;
+    }
+    final d = points[i].day;
+    return i == 0 || d == 1 || d % 5 == 0;
+  }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final maxY = points.fold<num>(0, (m, p) => [m, p.a, p.b].reduce((x, y) => x > y ? x : y)).toDouble();
+    final withB = (bLabel ?? '').isNotEmpty;
+    final maxY = points.fold<num>(0, (m, p) => [m, p.a, if (withB) p.b].reduce((x, y) => x > y ? x : y)).toDouble();
     final top = _niceTop(maxY * 1.08);
     LineChartBarData line(List<FlSpot> spots, Color c, {bool area = false}) => LineChartBarData(
           spots: spots,
@@ -902,7 +1044,10 @@ class RpTrendCard extends StatelessWidget {
             tone: RpTone.info,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [_legend(aLabel, aTone.fg), const SizedBox(width: Sp.md), _legend(bLabel, bTone.fg)],
+              children: [
+                _legend(aLabel, aTone.fg),
+                if (withB) ...[const SizedBox(width: Sp.md), _legend(bLabel!, bTone.fg)],
+              ],
             ),
           ),
           const SizedBox(height: Sp.md),
@@ -931,7 +1076,8 @@ class RpTrendCard extends StatelessWidget {
                         interval: top / 2,
                         getTitlesWidget: (v, meta) => Padding(
                           padding: const EdgeInsets.only(right: Sp.x6),
-                          child: Text(v == 0 ? '0' : rpCompact(v), style: AppType.micro(color: AppColors.textLow), textAlign: TextAlign.right),
+                          child: Text(v == 0 ? '0' : rpCompact(v),
+                              style: AppType.micro(color: AppColors.textLow), textAlign: TextAlign.right),
                         ),
                       ),
                     ),
@@ -941,19 +1087,21 @@ class RpTrendCard extends StatelessWidget {
                         reservedSize: 22,
                         interval: 1,
                         getTitlesWidget: (v, meta) {
-                          final d = v.round();
-                          if (d != 1 && d % 5 != 0) return const SizedBox.shrink();
+                          final i = v.round();
+                          if (v != i || !_labelAt(i)) return const SizedBox.shrink();
                           return Padding(
                             padding: const EdgeInsets.only(top: Sp.xs),
-                            child: Text('$d', style: AppType.micro(color: AppColors.textLow)),
+                            child: Text('${points[i].day}', style: AppType.micro(color: AppColors.textLow)),
                           );
                         },
                       ),
                     ),
                   ),
                   lineBarsData: [
-                    line([for (final p in points) FlSpot(p.day.toDouble(), p.a.toDouble())], aTone.fg, area: true),
-                    line([for (final p in points) FlSpot(p.day.toDouble(), p.b.toDouble())], bTone.fg),
+                    line([for (var i = 0; i < points.length; i++) FlSpot(i.toDouble(), points[i].a.toDouble())], aTone.fg,
+                        area: true),
+                    if (withB)
+                      line([for (var i = 0; i < points.length; i++) FlSpot(i.toDouble(), points[i].b.toDouble())], bTone.fg),
                   ],
                 ),
                 duration: Duration.zero,
@@ -991,11 +1139,33 @@ class RpTrendCard extends StatelessWidget {
 // ═══════════════════════════════ «قسّم حسب» ═══════════════════════════════
 
 class RpBreakdownCard extends StatelessWidget {
-  const RpBreakdownCard({super.key, required this.tabs, required this.selected, required this.shares, this.tone = RpTone.money});
+  const RpBreakdownCard({
+    super.key,
+    required this.tabs,
+    required this.selected,
+    required this.shares,
+    this.tone = RpTone.money,
+    this.onTab,
+    this.note,
+    this.more,
+    this.onMore,
+    this.unit = 'حركة',
+  });
   final List<String> tabs;
   final int selected;
   final List<RpShare> shares;
   final RpTone tone;
+  final ValueChanged<int>? onTab;
+
+  /// سطرٌ تحت التبويبات («من آخر 1000 حركة»).
+  final String? note;
+
+  /// «عرض الكلّ (12)».
+  final String? more;
+  final VoidCallback? onMore;
+
+  /// وحدة العدّ تحت المبلغ.
+  final String unit;
 
   @override
   Widget build(BuildContext context) {
@@ -1012,25 +1182,45 @@ class RpBreakdownCard extends StatelessWidget {
               children: [
                 for (var i = 0; i < tabs.length; i++) ...[
                   if (i > 0) const SizedBox(width: Sp.x6),
-                  Container(
-                    height: H.chipSm,
-                    padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: i == selected ? AppColors.brand : AppColors.surfaceSunken,
-                      borderRadius: BorderRadius.circular(R.pill),
+                  _Tap(
+                    onTap: onTab == null ? null : () => onTab!(i),
+                    child: Container(
+                      height: H.chipSm,
+                      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: i == selected ? AppColors.brand : AppColors.surfaceSunken,
+                        borderRadius: BorderRadius.circular(R.pill),
+                      ),
+                      child: Text(tabs[i],
+                          style: AppType.pillBold(color: i == selected ? AppColors.onBrand : AppColors.textMid), maxLines: 1),
                     ),
-                    child: Text(tabs[i],
-                        style: AppType.pillBold(color: i == selected ? AppColors.onBrand : AppColors.textMid), maxLines: 1),
                   ),
                 ],
               ],
             ),
           ),
+          if (note != null) ...[
+            const SizedBox(height: Sp.sm),
+            Text(note!, style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 2),
+          ],
           const SizedBox(height: Sp.md),
+          if (shares.isEmpty) Text('لا حركات بهذه الفترة', style: AppType.muted(color: AppColors.textMid)),
           for (var i = 0; i < shares.length; i++) ...[
             if (i > 0) const SizedBox(height: Sp.md),
             _share(shares[i]),
+          ],
+          if (more != null) ...[
+            const SizedBox(height: Sp.md),
+            Center(
+              child: _Tap(
+                onTap: onMore,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs),
+                  child: Text(more!, style: AppType.bodyBold(color: AppColors.brand)),
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -1038,6 +1228,8 @@ class RpBreakdownCard extends StatelessWidget {
   }
 
   Widget _share(RpShare s) {
+    // «حسب الشركة»: الاسم هو الشركة نفسها ⇒ لا وسم يكرّره (اللون في الشريط يكفي)
+    final tag = s.company != null && s.company!.name != s.name ? s.company : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1047,16 +1239,16 @@ class RpBreakdownCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.name, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  if (s.company != null || s.sub != null)
+                  Text(s.name, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  if (tag != null || s.sub != null)
                     Row(
                       children: [
-                        if (s.company != null) ...[
-                          Container(width: 7, height: 7, decoration: BoxDecoration(color: s.company!.color, shape: BoxShape.circle)),
+                        if (tag != null) ...[
+                          Container(width: 7, height: 7, decoration: BoxDecoration(color: tag.color, shape: BoxShape.circle)),
                           const SizedBox(width: Sp.xs),
                         ],
                         Flexible(
-                          child: Text([s.company?.name, s.sub].whereType<String>().join(' · '),
+                          child: Text([tag?.name, s.sub].whereType<String>().join(' · '),
                               style: AppType.micro(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
                       ],
@@ -1072,7 +1264,7 @@ class RpBreakdownCard extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('${s.count} حركة · ', style: AppType.micro(color: AppColors.textLow), maxLines: 1),
+                    Text('${s.count} $unit · ', style: AppType.micro(color: AppColors.textLow), maxLines: 1),
                     Directionality(
                       textDirection: TextDirection.ltr,
                       child: Text('${(s.share * 100).round()}%', style: AppType.microBold(color: AppColors.textMid)),
@@ -1101,12 +1293,23 @@ class RpBreakdownCard extends StatelessWidget {
 // ═══════════════════════════════ الحركات ═══════════════════════════════
 
 class RpRowsCard extends StatelessWidget {
-  const RpRowsCard({super.key, required this.total, required this.days, this.more});
+  const RpRowsCard(
+      {super.key, required this.total, required this.days, this.more, this.onMore, this.onSearch, this.note, this.empty});
   final int total;
   final List<RpDay> days;
 
   /// «عرض المزيد (٤٨)».
   final String? more;
+  final VoidCallback? onMore;
+
+  /// بحثٌ حيّ (null = حقلٌ للعرض فقط في صور التصميم).
+  final ValueChanged<String>? onSearch;
+
+  /// سطرٌ فوق القائمة («السجلّ ناقص…»).
+  final String? note;
+
+  /// نصّ القائمة الفارغة.
+  final String? empty;
 
   @override
   Widget build(BuildContext context) {
@@ -1136,12 +1339,32 @@ class RpRowsCard extends StatelessWidget {
                 Icon(LucideIcons.search, size: 17, color: AppColors.textLow),
                 const SizedBox(width: Sp.sm),
                 Expanded(
-                  child: Text('ابحث باسم المشترك أو يوزره أو رقمه',
-                      style: AppType.body(color: AppColors.textPlaceholder), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child: onSearch == null
+                      ? Text('ابحث باسم المشترك أو يوزره أو رقمه',
+                          style: AppType.body(color: AppColors.textPlaceholder), maxLines: 1, overflow: TextOverflow.ellipsis)
+                      : TextField(
+                          onChanged: onSearch,
+                          style: AppType.body(color: AppColors.textHi),
+                          decoration: InputDecoration(
+                            isCollapsed: true,
+                            border: InputBorder.none,
+                            hintText: 'ابحث باسم المشترك أو يوزره أو رقمه',
+                            hintStyle: AppType.body(color: AppColors.textPlaceholder),
+                          ),
+                        ),
                 ),
               ],
             ),
           ),
+          if (note != null) ...[
+            const SizedBox(height: Sp.sm),
+            Text(note!, style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 3),
+          ],
+          if (days.isEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Center(child: Text(empty ?? 'لا حركات بهذه الفترة', style: AppType.muted(color: AppColors.textMid))),
+            const SizedBox(height: Sp.sm),
+          ],
           for (final d in days) ...[
             const SizedBox(height: Sp.md),
             _dayHead(d),
@@ -1149,7 +1372,15 @@ class RpRowsCard extends StatelessWidget {
           ],
           if (more != null) ...[
             const SizedBox(height: Sp.sm),
-            Center(child: Text(more!, style: AppType.bodyBold(color: AppColors.brand))),
+            Center(
+              child: _Tap(
+                onTap: onMore,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs),
+                  child: Text(more!, style: AppType.bodyBold(color: AppColors.brand)),
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -1163,9 +1394,11 @@ class RpRowsCard extends StatelessWidget {
           children: [
             Icon(LucideIcons.calendar, size: 14, color: AppColors.textMid),
             const SizedBox(width: Sp.x6),
-            Directionality(textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
+            Directionality(
+                textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
             const SizedBox(width: Sp.sm),
             Expanded(child: Text('${d.count} حركة', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
+            Text('واصل ', style: AppType.micro(color: AppColors.textMid)),
             Text(rpMoney(d.sum), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
           ],
         ),
@@ -1182,8 +1415,11 @@ class RpRowsCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(r.title, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(r.detail, style: AppType.micro(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
+                // لا قصّ على شاشةٍ ضيّقة أو خطٍّ كبير: الاسم والوصف والكلفة تلتفّ لسطرين قبل أيّ «…»
+                Text(r.title, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(r.detail, style: AppType.micro(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
+                if (r.cost != null)
+                  Text(r.cost!, style: AppType.micro(color: AppColors.textLow), maxLines: 2, overflow: TextOverflow.ellipsis),
                 if (r.company != null)
                   Row(
                     children: [
@@ -1204,7 +1440,8 @@ class RpRowsCard extends StatelessWidget {
             children: [
               Directionality(
                 textDirection: TextDirection.ltr,
-                child: Text('${r.negative ? '−' : ''}${formatIQD(r.amount)}', style: AppType.bodyStrong(color: r.tone.fg), maxLines: 1),
+                child: Text('${r.negative ? '−' : ''}${formatIQD(r.amount)}',
+                    style: AppType.bodyStrong(color: r.tone.fg), maxLines: 1),
               ),
               Directionality(
                 textDirection: TextDirection.ltr,
@@ -1222,36 +1459,43 @@ class RpRowsCard extends StatelessWidget {
 
 /// ملفٌّ بالفلاتر نفسها: PDF باسم الشركة، Excel، أو يُرسل بالواتساب.
 class RpExportBar extends StatelessWidget {
-  const RpExportBar({super.key});
+  const RpExportBar({super.key, this.onPdf, this.onExcel, this.onShare});
+  final VoidCallback? onPdf;
+  final VoidCallback? onExcel;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    Widget b(IconData icon, String label, Color color) => Expanded(
-          child: Container(
-            height: H.segment,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(R.icon),
-              border: Border.all(color: color.withValues(alpha: 0.35)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 17, color: color),
-                const SizedBox(width: Sp.x6),
-                Flexible(child: Text(label, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1)),
-              ],
+    Widget b(IconData icon, String label, Color color, VoidCallback? onTap) => Expanded(
+          child: _Tap(
+            radius: R.icon,
+            onTap: onTap,
+            child: Container(
+              height: H.segment,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(R.icon),
+                border: Border.all(color: color.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 17, color: color),
+                  const SizedBox(width: Sp.x6),
+                  Flexible(child: Text(label, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1)),
+                ],
+              ),
             ),
           ),
         );
     return Row(
       children: [
-        b(LucideIcons.fileText, 'PDF', AppColors.error),
+        b(LucideIcons.fileText, 'PDF', AppColors.error, onPdf),
         const SizedBox(width: Sp.sm),
-        b(LucideIcons.sheet, 'Excel', AppColors.success),
+        b(LucideIcons.sheet, 'Excel', AppColors.success, onExcel),
         const SizedBox(width: Sp.sm),
-        b(LucideIcons.messageCircle, 'واتساب', AppColors.channelWhatsApp),
+        b(LucideIcons.messageCircle, 'واتساب', AppColors.channelWhatsApp, onShare),
       ],
     );
   }
