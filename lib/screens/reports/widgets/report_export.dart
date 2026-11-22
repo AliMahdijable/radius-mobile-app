@@ -436,7 +436,7 @@ class ReportPdf {
             pw.SizedBox(height: 2),
             pw.Align(
               alignment: pw.Alignment.centerRight,
-              child: text(d, pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey800)),
+              child: text(d, pw.TextStyle(font: font, fontSize: 10.5, color: PdfColors.grey800)),
             ),
           ],
           pw.SizedBox(height: 12),
