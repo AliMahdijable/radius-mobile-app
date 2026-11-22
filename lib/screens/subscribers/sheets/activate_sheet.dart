@@ -175,6 +175,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   final _pinCtrl = TextEditingController();         // Pin الكارت (card)
   // «طريق موقع الشحن» (فايبر الجزيرة): رقم بطاقةٍ خارجيّة (٨ خانات) — يُرسل مع الطلب وحده
   final _railPinCtrl = TextEditingController();
+  // «التفعيل برقم البطاقة» (٢٣ نوفمبر — شركات الكارتات، cards.typed): رقمٌ يكتبه الوكيل كصفحة الساس — يُرسل مرّةً مع الطلب ولا يُحفظ
+  // ولا يُطبع
+  final _typedPinCtrl = TextEditingController();
   // «تأكيد رقم المشترك بالواتساب» (موقع الشحن، ١٤ نوفمبر): الرقم ⇒ «أرسل الرمز» ⇒ الرمز ⇒ «تأكيد» ⇒ تُعاد قراءة النافذة
   late final _otpPhoneCtrl = TextEditingController(text: _otpPhoneOf(widget.sub.phone));
   final _otpCodeCtrl = TextEditingController();
@@ -364,6 +367,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     _identifierCtrl.dispose();
     _pinCtrl.dispose();
     _railPinCtrl.dispose();
+    _typedPinCtrl.dispose();
     _otpPhoneCtrl.dispose();
     _otpCodeCtrl.dispose();
     super.dispose();
@@ -698,7 +702,16 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// الكارت مختارٌ ولا يصلح الآن: لا كارت لهذه الباقة، أو رُفضت الصلاحيّة.
   /// «تعذّرت القراءة» ليست منعاً — الخادم يعيد القراءة عند التفعيل نفسه.
   bool get _cardBlocked =>
-      _cardMode && (_cardDenied || (_cards.level == CardStockLevel.empty && !_railExternal) || _railPinBad);
+      _cardMode &&
+      (_cardDenied || (_cards.level == CardStockLevel.empty && !_railExternal && !_typedExternal) || _railPinBad || _typedPinBad);
+
+  /// «التفعيل برقم البطاقة» (٢٣ نوفمبر — المالك: «هذه الشركات … تجبرهم على الكارتات. فاحنا نخلي العمليتين متاحة»؛ الخادم
+  /// 8106977 والموقع cec2570): الخادم يقول `cards.typed` ⇒ «رقم البطاقة» كما في صفحة الساس. بلا مخزونٍ الرقم مطلوب، ومع مخزونٍ اختياريّ
+  /// (الفارغ يُسحب كارتٌ من المخزون كما كان). طريق موقع الشحن له بطاقته الخارجيّة ([_rail]) فلا يجتمعان.
+  bool get _typedCard => _rail == null && _cards.typed;
+  String get _typedPin => _typedPinCtrl.text.trim();
+  bool get _typedExternal => _typedCard && _cardMode && _typedPin.isNotEmpty;
+  bool get _typedPinBad => _typedExternal && !RegExp(r'^[0-9A-Za-z-]{4,64}$').hasMatch(_typedPin);
 
   /// «طريق موقع الشحن» (فايبر الجزيرة): الخادم ينفّذ التفعيل عبر pay.jt.iq ويقول ذلك بـ`pay_rail` في بيانات التفعيل —
   /// الرصيد رصيد الموقع، والكارت بطاقات الوكيل فيه أو بطاقةٌ خارجيّة يكتب رقمها (٨ خانات). غيابه = كما كان.
@@ -741,8 +754,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (!_cardMode) return 'sheets.renew_now'.tr();
     if (_cardDenied) return 'cards.not_allowed_short'.tr();
     if (_railPinBad) return 'رقم البطاقة ٨ خانات';
-    if (_cards.level == CardStockLevel.empty && !_railExternal) {
-      return 'cards.no_card_short'.tr();
+    if (_typedPinBad) return 'رقم البطاقة غير صالح';
+    if (_cards.level == CardStockLevel.empty && !_railExternal && !_typedExternal) {
+      return _typedCard ? 'اكتب رقم البطاقة' : 'cards.no_card_short'.tr();
     }
     return 'cards.renew_with_card'.tr();
   }
@@ -912,7 +926,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
     // لقطةٌ قبل الانتظار: الردّ يُقرأ بما أُرسل لا بما صار مختاراً بعده.
     final useCard = _cardMode;
-    final railPin = useCard && _railExternal && !_railPinBad ? _railPin : null;
+    // رقم البطاقة: الخارجيّة (موقع الشحن) أو المكتوبة (شركات الكارتات) — مع «كارت» وحده؛ الفارغ ⇒ لا cardPin (سحبٌ من المخزون كما كان)
+    final railPin = useCard && _railExternal && !_railPinBad
+        ? _railPin
+        : (useCard && _typedExternal && !_typedPinBad ? _typedPin : null);
     setState(() => _submitting = true);
     // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التفعيل؟» (OpWaNotice).
     final pressedAt = DateTime.now();
@@ -1406,7 +1423,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             SheetChoiceTiles(
               labels: [
                 'cards.method_credit'.tr(),
-                available == null
+                // شركات الكارتات: «كارت (0)» يوحي بالمنع والرقم يُكتب ⇒ «كارت» وحده حين لا مخزون
+                available == null || (_typedCard && available == 0)
                     ? 'cards.method_card'.tr()
                     : 'cards.method_card_n'.tr(namedArgs: {'n': '$available'}),
               ],
@@ -1416,9 +1434,47 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               onSelect: (i) => setState(
                   () => _method = i == 1 ? _Method.card : _Method.credit),
             ),
+          if (_cardMode && !_methods.canChoose && _typedCard) ...[
+            Text(
+              'التفعيل بالبطاقة — اكتب رقمها تحت (حسابك لا يدعم الدفع من الرصيد).',
+              key: const ValueKey('typed-card-only'),
+              style: AppType.micro(color: AppColors.textMid),
+            ),
+            const SizedBox(height: Sp.sm),
+          ],
           if (_cardMode) ...[
             if (_methods.canChoose) const SizedBox(height: Sp.sm),
             _cardNote(),
+          ],
+          if (_typedCard && _cardMode) ...[
+            const SizedBox(height: Sp.sm),
+            Text(
+              (available ?? 0) > 0 ? 'رقم البطاقة (اتركه فارغاً ليُسحب كارت من مخزونك)' : 'رقم البطاقة',
+              style: AppType.micro(color: AppColors.textMid),
+            ),
+            const SizedBox(height: Sp.xs),
+            SheetBox(
+              focused: _typedPinCtrl.text.isNotEmpty,
+              child: TextField(
+                key: const ValueKey('typed-card-pin'),
+                controller: _typedPinCtrl,
+                enabled: !_submitting,
+                keyboardType: TextInputType.visiblePassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                textDirection: ui.TextDirection.ltr,
+                inputFormatters: const [_LatinCardPinFormatter()],
+                onChanged: (_) => setState(() {}),
+                style: AppType.input(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: 'كما هو على البطاقة',
+                  hintStyle: AppType.input(color: AppColors.textPlaceholder),
+                ),
+              ),
+            ),
           ],
           if (_railCardField) ...[
             const SizedBox(height: Sp.sm),
@@ -2311,6 +2367,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         text: _railPinBad ? 'رقم البطاقة الخارجيّة ٨ خانات (أرقام أو حروف إنكليزيّة)' : 'يُفعَّل بالبطاقة الخارجيّة التي كتبتها',
       );
     }
+    if (_typedExternal) {
+      return _CardNote(
+        tone: _typedPinBad ? AppTone.danger : AppTone.brand,
+        icon: LucideIcons.ticket,
+        text: _typedPinBad ? 'رقم البطاقة أرقامٌ أو حروفٌ إنكليزيّة — ٤ خانات فأكثر' : 'يُفعَّل بالبطاقة التي كتبت رقمها',
+      );
+    }
     if (_cardDenied) {
       return _CardNote(
         tone: AppTone.danger,
@@ -2327,6 +2390,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             'n': iso('${_cards.available}'),
             'profile': profile,
           }),
+        ),
+      // شركات الكارتات بلا مخزون: الرقم يُكتب تحت — لا «ليس لديك كارت»
+      CardStockLevel.empty when _typedCard => const _CardNote(
+          tone: AppTone.brand,
+          icon: LucideIcons.ticket,
+          text: 'اكتب رقم البطاقة بالحقل تحته — كما في صفحة الشركة',
         ),
       CardStockLevel.empty => _CardNote(
           tone: AppTone.warning,
@@ -2480,3 +2549,31 @@ class _CardNote extends StatelessWidget {
 }
 
 // ───────── shared sheet chrome ─────────
+
+/// رقم البطاقة كما يُكتب (كالموقع `latinCardPin` والخادم): الأرقام العربيّة/الفارسيّة لاتينيّة، وما ليس [0-9A-Za-z-] يُحذف (مسافاتٌ
+/// ولصق)، وحدّه ٦٤.
+class _LatinCardPinFormatter extends TextInputFormatter {
+  const _LatinCardPinFormatter();
+
+  static String latin(String v) {
+    final b = StringBuffer();
+    for (final c in v.runes) {
+      if (c >= 0x660 && c <= 0x669) {
+        b.writeCharCode(0x30 + c - 0x660);
+      } else if (c >= 0x6f0 && c <= 0x6f9) {
+        b.writeCharCode(0x30 + c - 0x6f0);
+      } else if ((c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a) || c == 0x2d) {
+        b.writeCharCode(c);
+      }
+    }
+    final s = b.toString();
+    return s.length > 64 ? s.substring(0, 64) : s;
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final t = latin(newValue.text);
+    if (t == newValue.text) return newValue;
+    return TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
+  }
+}

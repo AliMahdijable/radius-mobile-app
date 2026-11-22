@@ -131,9 +131,14 @@ class CardStockInfo {
     this.profileId,
     this.profileName,
     this.available,
+    this.typed = false,
   });
 
   final bool enabled;
+
+  /// «التفعيل برقم البطاقة» (٢٣ نوفمبر — الخادم 8106977 `cards.typed`): الشركة تُلزم وكلاءها بالكارتات (حياة FTTH أوّلها) ⇒ حقل
+  /// «رقم البطاقة» يكتبه الوكيل كما في صفحة الساس: بلا مخزونٍ مطلوب، ومع مخزونٍ اختياريّ (الفارغ يسحب من المخزون كما كان).
+  final bool typed;
   final int? profileId;
   final String? profileName;
 
@@ -156,6 +161,7 @@ class CardStockInfo {
         profileId: profileId,
         profileName: profileName,
         available: n,
+        typed: typed,
       );
 
   static CardStockInfo fromJson(Object? raw) {
@@ -165,6 +171,7 @@ class CardStockInfo {
       profileId: _intOrNull(raw['profile_id']),
       profileName: _str(raw['profile_name']),
       available: _countOrNull(raw['available']),
+      typed: raw['typed'] == true,
     );
   }
 

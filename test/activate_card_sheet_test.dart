@@ -472,6 +472,141 @@ void main() {
     expect(server.activateBodies.last.containsKey('method'), isFalse);
     await drainSnack(t);
   });
+
+  /* ── «التفعيل برقم البطاقة» (٢٣ نوفمبر — الخادم 8106977 والموقع cec2570): الخادم يقول cards.typed ⇒ «رقم البطاقة» كصفحة الساس ── */
+
+  Map<String, dynamic> typedData({Object? available = 0, bool credit = true}) {
+    final d = cardsData(available: available, credit: credit);
+    (d['cards'] as Map)['typed'] = true;
+    return d;
+  }
+
+  const typedKey = ValueKey('typed-card-pin');
+
+  testWidgets('رقم البطاقة بلا مخزون: «كارت» لا «كارت (0)»، الزرّ «اكتب رقم البطاقة»، والأرقام العربيّة لاتينيّة وتُرسل cardPin مع method=card',
+      (t) async {
+    server.activationExtra = typedData(available: 0);
+    await open(t);
+    expect(find.byKey(typedKey), findsNothing, reason: 'الحقل للكارت وحده');
+    expect(find.text('كارت (0)'), findsNothing);
+    await t.tap(find.text('كارت'));
+    await t.pumpAndSettle();
+    expect(find.byKey(typedKey), findsOneWidget);
+    expect(find.text('اكتب رقم البطاقة بالحقل تحته — كما في صفحة الشركة'), findsOneWidget);
+    expect(find.text('رقم البطاقة'), findsOneWidget, reason: 'بلا مخزون: مطلوب');
+    expect(footer('اكتب رقم البطاقة'), findsOneWidget);
+    await t.tap(footer('اكتب رقم البطاقة'));
+    await t.pumpAndSettle();
+    expect(server.activateBodies, isEmpty, reason: 'الزرّ معطّل بلا رقم');
+
+    // أقلّ من ٤ ⇒ «غير صالح»
+    await t.enterText(find.byKey(typedKey), '١٢ ٣');
+    await t.pumpAndSettle();
+    expect(t.widget<TextField>(find.byKey(typedKey)).controller!.text, '123');
+    expect(footer('رقم البطاقة غير صالح'), findsOneWidget);
+    expect(find.text('رقم البطاقة أرقامٌ أو حروفٌ إنكليزيّة — ٤ خانات فأكثر'), findsOneWidget);
+
+    // أرقامٌ عربيّة وفارسيّة ومسافاتٌ ورموز ⇒ [0-9A-Za-z-] وحدها
+    await t.enterText(find.byKey(typedKey), '١٢٣٤ ۵۶۷۸-ab*Z');
+    await t.pumpAndSettle();
+    expect(t.widget<TextField>(find.byKey(typedKey)).controller!.text, '12345678-abZ');
+    expect(find.text('يُفعَّل بالبطاقة التي كتبت رقمها'), findsOneWidget);
+    await submit(t, 'تجديد بكارت');
+    final body = server.activateBodies.single;
+    expect(body['method'], 'card');
+    expect(body['cardPin'], '12345678-abZ');
+    expect(body.containsKey('pin'), isFalse);
+    expect(find.text('تم التجديد بنجاح'), findsOneWidget, reason: 'النجاح بلا ذيل رقم (serial_tail null)');
+    expect(t.takeException(), isNull);
+    await drainSnack(t);
+  });
+
+  testWidgets('رقم البطاقة مع مخزون: اختياريّ — الفارغ يسحب من المخزون بلا cardPin، والرصيد لا يُرسل الرقم أبداً', (t) async {
+    server.activationExtra = typedData(available: 3);
+    await open(t);
+    await t.tap(find.text('كارت (3)'));
+    await t.pumpAndSettle();
+    expect(find.text('رقم البطاقة (اتركه فارغاً ليُسحب كارت من مخزونك)'), findsOneWidget);
+    expect(find.textContaining('يُسحب كارت تلقائيّاً'), findsOneWidget);
+    // رقمٌ يُكتب ثمّ يُختار «رصيد» ⇒ لا cardPin ولا method
+    await t.enterText(find.byKey(typedKey), 'ABCD1234');
+    await t.pumpAndSettle();
+    await t.tap(find.text('رصيد'));
+    await t.pumpAndSettle();
+    await submit(t, 'تجديد الآن');
+    expect(server.activateBodies.single.containsKey('cardPin'), isFalse);
+    expect(server.activateBodies.single.containsKey('method'), isFalse);
+    await drainSnack(t);
+
+    // من جديد: الحقل فارغ ⇒ method=card بلا cardPin (السحب كما كان)
+    server.activationExtra = typedData(available: 3);
+    await open(t);
+    await t.tap(find.text('كارت (3)'));
+    await t.pumpAndSettle();
+    await submit(t, 'تجديد بكارت');
+    final b = server.activateBodies.last;
+    expect(b['method'], 'card');
+    expect(b.containsKey('cardPin'), isFalse);
+    await drainSnack(t);
+  });
+
+  testWidgets('🚨 CARD_PIN_INVALID ورفض الساس لا يعطّلان «كارت» — يصحّح الرقم ويعيد؛ CARD_PIN_OFF برسالته', (t) async {
+    server.activationExtra = typedData(available: 0);
+    server.activateReply = (422, {'success': false, 'code': 'CARD_PIN_INVALID', 'message': 'رقم البطاقة غير صالح — راجعه'});
+    await open(t);
+    await t.tap(find.text('كارت'));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(typedKey), '99999999');
+    await t.pumpAndSettle();
+    await submit(t, 'تجديد بكارت');
+    expect(find.text('رقم البطاقة غير صالح — راجعه'), findsOneWidget);
+    expect(footer('تجديد بكارت'), findsOneWidget, reason: 'الكارت يبقى متاحاً — لا «حسابك ما يسمح بالكارت»');
+    await drainSnack(t);
+    // رفض الساس للبطاقة (٤٢٢ برسالة الخادم) ⇒ تصحيحٌ وإعادة بالرقم الجديد
+    server.activateReply = (
+      422,
+      {'success': false, 'message': 'تعذّر التفعيل بهذه البطاقة — تأكّد من رقمها وأنّها غير مستعملة ولباقة المشترك (الرمز)'}
+    );
+    await t.enterText(find.byKey(typedKey), '12345678');
+    await t.pumpAndSettle();
+    await submit(t, 'تجديد بكارت');
+    expect(find.textContaining('تعذّر التفعيل بهذه البطاقة'), findsOneWidget);
+    expect(server.activateBodies.map((b) => b['cardPin']).toList(), ['99999999', '12345678']);
+    await drainSnack(t);
+    server.activateReply = (409, {'success': false, 'code': 'CARD_PIN_OFF', 'message': 'التفعيل برقم البطاقة غير مفعّل لحسابك'});
+    await submit(t, 'تجديد بكارت');
+    expect(find.text('التفعيل برقم البطاقة غير مفعّل لحسابك'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await drainSnack(t);
+  });
+
+  testWidgets('الكارت وحده (لا رصيد) + رقم البطاقة: «التفعيل بالبطاقة — اكتب رقمها تحت»، وبلا typed كما كان', (t) async {
+    server.activationExtra = typedData(available: 0, credit: false);
+    await open(t);
+    expect(find.byKey(const ValueKey('typed-card-only')), findsOneWidget);
+    expect(find.text('التفعيل بالبطاقة — اكتب رقمها تحت (حسابك لا يدعم الدفع من الرصيد).'), findsOneWidget);
+    expect(find.byKey(typedKey), findsOneWidget);
+    expect(footer('اكتب رقم البطاقة'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    await t.pumpAndSettle();
+    // بلا typed: لا حقل ولا سطر — كما كان حرفاً
+    server.activationExtra = cardsData(available: 0, credit: false);
+    await open(t);
+    expect(find.byKey(typedKey), findsNothing);
+    expect(find.byKey(const ValueKey('typed-card-only')), findsNothing);
+    expect(footer('ليس لديك كارت لهذه الباقة'), findsOneWidget);
+  });
+
+  testWidgets('طريق موقع الشحن يغلب: لا حقل «رقم البطاقة» مع pay_rail (بطاقته الخارجيّة ٨ خانات وحدها)', (t) async {
+    final d = railData();
+    (d['cards'] as Map)['typed'] = true;
+    server.activationExtra = d;
+    await open(t);
+    await t.tap(find.text('كارت (0)'));
+    await t.pumpAndSettle();
+    expect(find.byKey(typedKey), findsNothing);
+    expect(find.byKey(pinKey), findsOneWidget);
+  });
 }
 
 /// الترجمات من القرص مباشرةً — بلا `rootBundle`، فتعمل داخل وقت الاختبار.
