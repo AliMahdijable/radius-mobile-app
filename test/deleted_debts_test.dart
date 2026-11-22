@@ -351,8 +351,10 @@ void main() {
   });
 
   group('الشكل الموحّد (٢٢ نوفمبر)', () {
+    setUp(() => DeletedDebtsScreen.clock = () => DateTime(2026, 11, 22, 12));
     tearDown(() async {
       ReportExportActions.debugSink = null;
+      DeletedDebtsScreen.clock = DateTime.now;
       await visualTearDown();
     });
 

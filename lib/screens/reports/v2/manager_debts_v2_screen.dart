@@ -19,6 +19,7 @@ import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../widgets/report_export.dart';
 import '../widgets/report_permission_gate.dart';
+import 'debt_age.dart';
 import 'manager_debts_view.dart';
 import 'report_kit.dart';
 import 'report_period.dart';
@@ -301,7 +302,20 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     ];
   }
 
-  List<String> get _tabs => [if (_merged) 'الشركة', 'المدير', 'النوع', 'اليوم'];
+  List<String> get _tabs => [if (_merged) 'الشركة', 'المدير', 'النوع', 'اليوم', 'عمر الدين'];
+
+  static const _ageTab = 'عمر الدين';
+
+  /// «عمر الدين» (بند المقترح): المتبقّي من «ديون أخرى» حسب تاريخها — بحث المدير يحصره؛ دين الساس بلا تاريخٍ فلا يدخل.
+  List<RpShare> _ages() {
+    final q = _q.trim().toLowerCase();
+    final open = [
+      for (final co in _inc)
+        for (final d in co.data!.debts)
+          if (d.remainingAmount > 0 && (q.isEmpty || (d.debtorAdminUsername ?? '').toLowerCase().contains(q))) d,
+    ];
+    return DebtAge.shares(open, at: (d) => d.debtDate, amount: (d) => d.remainingAmount, now: _now);
+  }
 
   List<RpShare> _breakdown(List<MgrEvent> events) {
     final tab = _tabs[_tab.clamp(0, _tabs.length - 1)];
@@ -309,6 +323,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       'الشركة' => ManagerDebtsView.shares(events, (e) => _coOf(e)?.name ?? '—', companyOf: _coOf),
       'المدير' => ManagerDebtsView.shares(events, (e) => e.managerName, companyOf: _merged ? _coOf : null),
       'النوع' => ManagerDebtsView.shares(events, (e) => e.meta.label),
+      _ageTab => _ages(),
       _ => ManagerDebtsView.shares(events, (e) => iqDateOf(e.date.toLocal())),
     };
   }
@@ -499,16 +514,21 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     ]));
     final shares = _breakdown(events);
     final cap = _tabAll ? shares.length : 6;
+    final age = _tabs[_tab.clamp(0, _tabs.length - 1)] == _ageTab;
     parts.add(RpBreakdownCard(
       tabs: _tabs,
       selected: _tab.clamp(0, _tabs.length - 1),
-      tone: RpTone.money,
+      tone: age ? RpTone.debt : RpTone.money,
+      unit: age ? 'دين' : 'حركة',
+      empty: age ? 'لا ديون أخرى متبقّية' : 'لا حركات بهذه الفترة',
       shares: shares.take(cap).toList(),
       onTab: (i) => setState(() {
         _tab = i;
         _tabAll = false;
       }),
-      note: 'المبلغ: ما استُحصل؛ والنسبة: من عدد الحركات',
+      note: age
+          ? 'المتبقّي من «ديون أخرى» حسب تاريخها — دين الساس بلا تاريخٍ فلا يدخل'
+          : 'المبلغ: ما استُحصل؛ والنسبة: من عدد الحركات',
       more: shares.length > cap ? 'عرض الكلّ (${shares.length})' : null,
       onMore: () => setState(() => _tabAll = true),
     ));

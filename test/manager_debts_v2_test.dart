@@ -72,6 +72,16 @@ class _Single implements HttpClientAdapter {
       return ok({
         'debts': [
           {'id': 7, 'amount': 5000, 'paid_amount': 5000, 'remaining_amount': 0, 'debtor_admin_id': 2, 'status': 'paid'},
+          {
+            'id': 8,
+            'amount': 15000,
+            'paid_amount': 0,
+            'remaining_amount': 15000,
+            'debtor_admin_id': 2,
+            'debtor_admin_username': 'm2',
+            'debt_date': '2026-06-01',
+            'status': 'open',
+          },
         ],
       });
     }
@@ -233,6 +243,15 @@ void main() {
       expect(k['debtors']!.value, 3, reason: 'm1 وm3 بالساس + m2 بالأخرى');
       expect(find.textContaining('دين 1 مدير لم يُقرأ من الساس'), findsOneWidget);
       expect(find.text('تسديد كامل — دين أخرى'), findsWidgets, reason: 'الدين 7 متبقّيه صفر');
+      // «عمر الدين»: المتبقّي من «ديون أخرى» بتاريخه — المسدَّد لا يدخل
+      final card = t.widget<RpBreakdownCard>(find.byType(RpBreakdownCard));
+      expect(card.tabs.last, 'عمر الدين');
+      card.onTab!(card.tabs.length - 1);
+      await t.pump();
+      final ages = t.widget<RpBreakdownCard>(find.byType(RpBreakdownCard)).shares;
+      expect([for (final a in ages) (a.name, a.amount, a.count)], [('3 – 6 أشهر', 15000, 1)]);
+      card.onTab!(0);
+      await t.pump();
 
       // بحث المدير يحصر الحركات والمتبقّي والمدينين
       await t.enterText(find.byType(TextField), 'm1');

@@ -40,6 +40,10 @@ import '../../services/merged_text.dart';
 class DeletedDebtsScreen extends StatefulWidget {
   const DeletedDebtsScreen({super.key});
 
+  /// «الآن» لعمر الدين — ثابتةٌ في الاختبار.
+  @visibleForTesting
+  static DateTime Function() clock = DateTime.now;
+
   @override
   State<DeletedDebtsScreen> createState() => _DeletedDebtsScreenState();
 }
@@ -388,7 +392,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
 
   List<RpShare> _shares(List<({String? key, DeletedDebt row})> rows, String tab) {
     if (tab == 'عمر الدين') {
-      return DebtAge.shares(rows, at: (r) => r.row.at, amount: (r) => r.row.debt, now: DateTime.now());
+      return DebtAge.shares(rows, at: (r) => r.row.at, amount: (r) => r.row.debt, now: DeletedDebtsScreen.clock());
     }
     final acc = <String, ({String name, num amount, int count, RpCompany? co})>{};
     for (final r in rows) {
@@ -460,7 +464,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
       }
       return _gapped(out);
     }
-    final now = DateTime.now();
+    final now = DeletedDebtsScreen.clock();
     final count = views.fold<int>(0, (a, v) => a + v.page.count);
     final total = views.fold<double>(0, (a, v) => a + v.page.total);
     final allRows = _rowsOf(views);
@@ -604,7 +608,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   }
 
   Widget _companyTable(MergedReport<DeletedDebtsPage> m) {
-    final now = DateTime.now();
+    final now = DeletedDebtsScreen.clock();
     final lines = <RpCompanyLine>[];
     final outside = <String>[];
     for (final p in m.parts) {
@@ -680,7 +684,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
       if (truncated.isNotEmpty) 'ناقص: ${truncated.every((n) => n.isEmpty) ? '' : '${truncated.where((n) => n.isNotEmpty).map((n) => '«$n»').join('، ')}: '}${'dd.truncated'.tr()}',
     ];
     final title = 'reports.deleted_debts'.tr();
-    final subtitle = 'حتى ${iqDateOf(DateTime.now())}';
+    final subtitle = 'حتى ${iqDateOf(DeletedDebtsScreen.clock())}';
     const weights = [2.0, 1.3, 1.3, 1.2, 1.0, 1.0, 1.0, 2.0];
     final w = [if (merged) 1.2, ...weights];
     switch (how) {

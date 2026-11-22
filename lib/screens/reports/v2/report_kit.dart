@@ -1196,7 +1196,11 @@ class RpBreakdownCard extends StatelessWidget {
     this.title = 'قسّم حسب',
     this.icon = LucideIcons.chartPie,
     this.onShare,
+    this.empty = 'لا حركات بهذه الفترة',
   });
+
+  /// نصّ البطاقة بلا سطور («لا ديون أخرى متبقّية» لعمر الدين).
+  final String empty;
 
   /// عنوان البطاقة — «الباقات» في توزيع الباقات.
   final String title;
@@ -1261,7 +1265,7 @@ class RpBreakdownCard extends StatelessWidget {
             Text(note!, style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 2),
           ],
           const SizedBox(height: Sp.md),
-          if (shares.isEmpty) Text('لا حركات بهذه الفترة', style: AppType.muted(color: AppColors.textMid)),
+          if (shares.isEmpty) Text(empty, style: AppType.muted(color: AppColors.textMid)),
           for (var i = 0; i < shares.length; i++) ...[
             if (i > 0) const SizedBox(height: Sp.md),
             if (onShare == null) _share(shares[i]) else _Tap(radius: R.sm, onTap: () => onShare!(i), child: _share(shares[i])),
