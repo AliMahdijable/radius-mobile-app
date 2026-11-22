@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/company_route.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../api/merged_finance_api.dart';
 import '../../../api/report_people_api.dart';
@@ -27,6 +28,7 @@ import '../widgets/report_filters.dart';
 import '../widgets/report_permission_gate.dart';
 import '../widgets/scope_helper.dart';
 import 'finance_export.dart';
+import 'activations_view.dart';
 import 'finance_view.dart';
 import 'report_kit.dart';
 import 'report_period.dart';
@@ -238,6 +240,90 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   /// يعلّم ردّه بـtype_filter حين طبّقه — وإلّا فالحساب من السطور كما كان. null: بلا فلتر نوع.
   List<String>? get _strictTypes => (_f?.types.isEmpty ?? true) ? null : _f!.types;
 
+  /// فلترٌ يطبّقه الخادم بالوضع الصارم (نوعٌ أو باقة) — المقارنة حينها حين يعلّم ردّه بـtype_filter.
+  bool get _hasStrict => (_f?.types.isNotEmpty ?? false) || (_f?.packages.isNotEmpty ?? false);
+
+  /// فلتر الباقة (بند المقترح ١٢، الخادم fintyped1122): باقات النطاق ([group] null = المفتوحة) بأسمائها كما يطلبها الخادم — null بلا باقة.
+  List<String>? _strictPackagesFor(String? group) {
+    final prefix = '${group ?? ''}|';
+    final names = [
+      for (final k in _f?.packages ?? const <String>{})
+        if (k.startsWith(prefix)) ActivationsView.serverPackage(k.substring(prefix.length)),
+    ];
+    return names.isEmpty ? null : names;
+  }
+
+  /// باقات الفترة لورقة الفلاتر — من حركات التفعيل والتمديد بالقاعدة نفسها التي يطابقها الخادم ([ActivationsView.packageNameOf])، لكلّ
+  /// نطاقٍ ولفترته؛ تُقرأ حين تُفتح الورقة (لا حركة ⇒ لا باقة). «توزيع الباقات» لا يصلح مصدراً: أسماؤه مُطبَّعة بغير قاعدة الفلتر.
+  final Map<String, List<String>> _pkgs = {};
+  String? _pkgsFor;
+
+  Future<void> _loadPackages(List<String?> keys) async {
+    final f = _f!;
+    final tag = '${f.range.from}|${f.range.to}';
+    if (_pkgsFor != tag) {
+      _pkgs.clear();
+      _pkgsFor = tag;
+    }
+    final want = [
+      for (final k in keys)
+        if (!_pkgs.containsKey(k ?? _open)) k,
+    ];
+    if (want.isEmpty) return;
+    _scopeIds ??= await loadScopeUserIds();
+    final res = await Future.wait([
+      for (final k in want)
+        k == null
+            ? ReportsApi.activitiesAll(
+                from: f.range.from, to: f.range.to, activityTypes: ActivationsView.types, userIds: _actorIds(_open) ?? _scopeIds, maxPages: 5)
+            : CompanyRoute.run(
+                k,
+                () => ReportsApi.activitiesAll(
+                    from: f.range.from,
+                    to: f.range.to,
+                    activityTypes: ActivationsView.types,
+                    userIds: _actorIds(k) ?? [if (MergedMode.companyOf(k) != null) MergedMode.companyOf(k)!.adminId],
+                    maxPages: 5)),
+    ]);
+    if (!mounted || _pkgsFor != tag) return;
+    setState(() {
+      for (var i = 0; i < want.length; i++) {
+        final names = <String>{
+          for (final r in res[i].rows)
+            if (ActivationsView.relevant(r)) ActivationsView.packageNameOf(r),
+        };
+        _pkgs[want[i] ?? _open] = names.toList()..sort();
+      }
+    });
+  }
+
+  List<(String, String)> get _packagesInPeriod {
+    final out = <String, String>{};
+    if (!_merged) {
+      for (final n in _pkgs[_open] ?? const <String>[]) {
+        out[RpFilterValue.packageKey(null, n)] = n;
+      }
+    } else {
+      for (final c in _countable) {
+        for (final n in _pkgs[c.key] ?? const <String>[]) {
+          out[RpFilterValue.packageKey(c.key, n)] = '$n · ${c.name}';
+        }
+      }
+    }
+    // المختارة قبلُ تبقى ظاهرةً ولو غابت عن هذه الفترة — لتُزال
+    for (final k in _f!.packages) {
+      out.putIfAbsent(k, () => _packageLabel(k));
+    }
+    return [for (final e in out.entries) (e.key, e.value)]..sort((a, b) => a.$2.compareTo(b.$2));
+  }
+
+  String _packageLabel(String key) {
+    final i = key.indexOf('|');
+    final company = i <= 0 ? null : MergedMode.companyOf(key.substring(0, i))?.name;
+    final name = i < 0 ? key : key.substring(i + 1);
+    return company == null ? name : '$name · $company';
+  }
+
   /// «من محفظة المشترك» (قرار المالك ٢٢ نوفمبر عبر d9 — بند ١٨): تفعيلات الوطنيّ المدفوعة من محفظة المشترك عند الشركة — لا نقدٌ للوكيل
   /// ولا دين، العدد وحده. نوعٌ يعرفه الخادم بالوضع الصارم وحده.
   static const _walletType = 'SUBSCRIBER_ACTIVATE_WALLET';
@@ -285,7 +371,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       _visible = _page;
     });
     // فلتر النوع: المقارنة حين طبّقه الخادم بالوضع الصارم وحده (الطلب نفسه للفترة السابقة) — المحسوب من السطور بلا مقارنة
-    if (!f.compare || (f.types.isNotEmpty && cur.data?.typeFilter == null) || !cur.ok) return;
+    if (!f.compare || (_hasStrict && cur.data?.typeFilter == null) || !cur.ok) return;
     final prev = await fetch(f.range.previous, 1);
     if (!mounted || seq != _seq || _merged) return;
     setState(() => _prev = prev.ok ? prev.data : null);
@@ -303,11 +389,17 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         // كلفة الباقات (قرار ٢٠٢٦-١٠-١٨): لمالك الحساب وحده، ولساسٍ بعيد أو ايرث لنك — كالشاشة السابقة.
         withPackageCost: !Perms.isEmployee && isCostBearingAdminId((_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
         strictTypes: _strictTypes,
+        strictPackages: _strictPackagesFor(null),
       );
 
   /// فلاتر شركةٍ في «كل الشركات» — طلبها وطلب مقارنتها وأجزاء تصديرها.
   FinanceCompanyFilter _companyFilter(String key) =>
-      FinanceCompanyFilter(userIds: _actorIds(key), userManager: _ownerUsername(key), employeeId: _employeeId(key), strictTypes: _strictTypes);
+      FinanceCompanyFilter(
+          userIds: _actorIds(key),
+          userManager: _ownerUsername(key),
+          employeeId: _employeeId(key),
+          strictTypes: _strictTypes,
+          strictPackages: _strictPackagesFor(key));
 
   List<MergedCompany> get _countable => MergedDashboardApi.countable();
 
@@ -315,7 +407,11 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     final all = _countable;
     final sel = _f!.companies;
     final picked = sel.isEmpty ? all : all.where((c) => sel.contains(c.key)).toList();
-    return picked.isEmpty ? all : picked;
+    final base = picked.isEmpty ? all : picked;
+    // فلتر الباقة في «كل الشركات»: باقةٌ لشركتها — الشركات التي اختيرت لها باقةٌ وحدها (غيرها لا حركة لها تحت الفلتر)
+    if (_f!.packages.isEmpty) return base;
+    final withPkg = base.where((c) => _f!.packages.any((k) => k.startsWith('${c.key}|'))).toList();
+    return withPkg.isEmpty ? base : withPkg;
   }
 
   Future<void> _loadMerged() async {
@@ -346,7 +442,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     if (!mounted || seq != _seq) return;
     final reason = (!r.ok || r.data == null) ? (r.error ?? 'تعذّر جلب تقريرها') : MergedFinanceApi.gapReason(c, r.data!);
     setState(() => _cos[c.key] = _Co(c, cur: r.data, reason: reason));
-    if (!f.compare || (f.types.isNotEmpty && r.data?.typeFilter == null) || reason != null) return;
+    if (!f.compare || (_hasStrict && r.data?.typeFilter == null) || reason != null) return;
     final p = await MergedFinanceApi.one(c,
         from: f.range.previous.from, to: f.range.previous.to, includeArchived: _withArchive, filter: filter, recentLimit: 1);
     if (!mounted || seq != _seq) return;
@@ -391,6 +487,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         typeNotes: [
           ...typeNotes,
           if (hasType && types.contains(_walletType)) '«من محفظة المشترك» يحتاج الخادم المحدَّث — لا يدخل في هذه الأرقام بعد',
+          if (_f!.packages.isNotEmpty && r.typeFilter == null) 'فلتر الباقة لا يطبّقه خادم هذه الشركة — الأرقام بلا فلتر الباقة',
         ],
         kpis: hasType ? FinanceLogs.kpisFromLogs(filtered, packageCost: cost?.cost) : r.kpis,
         prev: hasType ? null : _prev?.kpis,
@@ -473,6 +570,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         ...typeNotes,
         if (types.contains(_walletType) && m.included.any((p) => p.report!.typeFilter == null))
           '«من محفظة المشترك» يحتاج الخادم المحدَّث — شركةٌ لم يطبّقه خادمها لا يدخل فيها',
+        if (_f!.packages.isNotEmpty && m.included.any((p) => p.report!.typeFilter == null))
+          'فلتر الباقة لا يطبّقه خادم بعض الشركات — أرقامها بلا فلتر الباقة',
       ],
       kpis: kpis,
       prev: prevReady ? MergedFinanceApi.sumKpis([for (final co in inc) co.prev!.kpis]) : null,
@@ -540,10 +639,13 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
             // بند ١٨ (قرار المالك ٢٢ نوفمبر): الطريقة الثالثة عند الوطنيّ — لشركاته وحدها
             if (_walletShown) const RpPayShortcut('من محفظة المشترك', [_walletType]),
           ],
+          // فلتر الباقة (بند المقترح ١٢): باقات الفترة تصل والورقة مفتوحة
+          packages: _packagesInPeriod,
         );
       }),
     );
     unawaited(_loadPeople(keys).then((_) => _sheetRefresh?.call()));
+    unawaited(_loadPackages(keys).then((_) => _sheetRefresh?.call()));
     final v = await sheetFuture;
     _sheetRefresh = null;
     if (v != null && mounted) _apply(v);
@@ -848,6 +950,10 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         if (f.types.contains(_walletType)) 'من محفظة المشترك',
       ];
       out.add(RpChip('النوع: ${labels.join('، ')}', onRemove: () => _apply(f.copyWith(types: const []))));
+    }
+    if (f.packages.isNotEmpty) {
+      out.add(RpChip('الباقة: ${[for (final k in f.packages) _packageLabel(k)].join('، ')}',
+          onRemove: () => _apply(f.copyWith(packages: const {}))));
     }
     return out;
   }

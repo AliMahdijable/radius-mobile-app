@@ -777,6 +777,50 @@ void main() {
       }
     });
 
+    testWidgets('فلتر الباقة بالوضع الصارم: الأسماء كما يطلبها الخادم و«بلا باقة» برمزه، أرقام الخادم، والمقارنة بالفلتر نفسه', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          'pk': ['|Gaming 100', '|بلا باقة'],
+          'ot': 'supernet:12',
+        }),
+      });
+      server.strict = true;
+      try {
+        await open(t);
+        expect(server.finance.length, 2, reason: 'الصارم يُقارَن');
+        final (_, cur) = server.finance[0];
+        expect(cur['strict_types'], '1');
+        expect(cur['action_types'], isNull, reason: 'باقةٌ بلا نوع');
+        expect(jsonDecode('${cur['packages']}'), ['Gaming 100', ':none:activate']);
+        final (_, prev) = server.finance[1];
+        expect([prev['strict_types'], prev['packages'], prev['limit_logs']], ['1', cur['packages'], '1']);
+        expect(hero(t).kpi.value, 9850000, reason: 'رقم الخادم بفلتره');
+        expect(find.textContaining('الباقة: Gaming 100'), findsOneWidget);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('فلتر الباقة وخادمٌ لا يطبّقه (بلا type_filter): يُقال تحت الرقم لا صفرٌ ولا رقمٌ بلا فلترٍ صامت', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          'c': false,
+          'pk': ['|Gaming 100'],
+          'ot': 'supernet:12',
+        }),
+      });
+      try {
+        await open(t);
+        expect(hero(t).notes.any((n) => n.contains('فلتر الباقة لا يطبّقه')), isTrue, reason: '${hero(t).notes}');
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
     testWidgets('فلتر النوع وخادمٌ لا يعرف الوضع الصارم (بلا type_filter): من السطور كما كان — والطلب يحمل المعاملين', (t) async {
       await up(prefs: {
         'report.v2.finance': jsonEncode({

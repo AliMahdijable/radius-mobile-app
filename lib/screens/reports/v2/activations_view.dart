@@ -26,6 +26,17 @@ class ActivationsView {
 
   static const types = ['SUBSCRIBER_ACTIVATE', 'SUBSCRIBER_EXTEND', 'SUBSCRIBER_ADD'];
 
+  static const noPackage = 'بلا باقة';
+  static const noPackageExtend = 'تمديد (بلا باقة)';
+
+  /// اسم الباقة كما في «قسّم حسب الباقة» وفلترها — action_data.package_name مشذّباً، وما بلا باقةٍ اسمٌ صريح يُختار أيضاً. القاعدة
+  /// نفسها في فلتر الماليّ (الخادم يطابقها حرفاً: FinanceReportController PKG_NAME_SQL).
+  static String packageNameOf(ActivityRow r) =>
+      (r.packageName ?? '').isNotEmpty ? r.packageName! : (kindOf(r) == ActKind.extend ? noPackageExtend : noPackage);
+
+  /// الاسم كما يطلبه الخادم في فلتر الماليّ الصارم (packages): ما بلا باقة برمزَيه (d9 ٢٢ نوفمبر — fintyped1122).
+  static String serverPackage(String name) => name == noPackage ? ':none:activate' : (name == noPackageExtend ? ':none:extend' : name);
+
   /// تفعيلٌ (ومنه «إضافة مشترك» بتفعيل) أو تمديد — غيرهما لا يدخل التقرير.
   static bool relevant(ActivityRow r) {
     final at = r.actionType.toUpperCase().trim();

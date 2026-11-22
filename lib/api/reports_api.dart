@@ -1038,16 +1038,17 @@ class ReportsApi {
     bool includeArchived = false,
     bool withPackageCost = false,
     List<String>? strictTypes,
+    List<String>? strictPackages,
   }) async {
+    final strict = (strictTypes?.isNotEmpty ?? false) || (strictPackages?.isNotEmpty ?? false);
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
-        // فلتر النوع بالوضع الصارم (d9 ٢٢ نوفمبر): الخادم يقيّد أرقام الفترة كاملةً بالأنواع ويعلّم ردّه بـtype_filter؛ خادمٌ قديم يتجاهل
-        // المعاملين فيبقى الحساب من السطور
-        if (strictTypes != null && strictTypes.isNotEmpty) ...{
-          'strict_types': '1',
-          'action_types': strictTypes.join(','),
-        },
+        // فلتر النوع والباقة بالوضع الصارم (d9 ٢٢ نوفمبر): الخادم يقيّد أرقام الفترة كاملةً بهما ويعلّم ردّه بـtype_filter؛ خادمٌ قديم
+        // يتجاهل المعاملات فيبقى الحساب من السطور. الباقات أسماءٌ كما في action_data.package_name ورمزا «بلا باقة»
+        if (strict) 'strict_types': '1',
+        if (strictTypes != null && strictTypes.isNotEmpty) 'action_types': strictTypes.join(','),
+        if (strictPackages != null && strictPackages.isNotEmpty) 'packages': jsonEncode(strictPackages),
         // ما غطّته تسويةٌ فعّالة مخفيٌّ افتراضيّاً من الخادم: الأرقام
         // والسلسلة وآخر الحركات والصرفيات معاً (§٤).
         if (includeArchived) 'include_archived': '1',
@@ -1113,7 +1114,7 @@ class ReportsApi {
           perAdmin: rows(data['perAdmin'], FinanceAdminRow.fromJson),
           series: rows(data['timeseries'], FinanceDayRow.fromJson),
           byType: rows(data['stacked'], FinanceTypeRow.fromJson),
-          typeFilter: strictTypes == null || strictTypes.isEmpty ? null : FinanceTypeFilter.fromJson(data['type_filter']),
+          typeFilter: strict ? FinanceTypeFilter.fromJson(data['type_filter']) : null,
         ),
         error: null,
       );

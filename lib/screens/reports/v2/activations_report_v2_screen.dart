@@ -336,9 +336,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
   // ═══════════════ ما يُرسم ═══════════════
 
   /// اسم الباقة كما في «قسّم حسب الباقة» — وما بلا باقةٍ اسمٌ صريح يُختار أيضاً.
-  static String _pkgName(ActivityRow r) => (r.packageName ?? '').isNotEmpty
-      ? r.packageName!
-      : (ActivationsView.kindOf(r) == ActKind.extend ? 'تمديد (بلا باقة)' : 'بلا باقة');
+  static String _pkgName(ActivityRow r) => ActivationsView.packageNameOf(r);
 
   /// فلتر الباقة (بند المقترح ١٢) على سطور شركةٍ واحدة ([company] null = المفتوحة) — السطور كاملةٌ للفترة فالرقم صادق.
   List<ActivityRow> _byPackage(List<ActivityRow> rows, String? company) {
