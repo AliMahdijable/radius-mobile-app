@@ -590,6 +590,29 @@ class FinanceTypeRow {
   }
 }
 
+/// علامة «الوضع الصارم» في ردّ الماليّ (d9 ٢٢ نوفمبر — fintyped1122/elfintyped1122): الخادم طبّق فلتر النوع (والباقة) على الفترة كاملةً —
+/// kpis/perAdmin/timeseries/stacked/recentLogs كلّها مقيّدةٌ به، فتُعرض كما هي (لا حسابٌ من السطور ولا «من آخر 1000»). غيابها (خادمٌ قبل
+/// النشر، FTTH القديم) ⇒ الحساب من السطور كما كان.
+class FinanceTypeFilter {
+  const FinanceTypeFilter({required this.types, this.packages, this.expenses = false});
+  final List<String> types;
+  final List<String>? packages;
+
+  /// الصرفيّات داخلةٌ في الأرقام (ADMIN_EXPENSE بين الأنواع ولا باقة).
+  final bool expenses;
+
+  static FinanceTypeFilter? fromJson(Object? j) {
+    if (j is! Map || j['strict'] != true) return null;
+    final t = j['types'];
+    final p = j['packages'];
+    return FinanceTypeFilter(
+      types: t is List ? [for (final x in t) '$x'] : const [],
+      packages: p is List ? [for (final x in p) '$x'] : null,
+      expenses: j['expenses'] == true,
+    );
+  }
+}
+
 class FinanceReport {
   const FinanceReport({
     required this.kpis,
@@ -600,9 +623,13 @@ class FinanceReport {
     this.perAdmin = const [],
     this.series = const [],
     this.byType = const [],
+    this.typeFilter,
   });
   final FinanceKPIs kpis;
   final List<FinanceLog> recentLogs;
+
+  /// الخادم طبّق فلتر النوع بنفسه ([FinanceTypeFilter]) — null: بلا فلتر، أو خادمٌ لا يعرف الوضع الصارم.
+  final FinanceTypeFilter? typeFilter;
 
   /// «حسب المدير» و«يوماً بيوم» و«حسب النوع» من الخادم نفسه (التقرير الموحّد، ٢٢ نوفمبر) — فارغةٌ من خادمٍ لا يرسلها.
   final List<FinanceAdminRow> perAdmin;
@@ -1010,10 +1037,17 @@ class ReportsApi {
     int? employeeId,
     bool includeArchived = false,
     bool withPackageCost = false,
+    List<String>? strictTypes,
   }) async {
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
+        // فلتر النوع بالوضع الصارم (d9 ٢٢ نوفمبر): الخادم يقيّد أرقام الفترة كاملةً بالأنواع ويعلّم ردّه بـtype_filter؛ خادمٌ قديم يتجاهل
+        // المعاملين فيبقى الحساب من السطور
+        if (strictTypes != null && strictTypes.isNotEmpty) ...{
+          'strict_types': '1',
+          'action_types': strictTypes.join(','),
+        },
         // ما غطّته تسويةٌ فعّالة مخفيٌّ افتراضيّاً من الخادم: الأرقام
         // والسلسلة وآخر الحركات والصرفيات معاً (§٤).
         if (includeArchived) 'include_archived': '1',
@@ -1079,6 +1113,7 @@ class ReportsApi {
           perAdmin: rows(data['perAdmin'], FinanceAdminRow.fromJson),
           series: rows(data['timeseries'], FinanceDayRow.fromJson),
           byType: rows(data['stacked'], FinanceTypeRow.fromJson),
+          typeFilter: strictTypes == null || strictTypes.isEmpty ? null : FinanceTypeFilter.fromJson(data['type_filter']),
         ),
         error: null,
       );

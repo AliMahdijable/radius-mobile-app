@@ -130,6 +130,9 @@ class _Server implements HttpClientAdapter {
   /// مدراء المفتوحة (/api/v2/managers) — null = الحاضنة.
   List<Map<String, Object?>>? managers;
 
+  /// خادمٌ بعد نشر d9 (fintyped1122): يطبّق فلتر النوع بالوضع الصارم ويعلّم ردّه بـtype_filter.
+  bool strict = false;
+
   List<Map<String, Object?>> _slice(Map<String, dynamic> q) {
     final lo = '${q['date_from']}', hi = '${q['date_to']}';
     final limit = int.tryParse('${q['limit_logs']}') ?? 50;
@@ -154,7 +157,16 @@ class _Server implements HttpClientAdapter {
       if (key != null && failing.contains(key)) return _json({'success': false, 'message': 'انتهت جلستها'}, key);
       final prev = o.queryParameters['limit_logs']?.toString() == '1';
       final rows = month == null ? null : _slice(Map<String, dynamic>.from(o.queryParameters));
-      return _json(_financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows, debt: debtFor.contains(key)), key);
+      final b = _financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows, debt: debtFor.contains(key));
+      if (strict && o.queryParameters['strict_types']?.toString() == '1') {
+        (b['data'] as Map)['type_filter'] = {
+          'strict': true,
+          'types': '${o.queryParameters['action_types']}'.split(','),
+          'packages': null,
+          'expenses': false,
+        };
+      }
+      return _json(b, key);
     }
     if (key != null) return _json({'success': true, 'data': const []}, key);
     if (managers != null && p == '/api/v2/managers') return _json({'success': true, 'data': managers}, null);
@@ -519,7 +531,7 @@ void main() {
             'm': {
               'open': ['101'],
             },
-            's': true,
+            'ws': true,
             'mm': 'actor',
             'ot': 'supernet:12',
           }),
@@ -709,6 +721,73 @@ void main() {
         expect(hero(t).kpi.value, 70000, reason: 'تفعيلان نقديّان 35,000 من السطور');
         expect(hero(t).kpi.delta, isNull);
         expect(find.byType(RpTrendCard), findsNothing);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('«مع الفرعيّين» مطفأٌ افتراضاً: «s» القديم المحفوظ true لا يُورَث — المدير المختار وحده ولو وصلت الشجرة', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          'c': false,
+          'm': {
+            'open': ['101'],
+          },
+          's': true,
+          'mm': 'actor',
+          'ot': 'supernet:12',
+        }),
+      });
+      server.managers = [
+        {'id': 101, 'username': 'ali', 'parent_id': null},
+        {'id': 102, 'username': 'sub1', 'parent_id': 101},
+      ];
+      try {
+        await open(t);
+        expect('${server.finance.first.$2['user_ids']}'.split(','), ['101'], reason: 'قرار المالك: الفرعيّون من المفتاح وحده');
+        expect(find.textContaining('+ الفرعيّين'), findsNothing);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('فلتر النوع بالوضع الصارم (type_filter): أرقام الخادم للفترة كاملةً لا السطور، والمقارنة بالطلب نفسه', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          't': ['SUBSCRIBER_ACTIVATE_CASH'],
+        }),
+      });
+      server.strict = true;
+      try {
+        await open(t);
+        expect(server.finance.length, 2, reason: 'الصارم يُقارَن');
+        final (_, cur) = server.finance[0];
+        expect([cur['strict_types'], cur['action_types'], cur['limit_logs']], ['1', 'SUBSCRIBER_ACTIVATE_CASH', '2000']);
+        final (_, prev) = server.finance[1];
+        expect([prev['strict_types'], prev['action_types'], prev['limit_logs']], ['1', 'SUBSCRIBER_ACTIVATE_CASH', '1']);
+        expect(hero(t).kpi.value, 9850000, reason: 'رقم الخادم للفترة كاملةً — لا 70,000 من السطور');
+        expect(hero(t).kpi.delta, closeTo((9850000 - 8865000) / 8865000, 1e-9));
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('فلتر النوع وخادمٌ لا يعرف الوضع الصارم (بلا type_filter): من السطور كما كان — والطلب يحمل المعاملين', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          't': ['SUBSCRIBER_ACTIVATE_CASH'],
+        }),
+      });
+      try {
+        await open(t);
+        expect(server.finance.single.$2['strict_types'], '1');
+        expect(hero(t).kpi.value, 70000, reason: 'تفعيلان نقديّان 35,000 من السطور');
         expect(t.takeException(), isNull);
       } finally {
         await down(t);

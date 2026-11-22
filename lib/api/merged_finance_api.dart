@@ -24,7 +24,10 @@ class MergedFinancePart {
 
 /// فلاتر شركةٍ واحدة في التقرير الموحّد — null في كلٍّ منها = بلا ذلك الفلتر.
 class FinanceCompanyFilter {
-  const FinanceCompanyFilter({this.userIds, this.userManager, this.employeeId});
+  const FinanceCompanyFilter({this.userIds, this.userManager, this.employeeId, this.strictTypes});
+
+  /// فلتر النوع بالوضع الصارم — كلّ شركةٍ بعلامة ردّها ([FinanceReport.typeFilter]).
+  final List<String>? strictTypes;
 
   /// مدراءٌ اختارهم (مع فرعيّيهم حين يُطلب) — بدل «مديرها وحده».
   final List<String>? userIds;
@@ -105,6 +108,7 @@ class MergedFinanceApi {
           recentLimit: recentLimit,
           includeArchived: includeArchived,
           withPackageCost: isCostBearingAdminId(c.adminId),
+          strictTypes: filter?.strictTypes,
         ),
       );
 

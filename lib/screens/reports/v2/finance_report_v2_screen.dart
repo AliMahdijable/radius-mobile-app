@@ -14,6 +14,7 @@ import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/permissions_service.dart';
+import '../../../services/provider_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -75,9 +76,18 @@ class _View {
     required this.costNeedsAllTypes,
     required this.mixedRules,
     required this.showCost,
+    this.clientTyped = false,
+    this.typeNotes = const [],
   });
   final FinanceKPIs kpis;
   final FinanceKPIs? prev;
+
+  /// فلتر النوع محسوبٌ هنا من السطور (خادمٌ لم يطبّقه — بلا [FinanceReport.typeFilter]): التقسيمات من السطور بملاحظة «من آخر 1000».
+  /// false: بلا فلتر، أو الخادم طبّقه بالوضع الصارم فأرقامه وتقسيماته للفترة كاملةً.
+  final bool clientTyped;
+
+  /// سطورٌ تحت الرقم الأكبر عن فلتر النوع («من محفظة المشترك»…).
+  final List<String> typeNotes;
 
   /// السطور بعد فلتر النوع.
   final List<FinanceLog> logs;
@@ -224,6 +234,19 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
 
   int? _employeeId(String group) => int.tryParse(_f!.employees[group] ?? '');
 
+  /// فلتر النوع بالوضع الصارم (d9 ٢٢ نوفمبر — fintyped1122/elfintyped1122): يُرسل مع كلّ طلبٍ للفترة ومقارنتها وأجزاء تصديرها، والخادم
+  /// يعلّم ردّه بـtype_filter حين طبّقه — وإلّا فالحساب من السطور كما كان. null: بلا فلتر نوع.
+  List<String>? get _strictTypes => (_f?.types.isEmpty ?? true) ? null : _f!.types;
+
+  /// «من محفظة المشترك» (قرار المالك ٢٢ نوفمبر عبر d9 — بند ١٨): تفعيلات الوطنيّ المدفوعة من محفظة المشترك عند الشركة — لا نقدٌ للوكيل
+  /// ولا دين، العدد وحده. نوعٌ يعرفه الخادم بالوضع الصارم وحده.
+  static const _walletType = 'SUBSCRIBER_ACTIVATE_WALLET';
+
+  /// الخيار يظهر لشركات المشروع الوطنيّ (من يكتب هذه الطريقة) — المفتوحة أو إحدى شركات «كل الشركات».
+  bool get _walletShown => _merged
+      ? _countable.any((c) => c.code.toLowerCase().startsWith('watani'))
+      : ProviderService.parentIsZone && !ProviderService.isFtth;
+
   Future<void> _loadPeople(List<String?> keys) async {
     final want = [
       for (final k in keys)
@@ -261,8 +284,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       _error = cur.ok ? null : (cur.error ?? 'common.load_failed'.tr());
       _visible = _page;
     });
-    // فلتر النوع يُحسب من السطور ولا مقارنة له ([_view]) ⇒ لا طلب للسابقة
-    if (!f.compare || f.types.isNotEmpty || !cur.ok) return;
+    // فلتر النوع: المقارنة حين طبّقه الخادم بالوضع الصارم وحده (الطلب نفسه للفترة السابقة) — المحسوب من السطور بلا مقارنة
+    if (!f.compare || (f.types.isNotEmpty && cur.data?.typeFilter == null) || !cur.ok) return;
     final prev = await fetch(f.range.previous, 1);
     if (!mounted || seq != _seq || _merged) return;
     setState(() => _prev = prev.ok ? prev.data : null);
@@ -279,11 +302,12 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         includeArchived: _withArchive,
         // كلفة الباقات (قرار ٢٠٢٦-١٠-١٨): لمالك الحساب وحده، ولساسٍ بعيد أو ايرث لنك — كالشاشة السابقة.
         withPackageCost: !Perms.isEmployee && isCostBearingAdminId((_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
+        strictTypes: _strictTypes,
       );
 
   /// فلاتر شركةٍ في «كل الشركات» — طلبها وطلب مقارنتها وأجزاء تصديرها.
   FinanceCompanyFilter _companyFilter(String key) =>
-      FinanceCompanyFilter(userIds: _actorIds(key), userManager: _ownerUsername(key), employeeId: _employeeId(key));
+      FinanceCompanyFilter(userIds: _actorIds(key), userManager: _ownerUsername(key), employeeId: _employeeId(key), strictTypes: _strictTypes);
 
   List<MergedCompany> get _countable => MergedDashboardApi.countable();
 
@@ -322,7 +346,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     if (!mounted || seq != _seq) return;
     final reason = (!r.ok || r.data == null) ? (r.error ?? 'تعذّر جلب تقريرها') : MergedFinanceApi.gapReason(c, r.data!);
     setState(() => _cos[c.key] = _Co(c, cur: r.data, reason: reason));
-    if (!f.compare || f.types.isNotEmpty || reason != null) return;
+    if (!f.compare || (f.types.isNotEmpty && r.data?.typeFilter == null) || reason != null) return;
     final p = await MergedFinanceApi.one(c,
         from: f.range.previous.from, to: f.range.previous.to, includeArchived: _withArchive, filter: filter, recentLimit: 1);
     if (!mounted || seq != _seq) return;
@@ -350,15 +374,24 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
 
   _View? _view() {
     final types = _f!.types;
-    final hasType = types.isNotEmpty;
+    final typeNotes = [
+      if (types.contains(_walletType)) 'من محفظة المشترك: دُفع من محفظة المشترك بالشركة — بلا نقدٍ ولا دين (العدد وحده)',
+    ];
     if (!_merged) {
       final r = _cur;
       if (r == null) return null;
-      final filtered = FinanceLogs.filter(r.recentLogs, types);
+      // الخادم طبّق الفلتر (type_filter): أرقامه وسطوره كما أرسلها — لا تُعاد فلترتها (تعريفه أوسع من كلمات الوصف). وإلّا: من السطور.
+      final hasType = types.isNotEmpty && r.typeFilter == null;
+      final filtered = FinanceLogs.filter(r.recentLogs, hasType ? types : null);
       final cost = hasType
           ? PackageCostKpis.forFilteredLogs(period: r.kpis.packageCost, allLogs: r.recentLogs, filtered: filtered)
           : null;
       return _View(
+        clientTyped: hasType,
+        typeNotes: [
+          ...typeNotes,
+          if (hasType && types.contains(_walletType)) '«من محفظة المشترك» يحتاج الخادم المحدَّث — لا يدخل في هذه الأرقام بعد',
+        ],
         kpis: hasType ? FinanceLogs.kpisFromLogs(filtered, packageCost: cost?.cost) : r.kpis,
         prev: hasType ? null : _prev?.kpis,
         logs: filtered,
@@ -375,13 +408,27 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     final m = _combined;
     final rep = m.report;
     if (rep == null) return null;
-    final filtered = FinanceLogs.filter(rep.recentLogs, types);
+    // «كل الشركات»: كلّ شركةٍ بعلامة ردّها — الصارمة بأرقامها وسطورها كما أرسلتها، وغيرها (FTTH القديم) من سطورها
+    bool typedCo(String? key) => key != null && _cos[key]?.cur?.typeFilter != null;
+    final hasType = types.isNotEmpty && m.included.any((p) => p.report!.typeFilter == null);
+    final filtered = types.isEmpty
+        ? FinanceLogs.filter(rep.recentLogs, null)
+        : [
+            for (final l in rep.recentLogs)
+              if (!FinanceLogs.excludedTypes.contains(l.actionType.toUpperCase().trim()) &&
+                  (typedCo(m.logCompany[l]) || types.any((t) => FinanceLogs.matchesType(l, t))))
+                l,
+          ];
     FinanceKPIs kpis = rep.kpis;
     var costUnavailable = false;
     if (hasType) {
-      // كلّ شركةٍ من سطورها (وكلفتها من سطورها) ثمّ المجموع — لا سطور شركةٍ بكلفة أخرى (كالشاشة السابقة).
+      // كلّ شركةٍ من سطورها (وكلفتها من سطورها) ثمّ المجموع — لا سطور شركةٍ بكلفة أخرى (كالشاشة السابقة)؛ والصارمة بأرقامها هي.
       final parts = <FinanceKPIs>[];
       for (final p in m.included) {
+        if (p.report!.typeFilter != null) {
+          parts.add(p.report!.kpis);
+          continue;
+        }
         final mine = [
           for (final l in filtered)
             if (m.logCompany[l] == p.company.key) l,
@@ -421,6 +468,12 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       }
     }
     return _View(
+      clientTyped: hasType,
+      typeNotes: [
+        ...typeNotes,
+        if (types.contains(_walletType) && m.included.any((p) => p.report!.typeFilter == null))
+          '«من محفظة المشترك» يحتاج الخادم المحدَّث — شركةٌ لم يطبّقه خادمها لا يدخل فيها',
+      ],
       kpis: kpis,
       prev: prevReady ? MergedFinanceApi.sumKpis([for (final co in inc) co.prev!.kpis]) : null,
       logs: filtered,
@@ -481,9 +534,11 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
               ),
           ],
           types: [for (final t in kFinancialActionTypes) (t.key, t.displayLabel)],
-          payments: const [
-            RpPayShortcut('نقد', ['SUBSCRIBER_ACTIVATE_CASH', 'BALANCE_DEDUCT']),
-            RpPayShortcut('بالدين', ['SUBSCRIBER_ACTIVATE_NON_CASH', 'BALANCE_ADD']),
+          payments: [
+            const RpPayShortcut('نقد', ['SUBSCRIBER_ACTIVATE_CASH', 'BALANCE_DEDUCT']),
+            const RpPayShortcut('بالدين', ['SUBSCRIBER_ACTIVATE_NON_CASH', 'BALANCE_ADD']),
+            // بند ١٨ (قرار المالك ٢٢ نوفمبر): الطريقة الثالثة عند الوطنيّ — لشركاته وحدها
+            if (_walletShown) const RpPayShortcut('من محفظة المشترك', [_walletType]),
           ],
         );
       }),
@@ -586,7 +641,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       companyOf = (l) => full.companyOf[l];
       gaps.addAll(full.gaps);
     }
-    var logs = FinanceLogs.filter(all, f.types);
+    // الصارم: السطور كما أرسلها الخادم (مقيّدةً بتعريفه) — لا تُعاد فلترتها بكلمات الوصف
+    var logs = v.clientTyped ? FinanceLogs.filter(all, f.types) : (f.types.isEmpty ? FinanceLogs.filter(all, null) : _strictKeep(all, m, companyOf));
     if (pick != null) logs = logs.where(pick).toList();
     if (withSearch) logs = FinanceView.search(logs, _q);
     final t = title.isEmpty ? 'reports.financial'.tr() : title;
@@ -603,6 +659,21 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         return ReportExportActions.sharePdf(context,
             title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial');
     }
+  }
+
+  /// سطور التصدير بفلتر نوعٍ طبّقه الخادم: سطور الشركة الصارمة كما هي، وغيرها (FTTH القديم في «كل الشركات») بكلمات الوصف.
+  List<FinanceLog> _strictKeep(List<FinanceLog> all, MergedFinanceResult? m, String? Function(FinanceLog) companyOf) {
+    final types = _f!.types;
+    bool typed(FinanceLog l) {
+      if (m == null) return _cur?.typeFilter != null;
+      final key = companyOf(l);
+      return key != null && _cos[key]?.cur?.typeFilter != null;
+    }
+
+    return [
+      for (final l in all)
+        if (!FinanceLogs.excludedTypes.contains(l.actionType.toUpperCase().trim()) && (typed(l) || types.any((t) => FinanceLogs.matchesType(l, t)))) l,
+    ];
   }
 
   /// كلّ حركات الفترة لكلّ شركةٍ داخلة (المقصوصة وحدها تُطلب مقسومة) بنافذة تقدّمٍ تُلغى — null: أُلغي.
@@ -774,6 +845,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       final labels = [
         for (final t in kFinancialActionTypes)
           if (f.types.contains(t.key)) t.displayLabel,
+        if (f.types.contains(_walletType)) 'من محفظة المشترك',
       ];
       out.add(RpChip('النوع: ${labels.join('، ')}', onRemove: () => _apply(f.copyWith(types: const []))));
     }
@@ -786,7 +858,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
 
   ({List<RpShare> shares, String? note}) _breakdown(_View v) {
     final tab = _tabs[_tab.clamp(0, _tabs.length - 1)];
-    final hasType = _f!.types.isNotEmpty;
+    // من السطور حين حُسب الفلتر هنا؛ الصارم من الخادم كبلا فلتر (أرقامه للفترة كاملة)
+    final hasType = v.clientTyped;
     final fromLogsNote = v.truncated ? 'محسوبٌ من آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة' : null;
     List<RpShare> shares(List<(String, num, int, RpCompany?, String?)> rows) {
       final total = rows.fold<num>(0, (a, r) => a + (r.$2 > 0 ? r.$2 : 0));
@@ -817,7 +890,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
             for (final p in m?.included ?? const <MergedFinancePart>[])
               (
                 p.company.name,
-                hasType
+                hasType && p.report!.typeFilter == null
                     ? FinanceLogs.kpisFromLogs([
                         for (final l in v.logs)
                           if (m!.logCompany[l] == p.company.key) l,
@@ -973,7 +1046,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       compareWith: f.range.vsText,
       spark: spark,
       note: FinanceView.heroNote(v.kpis, mergedRule: v.mixedRules),
-      notes: FinanceView.heroNotes(v.kpis, costNeedsAllTypes: v.costNeedsAllTypes),
+      notes: [...FinanceView.heroNotes(v.kpis, costNeedsAllTypes: v.costNeedsAllTypes), ...v.typeNotes],
       onTap: () => _drill(hero, v),
     ));
     parts.add(RpKpiGrid(kpis: FinanceView.kpis(v.kpis, v.prev), compareWith: f.range.vsText, onTap: (k) => _drill(k, v)));

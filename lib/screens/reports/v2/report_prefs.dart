@@ -44,7 +44,9 @@ class RpPrefs {
         compare: j['c'] != false,
         companies: {for (final x in (j['co'] is List ? j['co'] as List : const [])) '$x'},
         managers: managers,
-        withSubs: j['s'] != false,
+        // «مع الفرعيّين» بمفتاحٍ جديد «ws» (٢٢ نوفمبر): «s» القديم حُفظ true افتراضاً قبل أن يظهر المفتاح — لا يُورَث فيضمّ الفرعيّين
+        // تلقائيّاً حين يصل parent_id من الخادم
+        withSubs: j['ws'] == true,
         managerMode: j['mm'] == 'owner' ? RpManagerMode.owner : RpManagerMode.actor,
         employees: employees,
         types: [for (final x in (j['t'] is List ? j['t'] as List : const [])) '$x'],
@@ -69,7 +71,7 @@ class RpPrefs {
           'c': v.compare,
           'co': v.companies.toList(),
           'm': {for (final e in v.managers.entries) e.key: e.value.toList()},
-          's': v.withSubs,
+          'ws': v.withSubs,
           'mm': v.managerMode.name,
           'e': v.employees,
           't': v.types,

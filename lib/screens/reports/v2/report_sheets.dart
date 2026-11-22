@@ -48,7 +48,7 @@ class RpFilterValue {
     this.compare = true,
     this.companies = const {},
     this.managers = const {},
-    this.withSubs = true,
+    this.withSubs = false,
     this.managerMode = RpManagerMode.actor,
     this.employees = const {},
     this.types = const [],
@@ -61,6 +61,9 @@ class RpFilterValue {
   /// «كل الشركات»: المختارة (فارغ = كلّها).
   final Set<String> companies;
   final Map<String, Set<String>> managers;
+
+  /// «مع مدرائه الفرعيّين» — مطفأٌ افتراضاً (قرار المالك ٢٢ نوفمبر: «حركاتي أنا»، والفرعيّون من الفلاتر بالمفتاح): المدير المختار وحده
+  /// حتى يُفتح المفتاح (يظهر حين يرسل الخادم شجرة parent_id — mgrparent1122).
   final bool withSubs;
   final RpManagerMode managerMode;
 
