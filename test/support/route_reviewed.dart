@@ -76,6 +76,8 @@ const reviewedSectionSites = <String, (String, String)>{
   'lib/services/permissions_service.dart EmployeesApi.me': ('open', 'صلاحيّات الجلسة'),
   'lib/widgets/manual_wa_chip.dart WaContactRiskApi.one': ('open', 'واتساب المفتوحة'),
   'lib/api/whatsapp_api.dart PortalSettingsApi.fillAgentCode': ('row', 'CompanyRoute.pin(sub.companyKey (بلا مفتاح ⇒ المفتوحة)'),
+  // ورقة فلاتر التقرير الموحّد (٢٢ نوفمبر): موظّفو مجموعتها — شركتها في «كل الشركات»، والمفتوحة صراحةً بلا مفتاح
+  'lib/api/report_people_api.dart EmployeesApi.list': ('row', 'CompanyRoute.pin(group.companyKey (بلا مفتاح ⇒ المفتوحة)'),
 };
 
 /// ودجات الشريط نفسها تقرأ اختياره؛ غيرها لا يمرّر الشريط شركةً لغلاف.

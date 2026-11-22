@@ -3,8 +3,8 @@ import 'api_client.dart';
 import 'company_route.dart';
 import 'employees_api.dart';
 
-/// مدراء وموظّفو شركةٍ لورقة فلاتر التقرير الموحّد (٢٢ نوفمبر) — بنطاق النداء: المفتوحة، أو شركة «كل الشركات» داخل
-/// [CompanyRoute.run] (المساران موجَّهان للقراءة). `parent_id` حين يرسله الخادم ⇒ شجرة المدراء الفرعيّين.
+/// مدراء وموظّفو شركةٍ لورقة فلاتر التقرير الموحّد (٢٢ نوفمبر) — [of] يثبّت شركتهما: المفتوحة، أو شركة «كل الشركات» بمفتاحها
+/// (المساران موجَّهان للقراءة). `parent_id` حين يرسله الخادم ⇒ شجرة المدراء الفرعيّين.
 class ReportPeopleApi {
   ReportPeopleApi._();
 
@@ -30,8 +30,7 @@ class ReportPeopleApi {
     }
   }
 
-  static Future<List<RpPerson>?> employees() async {
-    final r = await EmployeesApi.list(withDeleted: true);
+  static List<RpPerson>? _employees(({List<Employee> rows, String? error}) r) {
     if (r.error != null) return null;
     return [
       for (final e in r.rows)
@@ -40,10 +39,12 @@ class ReportPeopleApi {
     ];
   }
 
-  /// قائمتا شركةٍ معاً — [companyKey] null = المفتوحة. null في أيٍّ منهما = تعذّر جلبها.
+  /// قائمتا شركةٍ معاً — [companyKey] null = المفتوحة صراحةً (لا وجهة قسمٍ موجَّهٍ مفتوحٍ تحت التقرير). null في أيٍّ منهما = تعذّر.
   static Future<({List<RpPerson>? managers, List<RpPerson>? employees})> of(String? companyKey) async {
-    Future<T> run<T>(Future<T> Function() f) => companyKey == null ? CompanyRoute.runOpen(f) : CompanyRoute.run(companyKey, f);
-    final res = await Future.wait([run(managers), run(employees)]);
-    return (managers: res[0], employees: res[1]);
+    // شركة المجموعة في الورقة (مفتاحها، أو المفتوحة) — CompanyRoute.pin: مفتاحٌ صالح ⇒ لها، وإلّا ⇒ المفتوحة
+    final group = (companyKey: companyKey);
+    final m = CompanyRoute.pin(group.companyKey, managers);
+    final e = CompanyRoute.pin(group.companyKey, () => EmployeesApi.list(withDeleted: true));
+    return (managers: await m, employees: _employees(await e));
   }
 }
