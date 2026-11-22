@@ -9,11 +9,13 @@ import '../../api/settlements_api.dart';
 import '../../core/util/ar_date.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/util/server_time.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/payment_void_bits.dart';
+import '../reports/v2/report_kit.dart';
 
 /// مبلغٌ بإشارته: `formatIQD` يُسقطها عمداً، والصندوق قد يكون سالباً.
 String settleMoney(num n) =>
@@ -41,13 +43,14 @@ String settleMoney(num n) =>
   );
 }
 
-/// «الخميس 2026/10/01 · 21:40» بتوقيت الجهاز (الأجهزة في العراق).
-String settleWhen(DateTime? d, {bool weekday = false}) {
+/// «الخميس 2026/10/01 · 21:40» بتوقيت الجهاز (الأجهزة في العراق). [clock12] = الساعة «9:40 مساءً» كالتقارير الموحّدة (المالك ٢٢
+/// نوفمبر: «الأوقات خلّي صباحاً ومساءً») — شاشة الصندوق بها، والسند والطباعة كما كانا.
+String settleWhen(DateTime? d, {bool weekday = false, bool clock12 = false}) {
   if (d == null) return '—';
   final l = d.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
   // «2026/10/23 · 00:00» — أرقامٌ لا اسم شهر (المالك ١٦ نوفمبر).
-  final s = '${iqDateOf(l)} · ${two(l.hour)}:${two(l.minute)}';
+  final s = '${iqDateOf(l)} · ${clock12 ? clock12Ar(l) : '${two(l.hour)}:${two(l.minute)}'}';
   return weekday ? '${'settle.wd${l.weekday}'.tr()} $s' : s;
 }
 
@@ -60,26 +63,35 @@ String collectorName(SettleCollector c) {
 
 /// حصّة كلّ منفّذ: الاسم وعدد ما قبض وصرف، والصافي.
 class CollectorsList extends StatelessWidget {
-  const CollectorsList({super.key, required this.collectors});
+  const CollectorsList({super.key, required this.collectors, this.bare = false});
   final List<SettleCollector> collectors;
+
+  /// داخل بطاقةٍ من التقارير الموحّدة: السطور بلا حدٍّ ولا حاشيةٍ جانبيّة (البطاقة حدّها).
+  final bool bare;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: bare
+          ? null
+          : BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
       child: Column(
         children: [
           for (var i = 0; i < collectors.length; i++) ...[
             if (i > 0) Divider(height: 1, color: AppColors.divider),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              padding: EdgeInsets.symmetric(horizontal: bare ? 0 : 14, vertical: 11),
               child: Row(
                 children: [
+                  if (bare) ...[
+                    RpIconBox(icon: collectors[i].isManager ? LucideIcons.userCog : LucideIcons.user, tone: collectors[i].net < 0 ? RpTone.loss : RpTone.info, size: 32),
+                    const SizedBox(width: Sp.md),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,8 +153,13 @@ class MovementTile extends StatelessWidget {
     this.voided,
     this.voidAction = PaymentVoidAction.none,
     this.onVoid,
+    this.grouped = false,
   });
   final BoxMovement m;
+
+  /// تحت رأس يومها في بطاقة «حركات الفترة» الموحّدة (٢٢ نوفمبر): سطرٌ بشكل التقارير الموحّدة — مربّع أيقونةٍ ٣٦، والوقت «7:34
+  /// مساءً» تحت المبلغ بدل التاريخ في التفاصيل (اليوم في رأسه)، بلا حدٍّ ولا حاشيةٍ جانبيّة. سند التسوية يبقى كما كان.
+  final bool grouped;
 
   /// حال هذا التسديد في قيد الإلغاء — أو null.
   final PaymentVoidItem? voided;
@@ -229,14 +246,73 @@ class MovementTile extends StatelessWidget {
           m.description!.replaceFirst(RegExp(r'^(?:إلغاء بيع|بيع):\s*'), ''),
         // سطر الإلغاء منسوبٌ لمن استلم التسديد (من حصّته يخرج المبلغ) — «من حصّة فلان» فلا يُقرأ «فلان ألغى»
         m.kind == 'debt_payment_void' || m.kind == 'credit_cash_void' ? 'settle.pay_void_from_share'.tr(namedArgs: {'who': who}) : who,
-        settleWhen(m.createdAt),
+        if (!grouped) settleWhen(m.createdAt),
       ], ' · '),
-      style: AppType.muted(),
-      maxLines: 1,
+      style: grouped ? AppType.micro(color: AppColors.textMid) : AppType.muted(),
+      maxLines: grouped ? 2 : 1,
       overflow: TextOverflow.ellipsis,
     );
     // زرّ الفتح بلا معالجٍ لا يُعرض؛ والمقفل («لا صلاحيّة») لا يحتاج معالجاً.
     final action = voidAction == PaymentVoidAction.open && onVoid == null ? PaymentVoidAction.none : voidAction;
+    if (grouped) {
+      final at = m.createdAt?.toLocal();
+      final amountStyle = voidedDone
+          ? AppType.bodyStrong(color: AppColors.textLow).copyWith(decoration: TextDecoration.lineThrough, decorationColor: AppColors.textLow)
+          : AppType.bodyStrong(color: tone.fill);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+        child: Row(
+          children: [
+            RpIconBox(icon: icon, tone: m.isIn ? RpTone.money : RpTone.loss, size: 36),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Row(
+                    children: [
+                      if (v != null) ...[
+                        PaymentVoidBadge(item: v),
+                        const SizedBox(width: Sp.x6),
+                      ],
+                      Expanded(child: details),
+                    ],
+                  ),
+                  if (m.backdated && written.isNotEmpty) ...[
+                    const SizedBox(height: Sp.xs),
+                    ToneChip(
+                      label: 'settle.backdated'.tr(namedArgs: {
+                        'date': written.length >= 10 ? written.substring(0, 10) : written,
+                      }),
+                      tone: AppTone.warning,
+                      dense: true,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: Sp.sm),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('${m.isIn ? '+' : '−'}${formatIQD(m.amount)}', textDirection: TextDirection.ltr, style: amountStyle, maxLines: 1),
+                // «7:34 مساءً» بسطرٍ RTL (الرقم ثمّ الكلمة)
+                if (at != null) Text(clock12Ar(at), style: AppType.micro(color: AppColors.textLow), maxLines: 1),
+              ],
+            ),
+            if (action != PaymentVoidAction.none) ...[
+              const SizedBox(width: Sp.xxs),
+              PaymentVoidRowButton(
+                action: action,
+                resume: v != null,
+                onOpen: onVoid ?? () {},
+              ),
+            ],
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(

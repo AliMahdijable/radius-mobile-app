@@ -539,7 +539,9 @@ void main() {
       expect(find.textContaining('950,000'), findsOneWidget);
       await shoot(t, s1bSasOwner, 'pay_void_settlements', phone, server.inner as VisualServer);
 
-      // تسديد ali.kareem (60,000 — استلمه الموظّف hussein)
+      // تسديد ali.kareem (60,000 — استلمه الموظّف hussein) — الحركات تحت بطاقات الصندوق (الشكل الموحّد): تُمرَّر إليها أوّلاً
+      await t.ensureVisible(find.byType(PaymentVoidRowButton).last);
+      await t.pump();
       await t.tap(find.byType(PaymentVoidRowButton).last);
       await settle(t, seconds: 1);
       expect(server.previews, [770745]);
@@ -568,8 +570,10 @@ void main() {
       expect(find.textContaining('دين المشترك كما هو'), findsOneWidget, reason: 'إشعار الربط');
       expect(find.text('تأكيد الإلغاء'), findsNothing, reason: 'النافذة أُغلقت');
 
-      // القائمة من جديد: الصندوق ينقص، وحركة الإلغاء، والتسديد بشارته بلا زرّ
+      // القائمة من جديد: الصندوق ينقص، وحركة الإلغاء، والتسديد بشارته بلا زرّ — والصندوق أعلى القائمة (مُرِّرت للحركات)
       expect(server.currentGets, 2);
+      t.state<ScrollableState>(find.descendant(of: find.byType(RefreshIndicator), matching: find.byType(Scrollable)).first).position.jumpTo(0);
+      await t.pump();
       expect(find.textContaining('890,000'), findsOneWidget);
       expect(find.textContaining('950,000'), findsNothing);
       expect(find.byType(PaymentVoidBadge), findsOneWidget);

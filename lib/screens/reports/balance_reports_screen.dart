@@ -18,6 +18,8 @@ import '../../widgets/merged_section.dart';
 import '../../api/merged_dashboard_api.dart';
 import 'balance_companies_card.dart';
 import 'balance_period_screen.dart';
+import 'v2/report_kit.dart';
+import 'v2/report_prefs.dart';
 
 /// «تقارير الأرصدة» (١٥ نوفمبر — المالك: «في قسم التقارير نفتح قسم خاص… تقارير الأرصدة» + «اهتم بالتصميم وعرض التفاصيل بوضع
 /// الويب والتطبيق»): فترةٌ لكلّ شحنة رصيد — «هذا ربحك، هذا الإجمالي اللي طبّلك، هذا اللي معوز حتى يوصل للسقف»، «تسوية الرصيد»،
@@ -40,6 +42,44 @@ AppTone balanceStateTone(BalanceState s) => switch (s) {
       BalanceState.waiting => AppTone.warning,
       BalanceState.closed => AppTone.neutral,
     };
+
+/// لون الفترة بلغة التقارير الموحّدة (أيقونة الكرت وحدّه): الجارية بلون العلامة، بانتظار الإغلاق كهرمانيّ، المغلقة هادئة.
+RpTone balanceStateRpTone(BalanceState s) => switch (s) {
+      BalanceState.running => RpTone.brand,
+      BalanceState.waiting => RpTone.debt,
+      BalanceState.closed => RpTone.neutral,
+    };
+
+/// نغمة الحركة في التقارير الموحّدة من نغمتها في التطبيق.
+RpTone balanceRpTone(AppTone t) => switch (t) {
+      AppTone.success => RpTone.money,
+      AppTone.warning => RpTone.debt,
+      AppTone.danger => RpTone.loss,
+      AppTone.brand => RpTone.brand,
+      _ => RpTone.neutral,
+    };
+
+/// كرتٌ بشكل التقارير الموحّدة ([RpCard]: سطحٌ بحدٍّ وظلٍّ هادئ) بسطح Material — لما يحمل لمسةً (InkWell) أو زرّاً بداخله.
+class BalanceTapCard extends StatelessWidget {
+  const BalanceTapCard({super.key, required this.child, this.tint});
+  final Widget child;
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final radius = BorderRadius.circular(R.lg);
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: AppColors.isDark ? Sh.deskRestDark : Sh.deskRest),
+      child: Material(
+        color: AppColors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: tint?.withValues(alpha: 0.35) ?? AppColors.border)),
+        child: child,
+      ),
+    );
+  }
+}
 
 /// لوحة القسم بين الشاشتين (القائمة وتفاصيل الفترة): ما يكتبه أحدهما يراه الآخر فوراً.
 ///
@@ -146,6 +186,10 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
   late final BalanceReportsController _c;
   bool _started = false;
 
+  /// الأقسام الفرعيّة (المالك ٢٢ نوفمبر: «الأقسام الفرعيّة خلّيها مقفولة»): الفترات السابقة هي التقرير نفسه فتُفتح، و«خارج حساب
+  /// الشحن» فرعيّ مطويّ — وما فتحه الوكيل أو طواه يُتذكّر.
+  final _folds = RpFolds('balances', const {'periods': true});
+
   /// شركة القسم تُقرأ مرّةً لحظة فتحه — القسم يُبنى من جديد لكلّ شركةٍ يختارها الشريط ([MergedSection]).
   @override
   void didChangeDependencies() {
@@ -154,6 +198,9 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
     _started = true;
     _c = BalanceReportsController(companyKey: MergedSection.routeKeyOf(context));
     _c.load();
+    _folds.load().then((_) {
+      if (mounted) setState(() {});
+    });
     // «كل الشركات»: اسم المفتوحة لعنوان تفاصيلها تحت جدول الشركات
     if (MergedMode.active.value) {
       MergedMode.openKey().then((k) {
@@ -178,8 +225,9 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
     if (o != null) _c.apply(o);
   }
 
-  void _detail(BalancePeriod p) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => BalancePeriodScreen(controller: _c, periodId: p.id)));
+  /// تفاصيل الفترة — و[filter] حين فُتحت من رقمٍ («ديون الفترة» ⇒ «ديون باقية»: لمس الرقم يفتح حركاته كبقيّة التقارير).
+  void _detail(BalancePeriod p, {BalanceFilter filter = BalanceFilter.all}) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => BalancePeriodScreen(controller: _c, periodId: p.id, initialFilter: filter)));
   }
 
   @override
@@ -328,36 +376,46 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
                 key: const ValueKey('bal-routed-readonly'), style: AppType.micro(color: AppTone.warning.onSoft)),
           ],
           const SizedBox(height: Sp.md),
+          // الفترة الأحدث: كرتها الكبير (المبلغ وما اكتمل منه وتنبيهها وأزرارها) ثمّ أرقامها الأربعة ببطاقات التقارير الموحّدة —
+          // «ديون الفترة» تفتح ديونها الباقية
           BalancePeriodHero(period: periods.first, live: _c.live, controller: _c, onDetail: () => _detail(periods.first)),
+          const SizedBox(height: Sp.sm),
+          BalanceStats(period: periods.first, onDebts: () => _detail(periods.first, filter: BalanceFilter.open)),
           if (periods.length > 1) ...[
             const SizedBox(height: Sp.xl),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
-              child: Text('الفترات السابقة', style: AppType.bodyBold(color: AppColors.textHi)),
-            ),
-            const SizedBox(height: Sp.sm),
-            for (final p in periods.skip(1)) ...[
-              _PeriodCard(key: ValueKey('bal-period-${p.id}'), period: p, controller: _c, onDetail: () => _detail(p)),
-              const SizedBox(height: Sp.sm),
-            ],
+            _previousTitle(periods.skip(1).toList()),
+            if (_folds.open('periods'))
+              for (final p in periods.skip(1)) ...[
+                const SizedBox(height: Sp.sm),
+                _PeriodCard(key: ValueKey('bal-period-${p.id}'), period: p, controller: _c, onDetail: () => _detail(p)),
+              ],
           ],
           if (outside.isNotEmpty || notes.isNotEmpty) ...[
             const SizedBox(height: Sp.lg),
-            _Panel(
+            RpCard(
               key: const ValueKey('bal-outside'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (outside.isNotEmpty) ...[
-                    Text('خارج حساب الشحن', style: AppType.bodyBold(color: AppColors.textHi)),
-                    const SizedBox(height: 2),
-                    Text('مبالغ دخلت من غير تفعيلات الفترات — لا تُحسب ضمن مبلغ أيّ شحن.', style: AppType.micro(color: AppColors.textMid)),
-                    const SizedBox(height: Sp.sm),
-                    for (final o in outside) BalanceLine(key: ValueKey('bal-outside-${o.id}'), label: o.label, value: balanceIqd(o.value)),
+                    RpTitle(
+                      icon: LucideIcons.arrowLeftRight,
+                      title: 'خارج حساب الشحن',
+                      tone: RpTone.info,
+                      trailing: Text(rpNum(outside.fold<num>(0, (s, o) => s + o.value)), style: AppType.pillBold(color: AppColors.textMid)),
+                      fold: _folds.fold('outside', setState),
+                    ),
+                    if (_folds.open('outside')) ...[
+                      const SizedBox(height: Sp.sm),
+                      Text('مبالغ دخلت من غير تفعيلات الفترات — لا تُحسب ضمن مبلغ أيّ شحن.', style: AppType.micro(color: AppColors.textMid)),
+                      const SizedBox(height: Sp.sm),
+                      for (final o in outside) BalanceLine(key: ValueKey('bal-outside-${o.id}'), label: o.label, value: balanceIqd(o.value)),
+                    ],
                   ],
+                  // ملاحظات الدقّة تُقرأ دائماً — لا تُطوى مع ما فوقها
                   for (final n in notes)
                     Padding(
-                      padding: const EdgeInsets.only(top: Sp.x6),
+                      padding: EdgeInsets.only(top: outside.isEmpty && n == notes.first ? 0 : Sp.sm),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -370,6 +428,33 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
                 ],
               ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// عنوان «الفترات السابقة» يُطوى — وما ينتظر الإغلاق منها يُذكر تحته ما دام مطويّاً فلا يغيب (سطرٌ يلتفّ، لا شارةٌ تزاحم العنوان).
+  Widget _previousTitle(List<BalancePeriod> older) {
+    final waiting = older.where((p) => p.state == BalanceState.waiting).length;
+    final open = _folds.open('periods');
+    return RpCard(
+      key: const ValueKey('bal-previous'),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RpTitle(
+            icon: LucideIcons.history,
+            title: 'الفترات السابقة',
+            tone: RpTone.neutral,
+            trailing: Text('${older.length}', style: AppType.pillBold(color: AppColors.textMid)),
+            fold: _folds.fold('periods', setState),
+          ),
+          if (!open && waiting > 0) ...[
+            const SizedBox(height: Sp.x6),
+            Text(waiting == 1 ? 'فترةٌ بانتظار الإغلاق' : '$waiting فترات بانتظار الإغلاق',
+                key: const ValueKey('bal-previous-waiting'), style: AppType.microBold(color: AppTone.warning.onSoft)),
           ],
         ],
       ),
@@ -426,20 +511,6 @@ class _Message extends StatelessWidget {
       ),
     );
   }
-}
-
-/// كرتٌ بسطح التطبيق وحدّه.
-class _Panel extends StatelessWidget {
-  const _Panel({super.key, required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Material(
-        color: AppColors.surface,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.card), side: BorderSide(color: AppColors.border)),
-        child: Padding(padding: const EdgeInsets.all(Sp.lg), child: child),
-      );
 }
 
 /// سطر «تسمية ← قيمة»: التسمية تلتفّ والقيمة لا تُقصّ (تصغر إن ضاق السطر).
@@ -514,62 +585,12 @@ class BalanceProgress extends StatelessWidget {
   }
 }
 
-/// كرت رقم: الأيقونة والعنوان سطر، والرقم تحتهما بعرض الكرت — يصغر ولا يُقصّ، وتحته سطورٌ قصيرة.
-class _Stat extends StatelessWidget {
-  const _Stat({super.key, required this.icon, required this.tone, required this.label, required this.value, this.lines = const []});
-  final IconData icon;
-  final AppTone tone;
-  final String label;
-  final String value;
-  final List<String?> lines;
-
-  @override
-  Widget build(BuildContext context) {
-    final subs = lines.whereType<String>().where((x) => x.isNotEmpty).toList();
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.icon)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.sm)),
-                child: Icon(icon, size: 14, color: tone.fill),
-              ),
-              const SizedBox(width: Sp.sm),
-              Expanded(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid))),
-            ],
-          ),
-          const SizedBox(height: Sp.sm),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              value,
-              maxLines: 1,
-              style: AppType.rowValue(color: AppColors.textHi).copyWith(fontSize: 17, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
-            ),
-          ),
-          if (subs.isNotEmpty) ...[
-            const SizedBox(height: Sp.x6),
-            Divider(height: 1, thickness: 1, color: AppColors.divider),
-            const SizedBox(height: Sp.x6),
-            for (final s in subs) Text(s, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// الأرقام الأربعة: طبّلك · المعوز · ديون الفترة · ربحك.
+/// الأرقام الأربعة ببطاقات التقارير الموحّدة: المحصَّل · المتبقّي · ديون الفترة · ربحك — بعمودين وارتفاعٍ واحد لكلّ صفّ، والرقم
+/// يصغر ولا يُقصّ، وتحته سطوره كاملة. «ديون الفترة» تُلمس ([onDebts]) فتفتح ديونها الباقية.
 class BalanceStats extends StatelessWidget {
-  const BalanceStats({super.key, required this.period});
+  const BalanceStats({super.key, required this.period, this.onDebts});
   final BalancePeriod period;
+  final VoidCallback? onDebts;
 
   @override
   Widget build(BuildContext context) {
@@ -582,65 +603,62 @@ class BalanceStats extends StatelessWidget {
             : p.net < 0
                 ? 'يبدأ بعد أن يعود مبلغ الشحن'
                 : null;
-    Widget pair(Widget a, Widget b) => IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [Expanded(child: a), const SizedBox(width: Sp.sm), Expanded(child: b)],
-          ),
-        );
-    return Column(
-      children: [
-        pair(
-          _Stat(
-            key: const ValueKey('bal-stat-collected'),
-            icon: LucideIcons.handCoins,
-            tone: AppTone.success,
-            label: 'المحصَّل',
-            value: balanceIqd(p.collected),
-            lines: [
-              'نقد التفعيلات ${formatIQD(p.cashNow)}',
-              'تسديد ديونها ${formatIQD(p.paidIn)}',
-              // المدراء الفرعيّون داخل الرقم (حين يفتح الخادم مفتاحهم): ما دخل منهم، وما رُدّ لهم بالسحب
-              if (mg != null && mg.cash + mg.paidIn + mg.feesCash > 0) 'من المدراء الفرعيّين ${formatIQD(mg.cash + mg.paidIn + mg.feesCash)}',
-              if (mg != null && mg.withdrawn > 0) 'ناقص سحبٍ من المدراء ${formatIQD(mg.withdrawn)}',
-            ],
-          ),
-          // بلا مبلغ شحن بعد: المحصَّل والديون حقيقيّان؛ المتبقّي والربح لا يُعرفان قبل المبلغ («—» لا صفر)
-          p.amountPending
-              ? const _Stat(key: ValueKey('bal-stat-remaining'), icon: LucideIcons.scale, tone: AppTone.neutral, label: 'المتبقّي', value: '—', lines: ['يظهر بعد كتابة مبلغ الشحن'])
-              : p.remaining > 0
-              ? _Stat(
-                  key: const ValueKey('bal-stat-remaining'),
+    final kpis = [
+      RpKpi(
+        id: 'collected',
+        icon: LucideIcons.handCoins,
+        tone: RpTone.money,
+        label: 'المحصَّل',
+        // بإشارته: السحب من المدراء قد يجعله سالباً (rpMoney لا يُسقط «−» كـformatIQD)
+        value: p.collected,
+        hints: [
+          'نقد التفعيلات ${formatIQD(p.cashNow)}',
+          'تسديد ديونها ${formatIQD(p.paidIn)}',
+          // المدراء الفرعيّون داخل الرقم (حين يفتح الخادم مفتاحهم): ما دخل منهم، وما رُدّ لهم بالسحب
+          if (mg != null && mg.cash + mg.paidIn + mg.feesCash > 0) 'من المدراء الفرعيّين ${formatIQD(mg.cash + mg.paidIn + mg.feesCash)}',
+          if (mg != null && mg.withdrawn > 0) 'ناقص سحبٍ من المدراء ${formatIQD(mg.withdrawn)}',
+        ],
+      ),
+      // بلا مبلغ شحن بعد: المحصَّل والديون حقيقيّان؛ المتبقّي والربح لا يُعرفان قبل المبلغ («—» لا صفر)
+      p.amountPending
+          ? const RpKpi(id: 'remaining', icon: LucideIcons.scale, tone: RpTone.neutral, label: 'المتبقّي', value: 0, display: '—', hints: ['يظهر بعد كتابة مبلغ الشحن'])
+          : p.remaining > 0
+              ? RpKpi(
+                  id: 'remaining',
                   icon: LucideIcons.scale,
-                  tone: AppTone.warning,
+                  tone: RpTone.debt,
                   label: 'المتبقّي',
-                  value: balanceIqd(p.remaining),
-                  lines: [p.adjustmentsSum > 0 ? 'بعد تسوية ${formatIQD(p.adjustmentsSum)}' : 'حتى يعود مبلغ الشحن'],
+                  value: p.remaining,
+                  hints: [p.adjustmentsSum > 0 ? 'بعد تسوية ${formatIQD(p.adjustmentsSum)}' : 'حتى يعود مبلغ الشحن'],
                 )
-              : _Stat(
-                  key: const ValueKey('bal-stat-remaining'),
+              : RpKpi(
+                  id: 'remaining',
                   icon: LucideIcons.circleCheck,
-                  tone: AppTone.success,
+                  tone: RpTone.money,
                   label: 'المتبقّي',
-                  value: 'مكتمل',
-                  lines: [p.adjustmentsSum > 0 ? 'منها تسوية ${formatIQD(p.adjustmentsSum)}' : 'عاد مبلغ الشحن كاملاً'],
+                  value: 0,
+                  display: 'مكتمل',
+                  hints: [p.adjustmentsSum > 0 ? 'منها تسوية ${formatIQD(p.adjustmentsSum)}' : 'عاد مبلغ الشحن كاملاً'],
                 ),
-        ),
-        const SizedBox(height: Sp.sm),
-        pair(
-          _Stat(
-            key: const ValueKey('bal-stat-debts'),
-            icon: LucideIcons.clock,
-            tone: p.debtsOpen > 0 ? AppTone.danger : AppTone.success,
-            label: 'ديون الفترة',
-            value: balanceIqd(p.debtsOpen),
-            lines: ['باقية من أصل ${formatIQD(p.debtsCreated)}', if (mg != null && mg.open > 0) 'منها على المدراء ${formatIQD(mg.open)}'],
-          ),
-          p.amountPending
-              ? const _Stat(key: ValueKey('bal-stat-profit'), icon: LucideIcons.trendingUp, tone: AppTone.neutral, label: 'ربحك', value: '—', lines: ['يُحسب بعد كتابة مبلغ الشحن'])
-              : _Stat(key: const ValueKey('bal-stat-profit'), icon: LucideIcons.trendingUp, tone: AppTone.brand, label: 'ربحك', value: balanceIqd(p.profit), lines: [profitSub]),
-        ),
-      ],
+      RpKpi(
+        id: 'debts',
+        icon: LucideIcons.clock,
+        tone: p.debtsOpen > 0 ? RpTone.debt : RpTone.money,
+        label: 'ديون الفترة',
+        value: p.debtsOpen,
+        hints: ['باقية من أصل ${formatIQD(p.debtsCreated)}', if (mg != null && mg.open > 0) 'منها على المدراء ${formatIQD(mg.open)}'],
+      ),
+      p.amountPending
+          ? const RpKpi(id: 'profit', icon: LucideIcons.trendingUp, tone: RpTone.neutral, label: 'ربحك', value: 0, display: '—', hints: ['يُحسب بعد كتابة مبلغ الشحن'])
+          : RpKpi(id: 'profit', icon: LucideIcons.trendingUp, tone: RpTone.brand, label: 'ربحك', value: p.profit, hints: [if (profitSub != null) profitSub]),
+    ];
+    return RpKpiGrid(
+      kpis: kpis,
+      compareWith: '',
+      keyPrefix: 'bal-stat-',
+      // ديونٌ للفترة ⇒ «ديون الفترة» تفتح الباقي منها (لا «›» على رقمٍ لا حركات خلفه)
+      tappable: (k) => k.id == 'debts' && p.debtsCreated > 0,
+      onTap: onDebts == null ? null : (_) => onDebts!(),
     );
   }
 }
@@ -843,14 +861,21 @@ class BalancePeriodHero extends StatelessWidget {
     final pending = p.amountPending;
     // فُتحت بإغلاق سابقتها والمفتاح مفتوح: لا تُحذف (الرجوع بإلغاء إغلاق السابقة) — فلا زرّ يُضغط ليُرفض
     final pinned = controller.data?.pinned(p) ?? false;
-    return _Panel(
+    final tone = balanceStateRpTone(p.state);
+    // الكرت الكبير بشكل التقارير الموحّدة (RpHeroKpi): حدٌّ بلون حال الفترة ومربّع أيقونتها، والأزرار بداخله فسطحه Material
+    return BalanceTapCard(
       key: const ValueKey('bal-hero'),
-      child: Column(
+      tint: tone.fg,
+      child: Padding(
+        padding: const EdgeInsets.all(Sp.lg),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              RpIconBox(icon: LucideIcons.walletCards, tone: tone, size: 36),
+              const SizedBox(width: Sp.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -937,8 +962,6 @@ class BalancePeriodHero extends StatelessWidget {
             const SizedBox(height: Sp.md),
             BalanceBannerBox(key: const ValueKey('bal-banner'), kind: banner.kind, text: banner.text),
           ],
-          const SizedBox(height: Sp.md),
-          BalanceStats(period: p),
           if (showLive || p.incomeInWindow > 0 || p.transfersCount > 0) ...[
             const SizedBox(height: Sp.md),
             Container(
@@ -969,6 +992,7 @@ class BalancePeriodHero extends StatelessWidget {
           const SizedBox(height: Sp.md),
           BalanceActions(period: p, controller: controller, onDetail: onDetail, showAmount: false),
         ],
+        ),
       ),
     );
   }
@@ -994,10 +1018,10 @@ class _PeriodCard extends StatelessWidget {
               ? (label: 'المتبقّي', value: '—', color: null)
               : (label: 'المتبقّي', value: p.remaining > 0 ? formatIQD(p.remaining) : 'مكتمل', color: p.remaining > 0 ? AppTone.warning.onSoft : AppTone.success.onSoft),
     ];
-    return Material(
-      color: AppColors.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.card), side: BorderSide(color: AppColors.border)),
+    final tone = balanceStateRpTone(p.state);
+    return BalanceTapCard(
+      // بانتظار الإغلاق: حدٌّ كهرمانيّ يلفت إليها بين المغلقة
+      tint: p.state == BalanceState.waiting ? tone.fg : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1011,6 +1035,8 @@ class _PeriodCard extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      RpIconBox(icon: p.isClosed ? LucideIcons.lock : LucideIcons.walletCards, tone: tone),
+                      const SizedBox(width: Sp.sm),
                       Expanded(
                         flex: 3,
                         child: Wrap(

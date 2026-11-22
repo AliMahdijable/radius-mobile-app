@@ -96,10 +96,14 @@ class RpKpi {
     this.unit,
     this.display,
     this.hint,
+    this.hints = const [],
   });
 
   /// سطرٌ صغير تحت الرقم («الفعّالون 120» · «لا يشمل: …») — كاملاً بلا قصّ.
   final String? hint;
+
+  /// سطورٌ تحت الرقم بعد خطٍّ فاصل، كلٌّ بسطره (تقارير الأرصدة: «نقد التفعيلات …» · «تسديد ديونها …») — كاملةً بلا قصّ.
+  final List<String> hints;
 
   /// نصّ الرقم حين ليس مالاً ولا عدّاً («1.2 GB» في الجلسات) — يغلب [isCount] و[rpMoney].
   final String? display;
@@ -966,6 +970,12 @@ class RpKpiCard extends StatelessWidget {
             const SizedBox(height: Sp.xxs),
             RpDelta(kpi: kpi, compareWith: compareWith),
             if (kpi.hint != null) Text(kpi.hint!, style: AppType.micro(color: AppColors.textLow)),
+            if (kpi.hints.isNotEmpty) ...[
+              const SizedBox(height: Sp.x6),
+              Divider(height: 1, thickness: 1, color: AppColors.divider),
+              const SizedBox(height: Sp.x6),
+              for (final h in kpi.hints) Text(h, style: AppType.micro(color: AppColors.textMid)),
+            ],
           ],
         ),
       ),
@@ -975,28 +985,40 @@ class RpKpiCard extends StatelessWidget {
 
 /// البطاقات بعمودين وارتفاعٍ واحد لكلّ صفّ.
 class RpKpiGrid extends StatelessWidget {
-  const RpKpiGrid({super.key, required this.kpis, required this.compareWith, this.onTap});
+  const RpKpiGrid({super.key, required this.kpis, required this.compareWith, this.onTap, this.tappable, this.keyPrefix});
   final List<RpKpi> kpis;
   final String compareWith;
   final ValueChanged<RpKpi>? onTap;
 
+  /// أيّ البطاقات تُفتح ([onTap]) — null = كلّها؛ غيرها بلا «›» ولا لمسة.
+  final bool Function(RpKpi kpi)? tappable;
+
+  /// مفتاح كلّ بطاقة `<keyPrefix><id>` (تقارير الأرصدة: «bal-stat-collected») — null = بلا مفاتيح.
+  final String? keyPrefix;
+
   @override
   Widget build(BuildContext context) {
     final rows = <Widget>[];
+    Widget card(RpKpi k) => RpKpiCard(
+          key: keyPrefix == null ? null : ValueKey('$keyPrefix${k.id}'),
+          kpi: k,
+          compareWith: compareWith,
+          onTap: onTap == null || !(tappable?.call(k) ?? true) ? null : () => onTap!(k),
+        );
     for (var i = 0; i < kpis.length; i += 2) {
       if (rows.isNotEmpty) rows.add(const SizedBox(height: Sp.sm));
+      // الأخيرة الوحيدة في صفّها تأخذ عرضه (المالك ٢٢ نوفمبر: «ليش هيج؟ الفراغ…») — لا نصفٌ فارغ بجانبها
+      if (i + 1 >= kpis.length) {
+        rows.add(card(kpis[i]));
+        continue;
+      }
       rows.add(IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-                child: RpKpiCard(kpi: kpis[i], compareWith: compareWith, onTap: onTap == null ? null : () => onTap!(kpis[i]))),
+            Expanded(child: card(kpis[i])),
             const SizedBox(width: Sp.sm),
-            Expanded(
-              child: i + 1 < kpis.length
-                  ? RpKpiCard(kpi: kpis[i + 1], compareWith: compareWith, onTap: onTap == null ? null : () => onTap!(kpis[i + 1]))
-                  : const SizedBox.shrink(),
-            ),
+            Expanded(child: card(kpis[i + 1])),
           ],
         ),
       ));
@@ -1429,6 +1451,69 @@ class _RpSearchFieldState extends State<_RpSearchField> {
       );
 }
 
+/// حقل البحث بشكل التقارير الموحّدة (سطحٌ غاطس بحدّ وأيقونة) — [onChanged] null ⇒ نصّه للعرض وحده (صور التصميم).
+class RpSearchBox extends StatelessWidget {
+  const RpSearchBox({super.key, required this.query, required this.hint, this.onChanged});
+  final String query;
+  final String hint;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      height: H.search,
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInput,
+        borderRadius: BorderRadius.circular(R.icon),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.search, size: 17, color: AppColors.textLow),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: onChanged == null
+                ? Text(hint, style: AppType.body(color: AppColors.textPlaceholder), maxLines: 1, overflow: TextOverflow.ellipsis)
+                : _RpSearchField(initial: query, hint: hint, onChanged: onChanged!),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// رأس اليوم فوق حركاته: التاريخ أرقاماً، وعددها، و«واصل» اليوم حين يكون ([RpDay.sum]).
+class RpDayHead extends StatelessWidget {
+  const RpDayHead({super.key, required this.day, this.unit = 'حركة'});
+  final RpDay day;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final d = day;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.x6),
+      decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.sm)),
+      child: Row(
+        children: [
+          Icon(LucideIcons.calendar, size: 14, color: AppColors.textMid),
+          const SizedBox(width: Sp.x6),
+          Directionality(textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
+          const SizedBox(width: Sp.sm),
+          Expanded(child: Text('${d.count} $unit', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
+          if (d.sum != null) ...[
+            Text('واصل ', style: AppType.micro(color: AppColors.textMid)),
+            Text(rpMoney(d.sum!), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class RpRowsCard extends StatelessWidget {
   const RpRowsCard(
       {super.key,
@@ -1496,27 +1581,7 @@ class RpRowsCard extends StatelessWidget {
           ],
           if (!folded) ...[
           const SizedBox(height: Sp.md),
-          Container(
-            height: H.search,
-            padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceInput,
-              borderRadius: BorderRadius.circular(R.icon),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.search, size: 17, color: AppColors.textLow),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: onSearch == null
-                      ? Text(searchHint,
-                          style: AppType.body(color: AppColors.textPlaceholder), maxLines: 1, overflow: TextOverflow.ellipsis)
-                      : _RpSearchField(initial: query, hint: searchHint, onChanged: onSearch!),
-                ),
-              ],
-            ),
-          ),
+          RpSearchBox(query: query, hint: searchHint, onChanged: onSearch),
           if (note != null) ...[
             const SizedBox(height: Sp.sm),
             Text(note!, style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 3),
@@ -1528,7 +1593,7 @@ class RpRowsCard extends StatelessWidget {
           ],
           for (final d in days) ...[
             const SizedBox(height: Sp.md),
-            _dayHead(d),
+            RpDayHead(day: d, unit: unit),
             for (final r in d.rows) _row(r),
           ],
           if (more != null) ...[
@@ -1548,25 +1613,6 @@ class RpRowsCard extends StatelessWidget {
       ),
     );
   }
-
-  Widget _dayHead(RpDay d) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.x6),
-        decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.sm)),
-        child: Row(
-          children: [
-            Icon(LucideIcons.calendar, size: 14, color: AppColors.textMid),
-            const SizedBox(width: Sp.x6),
-            Directionality(
-                textDirection: TextDirection.ltr, child: Text(d.date, style: AppType.bodyBold(color: AppColors.textHi))),
-            const SizedBox(width: Sp.sm),
-            Expanded(child: Text('${d.count} $unit', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
-            if (d.sum != null) ...[
-              Text('واصل ', style: AppType.micro(color: AppColors.textMid)),
-              Text(rpMoney(d.sum!), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
-            ],
-          ],
-        ),
-      );
 
   Widget _row(RpRow r) {
     return Padding(

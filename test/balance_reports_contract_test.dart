@@ -414,6 +414,8 @@ void main() {
         expect(inKey('bal-stat-debts', 'باقية من أصل 165,000'), findsOneWidget);
         expect(inKey('bal-stat-debts', 'منها على المدراء 30,000'), findsOneWidget);
         expect(k('bal-transfers'), findsNothing);
+        // «خارج حساب الشحن» قسمٌ فرعيّ مطويّ (المالك ٢٢ نوفمبر) — يُفتح بلمس عنوانه
+        await tap(t, find.descendant(of: k('bal-outside'), matching: find.text('خارج حساب الشحن')));
         expect(inKey('bal-outside', '70,000 د.ع'), findsOneWidget);
         expect(find.descendant(of: k('bal-outside'), matching: find.textContaining('تسديد ديون مدراء فرعيّين أقدم من أوّل شحن')), findsOneWidget);
         expect(find.descendant(of: k('bal-period-2'), matching: find.text('170,000')), findsOneWidget);
@@ -572,6 +574,8 @@ void main() {
       expect(find.descendant(of: k('bal-period-2'), matching: find.text('160,000')), findsOneWidget);
       expect(find.descendant(of: k('bal-period-1'), matching: find.text('مغلقة')), findsOneWidget);
       expect(find.descendant(of: k('bal-period-1'), matching: find.text('170,000')), findsOneWidget);
+      // «خارج حساب الشحن» مطويّ أوّل مرّة — يُفتح بلمس عنوانه
+      await tap(t, find.descendant(of: k('bal-outside'), matching: find.text('خارج حساب الشحن')));
       expect(inKey('bal-outside', '30,000 د.ع'), findsOneWidget);
       expect(inKey('bal-outside', '25,000 د.ع'), findsOneWidget);
       await t.pumpWidget(const SizedBox.shrink());

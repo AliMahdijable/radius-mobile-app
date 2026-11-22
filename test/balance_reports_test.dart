@@ -474,6 +474,10 @@ void main() {
       expect(inKey('bal-period-3', '200,000'), findsOneWidget);
       expect(k('bal-adjust-3'), findsNothing);
       expect(t.widget<Text>(k('bal-transfers')).data, '2 تحويل رصيد لمدراء فرعيّين بمبلغ 500,000 د.ع — غير داخلة بالحساب');
+      // «خارج حساب الشحن» قسمٌ فرعيّ مطويّ (المالك ٢٢ نوفمبر): مجموعه بجانب عنوانه، وسطوره بلمسة — وملاحظات الدقّة ظاهرةٌ دائماً
+      expect(k('bal-outside-old'), findsNothing);
+      expect(inKey('bal-outside', '1,420,000'), findsOneWidget);
+      await tap(t, find.descendant(of: k('bal-outside'), matching: find.text('خارج حساب الشحن')));
       expect(inKey('bal-outside-old', '1,365,000 د.ع'), findsOneWidget);
       expect(inKey('bal-outside-manual', '40,000 د.ع'), findsOneWidget);
       expect(inKey('bal-outside-advance', '15,000 د.ع'), findsOneWidget);

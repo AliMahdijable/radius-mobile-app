@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/balance_reports_api.dart';
 import '../../core/util/format.dart';
+import '../../core/util/server_time.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../services/balance_sub_names.dart';
 import '../../services/merged_mode.dart';
@@ -12,6 +13,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'balance_reports_screen.dart';
+import 'v2/report_kit.dart';
 
 /// تفاصيل فترة من «تقارير الأرصدة»: خلاصتها سطراً سطراً حتى «صافي ربح الفترة»، ثمّ حركاتها — عشرةٌ ثمّ «عرض المزيد» — بفلاترها
 /// وبحثها. لكلّ تفعيل آجل حاله بكلمة (المالك: «كون أكو فد شي يبيّن إنّه كان دين وتحوّل إلى نقدي أو إلى دخل»): «كان دين وتسدّد»،
@@ -23,18 +25,20 @@ final String _pdi = String.fromCharCode(0x2069);
 String balanceSigned(num v, {String sign = ''}) => '$_lri$sign${formatIQD(v.abs())}$_pdi د.ع';
 
 class BalancePeriodScreen extends StatefulWidget {
-  const BalancePeriodScreen({super.key, required this.controller, required this.periodId});
+  const BalancePeriodScreen({super.key, required this.controller, required this.periodId, this.initialFilter = BalanceFilter.all});
   final BalanceReportsController controller;
   final int periodId;
+
+  /// الفلتر أوّل الفتح — «ديون الفترة» في القائمة تفتح «ديون باقية» (لمس الرقم يفتح حركاته كبقيّة التقارير الموحّدة).
+  final BalanceFilter initialFilter;
 
   @override
   State<BalancePeriodScreen> createState() => _BalancePeriodScreenState();
 }
 
 class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
-  final _searchCtrl = TextEditingController();
   Timer? _debounce;
-  BalanceFilter _filter = BalanceFilter.all;
+  late BalanceFilter _filter = widget.initialFilter;
   String _q = '';
 
   List<BalanceMove> _items = const [];
@@ -65,7 +69,6 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
   void dispose() {
     widget.controller.removeListener(_onBoard);
     _debounce?.cancel();
-    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -236,28 +239,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
                     BalanceActions(period: p, controller: c),
                   ],
                   const SizedBox(height: Sp.lg),
-                  SingleChildScrollView(
-                    key: const ValueKey('bal-filters'),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        // «المدراء» تظهر حين في الفترة حركاتٌ لهم داخلة بالحساب وحده
-                        for (final f in BalanceFilter.values.where((f) => f != BalanceFilter.managers || (_counts?[f] ?? 0) > 0)) ...[
-                          if (f != BalanceFilter.values.first) const SizedBox(width: Sp.x6),
-                          SheetQuickChip(
-                            key: ValueKey('bal-filter-${f.wire}'),
-                            label: _counts?[f] == null ? f.label : '${f.label} ${formatIQD(_counts![f]!)}',
-                            selected: _filter == f,
-                            onTap: () => _setFilter(f),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  SheetSearchField(key: const ValueKey('bal-search'), controller: _searchCtrl, hint: 'ابحث باسم المستخدم', onChanged: _onSearch),
-                  const SizedBox(height: Sp.sm),
-                  _moves(),
+                  _movesCard(),
                 ],
               ),
             ),
@@ -268,28 +250,25 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
     final closed = p.isClosed;
     final mg = p.managers;
     Widget rule() => Padding(padding: const EdgeInsets.symmetric(vertical: Sp.xs), child: Divider(height: 1, thickness: 1, color: AppColors.divider));
-    return Material(
+    // خلاصة الفترة ببطاقة التقارير الموحّدة: عنوانها بمربّع أيقونةٍ بلون حالها وشارة الحال، ثمّ الحساب سطراً سطراً
+    return RpCard(
       key: const ValueKey('bal-summary'),
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.card), side: BorderSide(color: AppColors.border)),
-      child: Padding(
-        padding: const EdgeInsets.all(Sp.lg),
-        child: Column(
+      tint: balanceStateRpTone(p.state).fg,
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                ToneChip(key: const ValueKey('bal-state'), label: p.state.label, tone: balanceStateTone(p.state), dense: true),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: Text(
-                    '${balancePeriodRange(p)}${closed && p.closedAtMs != null ? ' · أُغلقت ${balanceDay(p.closedAtMs!)}' : ''}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.micro(color: AppColors.textMid),
-                  ),
-                ),
-              ],
+            RpTitle(
+              icon: LucideIcons.calculator,
+              title: 'خلاصة الفترة',
+              tone: balanceStateRpTone(p.state),
+              trailing: ToneChip(key: const ValueKey('bal-state'), label: p.state.label, tone: balanceStateTone(p.state), dense: true),
+            ),
+            const SizedBox(height: Sp.x6),
+            Text(
+              '${balancePeriodRange(p)}${closed && p.closedAtMs != null ? ' · أُغلقت ${balanceDay(p.closedAtMs!)}' : ''}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.micro(color: AppColors.textMid),
             ),
             const SizedBox(height: Sp.sm),
             BalanceLine(key: const ValueKey('bal-sum-amount'), label: 'مبلغ الشحن', value: p.amountPending ? 'لم يُكتب بعد' : balanceIqd(p.amount), strong: true),
@@ -354,13 +333,54 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
               ),
           ],
         ),
+    );
+  }
+
+  /// الحركات ببطاقة التقارير الموحّدة: العنوان وعددها، شرائح الفلاتر بأعدادها، البحث، ثمّ الحركات تحت أيّامها.
+  Widget _movesCard() {
+    final counted = _firstError == null && !(_loading && _items.isEmpty);
+    return RpCard(
+      key: const ValueKey('bal-moves-card'),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RpTitle(
+            icon: LucideIcons.listOrdered,
+            title: 'الحركات',
+            tone: RpTone.neutral,
+            trailing: counted ? Text('${formatIQD(_total)} حركة', style: AppType.pillBold(color: AppColors.textMid)) : null,
+          ),
+          const SizedBox(height: Sp.md),
+          SingleChildScrollView(
+            key: const ValueKey('bal-filters'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                // «المدراء» تظهر حين في الفترة حركاتٌ لهم داخلة بالحساب وحده
+                for (final f in BalanceFilter.values.where((f) => f != BalanceFilter.managers || (_counts?[f] ?? 0) > 0)) ...[
+                  if (f != BalanceFilter.values.first) const SizedBox(width: Sp.x6),
+                  SheetQuickChip(
+                    key: ValueKey('bal-filter-${f.wire}'),
+                    label: _counts?[f] == null ? f.label : '${f.label} ${formatIQD(_counts![f]!)}',
+                    selected: _filter == f,
+                    onTap: () => _setFilter(f),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: Sp.sm),
+          RpSearchBox(key: const ValueKey('bal-search'), query: _q, hint: 'ابحث باسم المستخدم', onChanged: _onSearch),
+          const SizedBox(height: Sp.sm),
+          _moves(),
+        ],
       ),
     );
   }
 
-  Widget _box(Widget child) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.xxl),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(R.card), border: Border.all(color: AppColors.border), color: AppColors.surface),
+  Widget _box(Widget child) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xl),
         child: Center(child: child),
       );
 
@@ -411,24 +431,34 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
         color: AppColors.textMid,
       );
     }
-    return Material(
+    // تحت كلّ يومٍ حركاته (كبقيّة التقارير الموحّدة): رأسٌ بالتاريخ وعدد المعروض منه، والوقت بساعة ١٢ بجانب كلّ حركة
+    final groups = <({String day, List<BalanceMove> rows})>[];
+    for (final m in _items.take(shown)) {
+      final day = balanceDay(m.atMs);
+      if (groups.isEmpty || groups.last.day != day) {
+        groups.add((day: day, rows: [m]));
+      } else {
+        groups.last.rows.add(m);
+      }
+    }
+    return Column(
       key: const ValueKey('bal-moves'),
-      color: AppColors.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.card), side: BorderSide(color: AppColors.border)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < shown; i++) ...[
-            if (i > 0) Divider(height: 1, thickness: 1, indent: Sp.md, endIndent: Sp.md, color: AppColors.divider),
-            BalanceMoveRow(key: ValueKey('bal-move-${_items[i].key}'), move: _items[i], name: _nameOf(_items[i])),
-          ],
-          if (footer != null) ...[
-            Divider(height: 1, thickness: 1, color: AppColors.divider),
-            footer,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final g in groups) ...[
+          const SizedBox(height: Sp.x6),
+          RpDayHead(day: RpDay(date: g.day, count: g.rows.length, sum: null, rows: const [])),
+          for (var i = 0; i < g.rows.length; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+            BalanceMoveRow(key: ValueKey('bal-move-${g.rows[i].key}'), move: g.rows[i], name: _nameOf(g.rows[i])),
           ],
         ],
-      ),
+        if (footer != null) ...[
+          const SizedBox(height: Sp.xs),
+          Divider(height: 1, thickness: 1, color: AppColors.divider),
+          footer,
+        ],
+      ],
     );
   }
 
@@ -487,7 +517,6 @@ class BalanceMoveRow extends StatelessWidget {
         tags = [(text: m.pay.label, tone: tone), if (m.afterClose) (text: 'بعد الإغلاق — ربح', tone: AppTone.brand)];
         amount = balanceIqd(m.price);
         details = [
-          balanceDayTime(m.atMs, nowMs: nowMs),
           m.package,
           if (m.pay == BalancePay.partial) 'نقد ${formatIQD(m.cash)} · دين ${formatIQD(m.debt + m.untracked)}',
           if (m.excess > 0) 'وزيادة ${formatIQD(m.excess)} سدّت ديناً أقدم',
@@ -502,7 +531,7 @@ class BalanceMoveRow extends StatelessWidget {
         tags = [(text: 'تسديد دين', tone: AppTone.success)];
         amount = balanceSigned(m.amount, sign: '+');
         amountColor = AppTone.success.onSoft;
-        details = [balanceDayTime(m.atMs, nowMs: nowMs), if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
+        details = [if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
         status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
       case BalanceMgrMove():
         // شحنٌ نقديّ وتسديد دين وفائدة الشحن النقديّ: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل وفائدته: دينٌ بحاله كدين التفعيل.
@@ -521,7 +550,7 @@ class BalanceMoveRow extends StatelessWidget {
         amountColor = m.op.debtLike
             ? AppColors.textHi
             : (m.op == BalanceMgrOp.withdraw ? AppTone.danger.onSoft : AppTone.success.onSoft);
-        details = [balanceDayTime(m.atMs, nowMs: nowMs), 'مدير فرعيّ', balanceMgrFeeDetail(m), if (m.by != null) 'نفّذها ${m.by}'];
+        details = ['مدير فرعيّ', balanceMgrFeeDetail(m), if (m.by != null) 'نفّذها ${m.by}'];
         note = m.note;
         if (m.op.debtLike) {
           final n = balanceMgrDebtNote(m, nowMs: nowMs);
@@ -537,32 +566,25 @@ class BalanceMoveRow extends StatelessWidget {
         title = 'تسوية الرصيد';
         tags = [(text: m.source.label, tone: AppTone.brand)];
         amount = balanceIqd(m.amount);
-        details = [balanceDayTime(m.atMs, nowMs: nowMs)];
+        details = const [];
         note = m.note;
     }
     final info = details.whereType<String>().where((x) => x.trim().isNotEmpty).join(' · ');
     final subName = (m is BalanceActMove || m is BalancePayMove) && (name?.trim().isNotEmpty ?? false) ? name!.trim() : null;
-    const pad = Sp.sm + 2;
+    // «7:34 مساءً» بتوقيت بغداد تحت المبلغ (اليوم في رأس مجموعته) — كسطور التقارير الموحّدة
+    final time = clock12Ar(balanceBaghdad(m.atMs));
     return Padding(
-      padding: const EdgeInsetsDirectional.only(start: Sp.md, end: Sp.md, top: pad, bottom: pad),
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm + 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.sm)),
-              child: Icon(icon, size: 17, color: tone.fill),
-            ),
-          ),
+          RpIconBox(icon: icon, tone: balanceRpTone(tone), size: 36),
           const SizedBox(width: Sp.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // المبلغ على سطر الاسم ولو التفّ الاسم؛ ولا يأخذ أكثر من نصف السطر (رقمٌ بعشر خاناتٍ يصغر ولا يفيض)
+                // المبلغ ووقته على سطر الاسم ولو التفّ الاسم؛ ولا يأخذان أكثر من نصف السطر (رقمٌ بعشر خاناتٍ يصغر ولا يفيض)
                 LayoutBuilder(
                   builder: (context, box) => Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,10 +595,10 @@ class BalanceMoveRow extends StatelessWidget {
                           runSpacing: 2,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
+                            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
                             // الاسم العربيّ بعد اليوزر — يلتفّ تحته كاملاً إن ضاق السطر، ولا يُقصّ (كالويب)
                             if (subName != null)
-                              Text(subName, key: const ValueKey('bal-move-name'), style: AppType.rowValue(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
+                              Text(subName, key: const ValueKey('bal-move-name'), style: AppType.body(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
                             for (final t in tags) ToneChip(label: t.text, tone: t.tone, dense: true),
                           ],
                         ),
@@ -584,14 +606,20 @@ class BalanceMoveRow extends StatelessWidget {
                       const SizedBox(width: Sp.sm),
                       ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: box.maxWidth * 0.5),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: Text(
-                            amount,
-                            maxLines: 1,
-                            style: AppType.rowValue(color: amountColor).copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: Text(
+                                amount,
+                                maxLines: 1,
+                                style: AppType.bodyStrong(color: amountColor).copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
+                              ),
+                            ),
+                            Text(time, key: const ValueKey('bal-move-time'), maxLines: 1, style: AppType.micro(color: AppColors.textLow)),
+                          ],
                         ),
                       ),
                     ],
@@ -599,7 +627,7 @@ class BalanceMoveRow extends StatelessWidget {
                 ),
                 if (info.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(info, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid)),
+                  Text(info, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
                 ],
                 if (note != null) ...[
                   const SizedBox(height: 2),

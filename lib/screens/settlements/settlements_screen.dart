@@ -6,6 +6,7 @@ import '../../api/company_route.dart';
 import '../../api/payment_voids_api.dart';
 import '../../api/settlements_api.dart';
 import '../../core/util/amount_input.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -21,6 +22,8 @@ import '../desktop/desk_widgets.dart';
 import '../../widgets/merged_section.dart';
 import '../../services/merged_text.dart';
 import '../../services/merged_mode.dart';
+import '../reports/v2/report_kit.dart';
+import '../reports/v2/report_prefs.dart';
 
 /// «تسوية الحساب» — صندوق المدير (2026-10-02).
 ///
@@ -93,6 +96,13 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   /// «كل الشركات» (٨ نوفمبر): الشركة المعروضة من [MergedSection] — تُقرأ في build.
   MergedSectionInfo? _section;
 
+  /// الأقسام بشكل التقارير الموحّدة (المالك ٢٢ نوفمبر: «بقى عندك… تسوية الحساب… كمّلهن كلّهن» + «الأقسام الفرعيّة خلّيها مقفولة»):
+  /// الحركات وحصص المنفّذين هي الصندوق نفسه فتُفتح، و«سجلّ التسويات» فرعيٌّ مطويّ — وما فُتح أو طُوي يُتذكّر.
+  final _folds = RpFolds('settlements', const {'moves': true, 'collectors': true});
+
+  /// بحث الحركات — في المعروض منها (الخادم يرسل أحدثها حتى ٥٠٠).
+  String _q = '';
+
   /// مقفلة: شركةٌ موجَّهة لم يفتح الخادم كتابتها (settlements_routed) — لا بداية ولا تسوية ولا إلغاء من هنا.
   /// «كل الصفحات» للموظّف (٩ نوفمبر): وصفحةٌ كتابتها مغلقةٌ له من هنا (غير صفحته الحاليّة) — ولو فتحها الخادم لمالكها.
   bool get _locked =>
@@ -106,6 +116,9 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   void initState() {
     super.initState();
     _load();
+    _folds.load().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -461,40 +474,125 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       padding: pad,
       children: [
         _BoxCard(cur: cur),
+        const SizedBox(height: Sp.sm),
+        _BoxKpis(cur: cur),
         if (cur.hasEmployees) ...[
-          const SizedBox(height: Sp.xl),
-          _SectionTitle(text: 'settle.collectors_title'.tr()),
-          CollectorsList(collectors: cur.collectors),
-          const SizedBox(height: Sp.x6),
-          Text('settle.collectors_hint'.tr(), style: AppType.muted()),
+          const SizedBox(height: Sp.lg),
+          RpCard(
+            key: const ValueKey('settle-collectors'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                RpTitle(
+                  icon: LucideIcons.users,
+                  title: 'settle.collectors_title'.tr(),
+                  tone: RpTone.info,
+                  trailing: Text('${cur.collectors.length}', style: AppType.pillBold(color: AppColors.textMid)),
+                  fold: _folds.fold('collectors', setState),
+                ),
+                if (_folds.open('collectors')) ...[
+                  const SizedBox(height: Sp.sm),
+                  CollectorsList(collectors: cur.collectors, bare: true),
+                  const SizedBox(height: Sp.x6),
+                  Text('settle.collectors_hint'.tr(), style: AppType.micro(color: AppColors.textMid)),
+                ],
+              ],
+            ),
+          ),
         ],
-        const SizedBox(height: Sp.xl),
-        _SectionTitle(
-          text: 'settle.movements_title'.tr(),
-          trailing: '${cur.moveCount}',
-        ),
-        _Panel(
-          children: [
+        const SizedBox(height: Sp.lg),
+        _movesCard(cur, openingLabel),
+        const SizedBox(height: Sp.lg),
+        _historyCard(),
+      ],
+    );
+  }
+
+  /// حركةٌ تطابق البحث: المشترك، البند/الوصف، المنفّذ، الباقة.
+  static bool _matches(BoxMovement m, String q) {
+    final s = q.toLowerCase();
+    bool has(String? v) => (v ?? '').toLowerCase().contains(s);
+    return has(m.subscriber) || has(m.description) || has(m.employeeName) || has(m.employeeUsername) || has(m.packageName);
+  }
+
+  /// «حركات الفترة» ببطاقة التقارير الموحّدة: العنوان وعددها، البحث، ثمّ الحركات تحت أيّامها بوقتها «7:34 مساءً» — وزرّ إلغاء
+  /// التسديد بمكانه. «عرض المزيد» والمُرحَّل في آخرها كما كانا.
+  Widget _movesCard(CurrentAccount cur, String openingLabel) {
+    final open = _folds.open('moves');
+    final q = _q.trim();
+    final shown = q.isEmpty ? _moves : [for (final m in _moves) if (_matches(m, q)) m];
+    final groups = <({String day, List<BoxMovement> rows})>[];
+    for (final m in shown) {
+      final at = m.createdAt?.toLocal();
+      final day = at == null ? '—' : iqDateOf(at);
+      if (groups.isEmpty || groups.last.day != day) {
+        groups.add((day: day, rows: [m]));
+      } else {
+        groups.last.rows.add(m);
+      }
+    }
+    return RpCard(
+      key: const ValueKey('settle-moves'),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RpTitle(
+            icon: LucideIcons.listOrdered,
+            title: 'settle.movements_title'.tr(),
+            tone: RpTone.neutral,
+            trailing: Text('${formatIQD(cur.moveCount)} حركة', style: AppType.pillBold(color: AppColors.textMid)),
+            fold: _folds.fold('moves', setState),
+          ),
+          if (!open && q.isNotEmpty) ...[
+            const SizedBox(height: Sp.x6),
+            Text('البحث: «$q»', style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 2),
+          ],
+          if (open) ...[
+            const SizedBox(height: Sp.md),
+            RpSearchBox(
+              key: const ValueKey('settle-search'),
+              query: _q,
+              hint: 'ابحث باسم المشترك أو البند أو المنفّذ',
+              onChanged: (v) => setState(() => _q = v),
+            ),
+            // البحث في المعروض وحده — يُقال حين في الصندوق حركاتٌ أقدم لم تُحمَّل
+            if (q.isNotEmpty && _movesMore) ...[
+              const SizedBox(height: Sp.sm),
+              Text('البحث في المعروض (${formatIQD(_moves.length)} حركة) — «عرض المزيد» يضيف الأقدم',
+                  style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 3),
+            ],
             if (_moves.isEmpty && cur.openingBalance == 0)
               Padding(
-                padding: const EdgeInsets.all(Sp.lg),
+                padding: const EdgeInsets.symmetric(vertical: Sp.lg),
                 child: Text(
                   _movesMsg ?? 'settle.no_movements'.tr(),
-                  style: _movesMsg == null
-                      ? AppType.muted()
-                      : AppType.muted(color: AppTone.danger.fill),
+                  textAlign: TextAlign.center,
+                  style: _movesMsg == null ? AppType.muted() : AppType.muted(color: AppTone.danger.fill),
                 ),
+              )
+            else if (shown.isEmpty && q.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Sp.lg),
+                child: Text('لا حركة تطابق «$q»', textAlign: TextAlign.center, style: AppType.muted()),
               ),
-            for (final m in _moves)
-              MovementTile(
-                m: m,
-                voided: _companyKey == null ? _voids.of(m.paymentActivityId) : null,
-                voidAction: _voidActionFor(m),
-                onVoid: () => _openVoid(m),
-              ),
+            for (final g in groups) ...[
+              const SizedBox(height: Sp.sm),
+              RpDayHead(day: RpDay(date: g.day, count: g.rows.length, sum: null, rows: const [])),
+              for (var i = 0; i < g.rows.length; i++) ...[
+                if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+                MovementTile(
+                  m: g.rows[i],
+                  grouped: true,
+                  voided: _companyKey == null ? _voids.of(g.rows[i].paymentActivityId) : null,
+                  voidAction: _voidActionFor(g.rows[i]),
+                  onVoid: () => _openVoid(g.rows[i]),
+                ),
+              ],
+            ],
             if (_movesMore)
               Padding(
-                padding: const EdgeInsets.all(Sp.sm),
+                padding: const EdgeInsets.only(top: Sp.sm),
                 child: Center(
                   child: _movesLimit >= 500
                       ? Text(
@@ -508,33 +606,57 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                         ),
                 ),
               )
-            else if (cur.openingBalance != 0)
-              OpeningTile(label: openingLabel, amount: cur.openingBalance),
+            else if (cur.openingBalance != 0 && q.isEmpty) ...[
+              const SizedBox(height: Sp.sm),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(R.sm),
+                child: OpeningTile(label: openingLabel, amount: cur.openingBalance),
+              ),
+            ],
           ],
-        ),
-        const SizedBox(height: Sp.xl),
-        _SectionTitle(
-          text: 'settle.history_title'.tr(),
-          trailing: _historyTotal > 0 ? '$_historyTotal' : null,
-        ),
-        _Panel(
-          children: [
+        ],
+      ),
+    );
+  }
+
+  /// «سجلّ التسويات» — قسمٌ فرعيّ مطويّ أوّل مرّة؛ كلّ سندٍ بلمسة.
+  Widget _historyCard() {
+    final open = _folds.open('history');
+    return RpCard(
+      key: const ValueKey('settle-history'),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RpTitle(
+            icon: LucideIcons.archive,
+            title: 'settle.history_title'.tr(),
+            tone: RpTone.brand,
+            trailing: _historyTotal > 0 ? Text('$_historyTotal', style: AppType.pillBold(color: AppColors.textMid)) : null,
+            fold: _folds.fold('history', setState),
+          ),
+          if (open) ...[
+            const SizedBox(height: Sp.sm),
             if (_history.isEmpty)
               Padding(
-                padding: const EdgeInsets.all(Sp.lg),
+                padding: const EdgeInsets.symmetric(vertical: Sp.md),
                 // السبب إن وُجد، وإلّا فهو فراغٌ حقيقيّ.
                 child: Text(
                   _historyMsg ?? 'settle.history_empty'.tr(),
-                  style: _historyMsg == null
-                      ? AppType.muted()
-                      : AppType.muted(color: AppTone.danger.fill),
+                  style: _historyMsg == null ? AppType.muted() : AppType.muted(color: AppTone.danger.fill),
+                ),
+              )
+            else
+              ClipRRect(
+                borderRadius: BorderRadius.circular(R.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [for (final r in _history) _HistoryTile(record: r, onTap: () => _openDetail(r.id))],
                 ),
               ),
-            for (final r in _history)
-              _HistoryTile(record: r, onTap: () => _openDetail(r.id)),
           ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -801,7 +923,8 @@ class _StepLine extends StatelessWidget {
   }
 }
 
-/// «في الصندوق الآن» — المبلغ بإشارته وتفصيله منذ آخر تسوية.
+/// «في الصندوق الآن» — البطاقة الكبرى بشكل التقارير الموحّدة (RpHeroKpi): المبلغ بإشارته ومنذ متى، والتنبيه أعلاها
+/// (المالك ٢٤ أكتوبر: «التنبيه يكون بالاعلى»). تفصيله بطاقاتٌ تحتها ([_BoxKpis]).
 class _BoxCard extends StatelessWidget {
   const _BoxCard({required this.cur});
   final CurrentAccount cur;
@@ -810,23 +933,19 @@ class _BoxCard extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final head = cur.head;
-    final when = settleWhen(cur.periodStart, weekday: true);
+    final when = settleWhen(cur.periodStart, weekday: true, clock12: true);
     final since = (head == null || head.isOpening)
         ? 'settle.since_opening'.tr(namedArgs: {'when': when})
         : 'settle.since_settlement'
             .tr(namedArgs: {'n': '${head.number}', 'when': when});
     final negative = cur.expected < 0;
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.card),
-        border: Border.all(color: AppColors.border),
-      ),
+    final tone = negative ? RpTone.loss : RpTone.brand;
+    return RpCard(
+      key: const ValueKey('settle-box'),
+      tint: tone.fg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // التنبيه أعلى البطاقة لا أسفلها (المالك ٢٤ أكتوبر: «التنبيه يكون بالاعلى») — يُقرأ قبل الأرقام.
           if (negative)
             _Note(
               tone: AppTone.danger,
@@ -842,116 +961,93 @@ class _BoxCard extends StatelessWidget {
                 'n': '${cur.newDebts.count}',
               }),
             ),
-          Padding(
-            padding: const EdgeInsets.all(Sp.lg),
-            child: Row(
-              children: [
-                Container(
-                  width: H.iconBox,
-                  height: H.iconBox,
-                  decoration: BoxDecoration(
-                    color: AppTone.brand.softBg,
-                    borderRadius: BorderRadius.circular(R.icon),
-                  ),
-                  child: Icon(LucideIcons.wallet,
-                      size: 20, color: AppTone.brand.fill),
+          Row(
+            children: [
+              RpIconBox(icon: LucideIcons.wallet, tone: tone, size: 36),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('settle.in_box_now'.tr(), style: AppType.label(color: AppColors.textMid), maxLines: 1),
+                    // يصغر ولا يُقصّ، وبإشارته (rpMoney لا يُسقط «−»)
+                    RpFitText(rpMoney(cur.expected), style: AppType.amount(color: negative ? AppColors.error : AppColors.textHi)),
+                  ],
                 ),
-                const SizedBox(width: Sp.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('settle.in_box_now'.tr(), style: AppType.label()),
-                      const SizedBox(height: Sp.xxs),
-                      Text(
-                        settleMoney(cur.expected),
-                        textDirection: TextDirection.ltr,
-                        style: AppType.amount(
-                          color: negative ? AppColors.error : AppColors.textHi,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: Sp.xxs),
-                      Text(
-                        since,
-                        style: AppType.muted(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Divider(height: 1, color: AppColors.divider),
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
-            child: Column(
-              children: [
-                if (cur.openingBalance != 0)
-                  _Line(
-                    label: (head == null || head.isOpening)
-                        ? 'settle.opening_balance'.tr()
-                        : 'settle.carried_balance'.tr(),
-                    value: settleMoney(cur.openingBalance),
-                  ),
-                _Line(
-                  label:
-                      '${'settle.cash_activations'.tr()} · ${cur.cashActivations.count}',
-                  value: '+${formatIQD(cur.cashActivations.sum)}',
-                  color: AppColors.success,
-                ),
-                _Line(
-                  label:
-                      '${'settle.debt_payments'.tr()} · ${cur.debtPayments.count}',
-                  value: '+${formatIQD(cur.debtPayments.sum)}',
-                  color: AppColors.success,
-                ),
-                // بيع المواد نقداً (قسم «المبيعات») — حين يوجد بالفترة.
-                if (cur.salesCash.count > 0)
-                  _Line(
-                    label: '${'settle.sales_cash'.tr()} · ${cur.salesCash.count}',
-                    value: '${cur.salesCash.sum < 0 ? '−' : '+'}${formatIQD(cur.salesCash.sum)}',
-                    color: cur.salesCash.sum < 0 ? AppColors.error : AppColors.success,
-                  ),
-                _Line(
-                  label: '${'settle.expenses'.tr()} · ${cur.expenses.count}',
-                  value: '−${formatIQD(cur.expenses.sum)}',
-                  color: AppColors.error,
-                ),
-                // شراء المخزون «من الصندوق» (قسم «المبيعات») — خارجٌ كالصرفيات، حين يوجد بالفترة؛ وما رجّعه
-                // المورّد للصندوق يُطرح منه (صافيه سالبٌ ⇒ «استرجاع من المورّد» داخل).
-                if (cur.goodsPurchases.count > 0)
-                  _Line(
-                    label: '${goodsBoxLine(cur.goodsPurchases).label} · ${cur.goodsPurchases.count}',
-                    value: goodsBoxLine(cur.goodsPurchases).value,
-                    color: goodsBoxLine(cur.goodsPurchases).out ? AppColors.error : AppColors.success,
-                  ),
-                // «حركات الموظف» (١٣ نوفمبر): سلف وقروض وسحوبات خرجت من الصندوق ناقص ما عاد (تسديد، استقطاع رواتب)
-                if (cur.employeeMoves.count > 0)
-                  _Line(
-                    key: const ValueKey('settle-emp-line'),
-                    label: '${employeeBoxLine(cur.employeeMoves).label} · ${cur.employeeMoves.count}',
-                    value: employeeBoxLine(cur.employeeMoves).value,
-                    color: employeeBoxLine(cur.employeeMoves).out ? AppColors.error : AppColors.success,
-                  ),
-              ],
-            ),
-          ),
+          const SizedBox(height: Sp.xs),
+          Text(since, style: AppType.micro(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
   }
 }
 
+/// تفصيل الصندوق ببطاقات التقارير الموحّدة — كلّ بندٍ بلونه (الداخل أخضر والخارج أحمر) وعدده تحته؛ يُعرض البند حين يوجد في
+/// الفترة كما كان (المبيعات وشراء المواد وحركات الموظفين).
+class _BoxKpis extends StatelessWidget {
+  const _BoxKpis({required this.cur});
+  final CurrentAccount cur;
+
+  @override
+  Widget build(BuildContext context) {
+    final head = cur.head;
+    String n(int c) => '${formatIQD(c)} حركة';
+    final goods = goodsBoxLine(cur.goodsPurchases);
+    final emp = employeeBoxLine(cur.employeeMoves);
+    final kpis = [
+      if (cur.openingBalance != 0)
+        RpKpi(
+          id: 'opening',
+          label: (head == null || head.isOpening) ? 'settle.opening_balance'.tr() : 'settle.carried_balance'.tr(),
+          value: cur.openingBalance,
+          icon: LucideIcons.history,
+          tone: RpTone.neutral,
+        ),
+      RpKpi(id: 'cash', label: 'settle.cash_activations'.tr(), value: cur.cashActivations.sum, icon: LucideIcons.zap, tone: RpTone.money, hint: n(cur.cashActivations.count)),
+      RpKpi(id: 'payments', label: 'settle.debt_payments'.tr(), value: cur.debtPayments.sum, icon: LucideIcons.handCoins, tone: RpTone.money, hint: n(cur.debtPayments.count)),
+      // بيع المواد نقداً (قسم «المبيعات») — حين يوجد بالفترة؛ صافيه سالبٌ (إلغاءاتٌ أكثر) ⇒ أحمر بإشارته
+      if (cur.salesCash.count > 0)
+        RpKpi(
+          id: 'sales',
+          label: 'settle.sales_cash'.tr(),
+          value: cur.salesCash.sum,
+          icon: LucideIcons.shoppingCart,
+          tone: cur.salesCash.sum < 0 ? RpTone.loss : RpTone.money,
+          hint: n(cur.salesCash.count),
+        ),
+      RpKpi(id: 'expenses', label: 'settle.expenses'.tr(), value: cur.expenses.sum, icon: LucideIcons.receipt, tone: RpTone.loss, hint: n(cur.expenses.count)),
+      // شراء المخزون «من الصندوق» خارجٌ كالمصاريف، وما رجّعه المورّد داخل
+      if (cur.goodsPurchases.count > 0)
+        RpKpi(
+          id: 'goods',
+          label: goods.label,
+          value: cur.goodsPurchases.sum.abs(),
+          icon: LucideIcons.packagePlus,
+          tone: goods.out ? RpTone.loss : RpTone.money,
+          hint: n(cur.goodsPurchases.count),
+        ),
+      // «حركات الموظف» (١٣ نوفمبر): سلفٌ وقروضٌ خرجت ناقص ما عاد
+      if (cur.employeeMoves.count > 0)
+        RpKpi(
+          id: 'employees',
+          label: emp.label,
+          value: cur.employeeMoves.sum.abs(),
+          icon: LucideIcons.users,
+          tone: emp.out ? RpTone.loss : RpTone.money,
+          hint: n(cur.employeeMoves.count),
+        ),
+    ];
+    return RpKpiGrid(kpis: kpis, compareWith: '', keyPrefix: 'settle-kpi-');
+  }
+}
+
 class _Line extends StatelessWidget {
-  const _Line({super.key, required this.label, required this.value, this.color});
+  const _Line({required this.label, required this.value});
   final String label;
   final String value;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -972,7 +1068,7 @@ class _Line extends StatelessWidget {
           Text(
             value,
             textDirection: TextDirection.ltr,
-            style: AppType.bodyBold(color: color ?? AppColors.textHi),
+            style: AppType.bodyBold(color: AppColors.textHi),
           ),
         ],
       ),
@@ -990,15 +1086,17 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+      margin: const EdgeInsets.only(bottom: Sp.md),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
       decoration: BoxDecoration(
         color: tone.softBg,
-        border: Border(bottom: BorderSide(color: tone.softBorder)),
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: tone.softBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 15, color: tone.fill),
+          Padding(padding: const EdgeInsets.only(top: 2), child: Icon(icon, size: 15, color: tone.fill)),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
@@ -1007,56 +1105,6 @@ class _Note extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.text, this.trailing});
-  final String text;
-  final String? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Sp.sm),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              text,
-              style: AppType.cardTitleBold(color: AppColors.textHi),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (trailing != null) ToneChip(label: trailing!, dense: true),
-        ],
-      ),
-    );
-  }
-}
-
-/// حاوية بيضاء بحدّ — القوائم داخلها بلا حواف لكلّ صفّ.
-class _Panel extends StatelessWidget {
-  const _Panel({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
       ),
     );
   }
@@ -1138,7 +1186,7 @@ class _HistoryTile extends StatelessWidget {
                       ),
                       const SizedBox(height: Sp.xxs),
                       Text(
-                        settleWhen(r.cutAt, weekday: true),
+                        settleWhen(r.cutAt, weekday: true, clock12: true),
                         style: AppType.muted(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

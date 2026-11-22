@@ -616,6 +616,12 @@ void main() {
       await pumpVisual(t, const VisualDevice('', Size(390, 2400), 1), home: (_) => SettlementsScreen.mergedPage());
       await settleReal(t);
       expect(srv.asked, contains('GET /api/v2/settlements $_kB'));
+      // «سجلّ التسويات» قسمٌ فرعيّ مطويّ (المالك ٢٢ نوفمبر) — يُفتح بلمس عنوانه
+      final history = find.text('settle.history_title'.tr());
+      await t.ensureVisible(history);
+      await t.pump();
+      await t.tap(history);
+      await settleReal(t);
       final tile = _private('_HistoryTile');
       expect(tile, findsOneWidget);
       await t.ensureVisible(tile);
