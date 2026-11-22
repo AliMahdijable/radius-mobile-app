@@ -1486,9 +1486,12 @@ class RpSearchBox extends StatelessWidget {
 
 /// رأس اليوم فوق حركاته: التاريخ أرقاماً، وعددها، و«واصل» اليوم حين يكون ([RpDay.sum]).
 class RpDayHead extends StatelessWidget {
-  const RpDayHead({super.key, required this.day, this.unit = 'حركة'});
+  const RpDayHead({super.key, required this.day, this.unit = 'حركة', this.sumLabel = 'واصل'});
   final RpDay day;
   final String unit;
+
+  /// اسم مجموع اليوم («المجموع» في المصاريف — لا «واصل»).
+  final String sumLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1505,7 +1508,7 @@ class RpDayHead extends StatelessWidget {
           const SizedBox(width: Sp.sm),
           Expanded(child: Text('${d.count} $unit', style: AppType.micro(color: AppColors.textMid), maxLines: 1)),
           if (d.sum != null) ...[
-            Text('واصل ', style: AppType.micro(color: AppColors.textMid)),
+            Text('$sumLabel ', style: AppType.micro(color: AppColors.textMid)),
             Text(rpMoney(d.sum!), style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1),
           ],
         ],

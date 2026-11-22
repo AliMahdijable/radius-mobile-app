@@ -83,6 +83,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   RpRange _range = RpRange.of(RpPreset.thisMonth, now: DateTime.now());
   static const _prefsId = 'expenses';
 
+  /// بحث القائمة (الشكل الموحّد، ٢٢ نوفمبر): في البيان والمنفّذ وصاحب كشف الراتب — بين ما جاء للفترة.
+  String _q = '';
+
+  static bool _matches(ExpenseRow r, String q) {
+    final s = q.toLowerCase();
+    bool has(String? v) => (v ?? '').toLowerCase().contains(s);
+    return has(r.note) || has(r.actingEmployeeUsername) || has(r.payslipEmployee);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -273,17 +282,25 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             children: [
               // «كل الشركات»: الشركات ومن تُعرض (والمقفلة بسببها)
               MergedSectionBar(lockedText: _locked && !_loading ? _lockText : null),
-              // 2026-08-26 redesign: header صف واحد كثيف — إجمالي + نطاق
-              // + عدد. بلا gradient بلا حواف ثقيلة.
-              DeskSection(children: [
-                _CompactHeader(
-                  total: _total,
-                  count: _rows.length,
-                  range: _range,
-                  accent: accent,
-                  onRange: _pickRange,
+              // الشكل الموحّد (٢٢ نوفمبر — المالك: «بقى عندك… أقسام بعده ما كاملات، كمّلهن كلّهن»): شريط الفترة، ثمّ المجموع بطاقةً كبرى
+              // (RpHeroKpi)، ثمّ المصاريف ببحثٍ وتحت أيّامها بمجموع كلّ يوم — الإضافة والتعديل والحذف كما كانت.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RpPeriodBar(period: RpPeriod(name: _range.name, range: _range.rangeText), compareOn: false, compareWith: '', onPeriod: _pickRange),
+                    const SizedBox(height: Sp.md),
+                    RpHeroKpi(
+                      key: const ValueKey('exp-total'),
+                      kpi: RpKpi(id: 'total', label: 'exp.total_expenses'.tr(), value: _total, icon: LucideIcons.receiptText, tone: RpTone.loss),
+                      compareWith: '',
+                      spark: const [],
+                      note: '${formatIQD(_rows.length)} عملية · ${_range.name}',
+                    ),
+                  ],
                 ),
-              ]),
+              ),
               // «الصرفيات الثابتة» — حين يفتحها الخادم للحساب (وإلّا لا شيء هنا). شركةٌ موجَّهة: قوالبها من صفحتها (مساراتها غير
               // موجَّهة بعد) — لا تُعرض قوالب المفتوحة تحت اسمها.
               if (!routed)
@@ -309,21 +326,67 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   padding: const EdgeInsets.all(Sp.lg),
                   child: _emptyState(),
                 )
-              else ...[
-                // الهاتف: فسحةٌ بين الرأس وأوّل بطاقة (الحاسبة يفصلها DeskSection نفسه).
-                if (!DesktopScope.of(context)) const SizedBox(height: Sp.md),
-                DeskSection(children: [
-                  for (final row in _rows)
-                    _ExpenseTile(
-                      row: row,
-                      onEdit: () => _openEdit(row),
-                      onDelete: () => _confirmDelete(row),
-                    ),
-                ]),
-              ],
+              else
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                  child: _listCard(),
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// المصاريف ببطاقة التقارير الموحّدة: العنوان وعددها، البحث، ثمّ تحت كلّ يومٍ مصاريفه ومجموعه.
+  Widget _listCard() {
+    final q = _q.trim();
+    final shown = q.isEmpty ? _rows : [for (final r in _rows) if (_matches(r, q)) r];
+    final groups = <({String day, List<ExpenseRow> rows})>[];
+    for (final r in shown) {
+      final day = r.expenseDate;
+      if (groups.isEmpty || groups.last.day != day) {
+        groups.add((day: day, rows: [r]));
+      } else {
+        groups.last.rows.add(r);
+      }
+    }
+    return RpCard(
+      key: const ValueKey('exp-list'),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RpTitle(
+            icon: LucideIcons.listOrdered,
+            title: 'more.expenses'.tr(),
+            tone: RpTone.neutral,
+            trailing: Text('${formatIQD(_rows.length)} مصروف', style: AppType.pillBold(color: AppColors.textMid)),
+          ),
+          const SizedBox(height: Sp.md),
+          RpSearchBox(key: const ValueKey('exp-search'), query: _q, hint: 'ابحث بالبيان أو المنفّذ', onChanged: (v) => setState(() => _q = v)),
+          if (shown.isEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Center(child: Text('لا مصروف يطابق «$q»', style: AppType.muted(color: AppColors.textMid))),
+            const SizedBox(height: Sp.sm),
+          ],
+          for (final g in groups) ...[
+            const SizedBox(height: Sp.md),
+            RpDayHead(
+              day: RpDay(date: iqDateLabel(g.day), count: g.rows.length, sum: g.rows.fold<num>(0, (a, r) => a + r.amount), rows: const []),
+              unit: 'مصروف',
+              sumLabel: 'المجموع',
+            ),
+            for (var i = 0; i < g.rows.length; i++) ...[
+              if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+              _ExpenseTile(
+                row: g.rows[i],
+                onEdit: () => _openEdit(g.rows[i]),
+                onDelete: () => _confirmDelete(g.rows[i]),
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }
@@ -356,89 +419,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 }
 
-/// 2026-08-26 redesign: header مضغوط بلا gradient بلا حواف ثقيلة.
-/// سطر واحد: إجمالي كبير + عدّاد. سطر ثاني: chip نطاق التاريخ.
-class _CompactHeader extends StatelessWidget {
-  const _CompactHeader({
-    required this.total,
-    required this.count,
-    required this.range,
-    required this.accent,
-    required this.onRange,
-  });
-  final num total;
-  final int count;
-  final RpRange range;
-  final Color accent;
-  final VoidCallback onRange;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.border, width: 0.5),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'exp.total_expenses'.tr(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textMid,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${formatIQD(total)} د.ع',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                        letterSpacing: -0.4,
-                        height: 1.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Text(
-                  '$count عملية',
-                  style: AppType.pillBold(color: accent),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // شريط الفترة نفسه في التقارير الموحّدة: لمسةٌ تفتح الفترات الجاهزة والمخصّصة.
-          RpPeriodBar(period: RpPeriod(name: range.name, range: range.rangeText), compareOn: false, compareWith: '', onPeriod: onRange),
-        ],
-      ),
-    );
-  }
-}
-
 /// 2026-08-26 redesign: tile مسطّح مع hairline divider. لا حواف كامل
 /// لكل صف. المبلغ RTL end (يسار)، الوصف/التاريخ middle، حذف على أطراف.
 /// المصمم متطابق مع صفّ المشترك الجديد (rail 3dp + fixed metric column).
@@ -460,55 +440,43 @@ class _ExpenseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Theme.of(context);
-    final desk = DesktopScope.of(context);
-    final body = Padding(
-      padding: const EdgeInsetsDirectional.only(
-          start: 12, end: 4, top: 10, bottom: 10),
-      child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+    Theme.of(context); // theme-dep (dark-mode)
+    final note = _note(row);
+    final who = (row.actingEmployeeUsername ?? '').trim();
+    // سطرٌ بشكل التقارير الموحّدة (٢٢ نوفمبر): مربّع الأيقونة، البيان، المنفّذ وشاراته، المبلغ بطرفه — واليوم في رأس مجموعته.
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        key: ValueKey('exp-row-${row.id}'),
+        onTap: onEdit,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+          child: Row(
             children: [
-              // Rail — أحمر رفيع (صرفية = خرج مال)
-              Container(
-                width: 3,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.dangerSoftBorder,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
+              RpIconBox(
+                icon: row.isPayslip ? LucideIcons.users : (row.isRecurring ? LucideIcons.repeat : LucideIcons.receiptText),
+                tone: RpTone.loss,
+                size: 36,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: Sp.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Row(
-                      children: [
-                        Icon(LucideIcons.calendar,
-                            size: 11, color: AppColors.textLow),
-                        const SizedBox(width: 4),
-                        Text(
-                          iqDateLabel(row.expenseDate),
-                          style: AppType.bodyBold(color: AppColors.textHi),
-                        ),
-                        if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
-                          Text('  ·  ',
-                              style: AppType.muted()),
-                          Icon(Icons.badge,
-                              size: 11, color: AppColors.brandAccent),
+                    // المالك ٢٥ أكتوبر: «معلومات الصرفيّة ناعمة جدّاً» — البيان عنواناً بخطٍّ واضح
+                    Text(note.isEmpty ? 'exp.total_expenses'.tr() : note,
+                        style: AppType.bodyBold(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (who.isNotEmpty)
+                      Row(
+                        children: [
+                          Icon(Icons.badge, size: 11, color: AppColors.brandAccent),
                           const SizedBox(width: 3),
                           Flexible(
-                            child: Text(
-                              row.actingEmployeeUsername!,
-                              style: AppType.pillBold(color: AppColors.brandAccent),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            child: Text(who, style: AppType.pillBold(color: AppColors.brandAccent), maxLines: 1, overflow: TextOverflow.ellipsis),
                           ),
                         ],
-                      ],
-                    ),
+                      ),
                     if (row.isPayslip) ...[
                       const SizedBox(height: 3),
                       ToneChip(
@@ -534,94 +502,40 @@ class _ExpenseTile extends StatelessWidget {
                         dense: true,
                       ),
                     ],
-                    if (_note(row).isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        _note(row),
-                        // المالك ٢٥ أكتوبر: «معلومات الصرفيّة ناعمة جدّاً» — أكبر وأوضح (كانت muted/11 رماديّ).
-                        style: AppType.body(color: AppColors.textBody),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // Amount — big + red (متطابق مع currency style بالكارت)
+              const SizedBox(width: Sp.sm),
               Text(
                 '${formatIQD(row.amount)} د.ع',
-                style: TextStyle(
-                  fontSize: 14, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.error,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+                style: AppType.bodyStrong(color: AppColors.error).copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
               ),
               // صرفيةٌ داخل تسوية: مقفلة — شارة رقمها بدل زرّ الحذف.
               if (row.isLocked)
                 Padding(
-                  padding: const EdgeInsetsDirectional.only(start: Sp.x6, end: Sp.sm),
+                  padding: const EdgeInsetsDirectional.only(start: Sp.x6),
                   child: ToneChip(
-                    label: 'exp.locked_chip'
-                        .tr(namedArgs: {'n': '${row.settlementNumber}'}),
+                    label: 'exp.locked_chip'.tr(namedArgs: {'n': '${row.settlementNumber}'}),
                     icon: LucideIcons.lock,
                     dense: true,
                   ),
                 )
               else if (row.isPayslip)
-                // صرفيّة كشف راتب: لا حذف من هنا (قفلٌ بمكان الزرّ — البطاقة بحجمها)
+                // صرفيّة كشف راتب: لا حذف من هنا (قفلٌ بمكان الزرّ)
                 Padding(
-                  padding: const EdgeInsetsDirectional.only(start: Sp.x6, end: Sp.md),
+                  padding: const EdgeInsetsDirectional.only(start: Sp.x6, end: Sp.xs),
                   child: Icon(LucideIcons.lock, size: 14, color: AppColors.textLow),
                 )
               else
                 IconButton(
-                  icon: Icon(LucideIcons.trash2,
-                      size: 15, color: AppColors.error),
+                  icon: Icon(LucideIcons.trash2, size: 15, color: AppColors.error),
                   onPressed: onDelete,
                   tooltip: 'common.delete'.tr(),
                   splashRadius: 18,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 ),
             ],
-          ),
-        );
-    if (desk) {
-      // الحاسبة: صفٌّ ضمن بطاقة القسم المجمّعة بفاصلٍ رفيع (كما كان).
-      return Material(
-        color: AppColors.surface,
-        child: InkWell(
-          onTap: onEdit,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.border, width: 0.5),
-              ),
-            ),
-            child: body,
-          ),
-        ),
-      );
-    }
-    // الهاتف: بطاقةٌ مستقلّة لكلّ صرفيّةٍ كبطاقات المشتركين، مع إبقاء كثافة الصفّ.
-    // (المالك ٢٧ أكتوبر — تجانس القوائم) وبهامش قائمة المشتركين (١٦ جانباً، ٦ بين البطاقات) — لا التصاق بالحافّة.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.x6),
-      child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onEdit,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.lg),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: body,
           ),
         ),
       ),
