@@ -101,6 +101,21 @@ void main() {
     await t.pumpAndSettle();
   }
 
+  // الشكل الموحّد (المالك ٢٣ نوفمبر: «المدراء … كذلك»): بطاقتا الأرقام وبطاقة الحسابات التابعة، والزرّان بسطرٍ واحد على ٣٢٠
+  testWidgets('الشكل الموحّد @320 داكن: بطاقتا الأرقام والقائمة، والزرّان كلٌّ بسطرٍ واحد — بلا فيض', (t) async {
+    await open(t, variant: const SimVariant(320, dark: true));
+    expect(t.takeException(), isNull);
+    expect(find.byKey(const ValueKey('elmgr-kpi-balance')), findsOneWidget);
+    expect(find.byKey(const ValueKey('elmgr-kpi-count')), findsOneWidget);
+    expect(find.byKey(const ValueKey('elmgr-list')), findsOneWidget);
+    expect(find.text('ديون أخرى عليهم 75,000 د.ع'), findsOneWidget);
+    for (final w in t.widgetList<Text>(find.text('شحن رصيد'))) {
+      expect(w.maxLines, 1);
+    }
+    final btn = t.getSize(find.text('شحن رصيد').first);
+    expect(btn.height, lessThan(30), reason: 'سطرٌ واحد — كان «شحن / رصيد» سطرين على ٣٢٠');
+  });
+
   testWidgets('القائمة: الحسابات التابعة ورصيد الإيداع وديون أخرى، والعمليّتان لكلّ مدير', (t) async {
     await open(t);
     expect(find.text('najaf40'), findsOneWidget);

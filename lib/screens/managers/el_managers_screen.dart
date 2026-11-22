@@ -10,6 +10,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../el/transfer_screen.dart';
+import '../reports/v2/report_kit.dart';
 import 'custom_debts_screen.dart';
 import 'sheets/el_topup_sheet.dart';
 import 'sheets/el_wa_phone_sheet.dart';
@@ -40,23 +41,12 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
 
   bool get _canTopup => !Perms.isEmployee || Perms.has('el_managers.topup');
   bool get _canDebts => !Perms.isEmployee || Perms.has('reports.manager_debts');
-  final _searchCtrl = TextEditingController();
   String _query = '';
 
   @override
   void initState() {
     super.initState();
     _load();
-    _searchCtrl.addListener(() {
-      final q = _searchCtrl.text.trim();
-      if (q != _query) setState(() => _query = q);
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -134,29 +124,60 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
         child: RefreshIndicator(
           onRefresh: _load,
           color: AppColors.brandAccent,
+          // الشكل الموحّد (المالك ٢٣ نوفمبر: «المدراء والخصومات والسعر الثابت كذلك»): بطاقتا أرقام، ثمّ بطاقة الحسابات التابعة بعنوانها
+          // وعددها وحدّ ايرث لنك والبحث، وسطرٌ لكلّ حساب بزرّيه — بدل الرأس الأخضر وبطاقةٍ لكلّ حساب.
           child: ListView(
-            padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 32),
+            padding: EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, MediaQuery.paddingOf(context).bottom + 32),
             children: [
               if (!_loading && !_enabled)
                 _notEnabled()
               else ...[
-                _hero(),
-                _scopeNote(),
-                Padding(padding: const EdgeInsets.fromLTRB(12, 4, 12, 8), child: _searchField()),
-                if (_loading)
-                  const Padding(padding: EdgeInsets.symmetric(vertical: 32), child: Center(child: CircularProgressIndicator()))
-                else if (rows.isEmpty)
-                  _empty()
-                else
-                  for (final m in rows)
-                    _ElManagerTile(
-                      manager: m,
-                      topupLocked: !_canTopup,
-                      debtsLocked: !_canDebts,
-                      onTopup: () => _topup(m),
-                      onDebts: () => _debts(m),
-                      onWa: () => _editWa(m),
-                    ),
+                _kpis(),
+                const SizedBox(height: Sp.md),
+                RpCard(
+                  key: const ValueKey('elmgr-list'),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      RpTitle(
+                        icon: LucideIcons.listOrdered,
+                        title: 'حساباتك التابعة',
+                        tone: RpTone.neutral,
+                        trailing: Text('${formatIQD(rows.length)} مدير', style: AppType.pillBold(color: AppColors.textMid)),
+                      ),
+                      const SizedBox(height: Sp.x6),
+                      _scopeNote(),
+                      const SizedBox(height: Sp.md),
+                      RpSearchBox(
+                        key: const ValueKey('elmgr-search'),
+                        query: _query,
+                        hint: 'ابحث باسم المدير',
+                        onChanged: (v) => setState(() => _query = v.trim()),
+                      ),
+                      if (_loading) ...[
+                        const SizedBox(height: Sp.xl),
+                        const Center(child: CircularProgressIndicator()),
+                        const SizedBox(height: Sp.xl),
+                      ] else if (rows.isEmpty)
+                        _empty()
+                      else ...[
+                        const SizedBox(height: Sp.x6),
+                        for (final (i, m) in rows.indexed) ...[
+                          if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
+                          _ElManagerTile(
+                            manager: m,
+                            topupLocked: !_canTopup,
+                            debtsLocked: !_canDebts,
+                            onTopup: () => _topup(m),
+                            onDebts: () => _debts(m),
+                            onWa: () => _editWa(m),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ],
           ),
@@ -165,117 +186,64 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
     );
   }
 
-  Widget _hero() {
+  /// رصيد الإيداع (بإشارته) وعدد الحسابات التابعة وديونها الأخرى — بطاقتا التقارير الموحّدة.
+  Widget _kpis() {
     final debt = _totalOtherDebt;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      padding: const EdgeInsets.all(Sp.lg),
-      decoration: BoxDecoration(color: AppColors.brandSurface, borderRadius: BorderRadius.circular(R.card)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final bal = _balance;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('رصيد إيداعك', style: AppType.label(color: AppColors.onBrandSecondary)),
-                    const SizedBox(height: 4),
-                    Row(
-                      textBaseline: TextBaseline.alphabetic,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      children: [
-                        Text(_balance == null ? '—' : formatIQDSigned(_balance!),
-                            textDirection: TextDirection.ltr,
-                            style: AppType.amount(color: AppColors.onBrand).copyWith(fontSize: 22)),
-                        const SizedBox(width: 6),
-                        Text('د.ع', style: AppType.body(color: AppColors.onBrandSecondary)),
-                      ],
-                    ),
-                  ],
-                ),
+          Expanded(
+            child: RpKpiCard(
+              key: const ValueKey('elmgr-kpi-balance'),
+              kpi: RpKpi(
+                label: 'رصيد إيداعك',
+                value: bal ?? 0,
+                display: bal == null ? '—' : null,
+                icon: LucideIcons.wallet,
+                tone: (bal ?? 0) < 0 ? RpTone.loss : RpTone.money,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(color: AppColors.onBrandFill2, borderRadius: BorderRadius.circular(R.sm)),
-                child: Text(arCount(_rows.length, one: 'مدير واحد', two: 'مديران', few: 'مدراء', many: 'مديراً'),
-                    style: AppType.bodyBold(color: AppColors.onBrand)),
-              ),
-            ],
-          ),
-          if (debt > 0) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(LucideIcons.receipt, size: 14, color: AppColors.onBrandStrong),
-                const SizedBox(width: 6),
-                Text('ديون أخرى عليهم ', style: AppType.label(color: AppColors.onBrandSecondary)),
-                Text('${formatIQD(debt)} د.ع', style: AppType.bodyBold(color: AppColors.onBrand)),
-              ],
+              compareWith: '',
             ),
-          ],
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: RpKpiCard(
+              key: const ValueKey('elmgr-kpi-count'),
+              kpi: RpKpi(
+                label: 'المدراء',
+                value: _rows.length,
+                display: arCount(_rows.length, one: 'مدير واحد', two: 'مديران', few: 'مدراء', many: 'مديراً'),
+                icon: LucideIcons.users,
+                tone: RpTone.info,
+                hint: debt > 0 ? 'ديون أخرى عليهم ${rpMoney(debt)}' : null,
+              ),
+              compareWith: '',
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _scopeNote() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: Row(
-        children: [
-          Icon(LucideIcons.info, size: 13, color: AppColors.textMid),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text('ايرث لنك تسمح بشحن رصيدهم وحده — لا سحب ولا نقاط ولا تعديل معلومات',
-                style: AppType.muted().copyWith(fontSize: 11)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _searchField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-      child: Row(
-        children: [
-          Icon(LucideIcons.search, color: AppColors.textMid, size: 18),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              style: AppType.input(color: AppColors.textHi),
-              decoration: InputDecoration(
-                hintText: 'ابحث باسم المدير',
-                hintStyle: AppType.input(color: AppColors.textLow),
-                border: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: Sp.md),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(padding: const EdgeInsets.only(top: 2), child: Icon(LucideIcons.info, size: 13, color: AppColors.textMid)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text('ايرث لنك تسمح بشحن رصيدهم وحده — لا سحب ولا نقاط ولا تعديل معلومات', style: AppType.micro(color: AppColors.textMid)),
+        ),
+      ],
     );
   }
 
   /// الميزة لم تُفتح للحساب بعد — ولصاحبه «تحويل الرصيد» كما كان (لا يفقد التحويل في الانتظار).
   Widget _notEnabled() {
-    return Container(
-      margin: const EdgeInsets.all(12),
+    return RpCard(
       padding: const EdgeInsets.all(Sp.xl),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
       child: Column(
         children: [
           Icon(LucideIcons.userCog, size: 36, color: AppColors.textLow),
@@ -304,14 +272,8 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
   }
 
   Widget _empty() {
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(Sp.huge),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.xl),
       child: Column(
         children: [
           Icon(LucideIcons.userX, size: 36, color: AppColors.textLow),
@@ -345,83 +307,61 @@ class _ElManagerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final m = manager;
+    // سطرٌ بشكل سطور التقارير الموحّدة (٢٣ نوفمبر): مربّع الأيقونة، الاسم ورقمه، ديونه الأخرى وآخر شحنٍ وواتسابه سطوراً — وزرّا
+    // «شحن رصيد» و«ديون أخرى» تحت النصّ.
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.card)),
-                alignment: Alignment.center,
-                child: Icon(LucideIcons.shield, size: 17, color: AppColors.brandAccent),
-              ),
-              const SizedBox(width: 10),
+              const RpIconBox(icon: LucideIcons.shield, tone: RpTone.brand, size: 36),
+              const SizedBox(width: Sp.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(m.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textHi, height: 1.2)),
-                    const SizedBox(height: 2),
-                    Text('حساب تابع · #${m.index}',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMid, height: 1.25)),
+                    Text(m.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                    Text('حساب تابع · #${m.index}', style: AppType.micro(color: AppColors.textMid)),
+                    Text(
+                      m.otherDebt > 0 ? 'ديون أخرى ${rpMoney(m.otherDebt)}' : 'ديون أخرى: لا شيء',
+                      style: m.otherDebt > 0 ? AppType.microBold(color: AppColors.warning) : AppType.micro(color: AppColors.textLow),
+                    ),
+                    if (m.lastTopupAmount != null && m.lastTopupAt != null)
+                      Text(
+                        'آخر شحن ${formatIQD(m.lastTopupAmount!)} · ${_ymd(m.lastTopupAt!)}${m.lastTopupAsDebt ? ' · آجل' : ''}',
+                        style: AppType.micro(color: AppColors.textMid),
+                      ),
+                    const SizedBox(height: Sp.xxs),
+                    // واتساب الإشعار: رقم جلسته (لا يُعدَّل) أو المحفوظ (يُعدَّل)، وبلا رقم «أضف رقم واتساب»
+                    if (m.waPhone != null)
+                      _chip(
+                        icon: LucideIcons.messageCircle,
+                        label: 'واتساب',
+                        value: m.waPhone!,
+                        color: AppColors.channelWhatsApp,
+                        ltr: true,
+                        onTap: m.waEditable && !topupLocked ? onWa : null,
+                      )
+                    else if (!topupLocked)
+                      _chip(
+                        icon: LucideIcons.plus,
+                        label: 'أضف رقم واتساب',
+                        value: '',
+                        color: AppColors.textMid,
+                        onTap: onWa,
+                      ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _chip(
-                icon: LucideIcons.receipt,
-                label: 'ديون أخرى',
-                value: m.otherDebt > 0 ? '${formatIQD(m.otherDebt)} د.ع' : 'لا شيء',
-                color: m.otherDebt > 0 ? AppColors.warning : AppColors.textMid,
-              ),
-              if (m.lastTopupAmount != null && m.lastTopupAt != null)
-                _chip(
-                  icon: LucideIcons.arrowUpToLine,
-                  label: 'آخر شحن',
-                  value: '${formatIQD(m.lastTopupAmount!)} · ${_ymd(m.lastTopupAt!)}${m.lastTopupAsDebt ? ' · آجل' : ''}',
-                  color: AppColors.brand,
-                ),
-              // واتساب الإشعار: رقم جلسته (لا يُعدَّل) أو المحفوظ (يُعدَّل)، وبلا رقم «أضف رقم واتساب»
-              if (m.waPhone != null)
-                _chip(
-                  icon: LucideIcons.messageCircle,
-                  label: 'واتساب',
-                  value: m.waPhone!,
-                  color: AppColors.channelWhatsApp,
-                  ltr: true,
-                  onTap: m.waEditable && !topupLocked ? onWa : null,
-                )
-              else if (!topupLocked)
-                _chip(
-                  icon: LucideIcons.plus,
-                  label: 'أضف رقم واتساب',
-                  value: '',
-                  color: AppColors.textMid,
-                  onTap: onWa,
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Sp.sm),
+          // الزرّان بعرض السطر (لا تحت النصّ وحده): على ٣٢٠ التفّ «شحن رصيد» سطرين؛ والكلمة سطرٌ واحد يصغر ولا يلتفّ
           Row(
             children: [
               Expanded(
@@ -430,26 +370,35 @@ class _ElManagerTile extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: topupLocked ? LockedStyle.box : AppColors.brand,
                     foregroundColor: topupLocked ? LockedStyle.title : AppColors.onBrand,
-                    minimumSize: const Size.fromHeight(42),
+                    minimumSize: const Size.fromHeight(36),
+                    padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
                   ),
-                  icon: topupLocked ? const PermLockIcon(size: 15) : const Icon(LucideIcons.arrowUpToLine, size: 16),
-                  label: const Text('شحن رصيد', style: TextStyle(fontWeight: FontWeight.w700)),
+                  icon: topupLocked ? const PermLockIcon(size: 15) : const Icon(LucideIcons.arrowUpToLine, size: 15),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('شحن رصيد', maxLines: 1, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: Sp.sm),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onDebts,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.textHi,
                     side: BorderSide(color: AppColors.border),
-                    minimumSize: const Size.fromHeight(42),
+                    minimumSize: const Size.fromHeight(36),
+                    padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
                   ),
-                  icon: debtsLocked ? const PermLockIcon(size: 15) : Icon(LucideIcons.receipt, size: 16, color: AppColors.warning),
-                  label: Text('ديون أخرى',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: debtsLocked ? LockedStyle.title : null)),
+                  icon: debtsLocked ? const PermLockIcon(size: 15) : Icon(LucideIcons.receipt, size: 15, color: AppColors.warning),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('ديون أخرى',
+                        maxLines: 1,
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: debtsLocked ? LockedStyle.title : null)),
+                  ),
                 ),
               ),
             ],
@@ -459,7 +408,8 @@ class _ElManagerTile extends StatelessWidget {
     );
   }
 
-  Widget _chip({required IconData icon, required String label, required String value, required Color color, VoidCallback? onTap, bool ltr = false}) {
+  Widget _chip(
+      {required IconData icon, required String label, required String value, required Color color, VoidCallback? onTap, bool ltr = false}) {
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(R.sm)),
@@ -468,8 +418,7 @@ class _ElManagerTile extends StatelessWidget {
         children: [
           Icon(icon, size: 11, color: color),
           const SizedBox(width: 5),
-          Text(label,
-              style: TextStyle(fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.85))),
+          Text(label, style: TextStyle(fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.85))),
           if (value.isNotEmpty) ...[
             const SizedBox(width: 4),
             Text(value,
