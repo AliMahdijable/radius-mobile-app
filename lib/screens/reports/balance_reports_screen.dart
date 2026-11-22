@@ -15,6 +15,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_section.dart';
+import '../../api/merged_dashboard_api.dart';
+import 'balance_companies_card.dart';
 import 'balance_period_screen.dart';
 
 /// «تقارير الأرصدة» (١٥ نوفمبر — المالك: «في قسم التقارير نفتح قسم خاص… تقارير الأرصدة» + «اهتم بالتصميم وعرض التفاصيل بوضع
@@ -152,7 +154,16 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
     _started = true;
     _c = BalanceReportsController(companyKey: MergedSection.routeKeyOf(context));
     _c.load();
+    // «كل الشركات»: اسم المفتوحة لعنوان تفاصيلها تحت جدول الشركات
+    if (MergedMode.active.value) {
+      MergedMode.openKey().then((k) {
+        final name = k == null ? null : MergedMode.companyOf(k)?.name;
+        if (mounted && name != null) setState(() => _openName = name);
+      });
+    }
   }
+
+  String? _openName;
 
   @override
   void dispose() {
@@ -216,10 +227,50 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
     );
   }
 
+  /// شركاتٌ يخدمها القسم (كـ[BalanceReportsScreen.mergedPage]).
+  static List<MergedCompany> get _served => [
+        for (final c in MergedDashboardApi.countable())
+          if (c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit) c,
+      ];
+
+  /// «كل الشركات» و«الكل» في الشريط (٢٢ نوفمبر — بند المقترح: «بـ«كل الشركات» يظهر جدول المحصَّل والمتبقّي والربح لكلّ شركة»):
+  /// الجدول فوق تفاصيل المفتوحة (القسم تحت «الكل» يعرضها كما كان)، ولمسة شركةٍ تختارها في الشريط فيُعرض القسم لها.
+  Widget? _companies() {
+    final cs = _served;
+    if (!MergedMode.active.value || MergedMode.focused != null || cs.length < 2) return null;
+    final open = _openName;
+    return Column(
+      key: const ValueKey('bal-companies'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        BalanceCompaniesCard(
+          key: ValueKey('bal-companies-${[for (final c in cs) c.key].join(',')}'),
+          companies: cs,
+          onPick: (c) => MergedMode.focus.value = c.key,
+        ),
+        const SizedBox(height: Sp.lg),
+        Text(open == null ? 'تفاصيل الشركة المفتوحة' : 'تفاصيل «$open» — المفتوحة', style: AppType.bodyBold(color: AppColors.textHi)),
+      ],
+    );
+  }
+
+  /// رسالةٌ (لا فترات، غير مفعّلة، تعذّرت) — وفوقها جدول الشركات حين يُعرض.
+  Widget _framed(Widget message) {
+    final top = _companies();
+    if (top == null) return message;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0), child: top),
+        Expanded(child: message),
+      ],
+    );
+  }
+
   Widget _body(BalanceOverview? data) {
     if (data == null) {
-      if (_c.loading) return const Center(child: CircularProgressIndicator());
-      return _Message(
+      if (_c.loading) return _framed(const Center(child: CircularProgressIndicator()));
+      return _framed(_Message(
         key: const ValueKey('bal-error'),
         icon: LucideIcons.triangleAlert,
         tone: AppTone.danger,
@@ -231,13 +282,13 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
           setState(() => _c.loading = true);
           _c.load();
         },
-      );
+      ));
     }
     if (!data.featureEnabled) {
-      return const _Message(key: ValueKey('bal-off'), icon: LucideIcons.walletCards, tone: AppTone.neutral, title: 'تقارير الأرصدة غير مفعّلة لحسابك بعد', body: 'راسل الدعم لتفعيلها.');
+      return _framed(const _Message(key: ValueKey('bal-off'), icon: LucideIcons.walletCards, tone: AppTone.neutral, title: 'تقارير الأرصدة غير مفعّلة لحسابك بعد', body: 'راسل الدعم لتفعيلها.'));
     }
     if (data.periods.isEmpty) {
-      return _Message(
+      return _framed(_Message(
         key: const ValueKey('bal-empty'),
         icon: LucideIcons.walletCards,
         tone: AppTone.brand,
@@ -252,11 +303,12 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         action: _c.canWrite ? 'شحن جديد' : null,
         actionKey: const ValueKey('bal-first'),
         onAction: _c.canWrite ? _new : null,
-      );
+      ));
     }
     final periods = data.periods;
     final outside = data.outside;
     final notes = data.qualityNotes;
+    final top = _companies();
     return RefreshIndicator(
       onRefresh: _c.load,
       color: AppColors.brand,
@@ -264,6 +316,7 @@ class _BalanceReportsScreenState extends State<BalanceReportsScreen> {
         key: const ValueKey('bal-list'),
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 96),
         children: [
+          if (top != null) ...[top, const SizedBox(height: Sp.sm)],
           Text('لكلّ شحن رصيد: ما حصّلته منه، والمتبقّي حتى يعود مبلغه، وربحك', style: AppType.muted(color: AppColors.textMid)),
           if (_c.employeeReadOnly) ...[
             const SizedBox(height: Sp.x6),

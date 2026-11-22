@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:rad_mysvcs/api/balance_reports_api.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/screens/reports/balance_reports_screen.dart';
 import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/widgets/merged_section.dart';
 
@@ -120,8 +122,19 @@ void main() {
     await settleReal(t);
     expect(t.takeException(), isNull);
     expect(balanceCalls(), isNotEmpty);
-    expect(balanceCalls().every((a) => a.endsWith(' -')), isTrue, reason: '«الكل» = المفتوحة بلا توجيه: ${balanceCalls()}');
+    // «الكل»: تفاصيل المفتوحة كما كانت بلا توجيه؛ وجدول «حسب الشركة» فوقها (٢٢ نوفمبر — بند المقترح) يقرأ لوحة كلّ شركةٍ بمفتاحها
+    // قراءةً وحدها — لا /me ولا كتابة، والمشروع الوطنيّ لا يُطلب
+    expect(balanceCalls().where((a) => a.endsWith(' -')), contains('GET /api/v2/balance-reports -'), reason: '${balanceCalls()}');
+    expect(balanceCalls().where((a) => !a.endsWith(' -')).toSet(), {'GET /api/v2/balance-reports $_kOpen', 'GET /api/v2/balance-reports $_kEl'},
+        reason: '${balanceCalls()}');
     expect(balanceCalls().where((a) => a.contains('/me')), isEmpty, reason: 'المفتوحة لا تسأل routed_writes');
+    final table = t.widget<RpCompanyTable>(find.byType(RpCompanyTable));
+    expect([for (final l in table.lines) (l.company.key, l.state)], [(_kOpen, RpCompanyState.ok), (_kEl, RpCompanyState.ok)]);
+    final cur = BalanceOverview.fromJson((_contract['overview'] as Map)['data'])!.periods.first;
+    expect([table.lines.first.a, table.lines.first.b, table.lines.first.c],
+        [cur.collected, cur.amountPending ? null : cur.remaining, cur.amountPending ? null : cur.profit], reason: 'أرقام الفترة الجارية كما يحسبها الخادم');
+    expect(table.total.first, cur.collected * 2);
+    expect(find.text('تفاصيل «سوبرنت» — المفتوحة'), findsOneWidget);
     expect(find.byKey(const ValueKey('bal-new')), findsOneWidget);
     expect(find.byKey(const ValueKey('bal-edit-3')), findsOneWidget);
     expect(find.text('تسوية الرصيد'), findsWidgets);
@@ -202,6 +215,29 @@ void main() {
     expect(find.byType(BalanceReportsScreen), findsOneWidget);
     expect(t.takeException(), isNull);
     expect(CompanyRoute.sectionKey, isNull, reason: '«الكل» لا وجهة');
+    await down(t);
+  });
+
+  testWidgets('٦ «الكل» على 320: جدول «حسب الشركة» وتفاصيل المفتوحة بلا نصٍّ مقصوص', (t) async {
+    await up(t);
+    const d = VisualDevice('', Size(320, 2000), 2);
+    await pumpVisual(t, d, home: (_) => BalanceReportsScreen.mergedPage());
+    await settleReal(t);
+    final cut = <String>[
+      for (final e in find.byType(RichText).evaluate())
+        if (e.renderObject case final RenderParagraph ro when ro.didExceedMaxLines) ro.text.toPlainText(),
+    ];
+    final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(visualRootKey));
+    final png = await t.runAsync(() async {
+      final image = await boundary.toImage(pixelRatio: 2);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return data!.buffer.asUint8List();
+    });
+    Directory('build/report_design').createSync(recursive: true);
+    File('build/report_design/bal_merged_320.png').writeAsBytesSync(png!, flush: true);
+    expect(cut, isEmpty, reason: 'نصٌّ مقصوص: $cut');
+    expect(t.takeException(), isNull);
     await down(t);
   });
 }

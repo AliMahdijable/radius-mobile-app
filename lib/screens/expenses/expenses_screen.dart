@@ -1,3 +1,4 @@
+import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +6,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/company_route.dart';
 import '../../api/expenses_api.dart';
-import '../reports/widgets/date_range_chip.dart';
+import '../reports/v2/report_kit.dart';
+import '../reports/v2/report_period.dart';
+import '../reports/v2/report_prefs.dart';
+import '../reports/v2/report_sheets.dart';
 import '../settlements/widgets/archive_bar.dart';
 import '../../api/archive_info.dart';
 import '../../core/util/ar_date.dart';
@@ -74,13 +78,45 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       (_routedWrites != true || MergedOps.writeLockAt(_section!.company?.key) != null);
 
   String get _lockText => 'merged.section_locked'.trm(args: [_section?.company?.name ?? '—']);
-  // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب)، بشريط الفترات نفسه الذي في التقارير.
-  DateRange _range = DateRange.thisMonth();
+  // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب). شريط الفترة نفسه الذي في التقارير الموحّدة (٢٢ نوفمبر — بند المقترح:
+  // «الصرفيّات… تبقى بـ«قوائم أخرى»، لكن بنفس شريط الفلاتر»): تسع فتراتٍ جاهزة + مخصّصة، ويتذكّر آخر فترة.
+  RpRange _range = RpRange.of(RpPreset.thisMonth, now: DateTime.now());
+  static const _prefsId = 'expenses';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    final f = await RpPrefs.load(_prefsId, now: DateTime.now());
+    if (!mounted) return;
+    setState(() => _range = f.range);
+    await _load();
+  }
+
+  Future<void> _pickRange() async {
+    final v = await showModalBottomSheet<RpFilterValue>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      builder: (ctx) => RpFilterSheet(
+        subtitle: '${'more.expenses'.tr()} · ${_range.name}',
+        initial: RpFilterValue(range: _range, compare: false),
+        now: DateTime.now(),
+        people: const [],
+        showPeople: false,
+        showCompare: false,
+        types: const [],
+      ),
+    );
+    if (v == null || !mounted) return;
+    setState(() => _range = v.range);
+    unawaited(RpPrefs.save(_prefsId, RpFilterValue(range: v.range, compare: false)));
+    await _load();
   }
 
   String _fmtDate(DateTime d) {
@@ -245,10 +281,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   count: _rows.length,
                   range: _range,
                   accent: accent,
-                  onRange: (r) {
-                    setState(() => _range = r);
-                    _load();
-                  },
+                  onRange: _pickRange,
                 ),
               ]),
               // «الصرفيات الثابتة» — حين يفتحها الخادم للحساب (وإلّا لا شيء هنا). شركةٌ موجَّهة: قوالبها من صفحتها (مساراتها غير
@@ -335,9 +368,9 @@ class _CompactHeader extends StatelessWidget {
   });
   final num total;
   final int count;
-  final DateRange range;
+  final RpRange range;
   final Color accent;
-  final ValueChanged<DateRange> onRange;
+  final VoidCallback onRange;
 
   @override
   Widget build(BuildContext context) {
@@ -398,8 +431,8 @@ class _CompactHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          // نفس شريط الفترات في التقارير: الجاهزة + الفترة بأسماء الأشهر (المالك ٢٤ أكتوبر).
-          DateRangeChipBar(value: range, onChanged: onRange),
+          // شريط الفترة نفسه في التقارير الموحّدة: لمسةٌ تفتح الفترات الجاهزة والمخصّصة.
+          RpPeriodBar(period: RpPeriod(name: range.name, range: range.rangeText), compareOn: false, compareWith: '', onPeriod: onRange),
         ],
       ),
     );
