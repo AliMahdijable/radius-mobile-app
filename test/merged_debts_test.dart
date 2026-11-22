@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/screens/reports/all_managers_debts_screen.dart';
 import 'package:rad_mysvcs/screens/reports/deleted_debts_screen.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -210,13 +211,20 @@ void main() {
       'GET /api/v2/deleted-debts $_kF',
       'GET /api/v2/deleted-debts $_kN',
     }, reason: 'كلّ شركةٍ بمفتاحها — والمُضافة تخدمها (لا بلا مفتاح)');
-    // العدد 2 والمجموع 40,000 (علي 25,000 + زيد 15,000) — الفاشلة خارجه باسمها، وكربلاء غير مفعّلة
-    expect(find.text('40,000 د.ع'), findsOneWidget);
+    // العدد 2 والمجموع 40,000 (علي 25,000 + زيد 15,000) — الفاشلة خارجه باسمها، وكربلاء غير مفعّلة (الشكل الموحّد ٢٢ نوفمبر)
+    expect(t.widget<RpHeroKpi>(find.byType(RpHeroKpi)).kpi.value, 40000);
     expect(find.textContaining('خارج المجموع: «فاشلة»'), findsOneWidget);
-    expect(find.text('· غير مفعّلة'), findsOneWidget);
+    expect(find.text('غير مفعّلة: «كربلاء»'), findsOneWidget);
     expect(find.text('علي المحذوف'), findsOneWidget);
     expect(find.text('زيد المحذوف'), findsOneWidget);
-    expect(find.byKey(const ValueKey('merged-breakdown-$_kF')), findsOneWidget);
+    final table = t.widget<RpCompanyTable>(find.byType(RpCompanyTable));
+    expect([for (final l in table.lines) (l.company.key, l.state)], [
+      (_kA, RpCompanyState.ok),
+      (_kB, RpCompanyState.ok),
+      (_kF, RpCompanyState.failed),
+      (_kN, RpCompanyState.ok),
+    ]);
+    expect(table.total.take(2), [2, 40000]);
     // ديون الجزيرة المكرّرة: قرارها من داخلها
     expect(find.byKey(const ValueKey('dd-other-twins-$_kB')), findsOneWidget);
     expect(find.text('نفس الدين'), findsNothing, reason: 'لا زرّ قرارٍ لشركةٍ غير المفتوحة');
@@ -231,10 +239,10 @@ void main() {
     await t.tap(find.text('إلغاء'));
     await settle(t, seconds: 1);
 
-    // الجزيرة وحدها: لا زرّ إضافة (للمفتوحة)، وأرقامها وحدها
-    MergedMode.focus.value = _kB;
+    // الجزيرة وحدها (لمسة سطرها في «حسب الشركة»): لا زرّ إضافة (للمفتوحة)، وأرقامها وحدها
+    table.onTap!(table.lines[1].company);
     await settle(t, seconds: 1);
-    expect(find.text('15,000 د.ع'), findsWidgets);
+    expect(t.widget<RpHeroKpi>(find.byType(RpHeroKpi)).kpi.value, 15000);
     expect(find.text('علي المحذوف'), findsNothing);
     expect(find.text('إضافة دين · سوبرنت'), findsNothing);
     await down(t);

@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart' show SheetCloseButton;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -12,6 +14,8 @@ import 'package:rad_mysvcs/api/deleted_debts_api.dart';
 import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/screens/reports/deleted_debts_screen.dart';
 import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
+import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -343,6 +347,75 @@ void main() {
       expect(server.posts.last.$2, {'name': 'علي', 'amount': 20000, 'confirmRepeat': true});
       expect(find.text('إضافة دين لمشترك محذوف'), findsNothing, reason: 'أُغلق الشيت بعد الحفظ');
       await t.pump(const Duration(seconds: 4));
+    });
+  });
+
+  group('الشكل الموحّد (٢٢ نوفمبر)', () {
+    tearDown(() async {
+      ReportExportActions.debugSink = null;
+      await visualTearDown();
+    });
+
+    testWidgets('«قسّم حسب» المدير وعمر الدين، و«أقدم من 3 أشهر»، والتصدير بما على الشاشة (البحث في الرأس)', (t) async {
+      final server = _DdServer(await visualSetUp(s1bSasOwner));
+      // دينٌ قديم (أكثر من 6 أشهر) — ومن ملف بلا تاريخ لا يُنسب لفئةٍ تخميناً
+      server.rows = [
+        ...server.rows,
+        {'key': 'm11', 'origin': 'manual', 'name': 'سجّاد قديم', 'manager_username': 'agent1', 'debt': 50000, 'at': '2026-03-01T10:00:00Z'},
+        {'key': 'm12', 'origin': 'import', 'name': 'بلا تاريخ', 'manager_username': null, 'debt': 5000},
+      ];
+      ApiClient.dio.httpClientAdapter = server;
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      await pumpVisual(t, const VisualDevice('', Size(430, 3000), 2), home: (_) => const DeletedDebtsScreen());
+      await settle(t, seconds: 2);
+
+      expect(t.widget<RpHeroKpi>(find.byType(RpHeroKpi)).kpi.value, 130000);
+      final k = {for (final x in t.widget<RpKpiGrid>(find.byType(RpKpiGrid)).kpis) x.id: x};
+      expect(k['count']!.value, 5);
+      expect(k['old']!.value, 50000, reason: 'سجّاد وحده أقدم من 90 يوماً — وبلا تاريخ لا يُحسب قديماً');
+      var card = t.widget<RpBreakdownCard>(find.byType(RpBreakdownCard));
+      expect(card.tabs, ['المدير', 'عمر الدين', 'المصدر']);
+      expect([for (final x in card.shares) (x.name, x.amount, x.count)], [('agent1', 85000, 2), ('بلا مدير', 45000, 3)]);
+      card.onTab!(1);
+      await t.pump();
+      card = t.widget<RpBreakdownCard>(find.byType(RpBreakdownCard));
+      expect([for (final x in card.shares) x.name], ['شهر – 3 أشهر', 'أكثر من 6 أشهر', 'بلا تاريخ'], reason: 'بترتيب العمر لا بالمبلغ');
+
+      await t.enterText(find.byType(TextField).first, 'agent1');
+      await t.pump();
+      await t.scrollUntilVisible(find.text('Excel'), 600, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.text('Excel'));
+      await settle(t, seconds: 1);
+      final r = got.single;
+      expect(r.rows.length, 2, reason: 'ما على الشاشة بعد البحث');
+      expect(r.columns, ['الاسم', 'اسم المستخدم', 'الهاتف', 'المدير', 'المصدر', 'التاريخ', 'الدين', 'الملاحظة']);
+      expect(r.details, contains('البحث: «agent1»'));
+      expect(r.details, contains('عدد السطور: 2'));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('عرض 320: لا نصّ مقصوص', (t) async {
+      final server = _DdServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      const d = VisualDevice('', Size(320, 2600), 2);
+      await pumpVisual(t, d, home: (_) => const DeletedDebtsScreen());
+      await settle(t, seconds: 2);
+      final cut = <String>[
+        for (final e in find.byType(RichText).evaluate())
+          if (e.renderObject case final RenderParagraph ro when ro.didExceedMaxLines) ro.text.toPlainText(),
+      ];
+      final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(visualRootKey));
+      final png = await t.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 2);
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        return data!.buffer.asUint8List();
+      });
+      Directory('build/report_design').createSync(recursive: true);
+      File('build/report_design/dd_single_320.png').writeAsBytesSync(png!, flush: true);
+      expect(cut, isEmpty, reason: 'نصٌّ مقصوص: $cut');
+      expect(t.takeException(), isNull);
     });
   });
 

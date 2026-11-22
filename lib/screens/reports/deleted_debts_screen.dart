@@ -20,9 +20,10 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/company_tag.dart';
-import '../../widgets/merged_breakdown.dart';
-import '../../widgets/merged_company_strip.dart';
 import '../account/company_switch_sheet.dart';
+import 'v2/debt_age.dart';
+import 'v2/report_kit.dart';
+import 'widgets/report_export.dart';
 import 'widgets/report_permission_gate.dart';
 import '../../services/merged_text.dart';
 
@@ -64,7 +65,6 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   void initState() {
     super.initState();
     MergedMode.active.addListener(_onMergedMode);
-    MergedMode.focus.addListener(_onMergedFocus);
     if (Perms.has('deleted_debts.view')) {
       _load();
     } else {
@@ -76,7 +76,6 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   void dispose() {
     _gen++;
     MergedMode.active.removeListener(_onMergedMode);
-    MergedMode.focus.removeListener(_onMergedFocus);
     _search.dispose();
     super.dispose();
   }
@@ -87,10 +86,6 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     _openKey = null;
     _page = null;
     _load();
-  }
-
-  void _onMergedFocus() {
-    if (mounted && _mergedOn) setState(() {});
   }
 
   static bool _servedFor(MergedCompany c) =>
@@ -286,13 +281,6 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     }
   }
 
-  List<DeletedDebt> get _shown {
-    final rows = _page?.rows ?? const <DeletedDebt>[];
-    final s = _search.text.trim().toLowerCase();
-    if (s.isEmpty) return rows;
-    return rows.where((r) => _matches(r, s)).toList();
-  }
-
   static bool _matches(DeletedDebt r, String s) {
     final sd = _digits(s);
     final text = [r.name, r.username, r.managerUsername]
@@ -304,52 +292,20 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
 
   /* ── «كل الشركات» ── */
 
-  /// صفحات الشركات المعروضة المفعّلة: الكلّ بترتيب الشريط أو المختارة وحدها.
+  /// الشركات المختارة في الشريط (فارغ = كلّها) — اختيارٌ لهذا التقرير وحده كبقيّة التقارير الموحّدة.
+  Set<String> _companies = {};
+
+  bool _picked(String key) => _companies.isEmpty || _companies.contains(key);
+
+  /// صفحات الشركات المعروضة المفعّلة، بترتيب الشريط.
   List<({MergedCompany c, DeletedDebtsPage page})> get _mergedPages {
     final m = _merged;
     if (m == null) return const [];
-    final focus = MergedMode.focused;
-    final parts = focus == null ? m.parts : [if (m.partOf(focus.key) case final p?) p];
     return [
-      for (final p in parts)
-        if (p.ok && p.rows!.isNotEmpty && p.rows!.first.enabled) (c: p.company, page: p.rows!.first),
+      for (final p in m.parts)
+        if (_picked(p.company.key) && p.ok && p.rows!.isNotEmpty && p.rows!.first.enabled) (c: p.company, page: p.rows!.first),
     ];
   }
-
-  /// صفحة الشركة في التقرير — مقروءةٌ (مفعّلةً أو لا)، وإلّا null.
-  DeletedDebtsPage? _pageOf(MergedCompany c) {
-    final p = _merged?.partOf(c.key);
-    return p != null && p.ok && p.rows!.isNotEmpty ? p.rows!.first : null;
-  }
-
-  String? _problemOf(MergedCompany c) {
-    if (_pageOf(c)?.enabled == false) return 'غير مفعّلة';
-    return _merged!.problemOf(c,
-        failedLabel: 'merged.chip_failed'.trm(),
-        unsupportedLabel: c.provider == MergedProvider.ftth ? 'غير متاحة' : 'merged.web_only'.trm());
-  }
-
-  String? _mergedNote(MergedReport<DeletedDebtsPage> m) => m.noteFor(
-        MergedMode.focused?.key,
-        unsupportedText: 'ديون المحذوفين لنوعها ليست هنا',
-        missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')]),
-        nameUnsupported: false,
-      );
-
-  List<MergedBreakdownRow> _breakdown(MergedReport<DeletedDebtsPage> m) => [
-        for (final p in m.parts)
-          if (!p.ok && !p.unsupported)
-            (key: p.company.key, value: null, sub: null, reason: p.error ?? 'dd.load_failed'.tr())
-          else if (p.ok && p.rows!.isNotEmpty && !p.rows!.first.enabled)
-            (key: p.company.key, value: null, sub: null, reason: 'غير مفعّلة لها')
-          else if (p.ok && p.rows!.isNotEmpty)
-            (
-              key: p.company.key,
-              value: _money(p.rows!.first.total),
-              sub: '${formatIQD(p.rows!.first.count)} مدين',
-              reason: null,
-            ),
-      ];
 
   /// دينٌ في شركةٍ غير المفتوحة: تسديده وشطبه من داخلها.
   Future<void> _openOther(String key) async {
@@ -365,113 +321,205 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     if (go == true && mounted) await showCompanySwitchSheet(context);
   }
 
-  List<Widget> _mergedContent() {
-    final m = _merged!;
-    final focus = MergedMode.focused;
-    final pages = _mergedPages;
-    Widget retry() => TextButton.icon(
+  /// زرّ الإضافة: للشركة المفتوحة — في الوضع باسمها، ويختفي حين لا تُعرض.
+  Widget? _fab() {
+    if (!_mergedOn || _merged == null) return _page?.enabled == true ? _addButton() : null;
+    if (_openKey == null || _page?.enabled != true || !_picked(_openKey!)) return null;
+    return _addButton(company: MergedMode.companyOf(_openKey!)?.name);
+  }
+
+  void _toggleCompany(RpCompany c) {
+    final all = [for (final p in _merged?.parts ?? const <MergedReportPart<DeletedDebtsPage>>[]) if (!p.unsupported) p.company.key];
+    final picked = _companies.isEmpty ? {...all} : {..._companies};
+    if (picked.contains(c.key)) {
+      if (picked.length == 1) return;
+      picked.remove(c.key);
+    } else {
+      picked.add(c.key);
+    }
+    setState(() {
+      _companies = picked.length == all.length ? {} : picked;
+      _tabAll = false;
+    });
+  }
+
+  // ── الشكل الموحّد (٢٢ نوفمبر — «اكمل كلشي»؛ بند المقترح: «المجموع، وعمر الدين، وتقسيم حسب الشركة والمدير») ──
+
+  int _tab = 0;
+  bool _tabAll = false;
+
+  /// صفحاتٌ تُعرض: المفتوحة وحدها، أو المختارة في «كل الشركات».
+  List<({String? key, DeletedDebtsPage page})> get _views {
+    if (_mergedOn && _merged != null) return [for (final e in _mergedPages) (key: e.c.key, page: e.page)];
+    final p = _page;
+    return p != null && p.enabled ? [(key: null, page: p)] : const [];
+  }
+
+  /// سطور البحث عبر الصفحات المعروضة.
+  List<({String? key, DeletedDebt row})> _rowsOf(List<({String? key, DeletedDebtsPage page})> views) {
+    final s = _search.text.trim().toLowerCase();
+    return [
+      for (final v in views)
+        for (final r in v.page.rows)
+          if (s.isEmpty || _matches(r, s)) (key: v.key, row: r),
+    ];
+  }
+
+  /// شركاتٌ مختارةٌ تعذّرت — تُسمّى ولا تُجمع.
+  List<String> get _failed => [
+        for (final p in _merged?.parts ?? const <MergedReportPart<DeletedDebtsPage>>[])
+          if (_mergedOn && _picked(p.company.key) && !p.ok && !p.unsupported) p.company.name,
+      ];
+
+  List<String> _truncatedNames(List<({String? key, DeletedDebtsPage page})> views) => [
+        for (final v in views)
+          if (v.page.truncated) v.key == null ? '' : (MergedMode.companyOf(v.key!)?.name ?? ''),
+      ];
+
+  RpCompany _rp(MergedCompany c, {bool selected = true, String? note}) =>
+      RpCompany(key: c.key, name: c.name, colorIndex: c.colorIndex, selected: selected, note: note);
+
+  RpCompany? _coOf(String? key) {
+    final c = key == null ? null : MergedMode.companyOf(key);
+    return c == null ? null : _rp(c);
+  }
+
+  List<String> get _tabs => [if (_mergedOn && _merged != null) 'الشركة', 'المدير', 'عمر الدين', 'المصدر'];
+
+  List<RpShare> _shares(List<({String? key, DeletedDebt row})> rows, String tab) {
+    if (tab == 'عمر الدين') {
+      return DebtAge.shares(rows, at: (r) => r.row.at, amount: (r) => r.row.debt, now: DateTime.now());
+    }
+    final acc = <String, ({String name, num amount, int count, RpCompany? co})>{};
+    for (final r in rows) {
+      final co = tab == 'الشركة' ? _coOf(r.key) : (tab == 'المدير' && _mergedOn ? _coOf(r.key) : null);
+      final name = switch (tab) {
+        'الشركة' => co?.name ?? '—',
+        'المدير' => (r.row.managerUsername ?? '').trim().isEmpty ? 'بلا مدير' : r.row.managerUsername!.trim(),
+        _ => _originLabel(r.row.origin),
+      };
+      final k = '${co?.key ?? ''}|$name';
+      final o = acc[k];
+      acc[k] = (name: name, amount: (o?.amount ?? 0) + r.row.debt, count: (o?.count ?? 0) + 1, co: co);
+    }
+    final total = acc.values.fold<num>(0, (a, v) => a + (v.amount > 0 ? v.amount : 0));
+    final list = acc.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
+    return [
+      for (final v in list)
+        RpShare(name: v.name, amount: v.amount, count: v.count, share: total > 0 && v.amount > 0 ? v.amount / total : 0, company: v.co),
+    ];
+  }
+
+  List<Widget> _gapped(List<Widget> parts) => [
+        for (var i = 0; i < parts.length; i++) ...[if (i > 0) const SizedBox(height: Sp.md), parts[i]],
+      ];
+
+  Widget _retryNotice(String text) => _Notice(
+        icon: LucideIcons.userX,
+        text: text,
+        action: TextButton.icon(
           onPressed: _load,
           icon: const Icon(LucideIcons.refreshCw, size: 16),
           label: Text('common.retry'.tr()),
-        );
-    if (pages.isEmpty) {
-      // لا أصفار لما لم يُقرأ: سبب المختارة، أو الكلّ تعذّر/غير مفعّل
-      final p = focus == null ? null : m.partOf(focus.key);
-      final text = p == null
-          ? (m.parts.any((x) => x.ok) ? 'dd.off'.tr() : (_error ?? 'dd.load_failed'.tr()))
-          : p.unsupported
-              ? '«${p.company.name}»: ديون المحذوفين لنوعها ليست هنا'
-              : !p.ok
-                  ? '«${p.company.name}»: ${p.error ?? 'dd.load_failed'.tr()}'
-                  : '«${p.company.name}»: ${'dd.off'.tr()}';
-      return [_Notice(icon: LucideIcons.userX, text: text, action: retry())];
-    }
-    final count = pages.fold<int>(0, (s, e) => s + e.page.count);
-    final total = pages.fold<double>(0, (s, e) => s + e.page.total);
-    final failed = focus != null
-        ? const <String>[]
-        : [for (final p in m.parts) if (!p.ok && !p.unsupported) '«${p.company.name}»'];
-    final s = _search.text.trim().toLowerCase();
-    final rows = [
-      for (final e in pages)
-        for (final r in e.page.rows)
-          if (s.isEmpty || _matches(r, s)) (key: e.c.key, row: r),
-    ];
-    final anyRows = pages.any((e) => e.page.rows.isNotEmpty);
-    final openShown = _openKey != null && (focus == null || focus.key == _openKey);
-    final openTwins = openShown ? (_page?.pendingTwins ?? const <PendingTwin>[]) : const <PendingTwin>[];
-    final otherTwins = [
-      for (final e in pages)
-        if (e.c.key != _openKey && e.page.pendingTwins.isNotEmpty) e,
-    ];
-    return [
-      Row(
-        children: [
-          Expanded(
-            child: _Kpi(
-              icon: LucideIcons.userX,
-              label: 'dd.kpi_count'.tr(),
-              value: formatIQD(count),
-              tone: AppTone.danger,
-            ),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: _Kpi(
-              icon: LucideIcons.handCoins,
-              label: 'dd.kpi_total'.tr(),
-              value: _money(total),
-              tone: AppTone.warning,
-            ),
-          ),
-        ],
-      ),
-      // ما لم يدخل المجموع — باسمه
-      if (failed.isNotEmpty) ...[
-        const SizedBox(height: Sp.sm),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(LucideIcons.triangleAlert, size: 13, color: AppColors.warning),
-            ),
-            const SizedBox(width: Sp.x6),
-            Expanded(
-              child: Text(
-                'merged.not_in_sum'.trm(args: [failed.join('، ')]),
-                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
-              ),
-            ),
-          ],
         ),
-      ],
-      const SizedBox(height: Sp.md),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(LucideIcons.info, size: 14, color: AppColors.textLow),
-          ),
-          const SizedBox(width: Sp.x6),
-          Expanded(
-            child: Text(
-              'dd.info'.tr(),
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
-            ),
-          ),
+      );
+
+  /// الشاشة كلّها بالوضعين: الشركات ← «حسب الشركة» ← المجموع ← المدينون والأقدم ← «قسّم حسب» ← الدين المكرّر ← البحث والديون
+  /// (أزرار التسديد والشطب كما كانت) ← التصدير بما على الشاشة.
+  List<Widget> _frame() {
+    final m = _mergedOn ? _merged : null;
+    final out = <Widget>[];
+    if (m != null) {
+      out.add(RpCompanyChips(
+        companies: [
+          for (final p in m.parts)
+            if (!p.unsupported) _rp(p.company, selected: _companies.isNotEmpty && _companies.contains(p.company.key)),
         ],
-      ),
-      if (focus == null && m.parts.where((p) => !p.unsupported).length > 1) ...[
-        const SizedBox(height: Sp.md),
-        MergedBreakdownCard(rows: _breakdown(m)),
+        allSelected: _companies.isEmpty,
+        onAll: () => setState(() => _companies = {}),
+        onToggle: _toggleCompany,
+      ));
+      out.add(_companyTable(m));
+      final off = [
+        for (final p in m.parts)
+          if (_picked(p.company.key) && p.ok && p.rows!.isNotEmpty && !p.rows!.first.enabled) '«${p.company.name}»',
+      ];
+      if (off.isNotEmpty) out.add(Text('غير مفعّلة: ${off.join('، ')}', style: AppType.micro(color: AppColors.textLow)));
+    }
+    if (_loading) {
+      out.add(const Padding(padding: EdgeInsets.symmetric(vertical: 48), child: Center(child: CircularProgressIndicator())));
+      return _gapped(out);
+    }
+    final views = _views;
+    if (views.isEmpty) {
+      if (m == null) {
+        out.add(_page == null ? _retryNotice(_error ?? 'dd.load_failed'.tr()) : _Notice(icon: LucideIcons.userX, text: 'dd.off'.tr()));
+      } else {
+        // لا أصفار لما لم يُقرأ: الكلّ تعذّر، أو غير مفعّل
+        out.add(m.parts.any((x) => x.ok) ? _Notice(icon: LucideIcons.userX, text: 'dd.off'.tr()) : _retryNotice(_error ?? 'dd.load_failed'.tr()));
+      }
+      return _gapped(out);
+    }
+    final now = DateTime.now();
+    final count = views.fold<int>(0, (a, v) => a + v.page.count);
+    final total = views.fold<double>(0, (a, v) => a + v.page.total);
+    final allRows = _rowsOf(views);
+    final truncated = _truncatedNames(views);
+    final failed = _failed;
+    final searching = _search.text.trim().isNotEmpty;
+    final oldRows = [for (final r in allRows) if (DebtAge.isOld(r.row.at, now)) r];
+    final oldSum = oldRows.fold<double>(0, (a, r) => a + r.row.debt);
+    String truncNote(List<String> names) => names.every((n) => n.isEmpty)
+        ? 'dd.truncated'.tr()
+        : '${names.where((n) => n.isNotEmpty).map((n) => '«$n»').join('، ')}: ${'dd.truncated'.tr()}';
+    out.add(RpHeroKpi(
+      kpi: RpKpi(id: 'total', label: 'dd.kpi_total'.tr(), value: total, icon: LucideIcons.handCoins, tone: RpTone.debt, upIsGood: false),
+      compareWith: '',
+      spark: const [],
+      note: 'dd.info'.tr(),
+      notes: [
+        if (failed.isNotEmpty) 'merged.not_in_sum'.trm(args: [failed.map((n) => '«$n»').join('، ')]),
+        if (truncated.isNotEmpty) '${truncNote(truncated)} — الأعمار والتقسيم منها',
       ],
-      // الدين المكرّر: قرار المفتوحة هنا، وغيرها من داخلها
-      if (openTwins.isNotEmpty) ...[
-        const SizedBox(height: Sp.md),
-        if (focus == null) ...[
-          CompanyTag(companyKey: _openKey!, fontSize: 11),
+    ));
+    out.add(RpKpiGrid(compareWith: '', kpis: [
+      RpKpi(id: 'count', label: 'dd.kpi_count'.tr(), value: count, isCount: true, unit: 'مدين', icon: LucideIcons.userX, tone: RpTone.loss),
+      RpKpi(
+        id: 'old',
+        label: 'أقدم من 3 أشهر',
+        value: oldSum,
+        icon: LucideIcons.hourglass,
+        tone: RpTone.debt,
+        upIsGood: false,
+        hint: '${formatIQD(oldRows.length)} مدين${searching ? ' — من نتائج البحث' : ''}',
+      ),
+    ]));
+    // ── «قسّم حسب» ──
+    final tabs = _tabs;
+    final tab = tabs[_tab.clamp(0, tabs.length - 1)];
+    final shares = _shares(allRows, tab);
+    final cap = _tabAll ? shares.length : 6;
+    out.add(RpBreakdownCard(
+      tabs: tabs,
+      selected: tabs.indexOf(tab),
+      tone: RpTone.debt,
+      unit: 'مدين',
+      shares: shares.take(cap).toList(),
+      onTab: (i) => setState(() {
+        _tab = i;
+        _tabAll = false;
+      }),
+      note: searching ? 'من نتائج البحث' : (tab == 'عمر الدين' ? 'من تاريخ تسجيل الدين عندنا' : null),
+      more: shares.length > cap ? 'عرض الكلّ (${shares.length})' : null,
+      onMore: () => setState(() => _tabAll = true),
+    ));
+    // ── الدين المكرّر: قرار المفتوحة هنا، وغيرها من داخلها ──
+    final openShown = m == null || (_openKey != null && _picked(_openKey!));
+    final openTwins = openShown ? (_page?.pendingTwins ?? const <PendingTwin>[]) : const <PendingTwin>[];
+    if (openTwins.isNotEmpty) {
+      out.add(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (m != null && views.length > 1) ...[
+          Align(alignment: AlignmentDirectional.centerStart, child: CompanyTag(companyKey: _openKey!, fontSize: 11)),
           const SizedBox(height: Sp.xs),
         ],
         _TwinsCard(
@@ -481,10 +529,12 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
           onSame: _twinSame,
           onDistinct: _twinDistinct,
         ),
-      ],
-      for (final e in otherTwins) ...[
-        const SizedBox(height: Sp.sm),
-        Material(
+      ]));
+    }
+    if (m != null) {
+      for (final e in _mergedPages) {
+        if (e.c.key == _openKey || e.page.pendingTwins.isEmpty) continue;
+        out.add(Material(
           color: AppColors.warningSoftBg,
           borderRadius: BorderRadius.circular(R.card),
           child: InkWell(
@@ -506,56 +556,148 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
               ]),
             ),
           ),
-        ),
-      ],
-      if (anyRows) ...[
-        const SizedBox(height: Sp.md),
-        SheetSearchField(
-          controller: _search,
-          hint: 'dd.search_hint'.tr(),
-          onChanged: (_) => setState(() {}),
-        ),
-      ],
-      const SizedBox(height: Sp.md),
-      if (!anyRows)
-        _Notice(icon: LucideIcons.userX, text: 'dd.empty'.tr())
-      else if (rows.isEmpty)
-        _Notice(icon: LucideIcons.search, text: 'dd.no_results'.tr())
-      else
-        for (int i = 0; i < rows.length; i++) ...[
+        ));
+      }
+    }
+    // ── الديون: البحث ثمّ البطاقات بأزرارها ──
+    final anyRows = views.any((v) => v.page.rows.isNotEmpty);
+    if (anyRows) {
+      out.add(SheetSearchField(controller: _search, hint: 'dd.search_hint'.tr(), onChanged: (_) => setState(() {})));
+    }
+    if (!anyRows) {
+      out.add(_Notice(icon: LucideIcons.userX, text: 'dd.empty'.tr()));
+    } else if (allRows.isEmpty) {
+      out.add(_Notice(icon: LucideIcons.search, text: 'dd.no_results'.tr()));
+    } else {
+      final tagged = m != null && views.length > 1;
+      out.add(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (var i = 0; i < allRows.length; i++) ...[
           if (i > 0) const SizedBox(height: Sp.sm),
-          if (focus == null) ...[
+          if (tagged)
             Padding(
               padding: const EdgeInsetsDirectional.only(start: 4, bottom: 2),
-              child: CompanyTag(companyKey: rows[i].key, fontSize: 11),
+              child: CompanyTag(companyKey: allRows[i].key!, fontSize: 11),
             ),
-          ],
           _DebtTile(
-            row: rows[i].row,
-            onPay: rows[i].key == _openKey
-                ? () => _afterSheet(_showPaySheet(context, rows[i].row))
-                : () => _openOther(rows[i].key),
-            onWriteOff: rows[i].key == _openKey
-                ? () => _afterSheet(_showWriteOffSheet(context, rows[i].row))
-                : () => _openOther(rows[i].key),
+            row: allRows[i].row,
+            onPay: m == null || allRows[i].key == _openKey
+                ? () => _afterSheet(_showPaySheet(context, allRows[i].row))
+                : () => _openOther(allRows[i].key!),
+            onWriteOff: m == null || allRows[i].key == _openKey
+                ? () => _afterSheet(_showWriteOffSheet(context, allRows[i].row))
+                : () => _openOther(allRows[i].key!),
           ),
         ],
-    ];
+      ]));
+    }
+    if (truncated.isNotEmpty) {
+      out.add(Text(truncNote(truncated), textAlign: TextAlign.center, style: AppType.muted().copyWith(fontSize: 11.5)));
+    }
+    if (allRows.isNotEmpty) {
+      out.add(RpExportBar(
+        onPdf: () => _export('pdf', views, allRows),
+        onExcel: () => _export('excel', views, allRows),
+        onShare: () => _export('share', views, allRows),
+      ));
+    }
+    return _gapped(out);
   }
 
-  /// زرّ الإضافة: للشركة المفتوحة — في الوضع باسمها، ويختفي حين تُعرض شركةٌ غيرها وحدها.
-  Widget? _fab() {
-    if (!_mergedOn || _merged == null) return _page?.enabled == true ? _addButton() : null;
-    final focus = MergedMode.focused;
-    if (_openKey == null || _page?.enabled != true || (focus != null && focus.key != _openKey)) return null;
-    return _addButton(company: MergedMode.companyOf(_openKey!)?.name);
+  Widget _companyTable(MergedReport<DeletedDebtsPage> m) {
+    final now = DateTime.now();
+    final lines = <RpCompanyLine>[];
+    final outside = <String>[];
+    for (final p in m.parts) {
+      if (p.unsupported || !_picked(p.company.key)) continue;
+      final page = p.ok && p.rows!.isNotEmpty ? p.rows!.first : null;
+      if (page != null && !page.enabled) continue; // «غير مفعّلة» سطرٌ هادئ تحته
+      if (page == null) {
+        lines.add(RpCompanyLine(company: _rp(p.company, note: p.error), state: _loading ? RpCompanyState.loading : RpCompanyState.failed));
+        if (!_loading) outside.add('${p.company.name} (${p.error ?? 'dd.load_failed'.tr()})');
+        continue;
+      }
+      // «أقدم من 3 أشهر» من السطور — ناقصٌ إن لم تُقرأ كلّها (أحدث ٢٠٠٠) ⇒ «—» لا رقمٌ ناقص
+      final old = page.truncated
+          ? null
+          : page.rows.where((r) => DebtAge.isOld(r.at, now)).fold<double>(0, (a, r) => a + r.debt);
+      lines.add(RpCompanyLine(company: _rp(p.company), a: page.count, b: page.total, c: old));
+    }
+    final ok = [for (final l in lines) if (l.state == RpCompanyState.ok) l];
+    return RpCompanyTable(
+      heads: const ['المدينون', 'الديون', 'أقدم من 3 أشهر'],
+      tones: const [RpTone.loss, RpTone.debt, RpTone.loss],
+      lines: lines,
+      total: [
+        ok.fold<num>(0, (a, l) => a + (l.a ?? 0)),
+        ok.fold<num>(0, (a, l) => a + (l.b ?? 0)),
+        ok.any((l) => l.c == null) ? null : ok.fold<num>(0, (a, l) => a + (l.c ?? 0)),
+      ],
+      outside: outside.isEmpty ? null : 'خارج المجموع الآن: ${outside.join(' · ')}',
+      onTap: (c) => setState(() {
+        _companies = {c.key};
+        _tabAll = false;
+      }),
+      onRetry: (_) => _load(),
+    );
+  }
+
+  /// الملفّ = ما على الشاشة حرفاً: الشركات المختارة والبحث، وكلّ «ناقص» في الرأس.
+  Future<void> _export(String how, List<({String? key, DeletedDebtsPage page})> views, List<({String? key, DeletedDebt row})> rows) {
+    final merged = _mergedOn && _merged != null;
+    final columns = [
+      if (merged) 'merged.col_company'.trm(),
+      'الاسم',
+      'اسم المستخدم',
+      'الهاتف',
+      'المدير',
+      'المصدر',
+      'التاريخ',
+      'الدين',
+      'الملاحظة',
+    ];
+    final data = [
+      for (final r in rows)
+        [
+          if (merged) MergedMode.companyOf(r.key ?? '')?.name ?? '',
+          r.row.name,
+          r.row.username ?? '',
+          r.row.phone ?? '',
+          r.row.managerUsername ?? '',
+          _originLabel(r.row.origin),
+          r.row.at == null ? '' : iqDateOf(r.row.at!),
+          formatIQD(r.row.debt),
+          (r.row.note ?? '').trim(),
+        ],
+    ];
+    final search = _search.text.trim();
+    final truncated = _truncatedNames(views);
+    final details = [
+      if (merged) 'الشركات: ${[for (final v in views) MergedMode.companyOf(v.key ?? '')?.name ?? ''].where((n) => n.isNotEmpty).join('، ')}',
+      if (search.isNotEmpty) 'البحث: «$search»',
+      'المجموع: ${rpMoney(views.fold<double>(0, (a, v) => a + v.page.total))} · ${formatIQD(views.fold<int>(0, (a, v) => a + v.page.count))} مدين',
+      'عدد السطور: ${data.length}',
+      if (_failed.isNotEmpty) 'ناقص: ${'merged.not_in_sum'.trm(args: [_failed.map((n) => '«$n»').join('، ')])}',
+      if (truncated.isNotEmpty) 'ناقص: ${truncated.every((n) => n.isEmpty) ? '' : '${truncated.where((n) => n.isNotEmpty).map((n) => '«$n»').join('، ')}: '}${'dd.truncated'.tr()}',
+    ];
+    final title = 'reports.deleted_debts'.tr();
+    final subtitle = 'حتى ${iqDateOf(DateTime.now())}';
+    const weights = [2.0, 1.3, 1.3, 1.2, 1.0, 1.0, 1.0, 2.0];
+    final w = [if (merged) 1.2, ...weights];
+    switch (how) {
+      case 'pdf':
+        return ReportExportActions.pdf(context,
+            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: w, fileNameBase: 'deleted-debts');
+      case 'excel':
+        return ReportExportActions.csv(context, title: title, subtitle: subtitle, details: details, columns: columns, rows: data, fileNameBase: 'deleted-debts');
+      default:
+        return ReportExportActions.sharePdf(context,
+            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: w, fileNameBase: 'deleted-debts');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final page = _page;
-    final merged = _mergedOn ? _merged : null;
     return ReportPermissionGate(
       permission: 'deleted_debts.view',
       title: 'reports.deleted_debts'.tr(),
@@ -567,8 +709,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
           scrolledUnderElevation: 0,
           title: Text(
             'reports.deleted_debts'.tr(),
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
@@ -579,139 +720,13 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
             color: AppColors.brand,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                  Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
-              children: [
-                // «كل الشركات»: الشركات بعدد مديني كلٍّ منها، ومن لم يُقرأ ولماذا
-                if (merged != null) ...[
-                  MergedCompanyStrip(
-                    countOf: (c) => _pageOf(c)?.enabled == true ? _pageOf(c)!.count : null,
-                    total: [
-                      for (final p in merged.parts)
-                        if (p.ok && p.rows!.isNotEmpty && p.rows!.first.enabled) p.rows!.first.count,
-                    ].fold<int>(0, (a, b) => a + b),
-                    problemOf: _problemOf,
-                    note: _mergedNote(merged),
-                  ),
-                  const SizedBox(height: Sp.md),
-                ],
-                if (merged != null && !_loading) ..._mergedContent() else ..._content(page),
-              ],
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
+              children: _frame(),
             ),
           ),
         ),
       ),
     );
-  }
-
-  List<Widget> _content(DeletedDebtsPage? page) {
-    if (_loading) {
-      return const [
-        Padding(
-          padding: EdgeInsets.symmetric(vertical: 48),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ];
-    }
-    if (page == null) {
-      return [
-        _Notice(
-          icon: LucideIcons.userX,
-          text: _error ?? 'dd.load_failed'.tr(),
-          action: TextButton.icon(
-            onPressed: _load,
-            icon: const Icon(LucideIcons.refreshCw, size: 16),
-            label: Text('common.retry'.tr()),
-          ),
-        ),
-      ];
-    }
-    if (!page.enabled) {
-      return [_Notice(icon: LucideIcons.userX, text: 'dd.off'.tr())];
-    }
-    final shown = _shown;
-    return [
-      Row(
-        children: [
-          Expanded(
-            child: _Kpi(
-              icon: LucideIcons.userX,
-              label: 'dd.kpi_count'.tr(),
-              value: formatIQD(page.count),
-              tone: AppTone.danger,
-            ),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: _Kpi(
-              icon: LucideIcons.handCoins,
-              label: 'dd.kpi_total'.tr(),
-              value: _money(page.total),
-              tone: AppTone.warning,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: Sp.md),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(LucideIcons.info, size: 14, color: AppColors.textLow),
-          ),
-          const SizedBox(width: Sp.x6),
-          Expanded(
-            child: Text(
-              'dd.info'.tr(),
-              style: AppType.muted(color: AppColors.textMid)
-                  .copyWith(fontSize: 12.5, height: 1.6),
-            ),
-          ),
-        ],
-      ),
-      if (page.pendingTwins.isNotEmpty) ...[
-        const SizedBox(height: Sp.md),
-        _TwinsCard(
-          twins: page.pendingTwins,
-          decide: page.twinsApi >= 2,
-          busyKey: _twinBusy,
-          onSame: _twinSame,
-          onDistinct: _twinDistinct,
-        ),
-      ],
-      if (page.rows.isNotEmpty) ...[
-        const SizedBox(height: Sp.md),
-        SheetSearchField(
-          controller: _search,
-          hint: 'dd.search_hint'.tr(),
-          onChanged: (_) => setState(() {}),
-        ),
-      ],
-      const SizedBox(height: Sp.md),
-      if (page.rows.isEmpty)
-        _Notice(icon: LucideIcons.userX, text: 'dd.empty'.tr())
-      else if (shown.isEmpty)
-        _Notice(icon: LucideIcons.search, text: 'dd.no_results'.tr())
-      else
-        for (int i = 0; i < shown.length; i++) ...[
-          if (i > 0) const SizedBox(height: Sp.sm),
-          _DebtTile(
-            row: shown[i],
-            onPay: () => _afterSheet(_showPaySheet(context, shown[i])),
-            onWriteOff: () =>
-                _afterSheet(_showWriteOffSheet(context, shown[i])),
-          ),
-        ],
-      if (page.truncated) ...[
-        const SizedBox(height: Sp.md),
-        Text(
-          'dd.truncated'.tr(),
-          textAlign: TextAlign.center,
-          style: AppType.muted().copyWith(fontSize: 11.5),
-        ),
-      ],
-    ];
   }
 
   Widget _addButton({String? company}) {
@@ -824,61 +839,6 @@ class _TwinsCard extends StatelessWidget {
                 ],
               ]),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _Kpi extends StatelessWidget {
-  const _Kpi({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.tone,
-  });
-  final IconData icon;
-  final String label;
-  final String value;
-  final AppTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: tone.fill),
-              const SizedBox(width: Sp.xs),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.micro(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.x6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              value,
-              style: AppType.label(color: tone.fill)
-                  .copyWith(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-          ),
         ],
       ),
     );
