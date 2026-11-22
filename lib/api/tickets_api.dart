@@ -13,7 +13,7 @@ import 'api_client.dart';
 import 'company_route.dart';
 
 /// «التذاكر» (المالك ٩ نوفمبر — الخادم server/tickets.js): المشترك يفتح تذكرةً من تطبيقه (نوع المشكلة + نصّه) ووكيله وموظّفوه
-/// بالصلاحيّة يردّون ويغيّرون حالها؛ إشعارٌ لكلّ طرفٍ بما فعله الآخر. لكلّ الشركات ما عدا الوطنيّ.
+/// بالصلاحيّة يردّون ويغيّرون حالها؛ إشعارٌ لكلّ طرفٍ بما فعله الآخر. لكلّ الشركات — والمشروع الوطنيّ منذ ٢٢ نوفمبر — ما عدا FTTH القديم.
 ///   GET  /api/v2/portal/tickets/summary          ⇒ available · can_view · can_reply · scoped · counts {open, answered, closed, unread, total}
 ///   GET  /api/v2/portal/tickets?filter=&offset=&limit= ⇒ items · counts · has_more · next_offset
 ///   GET  /api/v2/portal/tickets/:id              ⇒ ticket · messages (تُعلَّم مقروءةً لطرف الوكيل)
@@ -349,8 +349,9 @@ class TicketsApi {
 
   static const base = '/api/v2/portal/tickets';
 
-  /// الوطنيّ (FTTH القديم والمشروع الوطنيّ على providerKit) بلا تذاكر — المالك ٩ نوفمبر: «للشركات كلها ما عدا الوطني».
-  static bool get servedByProvider => !(ProviderService.isFtth || ProviderService.parentIsZone);
+  /// FTTH القديم وحده بلا تذاكر (البوّابة لا تخدمه). المشروع الوطنيّ على providerKit (`watani`) مفتوحٌ منذ ٢٢ نوفمبر (المالك: «التذاكر
+  /// هسه افتحها»؛ الخادم 207212e) — كان مستثنىً بقرار ٩ نوفمبر «للشركات كلها ما عدا الوطني»، فتخفيه 191/192 من داخلها.
+  static bool get servedByProvider => !ProviderService.isFtth;
 
   static String? _msg(Object? data) => data is Map ? _str(data['message']) : null;
 

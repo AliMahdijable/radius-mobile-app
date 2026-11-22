@@ -386,12 +386,12 @@ class ElEmployeePerms {
   /// والمشروع الوطنيّ يزيد [nationalExtraKeys] بلا تصفيةٍ بقدرات صاحبه (لا تخصّ الساس — أقسام بوّابته).
   static Set<String> _kitKeysForSession() {
     final base = PermissionsService.isEmployee ? kitKeys : kitKeys.where(Perms.has).toSet();
-    // «التذاكر» لكلّ الشركات ما عدا الوطنيّ (المالك ٩ نوفمبر) — مفتاحاها لا يُعرضان لموظّفه
-    return isNationalSession ? {...base, ...nationalExtraKeys}.difference(ticketKeys) : base;
+    // «التذاكر» للمشروع الوطنيّ أيضاً منذ ٢٢ نوفمبر (المالك: «التذاكر هسه افتحها» — كان مفتاحاها لا يُعرضان لموظّفه بقرار ٩ نوفمبر)
+    return isNationalSession ? {...base, ...nationalExtraKeys} : base;
   }
 
   /// «التذاكر» (٩ نوفمبر، الخادم server/tickets.js): العرض والإشعار، والردّ والحالة والإغلاق — مطفأان افتراضاً، ويُمنحان فرادى
-  /// (خارج «موظّف عام»). لموظّفي ايرث لنك وفايبر اكس والشركات المُضافة كموظّفي الساس، ما عدا المشروع الوطنيّ.
+  /// (خارج «موظّف عام»). لموظّفي ايرث لنك وفايبر اكس والشركات المُضافة — والمشروع الوطنيّ منذ ٢٢ نوفمبر — كموظّفي الساس.
   static const ticketKeys = <String>{'tickets.view', 'tickets.reply'};
 
   /// الفحصان على شبكة الوكيل (٨ نوفمبر — المالك: «الافتراضي يكون لديه صلاحيه على شبكه فقط»): «الفحص الشامل» للأجهزة والرادار

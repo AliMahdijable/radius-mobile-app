@@ -357,7 +357,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('غير متاحةٍ لحسابه، أو الوطنيّ: لا قائمة ولا رقم ولا قسم', (t) async {
+    testWidgets('غير متاحةٍ لحسابه، أو FTTH القديم: لا قائمة ولا رقم ولا قسم — والوطنيّ (٢٢ نوفمبر) يسأل ويرى', (t) async {
       _serve(server, [_ticket(9, 'open', unread: true)], available: false);
       await pumpSim(t, _v, home: (_) => _section());
       expect(server.calls('GET', _summaryPath), hasLength(1));
@@ -368,10 +368,18 @@ void main() {
       TicketsState.reset();
       server.requests.clear();
       _serve(server, [_ticket(9, 'open', unread: true)]);
+      ProviderService.debugSet('ftth');
+      await pumpSim(t, _v, home: (_) => _section());
+      expect(server.requests.where((r) => r.path.startsWith(_listPath)), isEmpty, reason: 'FTTH القديم بلا تذاكر ولا سؤال');
+      expect(find.text('تذاكر المشتركين'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      TicketsState.reset();
+      server.requests.clear();
+      _serve(server, [_ticket(9, 'open', unread: true)]);
       ProviderService.debugSet('watani', label: 'المشروع الوطني');
       await pumpSim(t, _v, home: (_) => _section());
-      expect(server.requests.where((r) => r.path.startsWith(_listPath)), isEmpty, reason: 'الوطنيّ بلا تذاكر ولا سؤال');
-      expect(find.text('تذاكر المشتركين'), findsNothing);
+      expect(server.calls('GET', _summaryPath), hasLength(1), reason: 'الوطنيّ يسأل الخادم (٢٢ نوفمبر)');
+      expect(TicketsState.on, true, reason: 'الوطنيّ بالتذاكر');
       await simDrain(t);
     });
 

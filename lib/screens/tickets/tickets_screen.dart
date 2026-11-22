@@ -19,13 +19,13 @@ class TicketsScreen extends StatefulWidget {
   const TicketsScreen({super.key});
 
   /// «كل الشركات»: القائمة والمحادثة قراءةٌ موجَّهة لكلّ شركة (الخادم companyRoutingAllow) — غير المفتوحة للعرض، والردّ والحالة
-  /// من صفحتها. الوطنيّ لا تذاكر له.
+  /// من صفحتها. FTTH القديم وحده بلا تذاكر (المشروع الوطنيّ مفتوحٌ منذ ٢٢ نوفمبر).
   /// [openCompany] (٩ نوفمبر — «الكلّ» في الجرس وإشعارٌ بلا تذكرة): تذاكر المفتوحة التي يعرضها الجرس، مثبَّتةً لها بلا تبديل الشريط.
   static Widget mergedPage({bool openCompany = false}) => MergedSection(
       readOnly: true,
       prefixes: const [TicketsApi.base],
-      serves: (c) => c.provider != MergedProvider.ftth && !c.code.toLowerCase().startsWith('watani'),
-      servesNote: 'التذاكر لكلّ الشركات ما عدا المشروع الوطني',
+      serves: (c) => c.provider != MergedProvider.ftth,
+      servesNote: 'التذاكر لا تخدم بوّابة FTTH القديمة',
       lockTitle: 'التذاكر',
       openCompany: openCompany,
       child: const TicketsScreen());

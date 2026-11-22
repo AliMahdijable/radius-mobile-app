@@ -101,7 +101,7 @@ void main() {
     expect(ticketStatusMeta('cancelled').label, 'ألغاها المشترك');
   });
 
-  test('«كل الشركات»: القسم قراءةٌ موجَّهة بمساره، والوطنيّ لا يخدمه', () {
+  test('«كل الشركات»: القسم قراءةٌ موجَّهة بمساره — والوطنيّ يخدمه منذ ٢٢ نوفمبر، وFTTH القديم لا', () {
     final w = TicketsScreen.mergedPage() as MergedSection;
     expect(w.readOnly, true, reason: 'الردّ والحالة من صفحة الشركة');
     expect(w.prefixes, ['/api/v2/portal/tickets']);
@@ -111,7 +111,7 @@ void main() {
     expect(w.serves!(co('speed', MergedProvider.sas4)), true);
     expect(w.serves!(co('earthlink', MergedProvider.earthlink)), true);
     expect(w.serves!(co('nabd', MergedProvider.kit)), true);
-    expect(w.serves!(co('watani', MergedProvider.kit)), false);
+    expect(w.serves!(co('watani', MergedProvider.kit)), true, reason: 'الوطنيّ مفتوح (٢٢ نوفمبر)');
     expect(w.serves!(co('ftth-iq', MergedProvider.ftth)), false);
   });
 
@@ -121,7 +121,7 @@ void main() {
       PermissionsService.debugReset();
     });
 
-    test('ايرث لنك وفايبر اكس والمُضافة يعرضون مفتاحي التذاكر لموظّفيهم، والوطنيّ لا؛ و«موظّف عام» بلاهما', () {
+    test('ايرث لنك وفايبر اكس والمُضافة والوطنيّ (٢٢ نوفمبر) يعرضون مفتاحي التذاكر لموظّفيهم، وFTTH القديم لا؛ و«موظّف عام» بلاهما', () {
       PermissionsService.debugSet(isEmployee: true);
       for (final p in ['earthlink', 'fiberx', 'nabd']) {
         ProviderService.debugSet(p);
@@ -132,8 +132,8 @@ void main() {
         expect(p.keys.toSet().intersection(ElEmployeePerms.ticketKeys), isEmpty, reason: '${p.id}: تُمنح وحدها');
       }
       ProviderService.debugSet('watani', label: 'المشروع الوطني');
-      expect(ElEmployeePerms.keys.intersection(ElEmployeePerms.ticketKeys), isEmpty, reason: 'الوطنيّ بلا تذاكر');
-      expect(TicketsApi.servedByProvider, false);
+      expect(ElEmployeePerms.keys, containsAll(ElEmployeePerms.ticketKeys), reason: 'الوطنيّ بالتذاكر منذ ٢٢ نوفمبر');
+      expect(TicketsApi.servedByProvider, true, reason: 'الوطنيّ');
       ProviderService.debugSet('ftth');
       expect(TicketsApi.servedByProvider, false);
       ProviderService.debugSet(null);
@@ -195,7 +195,9 @@ void main() {
       expect(card(), isNotNull, reason: 'موظّف ايرث لنك يراها (مفتاحها في محرّره)');
       ProviderService.debugSet('watani', label: 'المشروع الوطني');
       TicketsState.debugSet(TicketsAccess.fromJson(_summary()));
-      expect(card(), isNull, reason: 'الوطنيّ بلا تذاكر');
+      expect(card(), isNotNull, reason: 'الوطنيّ بالتذاكر منذ ٢٢ نوفمبر (المالك: «التذاكر هسه افتحها»)');
+      ProviderService.debugSet('ftth');
+      expect(card(), isNull, reason: 'FTTH القديم بلا تذاكر');
     });
 
     testWidgets('«قوائم أخرى» بالرسم: الرقم بجانب البطاقة', (t) async {
