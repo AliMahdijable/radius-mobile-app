@@ -39,6 +39,7 @@ import 'national/national_wallet_screen.dart';
 import 'national/national_work_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
+import 'debts_import/debts_import_screen.dart';
 import 'receipts/receipts_archive_screen.dart';
 import 'renew/renew_requests_screen.dart';
 import 'reports_screen.dart';
@@ -346,6 +347,21 @@ List<AppModule> buildAppModules() {
         title: 'sales.title'.tr(),
         subtitle: 'sales.module_hint'.tr(),
         page: () => const SalesScreen(),
+      ),
+    // ٢٣ نوفمبر: «استيراد / تصدير الديون» (المالك: «اريد ينضاف مثل الويب للهاتف») — لصاحب الحساب وحده كالموقع (ownerOnly: لا يظهر
+    // للموظّف أبداً — قرار ٢١ أكتوبر؛ الخادم يردّه OWNER_ONLY)، ولا للوطنيّ القديم (FTTH لا يخدمه كالموقع noFtth). «كل الشركات»: للمفتوحة.
+    if (!Perms.isEmployee && !ProviderService.isFtth)
+      AppModule(
+        id: 'debts_import',
+        group: AppModuleGroup.finance,
+        icon: LucideIcons.fileSpreadsheet,
+        tone: AppTone.warning,
+        title: DebtsImportScreen.title,
+        subtitle: 'Excel: صدّر الديون والمشتركين، أو طبّق ديون ملفٍّ بالجملة',
+        page: () => const MergedSection.openOnly(
+            title: DebtsImportScreen.title,
+            reason: 'الاستيراد والتصدير للشركة المفتوحة وحدها — افتحها من «شركاتي»',
+            child: DebtsImportScreen()),
       ),
     // ١٨ أكتوبر: «شحن رصيد الصفحة» — يظهر حين يقول الخادم إنّ الميزة مفتوحة لهذا الحساب، وما لا
     // يُتاح يبقى بمكانه مقفلاً **بسببه** (الموظّف، ايرث لنك، الوطنيّ، صفحةٌ بلا إيداع، بلا وسائل).

@@ -252,14 +252,15 @@ void main() {
     testWidgets('المدير: لا قفل، والبطاقات نفسها كما كانت', (t) async {
       PermissionsService.debugSet(isEmployee: false);
       await showScreen(t, const MoreModulesScreen());
-      expect(moduleCards, findsNWidgets(10));
+      // + «استيراد / تصدير الديون» (٢٣ نوفمبر) — للمدير وحده، لا يظهر للموظّف (فعدّه في الاختبار أعلاه كما كان)
+      expect(moduleCards, findsNWidgets(11));
       expect(find.byType(PermLockIcon), findsNothing);
       expect(commsTile(), findsOneWidget);
       expect(commsLocks().values, everyElement(isFalse));
       // والكارتات حين يقول الخادم enabled.
       CardsState.badge.value = const CardsBadge(enabled: true, remaining: 4);
       await t.pump();
-      expect(moduleCards, findsNWidgets(11));
+      expect(moduleCards, findsNWidgets(12));
       expect(find.byType(PermLockIcon), findsNothing);
     });
 

@@ -105,6 +105,9 @@ dependencies:
   # قابل للطباعة أو المشاركة. share_plus يفتح shareSheet لحفظ
   # الملف أو إرساله. path_provider للـtemp files.
   csv: ^6.0.0
+  # استيراد/تصدير الديون (٢٣ نوفمبر): قراءة ملفّ Excel وكتابته (xlsx = zip + XML) — كانتا عابرتين بالقفل بهذه الإصدارات
+  archive: ^4.0.9
+  xml: ^6.6.1
   pdf: ^3.11.0
   printing: ^5.13.0
   share_plus: ^10.0.0
