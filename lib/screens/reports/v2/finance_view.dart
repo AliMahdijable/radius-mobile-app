@@ -14,6 +14,9 @@ import 'report_period.dart';
 // القواعد نفسها حرفاً (الصافي، الربح بعد كلفة الباقات، تسديد الديون بلا المقدّم نقداً، الإضافة اليدويّة) — لا رقمٌ جديد هنا.
 
 /// ثوابت البطاقات (حركاتها عند اللمس: [FinanceView.drill]).
+/// خاتمة ملاحظة صرفيّة كشفٍ صُرف «من مالي الخاص» كما يكتبها الخادم (server/employeeLedger.js OWN_NOTE = ' — من مال المدير الخاص').
+const ownPayslipNoteSuffix = 'من مال المدير الخاص';
+
 class FinanceKpiIds {
   static const hero = 'hero';
   static const cash = 'cash';
@@ -155,8 +158,11 @@ class FinanceView {
         return (l) => at(l) == 'BALANCE_ADD' && !l.isCredit && !l.isSaleDebtLine;
       case FinanceKpiIds.expenses:
       case FinanceKpiIds.salaries:
-      case FinanceKpiIds.salariesOwn:
         return (l) => t(l, 'ADMIN_EXPENSE');
+      // «دُفع من مال المدير» (٢٣ نوفمبر): صرفيّات الكشوف المدفوعة من ماله وحدها — الخادم يختم ملاحظتها بـ«— من مال المدير الخاص»
+      // (server/employeeLedger.js OWN_NOTE) ولا تُعدَّل من الصرفيات (PAYSLIP_EXPENSE)
+      case FinanceKpiIds.salariesOwn:
+        return (l) => t(l, 'ADMIN_EXPENSE') && (l.actionDescription ?? '').trimRight().endsWith(ownPayslipNoteSuffix);
       case FinanceKpiIds.creditCash:
         return (l) => at(l) == 'BALANCE_ADD' && l.isCredit && l.creditKind == 'cash';
       case FinanceKpiIds.creditComp:

@@ -1052,9 +1052,15 @@ void main() {
       final none = {for (final x in FinanceView.kpis(FinanceKPIs.fromJson({'emp_salaries_sum': 900000, 'emp_receivable_outstanding': 0}), null)) x.id};
       expect(none.contains('salaries'), isTrue);
       expect(none.contains('salaries_own'), isFalse);
-      expect(FinanceView.drill('salaries_own')(FinanceLog.fromJson({'id': 1, 'action_type': 'ADMIN_EXPENSE', 'amount': 1, 'created_at': '2026-11-28T09:00:00Z'})!), isTrue);
-      expect(FinanceView.drill('salaries_own')(FinanceLog.fromJson({'id': 2, 'action_type': 'SUBSCRIBER_ACTIVATE', 'amount': 1, 'created_at': '2026-11-28T09:00:00Z'})!), isFalse,
-          reason: 'لمسها يعرض الصرفيات وحدها');
+      // لمسها يعرض صرفيّات الكشوف «من مالي الخاص» وحدها (خاتمة ملاحظتها من الخادم) — لا كلّ الصرفيات
+      FinanceLog log(int id, String type, String desc) =>
+          FinanceLog.fromJson({'id': id, 'action_type': type, 'action_description': desc, 'amount': 1, 'created_at': '2026-11-28T09:00:00Z'})!;
+      final own = FinanceView.drill('salaries_own');
+      expect(own(log(1, 'ADMIN_EXPENSE', 'راتب علي — تشرين الثاني 2026 (يشمل: مكافآت) — من مال المدير الخاص')), isTrue);
+      expect(own(log(2, 'ADMIN_EXPENSE', 'راتب زين — تشرين الثاني 2026')), isFalse, reason: 'كشفٌ من الصندوق');
+      expect(own(log(3, 'ADMIN_EXPENSE', 'مولّد')), isFalse, reason: 'صرفيّةٌ عاديّة');
+      expect(own(log(4, 'SUBSCRIBER_ACTIVATE', 'من مال المدير الخاص')), isFalse, reason: 'ليست صرفيّة');
+      expect(FinanceView.drill('salaries')(log(3, 'ADMIN_EXPENSE', 'مولّد')), isTrue, reason: '«منها رواتب ومكافآت» كما كانت');
       // «كل الشركات»: يُجمع كما هو
       final merged = MergedFinanceApi.sumKpis([k, FinanceKPIs.fromJson({'emp_salaries_sum': 100000, 'emp_salaries_own_sum': 100000, 'emp_receivable_outstanding': 0})]);
       expect([merged.empSalariesSum, merged.empSalariesOwnSum], [1000000, 625000]);
