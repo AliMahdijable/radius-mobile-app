@@ -611,6 +611,7 @@ class ManagersApi {
     bool isLoan = false,
     Map<String, Object>? fee,
     Map<String, Object?> paidVia = const {},
+    int? balanceRequestId,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -622,6 +623,8 @@ class ManagersApi {
           if (fee != null) 'fee': fee,
           // «استلمته» (PaidVia.toBody — {} للكاش): الخادم يرفضها 409 قبل أيّ نداء إن لم تُفتح للصفحة
           ...paidVia,
+          // «قبول وشحن» من طلب رصيد (٢٤ نوفمبر): الخادم يحجز الطلب قبل الساس ويختمه بعده — طلبٌ واحد لا يُشحن مرّتين
+          if (balanceRequestId != null) 'balance_request_id': balanceRequestId,
         },
       );
       final body = r.data ?? const {};

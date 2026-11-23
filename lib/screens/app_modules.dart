@@ -8,6 +8,7 @@ import '../api/jtpay_api.dart';
 import '../api/national_more_api.dart';
 import '../api/receipts_archive_api.dart';
 import '../api/renew_requests_api.dart';
+import '../api/balance_requests_api.dart';
 import '../api/sales_api.dart';
 import '../api/sas_ftth_api.dart';
 import '../api/self_deposit_api.dart';
@@ -54,6 +55,7 @@ import 'tickets/tickets_screen.dart';
 import 'topup/fiberx_topup_screen.dart';
 import 'topup/jtpay_screen.dart';
 import 'topup/topup_screen.dart';
+import 'balance_requests/sub_balance_request_screen.dart';
 import '../widgets/merged_section.dart';
 import '../services/merged_text.dart';
 
@@ -126,6 +128,10 @@ Listenable appModulesListenable() => Listenable.merge([
       TicketsState.bell,
       // «الصيانة والمبيعات» — المفتاح field_team بالخادم وما يملكه المستخدم وأعداد المهامّ (الاستماع يطلبها).
       FieldTeamState.gate,
+      // «طلب رصيد من مديرك» (٢٤ نوفمبر): قسم الفرعيّ (يظهر حين يقول الخادم إنّ مديره عندنا والمفتاح مفتوح) وعدد طلبات الأعلى
+      // على «المدراء» — الاستماع يطلبهما.
+      BalanceReqState.me,
+      BalanceReqState.incoming,
     ]);
 
 /// مفتاحا «المدراء» لموظّف ايرث لنك (٢٠ نوفمبر — الخادم server/earthlink/elManagers.js).
@@ -369,6 +375,22 @@ List<AppModule> buildAppModules() {
       ),
     // ١٨ أكتوبر: «شحن رصيد الصفحة» — يظهر حين يقول الخادم إنّ الميزة مفتوحة لهذا الحساب، وما لا
     // يُتاح يبقى بمكانه مقفلاً **بسببه** (الموظّف، ايرث لنك، الوطنيّ، صفحةٌ بلا إيداع، بلا وسائل).
+    // «طلب رصيد من مديرك» (٢٤ نوفمبر — المالك: «قسم خاص به. هذا القسم اذا ماكو مدير فرعي ينختفي»): لصفحةٍ هي مديرٌ فرعيّ مديره
+    // صفحةٌ عندنا مفتوحٌ لها المفتاح — وغيرها لا يراه أصلاً. الموظّف يراه بمكانه مقفلاً (الطلب لمدير الصفحة).
+    if (BalanceReqState.me.value.enabled)
+      AppModule(
+        id: 'balance_request',
+        group: AppModuleGroup.finance,
+        locked: !BalanceReqState.me.value.canRequest,
+        icon: LucideIcons.handCoins,
+        tone: AppTone.brand,
+        title: 'طلب رصيد من مديرك',
+        subtitle: 'مديرك ${BalanceReqState.me.value.parent?.title ?? ''} — اطلب رصيداً وأرسل صورة الحوالة',
+        page: () => const MergedSection.openOnly(
+            title: 'طلب رصيد من مديرك',
+            reason: 'طلب الرصيد للصفحة المفتوحة وحدها — افتحها من «شركاتي»',
+            child: SubBalanceRequestScreen()),
+      ),
     if (SelfDepositState.visible)
       AppModule(
         id: 'topup',
@@ -535,7 +557,11 @@ List<AppModule> buildAppModules() {
         icon: LucideIcons.userCog,
         tone: AppTone.brand,
         title: 'more.managers'.tr(),
-        subtitle: 'more.managers_hint'.tr(),
+        // «طلبات الرصيد» من مدرائه الفرعيّين (٢٤ نوفمبر): العدد بجانب السهم والسطر يقوله
+        subtitle: BalanceReqState.incoming.value > 0
+            ? '${'more.managers_hint'.tr()} · ${BalanceReqState.incoming.value} طلبات رصيد بانتظارك'
+            : 'more.managers_hint'.tr(),
+        badge: BalanceReqState.incoming.value > 0 ? BalanceReqState.incoming.value : null,
         page: ManagersScreen.mergedPage,
       ),
     if (permShown(pkgKeys))

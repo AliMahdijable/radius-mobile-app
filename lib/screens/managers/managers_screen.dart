@@ -31,6 +31,8 @@ import '../../services/subscriber_events.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../api/company_route.dart';
+import '../../api/balance_requests_api.dart';
+import '../balance_requests/incoming_balance_requests_screen.dart';
 import '../../widgets/merged_section.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_text.dart';
@@ -385,6 +387,16 @@ class _ManagersScreenState extends State<ManagersScreen> {
             // وعددها، البحث والترتيب داخلها، وسطرٌ لكلّ مدير بشكل سطور التقارير — اللمسة تفتح إجراءاته كما كانت.
             padding: EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, MediaQuery.paddingOf(context).bottom + 96),
             children: [
+              // «طلبات الرصيد» من مدرائك الفرعيّين (٢٤ نوفمبر): حين ينتظرك طلب — بطاقةٌ تفتح القائمة
+              ValueListenableBuilder<int>(
+                valueListenable: BalanceReqState.incoming,
+                builder: (context, n, _) => n <= 0
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(bottom: Sp.md),
+                        child: _BalanceRequestsBanner(count: n),
+                      ),
+              ),
               _kpis(),
               const SizedBox(height: Sp.md),
               _listCard(filtered, viewOnly),
@@ -585,4 +597,35 @@ class _ManagerTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// «طلبات الرصيد» فوق قائمة المدراء — العدد وما ينتظر، والنقر يفتح القائمة.
+class _BalanceRequestsBanner extends StatelessWidget {
+  const _BalanceRequestsBanner({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.card),
+        child: InkWell(
+          key: const ValueKey('balreq-managers-banner'),
+          borderRadius: BorderRadius.circular(R.card),
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IncomingBalanceRequestsScreen()));
+            unawaited(BalanceReqState.refreshCount(force: true));
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+            child: Row(children: [
+              Icon(LucideIcons.handCoins, color: AppColors.warningOnSoft),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Text('طلبات الرصيد — $count بانتظارك', style: AppType.bodyStrong(color: AppColors.warningOnSoft)),
+              ),
+              Icon(LucideIcons.chevronLeft, color: AppColors.warningOnSoft),
+            ]),
+          ),
+        ),
+      );
 }

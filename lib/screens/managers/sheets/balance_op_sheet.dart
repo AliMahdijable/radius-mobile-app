@@ -26,6 +26,21 @@ import 'topup_fee_field.dart';
 /// نوع العملية الافتراضي (لو actions sheet مرّر نوعاً محدّداً).
 enum BalanceOpKind { deposit, withdraw, addPoints }
 
+/// «قبول وشحن» من «طلبات الرصيد» (٢٤ نوفمبر — المرحلة ٢): النافذة معبّأةٌ بالطلب — المبلغ، والآجل، و«استلمته» بما اختاره هو — ومعها
+/// رقمه ([requestId]) يُرسل مع الشحن فيحجزه الخادم قبل الساس ويختمه بعده (لا يُشحن طلبٌ مرّتين). إشعار «تمّ شحن رصيدك» يرسله الخادم
+/// لصاحب الطلب، فلا يُرسل إشعار التطبيق العامّ معه افتراضاً.
+@immutable
+class BalanceOpPrefill {
+  const BalanceOpPrefill({required this.requestId, required this.amount, required this.isLoan, required this.via, this.label = ''});
+  final int requestId;
+  final int amount;
+  final bool isLoan;
+  final PaidVia via;
+
+  /// «حوالة زين كاش» · «كاش باليد» · «آجل — دين عليه» — ما اختاره بالطلب.
+  final String label;
+}
+
 /// عمليات الرصيد على المدير: شحن / سحب / إضافة نقاط. الـmodal يعرض
 /// 3 toggle بأعلى الـsheet، الـadmin يختار نوع العملية ثم يدخل
 /// المبلغ + ملاحظة اختيارية. كل عملية لها endpoint منفصل في الـbackend.
@@ -34,6 +49,7 @@ Future<bool?> showBalanceOpSheet(
   Manager m, {
   BalanceOpKind? preselected,
   num? otherDebts,
+  BalanceOpPrefill? fromRequest,
 }) {
   return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
@@ -41,7 +57,7 @@ Future<bool?> showBalanceOpSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected, otherDebts: otherDebts),
+    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected, otherDebts: otherDebts, fromRequest: fromRequest),
   );
 }
 
@@ -80,9 +96,12 @@ enum _BalanceOp {
 }
 
 class _BalanceOpSheet extends StatefulWidget {
-  const _BalanceOpSheet({required this.manager, this.preselected, this.otherDebts});
+  const _BalanceOpSheet({required this.manager, this.preselected, this.otherDebts, this.fromRequest});
   final Manager manager;
   final BalanceOpKind? preselected;
+
+  /// «قبول وشحن» من طلب رصيد — null لكلّ فتحٍ آخر (كما كانت حرفاً).
+  final BalanceOpPrefill? fromRequest;
 
   /// «ديون أخرى» (دفتر ديون المدراء عندنا) كما عرضتها القائمة — احتياطٌ إن تعذّرت قراءتها طازجةً وقت الإرسال.
   final num? otherDebts;
@@ -166,6 +185,16 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   @override
   void initState() {
     super.initState();
+    // «قبول وشحن» من طلب: الشحن بمبلغه، وآجلٌ إن طلبه آجلاً، و«استلمته» بما اختاره — يغيّرها المدير إن استلم بغيرها
+    final req = widget.fromRequest;
+    if (req != null) {
+      _op = _BalanceOp.deposit;
+      _amount = req.amount;
+      _amountCtrl.text = _fmt(req.amount);
+      _isLoan = req.isLoan;
+      _paidVia = req.isLoan ? PaidVia.cash : req.via;
+      _sendPush = false;
+    }
     _amountCtrl.addListener(_onAmount);
     _feeCtrl.addListener(_onFee);
     if (!_tgLinked) _refreshTgStatus();
@@ -182,7 +211,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       if (!mounted || _noticeTouched) return;
       setState(() {
         _sendWhatsApp = p.whatsApp;
-        _sendPush = p.push;
+        // من طلب: إشعار «تمّ شحن رصيدك» يرسله الخادم لصاحبه — لا ثانٍ من التطبيق
+        _sendPush = widget.fromRequest != null ? false : p.push;
         _sendTelegram = p.telegram;
       });
     });
@@ -254,7 +284,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     switch (_op) {
       case _BalanceOp.deposit:
         final d = await ManagersApi.deposit(
-            id: id, amount: _amount, note: note, isLoan: _isLoan, fee: fee, paidVia: way);
+            id: id, amount: _amount, note: note, isLoan: _isLoan, fee: fee, paidVia: way,
+            balanceRequestId: widget.fromRequest?.requestId);
         r = (ok: d.ok, message: d.message);
         feeOut = d.fee;
         warning = d.warning;
@@ -288,7 +319,10 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       ));
     }
     // الاختيار يبقى للعمليّة القادمة (قناةٌ معطّلة لهذا المدير لم تُمسّ فتبقى كما حُفظت).
-    unawaited(ManagerNoticePrefs.save(whatsApp: _sendWhatsApp, push: _sendPush, telegram: _sendTelegram));
+    // من طلب: الإشعار أُطفئ لهذه المرّة وحدها — لا يُحفظ اختياراً للعمليّات القادمة
+    if (widget.fromRequest == null) {
+      unawaited(ManagerNoticePrefs.save(whatsApp: _sendWhatsApp, push: _sendPush, telegram: _sendTelegram));
+    }
     // حساب أرصدة ما بعد العملية (تقديرية — السيرفر قد يدور بـSAS4
     // قيم مختلفة قليلاً، لكن هذا كافٍ للقالب).
     num currentCredit = previousCredit;
@@ -466,6 +500,27 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           // الشحن — يحوّل الإيداع لـدين على المدير الفرعي
           // (مطابق v1 loan deposit).
           // الشركة المُضافة: الشحن عند مزوّدها نقدٌ وحده (لا «آجل» — الخادم يردّ LOAN_UNSUPPORTED)، كالموقع.
+          // «قبول وشحن» من طلب رصيد: ما اختاره هو بالطلب — يغيّره المدير إن استلم بغيره
+          if (widget.fromRequest != null && _op == _BalanceOp.deposit) ...[
+            Container(
+              key: const ValueKey('balreq-op-hint'),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+              decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.md)),
+              child: Row(children: [
+                Icon(LucideIcons.handCoins, size: 16, color: AppColors.brandOnSoft),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(
+                    widget.fromRequest!.label.isEmpty
+                        ? 'من طلبه — غيّر المبلغ أو الطريقة إن استلمت بغيرها'
+                        : 'من طلبه: ${widget.fromRequest!.label} — غيّرها إن استلمت بغيرها',
+                    style: AppType.body(color: AppColors.brandOnSoft),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: Sp.md),
+          ],
           if (_op == _BalanceOp.deposit && !sessionIsKit) ...[
             const SizedBox(height: Sp.md),
             Container(

@@ -75,6 +75,8 @@ const reviewedSectionSites = <String, (String, String)>{
   'lib/api/whatsapp_api.dart PortalSettingsApi.fillAgentCode': ('row', 'CompanyRoute.pin(sub.companyKey (بلا مفتاح ⇒ المفتوحة)'),
   // ورقة فلاتر التقرير الموحّد (٢٢ نوفمبر): موظّفو مجموعتها — شركتها في «كل الشركات»، والمفتوحة صراحةً بلا مفتاح
   'lib/api/report_people_api.dart EmployeesApi.list': ('row', 'CompanyRoute.pin(group.companyKey (بلا مفتاح ⇒ المفتوحة)'),
+  // «طلبات الرصيد» (٢٤ نوفمبر): «قبول وشحن» يقرأ حساب المدير الفرعيّ من ساس المفتوحة — القسم لها وحدها
+  'lib/screens/balance_requests/incoming_balance_requests_screen.dart ManagersApi.details': ('open', '«طلبات الرصيد» — المفتوحة'),
 };
 
 /// ودجات الشريط نفسها تقرأ اختياره؛ غيرها لا يمرّر الشريط شركةً لغلاف.

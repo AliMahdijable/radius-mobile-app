@@ -11,6 +11,8 @@ import '../screens/network_devices/agent_alerts_screen.dart';
 import '../screens/network_devices/fiber/fiber_push.dart';
 import '../screens/notifications/inbox_screen.dart';
 import '../screens/renew/renew_widgets.dart';
+import '../screens/balance_requests/incoming_balance_requests_screen.dart';
+import '../screens/balance_requests/sub_balance_request_screen.dart';
 import '../screens/sales/sales_screen.dart';
 import '../screens/reports/v2/activity_log_v2_screen.dart';
 import '../screens/tickets/ticket_widgets.dart';
@@ -97,6 +99,9 @@ class NotificationRouter {
 
     // (٠د) «طلب تجديد اشتراك» من تطبيق المشترك ⇒ الطلب نفسه بصورته وإجراءاته (٤ نوفمبر).
     if (await openRenewRequestPush(nav, n.data)) return;
+
+    // (٠د٢) «طلب رصيد من مديرك» (٢٤ نوفمبر): طلبٌ وصل الأعلى ⇒ «طلبات الرصيد» وفوقها الطلب؛ ردّه (شُحن/رُفض) ⇒ قسم الفرعيّ.
+    if (await openBalanceRequestPush(nav, n.data, subScreen: () => const SubBalanceRequestScreen())) return;
 
     // (٠هـ) «التذاكر» (٩ نوفمبر): تذكرةٌ جديدة أو ردّ مشترك أو إلغاؤه ⇒ المحادثة نفسها (لا كرت المشترك).
     if (await openTicketPush(nav, n.data)) return;

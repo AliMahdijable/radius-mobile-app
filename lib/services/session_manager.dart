@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/balance_reports_api.dart';
+import '../api/balance_requests_api.dart';
 import '../api/gdrive_backup_api.dart';
 import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
@@ -126,6 +127,8 @@ class SessionManager {
     _guardSync('ManagerMoneyState.reset', () => ManagerMoneyState.reset());
     // «تقارير الأرصدة» — هل فُتحت لصفحة المدير السابق (كرتها في «التقارير»).
     _guardSync('BalanceReportsState.reset', () => BalanceReportsState.reset());
+    // «طلب رصيد من مديرك»: قسم الفرعيّ وعدد طلبات الأعلى للصفحة السابقة
+    _guardSync('BalanceReqState.reset', () => BalanceReqState.reset());
     // «النسخ الاحتياطيّ إلى Google Drive» — هل فُتح لصفحة المدير السابق (بنده في الإعدادات).
     _guardSync('GdriveBackupApi.reset', () => GdriveBackupApi.reset());
     // «الموظف المتّصل الآن» — نبضة الموظّف السابق تتوقّف (الغلاف الجديد يبدؤها لجلسته إن كان موظّفاً).

@@ -24,6 +24,8 @@ import '../whatsapp/connection_auto_widgets.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../renew/renew_widgets.dart';
+import '../balance_requests/incoming_balance_requests_screen.dart';
+import '../balance_requests/sub_balance_request_screen.dart';
 import '../tickets/ticket_widgets.dart';
 import '../../api/renew_requests_api.dart';
 import '../../api/tickets_api.dart';
@@ -323,6 +325,9 @@ class _InboxScreenState extends State<InboxScreen> {
     // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته وإجراءاته (لا كرت المشترك)
     if (!mounted) return;
     if (await openRenewRequestPush(Navigator.of(context), n.data)) return;
+    // «طلب رصيد من مديرك» ⇒ «طلبات الرصيد» (الأعلى) أو قسم الفرعيّ (ردّ طلبه)
+    if (!mounted) return;
+    if (await openBalanceRequestPush(Navigator.of(context), n.data, subScreen: () => const SubBalanceRequestScreen())) return;
     // «التذاكر» ⇒ المحادثة نفسها (الحمولة تحمل يوزر المشترك لنسخٍ أقدم — لا كرته هنا)
     if (!mounted) return;
     if (await openTicketPush(Navigator.of(context), n.data)) return;
