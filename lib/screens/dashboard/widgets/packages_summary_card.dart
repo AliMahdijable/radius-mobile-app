@@ -47,10 +47,16 @@ class PackagesSummaryCard extends StatefulWidget {
 
   static DateRange rangeOf(String period) => switch (period) {
         'yesterday' => DateRange.yesterday(),
-        'last_week' => DateRange.lastWeek(),
+        // أسبوع التقرير نفسه (السبت ⇐ الجمعة) — البطاقة تفتح التقرير بفترتها فالرقمان واحد
+        'last_week' => _reportRange(RpPreset.lastWeek, 'reports.last_week'),
         'last_month' => DateRange.lastMonth(),
         _ => DateRange.today(),
       };
+
+  static DateRange _reportRange(RpPreset p, String labelKey) {
+    final r = RpRange.of(p, now: DateTime.now());
+    return DateRange(r.from, r.to, label: labelKey.tr());
+  }
 
   @override
   State<PackagesSummaryCard> createState() => _PackagesSummaryCardState();

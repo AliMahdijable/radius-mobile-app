@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/packages_summary_card.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/pill_tabs.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/date_range_chip.dart';
 
 /// «الأسبوع الماضي» في اختصارات بطاقة توزيع الباقات (المالك ٢٥ أكتوبر): الأسبوع الذي قبل «هذا الأسبوع» كاملاً — من الاثنين
@@ -21,6 +22,11 @@ void main() {
   test('اختصارات البطاقة: اليوم · أمس · الأسبوع الماضي · الشهر الماضي — والمجهول يرجع لليوم', () {
     expect(PackagesSummaryCard.periods, ['today', 'yesterday', 'last_week', 'last_month']);
     final today = DateRange.today();
+    // «الأسبوع الماضي» بالبطاقة = أسبوع التقرير نفسه (السبت ⇐ الجمعة) — تفتح التقرير بفترتها فالرقمان واحد (٢٣ نوفمبر)
+    final card = PackagesSummaryCard.rangeOf('last_week');
+    final report = RpRange.of(RpPreset.lastWeek, now: DateTime.now());
+    expect([card.from, card.to], [report.from, report.to]);
+    expect([card.from.weekday, card.to.weekday], [DateTime.saturday, DateTime.friday]);
     final unknown = PackagesSummaryCard.rangeOf('?');
     expect(unknown.from, today.from);
     expect(PackagesSummaryCard.rangeOf('last_month').from.day, 1);

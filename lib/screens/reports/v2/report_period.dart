@@ -1,7 +1,8 @@
 import '../../../core/util/ar_date.dart';
 
 // فترات التقرير الموحّد (٢٢ نوفمبر — بند المقترح ٣ و٤): تسع فتراتٍ جاهزة + مخصّص، ولكلّ فترةٍ «ما قبلها» للمقارنة.
-// الأسبوع يبدأ الإثنين كبقيّة التطبيق ([DateRange.thisWeek]). كلّ شيءٍ هنا حسابٌ صرف بساعةٍ تُمرَّر (للاختبار).
+// الأسبوع يبدأ السبت كأسبوع العراق (CLDR IQ: firstDay=sat) — ٢٣ نوفمبر، المالك بسجلّ النشاط: «اختار يوم يقره، سبوع ميقره» (كان يبدأ
+// الإثنين فصار «هذا الأسبوع» يوم الإثنين = اليوم وحده). [DateRange.thisWeek] خارج التقارير كما هو. كلّ شيءٍ هنا حسابٌ صرف بساعةٍ تُمرَّر.
 
 /// [all] «كل الفترات» — لتقريرٍ رصيده حالٌ لا فترة (ديون المدراء) وحده؛ ليس في [RpRange.presets].
 enum RpPreset { today, yesterday, thisWeek, lastWeek, thisMonth, lastMonth, last30, last90, thisYear, all, custom }
@@ -21,6 +22,9 @@ class RpRange {
   static DateTime _end(DateTime d) => DateTime(d.year, d.month, d.day, 23, 59, 59);
   static int _daysIn(int y, int m) => DateTime(y, m + 1, 0).day;
 
+  /// أيّامٌ منذ السبت: السبت ٠، الأحد ١ … الجمعة ٦.
+  static int _sinceSaturday(DateTime d) => (d.weekday - DateTime.saturday + 7) % 7;
+
   /// يومٌ من شهرٍ مقصوصٌ على طوله (٣١ ⇒ ٣٠ في نوفمبر).
   static DateTime _clampDay(int y, int m, int d) => DateTime(y, m, d > _daysIn(y, m) ? _daysIn(y, m) : d);
 
@@ -33,10 +37,11 @@ class RpRange {
         final y = t.subtract(const Duration(days: 1));
         return RpRange._(p, y, _end(y));
       case RpPreset.thisWeek:
-        return RpRange._(p, t.subtract(Duration(days: t.weekday - 1)), _end(t));
+        return RpRange._(p, DateTime(t.year, t.month, t.day - _sinceSaturday(t)), _end(t));
       case RpPreset.lastWeek:
-        final mon = t.subtract(Duration(days: t.weekday - 1 + 7));
-        return RpRange._(p, mon, _end(mon.add(const Duration(days: 6))));
+        // السبت الذي قبل سبت هذا الأسبوع ⇐ حتى الجمعة
+        final sat = DateTime(t.year, t.month, t.day - _sinceSaturday(t) - 7);
+        return RpRange._(p, sat, _end(DateTime(sat.year, sat.month, sat.day + 6)));
       case RpPreset.thisMonth:
         return RpRange._(p, DateTime(t.year, t.month, 1), _end(t));
       case RpPreset.lastMonth:

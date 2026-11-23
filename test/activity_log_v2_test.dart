@@ -20,7 +20,7 @@ import 'visual_perm/visual_perm_harness.dart';
 // «سجلّ الحركات» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»): كلّ حركات الفترة صفحةً صفحة بلا الإشعارات (الخادم 9bfabd2:
 // exclude_types/activity_types)، والصرفيّات من قائمتها للمفتوحة، و«الدين بعدها» على سطره، والتصدير بالفلاتر حرفاً وكاملاً.
 
-final _now = DateTime(2026, 11, 22, 18); // الأحد — «هذا الأسبوع» من 16 نوفمبر
+final _now = DateTime(2026, 11, 22, 18); // الأحد — «هذا الأسبوع» من السبت 21 نوفمبر (أسبوع العراق)
 
 Map<String, Object?> _row(int id, String type, String desc, String at, {num? money, num? balance, String? emp}) => {
       'id': id,
@@ -101,7 +101,7 @@ class _Server implements HttpClientAdapter {
       return _json({
         'success': true,
         'expenses': [
-          {'id': 1, 'amount': 15000, 'expense_date': '2026-11-20', 'note': 'وقود المولّدة'},
+          {'id': 1, 'amount': 15000, 'expense_date': '2026-11-22', 'note': 'وقود المولّدة'},
           {'id': 2, 'amount': 5000, 'expense_date': '2026-11-21', 'note': 'قرطاسية'},
         ],
         'total': 20000,
@@ -210,12 +210,12 @@ void main() {
       try {
         await open(t);
         expect(server.asked, isNotEmpty);
-        expect(server.asked.first.$2['date_from'], '2026-11-16 00:00:00');
+        expect(server.asked.first.$2['date_from'], '2026-11-21 00:00:00', reason: 'الأسبوع يبدأ السبت');
         expect(server.asked.first.$2['exclude_types'], 'EXPIRY_NOTIFICATION,NEAR_EXPIRY_NOTIFICATION,AUTO_NOTIFICATION');
         expect(server.asked.first.$2.containsKey('activity_types'), isFalse);
         expect(server.expensesAsked.single.$2['include_archived'], 1);
         final k = kpis(t);
-        expect(k[LogKpiIds.all], 7 * 5 + 2, reason: '7 أيّام × 5 حركات + صرفيّتان');
+        expect(k[LogKpiIds.all], 2 * 5 + 2, reason: 'يومان (السبت والأحد) × 5 حركات + صرفيّتان');
         expect(k[LogKpiIds.expenses], 2);
         expect(find.text('قارن'), findsNothing, reason: 'سجلّ تدقيق بلا مقارنة');
         expect(t.takeException(), isNull);
@@ -349,7 +349,7 @@ void main() {
         expect(server.expensesAsked, isEmpty);
         final table = t.widget<RpCompanyTable>(find.byType(RpCompanyTable));
         expect(table.lines.firstWhere((l) => l.company.key == _kEarth).state, RpCompanyState.failed);
-        expect(kpis(t)[LogKpiIds.all], 7 * 5);
+        expect(kpis(t)[LogKpiIds.all], 2 * 5, reason: 'يومان (السبت والأحد) × 5 — المتعذّرة خارج المجموع');
         expect(find.textContaining('الصرفيّات لا تُخلط هنا'), findsOneWidget);
         expect(t.takeException(), isNull);
       } finally {
