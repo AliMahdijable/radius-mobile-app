@@ -10,12 +10,30 @@ import '../theme/typography.dart';
 /// «استلمته» — كاش (الافتراضيّ) · زين كاش · ماستر · أخرى باسمها (٢٣ نوفمبر — «الحوالات»). شرائح صغيرة لا بلاطات (المالك:
 /// «لا تخليها شكل كبير… حتى تكون انسب»)، وتحتها سطرٌ واحد بما يحدث للمبلغ: الكاش يدخل الصندوق، والحوالة رصيد طريقتها حتى تسحبه.
 class PaidViaPicker extends StatefulWidget {
-  const PaidViaPicker({super.key, required this.value, required this.onChanged, this.enabled = true, this.label = 'استلمته'});
+  const PaidViaPicker({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+    this.label = 'استلمته',
+    this.noteOf,
+  });
 
   final PaidVia value;
   final ValueChanged<PaidVia> onChanged;
   final bool enabled;
   final String label;
+
+  /// سطر ما يحدث للمبلغ — غيابه = الاستلام ([defaultNote]: الكاش يدخل الصندوق، والحوالة رصيد طريقتها). نافذةٌ يخرج فيها المال
+  /// (سحب رصيد المدير الفرعيّ — ٢٣) تمرّر نصّها: «يخرج من الصندوق.» / «يُخصم من رصيد «X».».
+  final String Function(PaidVia v)? noteOf;
+
+  /// سطر الاستلام الافتراضيّ.
+  static String defaultNote(PaidVia v) => v.isCash
+      ? 'يدخل الصندوق.'
+      : v.valid
+          ? 'يُحسب على رصيد «${v.label}» — لا يدخل الصندوق حتى تسحبه.'
+          : 'اكتب اسم الطريقة.';
 
   @override
   State<PaidViaPicker> createState() => _PaidViaPickerState();
@@ -34,13 +52,6 @@ class _PaidViaPickerState extends State<PaidViaPicker> {
     if (!widget.enabled) return;
     widget.onChanged(key == 'other' ? PaidVia('other', _other.text) : PaidVia(key));
   }
-
-  /// ما يحدث للمبلغ بهذه الطريقة — سطرٌ واحد.
-  static String noteOf(PaidVia v) => v.isCash
-      ? 'يدخل الصندوق.'
-      : v.valid
-          ? 'يُحسب على رصيد «${v.label}» — لا يدخل الصندوق حتى تسحبه.'
-          : 'اكتب اسم الطريقة.';
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +130,7 @@ class _PaidViaPickerState extends State<PaidViaPicker> {
         ],
         const SizedBox(height: Sp.x6),
         Text(
-          noteOf(v),
+          (widget.noteOf ?? PaidViaPicker.defaultNote)(v),
           key: const ValueKey('paid-via-note'),
           style: AppType.muted(color: v.isCash ? AppColors.textLow : AppColors.brandOnSoft).copyWith(fontSize: 12.5),
         ),
