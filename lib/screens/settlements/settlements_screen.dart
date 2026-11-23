@@ -15,6 +15,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'settle_widgets.dart';
+import 'transfer_pots.dart';
+import '../../api/transfer_pay_api.dart';
 import 'sheets/settle_sheet.dart';
 import 'sheets/settlement_detail_sheet.dart';
 import '../subscribers/sheets/payment_void_sheet.dart';
@@ -58,6 +60,10 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   int _movesLimit = 100;
   List<SettlementRecord> _history = const [];
   int _historyTotal = 0;
+
+  /// «رصيد الحوالات» (٢٣ نوفمبر): رصيد زين كاش/ماستر/أخرى خارج الصندوق و«سحب للصندوق» — للشركة المفتوحة وحدها (الخادم لا
+  /// يوجّهه في «كل الشركات»). null = لم يُقرأ/تعذّر/قسمٌ لشركةٍ أخرى ⇒ لا بطاقة.
+  TransferPotsData? _pots;
 
   /// «إلغاء تسديد» (١١ نوفمبر): حال تسديدات الحركات المعروضة وهل يلغي هذا الفاعل — للشركة المفتوحة وحدها (الخادم لا يوجّه
   /// الإلغاء في «كل الشركات»، فقسمٌ يعرض شركةً أخرى بلا زرّ ولا شارة).
@@ -132,6 +138,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
 
   Future<void> _load() async {
     final key = _companyKey;
+    // «رصيد الحوالات» بالتوازي — للشركة المفتوحة وحدها
+    final potsF = key == null ? TransferPayApi.pots() : Future<TransferPotsData?>.value(null);
     final r = await CompanyRoute.pin(key, SettlementsApi.current);
     if (!mounted) return;
     final cur = r.data;
@@ -162,8 +170,12 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       histMsg = h.message;
       movMsg = m.message;
     }
+    final pots = await potsF;
+    if (!mounted) return;
     setState(() {
       _cur = cur;
+      // تعذّرت قراءته هذه المرّة ⇒ يبقى ما كان (لا تختفي البطاقة لحظةً)؛ قسمٌ لشركةٍ أخرى ⇒ لا بطاقة
+      _pots = key != null ? null : (pots ?? _pots);
       _error = null;
       _errorCode = null;
       _loading = false;
@@ -476,6 +488,21 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
         _BoxCard(cur: cur),
         const SizedBox(height: Sp.sm),
         _BoxKpis(cur: cur),
+        // «رصيد الحوالات» (٢٣ نوفمبر): مطفأ بلا رصيد ⇒ لا شيء (الشاشة كما كانت)
+        if (_pots != null && !_pots!.hidden && _companyKey == null) ...[
+          const SizedBox(height: Sp.lg),
+          TransferPotsCard(
+            data: _pots!,
+            onWithdraw: (p) async {
+              final ok = await showTransferWithdrawSheet(context, p);
+              if (ok == true && mounted) _load();
+            },
+            onVoid: (w) async {
+              final ok = await showTransferVoidSheet(context, w);
+              if (ok == true && mounted) _load();
+            },
+          ),
+        ],
         if (cur.hasEmployees) ...[
           const SizedBox(height: Sp.lg),
           RpCard(
@@ -860,6 +887,12 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
               label: employeeBoxLine(p.employeeMoves).label,
               value: employeeBoxLine(p.employeeMoves).value,
             ),
+          // «سحب من الحوالات» (٢٣ نوفمبر): زين كاش/ماستر/أخرى ⇒ الصندوق
+          if (p.transferWithdrawals.count > 0)
+            _Line(
+              label: transferBoxLine(p.transferWithdrawals).label,
+              value: transferBoxLine(p.transferWithdrawals).value,
+            ),
           if (_opening != 0)
             _Line(
               label: 'settle.opening_label'.tr(),
@@ -997,6 +1030,7 @@ class _BoxKpis extends StatelessWidget {
     String n(int c) => '${formatIQD(c)} حركة';
     final goods = goodsBoxLine(cur.goodsPurchases);
     final emp = employeeBoxLine(cur.employeeMoves);
+    final tw = transferBoxLine(cur.transferWithdrawals);
     final kpis = [
       if (cur.openingBalance != 0)
         RpKpi(
@@ -1038,6 +1072,16 @@ class _BoxKpis extends StatelessWidget {
           icon: LucideIcons.users,
           tone: emp.out ? RpTone.loss : RpTone.money,
           hint: n(cur.employeeMoves.count),
+        ),
+      // «سحب من الحوالات» (٢٣ نوفمبر): ما سحبه المدير من رصيد زين كاش/ماستر/أخرى إلى الصندوق
+      if (cur.transferWithdrawals.count > 0)
+        RpKpi(
+          id: 'transfers',
+          label: tw.label,
+          value: cur.transferWithdrawals.sum.abs(),
+          icon: LucideIcons.arrowLeftRight,
+          tone: tw.out ? RpTone.loss : RpTone.money,
+          hint: n(cur.transferWithdrawals.count),
         ),
     ];
     return RpKpiGrid(kpis: kpis, compareWith: '', keyPrefix: 'settle-kpi-');

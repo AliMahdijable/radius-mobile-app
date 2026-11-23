@@ -155,8 +155,15 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // التفعيلات تكون آجلة، فنجعله الافتراضي بدل نقدي.
   _PayType _pay = _PayType.debt;
 
-  /// «استلمته» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها — للنقديّ والجزئيّ وحدهما.
-  PaidVia _paidVia = PaidVia.cash;
+  /// «استلمته» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها — للنقديّ والجزئيّ وحدهما. طلب تجديدٍ حوّل بزين كاش/ماستر
+  /// ⇒ طريقته مسبقاً ([TransferPay.initialFor]).
+  late PaidVia _paidVia = TransferPay.initialFor(widget.sub.idx);
+
+  /// صفّ الشركة المفتوحة (أو بلا مفتاح): «الحوالات» إعداد الشركة المفتوحة وحدها — صفُّ شركةٍ أخرى في «كل الشركات» بلا اختيار.
+  late bool _onOpenCompany = widget.sub.companyKey == null;
+
+  /// «استلمته» ظاهرة ومُرسَلة: الخادم فتحها للصفحة، ساس فور (لا ايرث لنك ولا فايبر اكس/الشركات المُضافة)، نقديٌّ أو جزئيّ.
+  bool get _viaOn => TransferPay.available.value && _onOpenCompany && !_isEarthlink && !_fxMode && _pay != _PayType.debt;
   bool _printReceiptChecked = false;
   final _partialCtrl = TextEditingController();
   int _partialAmount = 0;
@@ -300,6 +307,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     _partialCtrl.addListener(_onPartialChanged);
     _deposit.addListener(_onDepositChanged);
     _loadAutoPrint();
+    // «الحوالات»: إعداد الصفحة (مرّةً كلّ دقيقة) وهل الصفّ للشركة المفتوحة
+    unawaited(TransferPay.refresh());
+    if (widget.sub.companyKey != null) {
+      MergedMode.isOpenKey(widget.sub.companyKey).then((v) {
+        if (mounted && v != _onOpenCompany) setState(() => _onOpenCompany = v);
+      });
+    }
   }
 
   /// «الطباعة التلقائيّة» في مصمّم وصل الموقع ⇒ الخانة معلَّمة من البداية (الموقع يطبع بلا سؤال).
@@ -796,6 +810,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       // Don't gate on amount >= price.
       if (_partialAmount <= 0) return false;
     }
+    // «الحوالات»: «أخرى» بلا اسم لا تُرسل (الخادم يرفضها PAID_VIA_NAME_REQUIRED)
+    if (_viaOn && !_paidVia.valid) return false;
     return true;
   }
 
@@ -941,6 +957,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يبني الرسالة
     // ويعيدها في wa_preview بلا إرسال، ونفتح modal بعد النجاح.
     final manualMode = ManualWaPrefs.enabled.value;
+    // «الحوالات»: لقطةٌ قبل الانتظار كبقيّة الطلب — الكاش (أو الميزة مطفأة) لا يُرسل شيئاً
+    final paidVia = _viaOn ? _paidVia : PaidVia.cash;
     final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
       idx: idx,
       paymentType: paymentType,
@@ -949,6 +967,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       skipAutoWa: manualMode,
       method: useCard ? 'card' : 'credit',
       cardPin: railPin,
+      paidVia: paidVia,
     ));
     if (!mounted) return;
     setState(() {
@@ -1355,7 +1374,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               const SizedBox(height: Sp.md),
               SheetSection(
                 // «الحوالات»: المدفوع قد يكون حوالة ⇒ «المبلغ المدفوع» (وقبلها «… نقداً» كما كان)
-                label: TransferPay.available.value ? 'المبلغ المدفوع' : 'sheets.cash_paid_amount'.tr(),
+                label: _viaOn ? 'المبلغ المدفوع' : 'sheets.cash_paid_amount'.tr(),
                 gap: 9,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1393,7 +1412,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               ),
             ],
             // «استلمته»: النقديّ والجزئيّ (بعد مبلغه) — كاش (الافتراضيّ) أو حوالة بطريقتها؛ الخادم الذي يعرفها وحده يُظهرها
-            if (_pay != _PayType.debt)
+            if (_pay != _PayType.debt && _onOpenCompany && !_isEarthlink && !_fxMode)
               ValueListenableBuilder<bool>(
                 valueListenable: TransferPay.available,
                 builder: (context, on, _) => !on

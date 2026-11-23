@@ -61,7 +61,16 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
   String? _kind;
 
   /// «استلمته» تحت «استلمت المبلغ» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها.
-  PaidVia _paidVia = PaidVia.cash;
+  late PaidVia _paidVia = TransferPay.initialFor(widget.sub.idx);
+
+  /// صفّ الشركة المفتوحة (أو بلا مفتاح) — «الحوالات» إعدادها وحدها.
+  late bool _onOpenCompany = widget.sub.companyKey == null;
+
+  bool get _viaOn => TransferPay.available.value && _onOpenCompany;
+
+  void _onTransferSetting() {
+    if (mounted) setState(() {});
+  }
 
   late final double _currentBalance = widget.sub.balanceAmount;
   late final double _currentDebt =
@@ -79,10 +88,19 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
       _amountCtrl.text = _formatThousands(init);
     }
     _amountCtrl.addListener(_onAmountChanged);
+    // «الحوالات»: إعداد الصفحة (مرّةً كلّ دقيقة) — وصوله يعيد البناء؛ وهل الصفّ للشركة المفتوحة
+    TransferPay.available.addListener(_onTransferSetting);
+    TransferPay.refresh();
+    if (widget.sub.companyKey != null) {
+      MergedMode.isOpenKey(widget.sub.companyKey).then((v) {
+        if (mounted && v != _onOpenCompany) setState(() => _onOpenCompany = v);
+      });
+    }
   }
 
   @override
   void dispose() {
+    TransferPay.available.removeListener(_onTransferSetting);
     _amountCtrl.dispose();
     _commentCtrl.dispose();
     super.dispose();
@@ -127,7 +145,13 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
     return buf.toString();
   }
 
-  bool get _canSubmit => !_submitting && widget.sub.idx != null && _amount > 0 && _kind != null;
+  bool get _canSubmit =>
+      !_submitting &&
+      widget.sub.idx != null &&
+      _amount > 0 &&
+      _kind != null &&
+      // «الحوالات»: «أخرى» بلا اسم لا تُرسل
+      (_kind != 'cash' || !_viaOn || _paidVia.valid);
 
   Future<void> _confirmAndSubmit() async {
     final amount = _amount.toDouble();
@@ -145,7 +169,7 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
         ),
         content: Text(
           'سيتم إضافة ${formatIQD(amount.round())} د.ع كرصيدٍ دائن إلى '
-          '"${widget.sub.fullName}" — ${_kind == 'comp' ? 'تعويض بلا نقد' : 'استلمت المبلغ نقداً'}.\n$after',
+          '"${widget.sub.fullName}" — ${_kind == 'comp' ? 'تعويض بلا نقد' : _viaOn && _paidVia.isTransfer ? 'استلمته ${_paidVia.label}' : 'استلمت المبلغ نقداً'}.\n$after',
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
@@ -173,12 +197,15 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
     setState(() => _submitting = true);
     final kind = _kind;
     if (kind == null) return;
+    // «الحوالات»: لقطةٌ قبل الانتظار — مع «استلمت المبلغ» وحده، والكاش (أو الميزة مطفأة) لا يُرسل شيئاً
+    final paidVia = kind == 'cash' && _viaOn ? _paidVia : PaidVia.cash;
     final result = await MergedOps.write(widget.sub, () => SubscribersApi.addCredit(
       idx: idx,
       amount: _amount.toDouble(),
       creditKind: kind,
       comment:
           _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
+      paidVia: paidVia,
     ));
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -186,7 +213,11 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
     showSheetSnack(
       context,
       result.ok
-          ? (kind == 'comp' ? 'تم إضافة الرصيد (تعويض)' : 'تم إضافة الرصيد (نقداً)')
+          ? (kind == 'comp'
+              ? 'تم إضافة الرصيد (تعويض)'
+              : paidVia.isTransfer
+                  ? 'تم إضافة الرصيد (${paidVia.label})'
+                  : 'تم إضافة الرصيد (نقداً)')
           : (result.message ?? 'فشل إضافة الرصيد'),
       isError: !result.ok,
     );
@@ -264,13 +295,13 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
                 SheetChoiceTiles(
                   compact: true,
                   // «الحوالات»: «استلمت المبلغ» كاشاً أو حوالة (تحتها)؛ قبل أن يعرفها الخادم «استلمت نقداً» كما كانت
-                  labels: [TransferPay.available.value ? 'استلمت المبلغ' : 'استلمت نقداً', 'تعويض بلا نقد'],
+                  labels: [_viaOn ? 'استلمت المبلغ' : 'استلمت نقداً', 'تعويض بلا نقد'],
                   icons: const [LucideIcons.banknote, LucideIcons.gift],
                   selectedIndex: _kind == 'cash' ? 0 : _kind == 'comp' ? 1 : -1,
                   enabled: !_submitting,
                   onSelect: (i) => setState(() => _kind = i == 0 ? 'cash' : 'comp'),
                 ),
-                if (_kind == 'cash' && TransferPay.available.value) ...[
+                if (_kind == 'cash' && _viaOn) ...[
                   const SizedBox(height: Sp.md),
                   PaidViaPicker(
                     value: _paidVia,
@@ -282,7 +313,7 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
                 Text(
                   _kind == 'cash'
                       // «الحوالات»: أين يذهب المبلغ يقوله سطر «استلمته» فوق — هنا ما بعده وحده
-                      ? (TransferPay.available.value
+                      ? (_viaOn
                           ? 'يُحسب مستلَماً الآن، والتفعيل منه لاحقاً لا يُحسب مرّةً ثانية.'
                           : 'يدخل الصندوق والنقد المُستلم الآن، والتفعيل منه لاحقاً لا يُحسب نقداً مرّةً ثانية.')
                       : _kind == 'comp'

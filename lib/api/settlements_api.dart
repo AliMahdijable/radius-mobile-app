@@ -59,6 +59,7 @@ class SettleCollector {
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
+    this.transferWithdrawals = const MoneyCount(0, 0),
   });
 
   final int? employeeId;
@@ -79,6 +80,10 @@ class SettleCollector {
   /// داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
   final MoneyCount employeeMoves;
 
+  /// «سحب من الحوالات» (٢٣ نوفمبر — الخادم abd6761): ما سحبه المدير من رصيد زين كاش/ماستر/أخرى إلى الصندوق — داخلٌ في المتوقَّع
+  /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount transferWithdrawals;
+
   bool get isManager => employeeId == null;
   int get inCount => cashActivations.count + debtPayments.count + salesCash.count;
 
@@ -96,6 +101,7 @@ class SettleCollector {
         salesCash: MoneyCount.fromJson(j['sales_cash']),
         goodsPurchases: MoneyCount.fromJson(j['goods_purchases']),
         employeeMoves: MoneyCount.fromJson(j['employee_moves']),
+        transferWithdrawals: MoneyCount.fromJson(j['transfer_withdrawals']),
       );
 }
 
@@ -133,6 +139,7 @@ class SettlementRecord {
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
+    this.transferWithdrawals = const MoneyCount(0, 0),
   });
 
   final int id;
@@ -167,10 +174,14 @@ class SettlementRecord {
   /// داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
   final MoneyCount employeeMoves;
 
+  /// «سحب من الحوالات» (٢٣ نوفمبر — الخادم abd6761): ما سحبه المدير من رصيد زين كاش/ماستر/أخرى إلى الصندوق — داخلٌ في المتوقَّع
+  /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount transferWithdrawals;
+
   bool get isOpening => kind == 'opening';
   bool get isVoided => status == 'voided';
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count + transferWithdrawals.count;
 
   static SettlementRecord? fromJson(Object? raw) {
     final j = _map(raw);
@@ -201,6 +212,7 @@ class SettlementRecord {
       salesCash: MoneyCount.fromJson(j['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(j['goods_purchases']),
         employeeMoves: MoneyCount.fromJson(j['employee_moves']),
+        transferWithdrawals: MoneyCount.fromJson(j['transfer_withdrawals']),
     );
   }
 }
@@ -257,6 +269,7 @@ class CurrentAccount {
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
+    this.transferWithdrawals = const MoneyCount(0, 0),
     this.routedWrites,
   });
 
@@ -293,8 +306,12 @@ class CurrentAccount {
   /// داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
   final MoneyCount employeeMoves;
 
+  /// «سحب من الحوالات» (٢٣ نوفمبر — الخادم abd6761): ما سحبه المدير من رصيد زين كاش/ماستر/أخرى إلى الصندوق — داخلٌ في المتوقَّع
+  /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount transferWithdrawals;
+
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count + transferWithdrawals.count;
   bool get hasEmployees => collectors.any((c) => !c.isManager);
 
   static CurrentAccount? fromJson(Object? raw) {
@@ -322,6 +339,7 @@ class CurrentAccount {
       salesCash: MoneyCount.fromJson(t['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
       employeeMoves: MoneyCount.fromJson(t['employee_moves']),
+      transferWithdrawals: MoneyCount.fromJson(t['transfer_withdrawals']),
       routedWrites: j['routed_writes'] is bool ? j['routed_writes'] as bool : null,
     );
   }
@@ -349,6 +367,7 @@ class StartPreview {
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
+    this.transferWithdrawals = const MoneyCount(0, 0),
   });
 
   /// ما أرسلناه كما ردّه الخادم: `now` أو `YYYY-MM-DD`. تُقرأ منه
@@ -369,8 +388,12 @@ class StartPreview {
   final MoneyCount goodsPurchases;
   final MoneyCount employeeMoves;
 
+  /// «سحب من الحوالات» (٢٣ نوفمبر — الخادم abd6761): ما سحبه المدير من رصيد زين كاش/ماستر/أخرى إلى الصندوق — داخلٌ في المتوقَّع
+  /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount transferWithdrawals;
+
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count + transferWithdrawals.count;
 
   static StartPreview? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -389,6 +412,7 @@ class StartPreview {
       salesCash: MoneyCount.fromJson(t['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
       employeeMoves: MoneyCount.fromJson(t['employee_moves']),
+      transferWithdrawals: MoneyCount.fromJson(t['transfer_withdrawals']),
     );
   }
 }

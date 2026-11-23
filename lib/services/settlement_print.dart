@@ -139,6 +139,11 @@ class SettlementPrint {
           s.employeeMoves.sum < 0
               ? row('− سلف وقروض الموظفين (${s.employeeMoves.count})', _money(-s.employeeMoves.sum))
               : row('+ رجع من سلف الموظفين (${s.employeeMoves.count})', _money(s.employeeMoves.sum)),
+        // «سحب من الحوالات» (زين كاش/ماستر/أخرى ⇒ الصندوق) — وإلغاؤه أكبر ⇒ خارج
+        if (s.transferWithdrawals.count > 0)
+          s.transferWithdrawals.sum < 0
+              ? row('− إلغاء سحب من الحوالات (${s.transferWithdrawals.count})', _money(-s.transferWithdrawals.sum))
+              : row('+ سحب من الحوالات (${s.transferWithdrawals.count})', _money(s.transferWithdrawals.sum)),
         pw.Divider(thickness: 0.8),
         row('المتوقّع في الصندوق', _money(s.expected), strong: true),
         row('المستلَم فعلاً', _money(s.received), strong: true),

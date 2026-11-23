@@ -83,8 +83,13 @@ class _PayDebtSheet extends StatefulWidget {
 }
 
 class _PayDebtSheetState extends State<_PayDebtSheet> {
-  /// «استلمته» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها.
-  PaidVia _paidVia = PaidVia.cash;
+  /// «استلمته» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها؛ طلب تسديدٍ حوّل بزين كاش/ماستر ⇒ طريقته مسبقاً.
+  late PaidVia _paidVia = TransferPay.initialFor(widget.sub.idx);
+
+  /// صفّ الشركة المفتوحة (أو بلا مفتاح) — «الحوالات» إعدادها وحدها.
+  late bool _onOpenCompany = widget.sub.companyKey == null;
+
+  bool get _viaOn => TransferPay.available.value && _onOpenCompany;
 
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
@@ -118,6 +123,13 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     }
     _amountCtrl.addListener(_onAmountChanged);
     _loadAutoPrint();
+    // «الحوالات»: إعداد الصفحة (مرّةً كلّ دقيقة) وهل الصفّ للشركة المفتوحة
+    unawaited(TransferPay.refresh());
+    if (widget.sub.companyKey != null) {
+      MergedMode.isOpenKey(widget.sub.companyKey).then((v) {
+        if (mounted && v != _onOpenCompany) setState(() => _onOpenCompany = v);
+      });
+    }
   }
 
   /// «الطباعة التلقائيّة» في مصمّم وصل الموقع ⇒ الخانة معلَّمة من البداية (الموقع يطبع بلا سؤال).
@@ -203,6 +215,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     if (_submitting || _done) return false;
     if (widget.sub.idx == null) return false;
     if (_currentDebt <= 0) return false;
+    // «الحوالات»: «أخرى» بلا اسم لا تُرسل
+    if (_viaOn && !_paidVia.valid) return false;
     return _effectiveAmount > 0;
   }
 
@@ -218,6 +232,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     // ما يرسل WA تلقائياً — يرجع wa_preview بالنصّ الجاهز، ونفتح modal بعد
     // النجاح ليختار المدير: إرسال يدوي من واتسابه أو تلقائي من السيرفر.
     final manualMode = ManualWaPrefs.enabled.value;
+    // «الحوالات»: لقطةٌ قبل الانتظار — الكاش (أو الميزة مطفأة) لا يُرسل شيئاً
+    final paidVia = _viaOn ? _paidVia : PaidVia.cash;
     final result = await MergedOps.write(widget.sub, () => SubscribersApi.payDebt(
       idx: idx,
       // ⚠️ حين يكون «كامل الدين» مفعّلاً نرسل **العلَم لا الرقم**:
@@ -227,6 +243,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       amount: _effectiveAmount,
       comment: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       skipAutoWa: manualMode,
+      paidVia: paidVia,
     ));
     if (!mounted) return;
     setState(() {
@@ -386,7 +403,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                 ),
                 ValueListenableBuilder<bool>(
                   valueListenable: TransferPay.available,
-                  builder: (context, on, _) => !on
+                  builder: (context, on, _) => !on || !_onOpenCompany
                       ? const SizedBox.shrink()
                       : Padding(
                           padding: const EdgeInsets.only(top: Sp.lg),

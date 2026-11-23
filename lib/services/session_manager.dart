@@ -52,6 +52,7 @@ import 'subscriber_usage_store.dart';
 import 'vpn_now.dart';
 import 'voice/voice_resolver.dart';
 import 'agent_net_presence.dart';
+import 'transfer_pay.dart';
 
 /// Central place that wipes every in-memory + persistent cache tied to
 /// a user session. Called from:
@@ -143,6 +144,8 @@ class SessionManager {
     _guardSync('LinkedCompanies.reset', () => LinkedCompanies.reset());
     // «كل الشركات»: لا يرث أحدٌ وضع سابقه ولا مراجعه ولا قوائم شركاته.
     _guardSync('MergedMode.reset', () => MergedMode.reset());
+    // «الحوالات» (٢٣ نوفمبر): إعداد الصفحة وأسماء «أخرى» والاختيارات المسبقة لا تعبر لجلسةٍ أخرى.
+    _guardSync('TransferPay.reset', () => TransferPay.reset());
     // شبكة الألياف: مراقبات الأولتات تتوقّف (لا يُقرأ أولت سابقه ولا يُبلَّغ عن عطله)، وتخطيطه يفرغ من الذاكرة.
     _guardSync('FiberWatch.halt', FiberWatch.halt);
     _guardSync('FiberMonitor.resetAll', () => FiberMonitor.resetAll());

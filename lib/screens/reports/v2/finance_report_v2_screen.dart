@@ -35,6 +35,8 @@ import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_prefs.dart';
 import 'report_sheets.dart';
+import 'cash_by_via_card.dart';
+import '../../../core/util/format.dart';
 
 /// التقرير الماليّ على الشكل الموحّد (٢٢ نوفمبر — المالك: «اي التطبيق أوّلاً … وانطلق» بعد صور المقترح).
 ///
@@ -802,6 +804,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   List<String> _exportDetails({required int count, String? drill, bool withSearch = true, List<String> gaps = const [], bool sorted = false}) {
     final m = _merged ? _combined : null;
     final q = _q.trim();
+    final kv = m == null ? _view()?.kpis : null;
+    final byVia = kv?.cashByVia;
     return [
       if (m != null) 'الشركات: ${m.included.map((p) => p.company.name).join('، ')}',
       if (m != null && m.parts.any((p) => !p.included))
@@ -812,6 +816,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       if (withSearch && q.isNotEmpty) 'بحث: «$q»',
       if (sorted) orderLine(_rowFields, _rowSort) ?? '',
       'عدد الحركات: $count',
+      // «الحوالات»: التقسيم على الشاشة ⇒ في الملفّ
+      if (byVia != null && kv != null) byVia.exportLine(kv.totalCashRevenue, (n) => '${formatIQD(n.round())} د.ع'),
       if (gaps.isNotEmpty) 'ناقص: ${gaps.join('؛ ')}',
     ];
   }
@@ -1266,6 +1272,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       onTap: () => _drill(hero, v),
     ));
     parts.add(RpKpiGrid(kpis: FinanceView.kpis(v.kpis, v.prev), compareWith: f.range.vsText, onTap: (k) => _drill(k, v)));
+    // «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — الخادم يرسله حين توجد حوالةٌ بالفترة؛ «كل الشركات» بلا تقسيم
+    if (!_merged && v.kpis.cashByVia != null) parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue));
     parts.add(RpCountsRow(items: FinanceView.counts(v.kpis)));
     // «يوماً بيوم» (الرسم) أُلغي من التقرير الماليّ (المالك ٢٢ نوفمبر: «اكو قسم بالتقارير المالية يوما بيوم هذا الغي»)
     final b = _breakdown(v);

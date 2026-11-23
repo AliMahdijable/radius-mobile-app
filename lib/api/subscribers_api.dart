@@ -17,6 +17,7 @@ import 'bulk_activate_api.dart';
 import 'el_deposit_password.dart';
 import 'cards_api.dart';
 import 'receipt_facts.dart';
+import '../services/transfer_pay.dart';
 
 /// ردّ activate. `code` رمز الرفض حين يرسله الخادم (`NO_CARDS` ·
 /// `CARD_NOT_ALLOWED`)، و`card` الكارت الذي سُحب في التفعيل بالكارت.
@@ -796,6 +797,8 @@ class SubscribersApi {
     num? expectedCost, // الكلفة التي رآها الوكيل في المعاينة — حارسٌ لا مبلغ (تغيّرت ⇒ 409 PRICE_CHANGED بلا تفعيل)
     // ── «طريق موقع الشحن» (فايبر الجزيرة، ١٤ نوفمبر) ──
     String? cardPin, // رقم بطاقةٍ خارجيّة (٨ خانات) مع method=='card' — يُرسل مع الطلب وحده ولا يُحفظ
+    // ── «الحوالات» (٢٣ نوفمبر): «استلمته» للنقديّ والجزئيّ — الكاش لا يُرسل شيئاً (كما كان حرفاً) ──
+    PaidVia paidVia = PaidVia.cash,
   }) async =>
       (await activateDetailed(
         idx: idx,
@@ -815,6 +818,7 @@ class SubscribersApi {
         months: months,
         expectedCost: expectedCost,
         cardPin: cardPin,
+        paidVia: paidVia,
       ))
           .result;
 
@@ -872,6 +876,7 @@ class SubscribersApi {
     int? months,
     num? expectedCost,
     String? cardPin,
+    PaidVia paidVia = PaidVia.cash,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -903,6 +908,8 @@ class SubscribersApi {
           if (months != null && months > 1 && expectedCost != null) 'expected_cost': expectedCost,
           // «طريق موقع الشحن»: بطاقةٌ خارجيّة برقمها — للكارت وحده، وغيابه = بطاقات الوكيل في الموقع
           if (method == 'card' && cardPin != null && cardPin.isNotEmpty) 'cardPin': cardPin,
+          // «الحوالات»: paid_via (+ اسم «أخرى») مع النقديّ والجزئيّ وحدهما — الآجل لا مال فيه، والكاش {}
+          if (paymentType == 'cash' || paymentType == 'partial-cash') ...paidVia.toBody(),
         },
         // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
         // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
@@ -1495,6 +1502,9 @@ class SubscribersApi {
     /// أمّا العلَم فيجعل الخادم يقرأ الدين **حيّاً من الساس** ويسدّده
     /// بالضبط. فالزيادة تصير مستحيلةً رياضيّاً لا مُضيَّقةً.
     bool payAll = false,
+
+    /// «الحوالات» (٢٣ نوفمبر): «استلمته» — الكاش لا يُرسل شيئاً (كما كان حرفاً)، والحوالة paid_via (+ اسم «أخرى»).
+    PaidVia paidVia = PaidVia.cash,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -1505,6 +1515,7 @@ class SubscribersApi {
           if (payAll) 'payAll': true else 'amount': amount,
           if (comment != null && comment.isNotEmpty) 'comment': comment,
           if (skipAutoWa) 'skipAutoWa': true,
+          ...paidVia.toBody(),
         },
       );
       final body = r.data ?? const {};
@@ -1602,6 +1613,9 @@ class SubscribersApi {
     required double amount,
     required String creditKind,
     String? comment,
+
+    /// «الحوالات» (٢٣ نوفمبر): «استلمته» تحت «استلمت المبلغ» وحده — التعويض بلا مالٍ فلا طريقة له (الخادم يرفضهما معاً).
+    PaidVia paidVia = PaidVia.cash,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -1610,6 +1624,7 @@ class SubscribersApi {
           'amount': amount,
           'credit_kind': creditKind,
           if (comment != null && comment.isNotEmpty) 'comment': comment,
+          if (creditKind == 'cash') ...paidVia.toBody(),
         },
       );
       final body = r.data ?? const {};

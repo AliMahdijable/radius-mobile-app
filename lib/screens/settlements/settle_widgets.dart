@@ -43,6 +43,17 @@ String settleMoney(num n) =>
   );
 }
 
+/// سطر «سحب من الحوالات» بالصندوق (٢٣ نوفمبر — «الحوالات»): ما سحبه المدير من رصيد زين كاش/ماستر/أخرى داخل؛ صافيه سالبٌ (إلغاءٌ
+/// أكبر) ⇒ خارج. القيمة بإشارتها كما تُحسب في المتوقَّع — كالموقع (lib/settlements.ts twBoxLine).
+({String label, String value, bool out}) transferBoxLine(MoneyCount m) {
+  final out = m.sum < 0;
+  return (
+    label: out ? 'إلغاء سحب من الحوالات' : m.sum > 0 ? 'سحب من الحوالات' : 'سحب من الحوالات (صافيه صفر)',
+    value: '${out ? '−' : '+'}${formatIQD(m.sum.abs())}',
+    out: out,
+  );
+}
+
 /// «الخميس 2026/10/01 · 21:40» بتوقيت الجهاز (الأجهزة في العراق). [clock12] = الساعة «9:40 مساءً» كالتقارير الموحّدة (المالك ٢٢
 /// نوفمبر: «الأوقات خلّي صباحاً ومساءً») — شاشة الصندوق بها، والسند والطباعة كما كانا.
 String settleWhen(DateTime? d, {bool weekday = false, bool clock12 = false}) {
@@ -114,6 +125,10 @@ class CollectorsList extends StatelessWidget {
                               // حركات الموظفين التي مرّ نقدها بيده (سلفة دفعها، تسديدٌ استلمه…) — داخلةٌ في صافيه
                               (collectors[i].employeeMoves.count > 0
                                   ? ' · ${'settle.collector_emp'.tr(namedArgs: {'n': '${collectors[i].employeeMoves.count}'})}'
+                                  : '') +
+                              // «سحب من الحوالات» إلى الصندوق (المدير وحده يسحب) — داخلٌ في صافيه
+                              (collectors[i].transferWithdrawals.count > 0
+                                  ? ' · سحب من الحوالات ${collectors[i].transferWithdrawals.count}'
                                   : ''),
                           style: AppType.muted(),
                           maxLines: 1,
@@ -183,6 +198,9 @@ class MovementTile extends StatelessWidget {
       'credit_cash_void' => LucideIcons.undo2,
       'emp_advance' || 'emp_withdraw' || 'emp_loan' || 'emp_repayment' || 'emp_payslip_recover' => LucideIcons.users,
       'emp_advance_void' || 'emp_withdraw_void' || 'emp_loan_void' || 'emp_repayment_void' => LucideIcons.undo2,
+      // «سحب للصندوق» من رصيد الحوالات (٢٣ نوفمبر): داخل، وإلغاؤه خارج
+      'transfer_withdraw' => LucideIcons.arrowLeftRight,
+      'transfer_withdraw_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
@@ -208,6 +226,8 @@ class MovementTile extends StatelessWidget {
       'emp_loan_void' => 'settle.kind_emp_loan_void'.tr(),
       'emp_repayment_void' => 'settle.kind_emp_repayment_void'.tr(),
       'emp_payslip_recover' => 'settle.kind_emp_payslip_recover'.tr(),
+      'transfer_withdraw' => 'سحب من الحوالات',
+      'transfer_withdraw_void' => 'إلغاء سحب من الحوالات',
       _ => 'settle.kind_debt_payment'.tr(),
     };
     // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
@@ -224,12 +244,19 @@ class MovementTile extends StatelessWidget {
         : '';
     // «العربي ومن ثم اليوزر» (المالك ٢٣ نوفمبر): الاسم العربيّ عنواناً واليوزر بعد النوع بسطر التفاصيل — للتفعيل والتسديد وإضافة
     // الرصيد وبيع المواد ليوزر؛ بلا اسمٍ معروف (خادمٌ أقدم، أو لم يصل خلال مهلته) اليوزر عنوانٌ كما كان.
+    // «سحب للصندوق» من رصيد الحوالات: العنوان الطريقة وملاحظتها («زين كاش — …») والنوع بسطر التفاصيل — لا مشترك له (كالموقع).
+    final isTransfer = m.source == 'transfer';
+    final transferTitle = isTransfer
+        ? (m.description ?? '').replaceFirst(RegExp(r'^(?:إلغاء )?سحب من '), '').replaceFirst(RegExp(r' للصندوق(?= — |$)'), '').trim()
+        : '';
     final subName = (m.subscriberName ?? '').trim();
     final named = subName.isNotEmpty && (m.subscriber ?? '').trim().isNotEmpty && (m.source == 'activity' || isSale);
     final title = m.kind == 'expense'
         ? (m.description ?? 'settle.kind_expense'.tr())
         : isEmployee
             ? (empTitle.isEmpty ? kindLabel : iso(empTitle))
+        : isTransfer
+            ? (transferTitle.isEmpty ? kindLabel : iso(transferTitle))
         : isPurchase
             ? (buyTitle.isEmpty ? kindLabel : iso(buyTitle))
             : named

@@ -10,8 +10,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
-import 'package:rad_mysvcs/core/util/format.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/api/transfer_pay_api.dart';
+import 'package:rad_mysvcs/screens/reports/v2/cash_by_via_card.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/settlements/transfer_pots.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/activate_sheet.dart';
@@ -64,6 +65,16 @@ class _Server implements HttpClientAdapter {
       return ResponseBody.fromString(jsonEncode(_activation), 200, headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       });
+    }
+    // «الحوالات»: الإعداد مفتوح وأسماء «أخرى»، ورصيد الطرق (للبطاقة بالتقرير)
+    if (o.path == '/api/v2/transfer-pay') {
+      return ResponseBody.fromString(
+          jsonEncode({'success': true, 'data': {'available': true, 'methods': ['cash', 'zaincash', 'master', 'other'], 'names': ['آسيا حوالة']}}), 200,
+          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    }
+    if (o.path == '/api/v2/transfer-pots') {
+      return ResponseBody.fromString(jsonEncode({'success': true, 'data': _potsJson}), 200,
+          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
     }
     return inner.fetch(o, requestStream, cancelFuture);
   }
@@ -128,63 +139,42 @@ Future<void> _showPicker(WidgetTester t) async {
   await settle(t, seconds: 1);
 }
 
-/// مثالٌ لبطاقة «النقد المستلم» بالتقرير الماليّ بعد الميزة (للتصميم — الأرقام من الخادم لاحقاً).
-Widget _financeMock() => Builder(builder: (context) {
-      final cur = 'common.currency'.tr();
-      Widget line(IconData i, String label, int v, {bool strong = false}) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(children: [
-              Icon(i, size: 18, color: AppColors.textMid),
-              const SizedBox(width: Sp.sm),
-              Expanded(child: Text(label, style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.body(color: AppColors.textBody))),
-              Text('${formatIQD(v)} $cur', style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.bodyStrong(color: AppColors.textHi)),
-            ]),
-          );
-      return Scaffold(
-        appBar: AppBar(title: const Text('التقرير المالي')),
-        body: ListView(padding: const EdgeInsets.all(Sp.lg), children: [
-          RpCard(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [
-                const RpIconBox(icon: LucideIcons.banknote, tone: RpTone.money, size: 36),
-                const SizedBox(width: Sp.md),
-                Text('النقد المستلم', style: AppType.bodyBold(color: AppColors.textHi)),
-              ]),
-              const SizedBox(height: Sp.sm),
-              line(LucideIcons.banknote, 'كاش', 1250000),
-              line(LucideIcons.smartphone, 'زين كاش', 175000),
-              line(LucideIcons.landmark, 'ماستر', 60000),
-              line(LucideIcons.arrowLeftRight, 'آسيا حوالة', 25000),
-              Divider(color: AppColors.border),
-              line(LucideIcons.sigma, 'المجموع (نفسه — الربح ما يتغيّر)', 1510000, strong: true),
-            ]),
-          ),
-          const SizedBox(height: Sp.md),
-          RpCard(
-            child: Row(children: [
-              const RpIconBox(icon: LucideIcons.arrowLeftRight, tone: RpTone.info, size: 36),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('رصيد الحوالات الآن', style: AppType.bodyBold(color: AppColors.textHi)),
-                  Text('زين كاش 125,000 · ماستر 60,000 · آسيا حوالة 25,000 — خارج الصندوق',
-                      style: AppType.micro(color: AppColors.textMid)),
-                ]),
-              ),
-              Text('210,000 $cur', style: AppType.bodyBold(color: AppColors.brand)),
-            ]),
-          ),
-        ]),
-      );
-    });
+/// بطاقة «النقد المستلم» بالتقرير الماليّ — البطاقة الحقيقيّة بأرقام الخادم (cash_by_via) ورصيد الحوالات الآن.
+Widget _financeMock() => Scaffold(
+      appBar: AppBar(title: const Text('التقرير المالي')),
+      body: ListView(padding: const EdgeInsets.all(Sp.lg), children: [
+        CashByViaCard(
+          byVia: CashByViaData.fromJson({
+            'cash': 1250000,
+            'transfers_sum': 260000,
+            'transfers': [
+              {'key': 'zaincash', 'via': 'zaincash', 'label': 'زين كاش', 'sum': 175000, 'count': 5},
+              {'key': 'master', 'via': 'master', 'label': 'ماستر', 'sum': 60000, 'count': 2},
+              {'key': 'other:آسيا حوالة', 'via': 'other', 'label': 'آسيا حوالة', 'sum': 25000, 'count': 1},
+            ],
+          })!,
+          total: 1510000,
+        ),
+      ]),
+    );
 
-const _pots = [
-  TransferPot(key: 'zaincash', label: 'زين كاش', balance: 125000, received: 175000, withdrawn: 50000),
-  TransferPot(key: 'master', label: 'ماستر', balance: 60000, received: 60000),
-  TransferPot(key: 'other:آسيا حوالة', label: 'آسيا حوالة', balance: 25000, received: 25000),
-];
+const _potsJson = {
+  'available': true,
+  'pots': [
+    {'key': 'zaincash', 'via': 'zaincash', 'label': 'زين كاش', 'received': 175000, 'withdrawn': 50000, 'balance': 125000, 'count': 5},
+    {'key': 'master', 'via': 'master', 'label': 'ماستر', 'received': 60000, 'withdrawn': 0, 'balance': 60000, 'count': 2},
+    {'key': 'other:آسيا حوالة', 'via': 'other', 'name': 'آسيا حوالة', 'label': 'آسيا حوالة', 'received': 25000, 'withdrawn': 0, 'balance': 25000, 'count': 1},
+  ],
+  'total': 210000,
+  'withdrawals': [
+    {'id': 7, 'via': 'zaincash', 'label': 'زين كاش', 'amount': 50000, 'kind': 'withdraw', 'voided': false, 'created_at': '2026-11-23 18:10:00'},
+  ],
+  'can_withdraw': true,
+};
 
-Widget _settlementMock(void Function(TransferPot) onWithdraw) => Builder(builder: (context) {
+final _pots = TransferPotsData.fromJson(Map<String, dynamic>.from(_potsJson));
+
+Widget _settlementMock(void Function(TransferPotData) onWithdraw) => Builder(builder: (context) {
       final cur = 'common.currency'.tr();
       return Scaffold(
         appBar: AppBar(title: const Text('تسوية الحساب')),
@@ -204,7 +194,7 @@ Widget _settlementMock(void Function(TransferPot) onWithdraw) => Builder(builder
             ]),
           ),
           const SizedBox(height: Sp.md),
-          TransferPotsCard(pots: _pots, onWithdraw: onWithdraw),
+          TransferPotsCard(data: _pots, onWithdraw: onWithdraw),
         ]),
       );
     });

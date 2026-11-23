@@ -17,6 +17,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import 'renew_requests_screen.dart';
+import '../../services/transfer_pay.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — المالك): بطاقة الطلب، صورة التحويل (تكبيرٌ بملء الشاشة)، النافذة السريعة (من الجرس والإشعار)،
 /// وقسمها في صندوق الإشعارات (حين يوجد طلبٌ وحده — المالك: «في حال اكو طلب يظهر بالجرس»).
@@ -715,7 +716,13 @@ Future<void> openRenewSubscriber(BuildContext context, RenewRequest r) async {
     messenger?.showSnackBar(const SnackBar(content: Text('تعذّر إيجاد المشترك الآن — ابحث عنه من «المشتركين»')));
     return;
   }
-  await nav.push(MaterialPageRoute(builder: (_) => SubscriberDetailScreen(sub: sub), fullscreenDialog: true));
+  // «الحوالات» (٢٣ نوفمبر): حوّل بزين كاش/ماستر/غيرهما ⇒ شيت التفعيل/التسديد من صفحته يختار طريقته مسبقاً (يغيّرها الوكيل إن لزم)
+  TransferPay.hint(sub.idx, PaidVia.fromRequest(r.payMethod));
+  try {
+    await nav.push(MaterialPageRoute(builder: (_) => SubscriberDetailScreen(sub: sub), fullscreenDialog: true));
+  } finally {
+    TransferPay.clearHint(sub.idx);
+  }
 }
 
 /// النافذة السريعة (الجرس والإشعار): الطلب كاملاً — الصورة والإجراءات — بلا مغادرة الشاشة. بعد الرفض/«تمّ التفعيل» تُغلق،

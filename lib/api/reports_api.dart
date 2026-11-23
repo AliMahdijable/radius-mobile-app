@@ -9,6 +9,7 @@ import '../core/util/bidi.dart';
 import '../core/util/edit_summary.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
+import 'transfer_pay_api.dart' show CashByViaData;
 
 /// ============================================================
 /// Reports API — موحّد لكل التقارير الـ8 في v2 web:
@@ -182,7 +183,12 @@ class FinanceKPIs {
     this.empOutstanding = 0,
     this.creditCashSum = 0,
     this.creditCompSum = 0,
+    this.cashByVia,
   });
+
+  /// «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — من الخادم حين توجد حوالةٌ بالفترة وحدها؛ null غير ذلك (وفي الحساب من
+  /// السطور، و«كل الشركات») ⇒ لا بطاقة.
+  final CashByViaData? cashByVia;
 
   /// «إضافة رصيد» مقدّماً نقداً (١٧ نوفمبر): **داخلةٌ أصلاً** في [debtPaySum] عند الخادم (نقدٌ محصَّل) — للعرض وحده.
   final num creditCashSum;
@@ -346,6 +352,7 @@ class FinanceKPIs {
       // «إضافة رصيد» (١٧ نوفمبر): يرسلها الخادم حين يوجد رصيدٌ بالفترة وحدها — وإلّا أصفار ⇒ الشاشة كما كانت.
       creditCashSum: _n(j['credit_cash_sum']),
       creditCompSum: _n(j['credit_comp_sum']),
+      cashByVia: CashByViaData.fromJson(j['cash_by_via']),
     );
   }
 }
