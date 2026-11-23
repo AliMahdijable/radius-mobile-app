@@ -162,7 +162,11 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
     _load();
   }
 
-  int? _employeeId(String group) => int.tryParse(_f!.employees[group] ?? '');
+  /// موظّفو الشركة المختارون — واحدٌ أو أكثر (lib/api/employee_filter.dart).
+  List<int> _employeeIds(String group) => [
+        for (final s in _f!.employees[group] ?? const <String>{})
+          if (int.tryParse(s) != null) int.parse(s),
+      ];
 
   List<MergedCompany> get _countable => MergedDashboardApi.countable();
 
@@ -193,7 +197,7 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
             from: f.range.from,
             to: f.range.to,
             userIds: _scopeIds,
-            employeeId: _employeeId(_open),
+            employeeIds: _employeeIds(_open),
           ));
       if (!mounted || seq != _seq || _merged) return;
       setState(() => _cos[_open] = _Co(null, data: r.data, reason: r.data == null ? (r.error ?? 'pkgdist.fetch_failed'.tr()) : null));
@@ -234,7 +238,7 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
           from: f.range.from,
           to: f.range.to,
           userIds: [c.adminId],
-          employeeId: _employeeId(c.key),
+          employeeIds: _employeeIds(c.key),
         ));
     if (!mounted || seq != _seq) return;
     setState(() => _cos[c.key] = _Co(c, data: r.data, reason: r.data == null ? (r.error ?? 'pkgdist.fetch_failed'.tr()) : null));
@@ -301,10 +305,13 @@ class _PackageDistV2State extends State<PackageDistV2Screen> {
     final f = _f!;
     return [
       for (final e in f.employees.entries)
-        RpChip('الموظّف: ${_nameOf(e.key, e.value)}${_groupName(e.key)}', onRemove: () {
-          final m = {...f.employees}..remove(e.key);
-          _apply(f.copyWith(employees: m));
-        }),
+        if (e.value.isNotEmpty)
+          RpChip(
+              '${e.value.length > 1 ? 'الموظّفون' : 'الموظّف'}: ${[for (final id in e.value) _nameOf(e.key, id)].join('، ')}${_groupName(e.key)}',
+              onRemove: () {
+            final m = {...f.employees}..remove(e.key);
+            _apply(f.copyWith(employees: m));
+          }),
     ];
   }
 

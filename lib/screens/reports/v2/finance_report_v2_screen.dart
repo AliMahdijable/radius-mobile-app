@@ -234,7 +234,25 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     return null;
   }
 
-  int? _employeeId(String group) => int.tryParse(_f!.employees[group] ?? '');
+  /// ايرث لنك بفلتر موظّف: صرفيّاتها (ومعها الربح بعد الكلفة) للحساب كلّه — خادمها لا يفرز الصرفيّة بالموظّف، بالواحد وبالأكثر
+  /// (d9 ٢٣ نوفمبر). يُقال تحت البطاقة الكبرى وفي رأس الملفّ — لا رقمٌ يبدو للموظّفين وهو للحساب.
+  String? get _elEmployeesNote {
+    final names = <String>[
+      if (!_merged && ProviderService.isEarthlink && _employeeIds(_open).isNotEmpty) '',
+      if (_merged)
+        for (final c in _picked)
+          if (c.provider == MergedProvider.earthlink && _employeeIds(c.key).isNotEmpty) c.name,
+    ];
+    if (names.isEmpty) return null;
+    final who = names.every((n) => n.isEmpty) ? 'ايرث لنك' : 'ايرث لنك (${names.join('، ')})';
+    return '$who: الصرفيّات والربح بعد الكلفة للحساب كلّه — لا تُفرز بالموظّف';
+  }
+
+  /// موظّفو الشركة المختارون — واحدٌ أو أكثر (lib/api/employee_filter.dart).
+  List<int> _employeeIds(String group) => [
+        for (final s in _f!.employees[group] ?? const <String>{})
+          if (int.tryParse(s) != null) int.parse(s),
+      ];
 
   /// فلتر النوع بالوضع الصارم (d9 ٢٢ نوفمبر — fintyped1122/elfintyped1122): يُرسل مع كلّ طلبٍ للفترة ومقارنتها وأجزاء تصديرها، والخادم
   /// يعلّم ردّه بـtype_filter حين طبّقه — وإلّا فالحساب من السطور كما كان. null: بلا فلتر نوع.
@@ -383,7 +401,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         to: to,
         userIds: _actorIds(_open) ?? _scopeIds,
         userManager: _ownerUsername(_open),
-        employeeId: _employeeId(_open),
+        employeeIds: _employeeIds(_open),
         recentLimit: limit,
         includeArchived: _withArchive,
         // كلفة الباقات (قرار ٢٠٢٦-١٠-١٨): لمالك الحساب وحده، ولساسٍ بعيد أو ايرث لنك — كالشاشة السابقة.
@@ -397,7 +415,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       FinanceCompanyFilter(
           userIds: _actorIds(key),
           userManager: _ownerUsername(key),
-          employeeId: _employeeId(key),
+          employeeIds: _employeeIds(key),
           strictTypes: _strictTypes,
           strictPackages: _strictPackagesFor(key));
 
@@ -712,6 +730,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       if (m != null && m.parts.any((p) => !p.included))
         'خارج الملفّ: ${[for (final p in m.parts) if (!p.included) '${p.company.name} (${p.reason ?? 'تعذّرت'})'].join('، ')}',
       for (final c in _chips()) c.label,
+      if (_elEmployeesNote != null) _elEmployeesNote!,
       if (drill != null) 'الحركات: $drill',
       if (withSearch && q.isNotEmpty) 'بحث: «$q»',
       'عدد الحركات: $count',
@@ -938,7 +957,9 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       }));
     }
     for (final e in f.employees.entries) {
-      out.add(RpChip('الموظّف: ${_nameOf(e.key, e.value, manager: false)}${_groupName(e.key)}', onRemove: () {
+      if (e.value.isEmpty) continue;
+      final names = [for (final id in e.value) _nameOf(e.key, id, manager: false)].join('، ');
+      out.add(RpChip('${e.value.length > 1 ? 'الموظّفون' : 'الموظّف'}: $names${_groupName(e.key)}', onRemove: () {
         final m = {...f.employees}..remove(e.key);
         _apply(f.copyWith(employees: m));
       }));
@@ -1155,7 +1176,11 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       compareWith: f.range.vsText,
       spark: spark,
       note: FinanceView.heroNote(v.kpis, mergedRule: v.mixedRules),
-      notes: [...FinanceView.heroNotes(v.kpis, costNeedsAllTypes: v.costNeedsAllTypes), ...v.typeNotes],
+      notes: [
+        ...FinanceView.heroNotes(v.kpis, costNeedsAllTypes: v.costNeedsAllTypes),
+        ...v.typeNotes,
+        if (_elEmployeesNote != null) _elEmployeesNote!,
+      ],
       onTap: () => _drill(hero, v),
     ));
     parts.add(RpKpiGrid(kpis: FinanceView.kpis(v.kpis, v.prev), compareWith: f.range.vsText, onTap: (k) => _drill(k, v)));

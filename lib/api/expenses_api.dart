@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'employee_filter.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
 import 'company_route.dart';
@@ -100,6 +101,7 @@ class ExpensesApi {
     int limit = 500,
     bool includeArchived = false,
     int? employeeId,
+    List<int>? employeeIds,
   }) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -110,11 +112,15 @@ class ExpensesApi {
           'limit': limit,
           if (includeArchived) 'include_archived': 1,
           // صرفيّات موظّفٍ واحد (كصفحة الصرفيّات بالموقع) — سجلّ الحركات بفلتر الموظّف
-          if (employeeId != null) 'employee_id': employeeId,
+          ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
         },
       );
       final body = r.data ?? const {};
       if (body['success'] != true) {
+        return (rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null);
+      }
+      // اثنان فأكثر بلا علامة الخادم ⇒ لا صرفيّات غير مفلترة (السجلّ نفسه يقول «لا يدعم بعد»)
+      if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], body)) {
         return (rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null);
       }
       // «كل الشركات» (٨ نوفمبر): الطلب الموجَّه وحده يحمل routed_writes (expenses_routed) — null عاديّاً.

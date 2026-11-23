@@ -15,6 +15,7 @@ import '../../../core/util/ar_date.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
+import '../../../services/provider_service.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -184,7 +185,16 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     return null;
   }
 
-  int? _employeeId(String group) => int.tryParse(_f!.employees[group] ?? '');
+  /// ايرث لنك المفتوحة بفلتر موظّف (واحدٍ أو أكثر).
+  bool get _elEmployeeFilter => !_merged && ProviderService.isEarthlink && _employeeIds(_open).isNotEmpty;
+
+  static const _elNote = 'ايرث لنك: الصرفيّات لا تُفرز بالموظّف — لا تُدمج تحت فلتر الموظّف';
+
+  /// موظّفو الشركة المختارون — واحدٌ أو أكثر (lib/api/employee_filter.dart).
+  List<int> _employeeIds(String group) => [
+        for (final s in _f!.employees[group] ?? const <String>{})
+          if (int.tryParse(s) != null) int.parse(s),
+      ];
 
   Future<void> _loadPeople(List<String?> keys) async {
     final want = [
@@ -211,6 +221,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
   /// المشترك أو بمديرٍ غير صاحبها (كانت تظهر تحت فلتر مديرٍ فرعيّ وليست له)؛ وبفلتر الموظّف صرفيّاته وحده.
   bool get _wantExpenses {
     final f = _f!;
+    // ايرث لنك: صرفيّاتها لا تُفرز بالموظّف (خادمها، بالواحد وبالأكثر — d9 ٢٣ نوفمبر) ⇒ لا تُدمج تحت فلتر موظّف، ويُقال ([_elNote])
+    if (_elEmployeeFilter) return false;
     if (f.types.isNotEmpty && !f.types.any(ActivityLogView.expenseTypes.contains)) return false;
     if (_ownerUsername(_open) != null) return false;
     final actors = _actorIds(_open);
@@ -227,7 +239,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       excludeTypes: types == null ? ActivityLogView.excluded : null,
       userIds: ids,
       userManager: _ownerUsername(group),
-      employeeId: _employeeId(group),
+      employeeIds: _employeeIds(group),
       maxPages: _maxPages,
     );
   }
@@ -254,7 +266,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
               to: _day(f.range.to),
               limit: 5000,
               includeArchived: true,
-              employeeId: _employeeId(_open),
+              employeeIds: _employeeIds(_open),
             ))
         : Future.value((rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null));
     final (acts, exps) = await (_fetch(f.range, group: _open, ids: ids), expF).wait;
@@ -467,6 +479,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       if (_merged) 'الشركات: ${inc.join('، ')}',
       if (_merged && out.isNotEmpty) 'خارج الملفّ: ${out.join('، ')}',
       if (_merged) 'الصرفيّات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تُفتح وحدها',
+      if (_elEmployeeFilter) _elNote,
       for (final c in _chips()) c.label,
       if (drill != null) 'الحركات: $drill',
       if (withSearch && q.isNotEmpty) 'بحث: «$q»',
@@ -573,7 +586,9 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       }));
     }
     for (final e in f.employees.entries) {
-      out.add(RpChip('الموظّف: ${_nameOf(e.key, e.value, manager: false)}${_groupName(e.key)}', onRemove: () {
+      if (e.value.isEmpty) continue;
+      final names = [for (final id in e.value) _nameOf(e.key, id, manager: false)].join('، ');
+      out.add(RpChip('${e.value.length > 1 ? 'الموظّفون' : 'الموظّف'}: $names${_groupName(e.key)}', onRemove: () {
         final m = {...f.employees}..remove(e.key);
         _apply(f.copyWith(employees: m));
       }));
@@ -695,6 +710,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       parts.add(Text('الصرفيّات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تُفتح وحدها',
           style: AppType.micro(color: AppColors.textMid), maxLines: 2));
     }
+    if (_elEmployeeFilter) parts.add(Text(_elNote, style: AppType.micro(color: AppColors.textMid), maxLines: 2));
     // «يوماً بيوم» أُلغي من كلّ التقارير (المالك ٢٢ نوفمبر: «كراف يوماً بيوم من جميع التقارير حذفه»)
     final shares = _breakdown(v);
     final cap = _tabAll ? shares.length : 6;

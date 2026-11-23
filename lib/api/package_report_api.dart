@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'employee_filter.dart';
 import '../core/util/error_text.dart';
 import 'api_client.dart';
 
@@ -230,6 +231,7 @@ class PackageReportApi {
     required DateTime to,
     List<String>? userIds,
     int? employeeId,
+    List<int>? employeeIds,
     String? companyKey,
     bool countsOnly = false,
   }) async {
@@ -241,7 +243,7 @@ class PackageReportApi {
           'date_to': '${_d(to)} 23:59:59',
           if (companyKey == null && userIds != null && userIds.isNotEmpty)
             'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
-          if (employeeId != null) 'employee_id': '$employeeId',
+          ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
           // بطاقة الرئيسيّة والأرباح مخفيّة: الأعداد وحدها (بلا أسعار — أسرع ولا مبلغ قديم)؛ الخادم القديم يتجاهله فيردّ الكامل.
           if (countsOnly) 'counts_only': '1',
         },
@@ -258,6 +260,10 @@ class PackageReportApi {
           error: body['message']?.toString() ?? 'تعذّر جلب تقرير الباقات',
           status: r.statusCode
         );
+      }
+      // اثنان فأكثر بلا علامة الخادم ⇒ لا أعداد غير مفلترة كأنّها مفلترة
+      if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], body)) {
+        return (data: null, error: kEmployeesUnsupported, status: r.statusCode);
       }
       final rep = PackageReport.fromBody(body);
       if (rep == null) {

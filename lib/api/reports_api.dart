@@ -1,3 +1,4 @@
+import 'employee_filter.dart';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -1035,6 +1036,9 @@ class ReportsApi {
     String? actionManagerId,
     String? userManager,
     int? employeeId,
+
+    /// اثنان فأكثر ⇒ employee_ids ويُشترط employee_filter في الردّ ([employeeFilterHonored]).
+    List<int>? employeeIds,
     bool includeArchived = false,
     bool withPackageCost = false,
     List<String>? strictTypes,
@@ -1061,7 +1065,7 @@ class ReportsApi {
           'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
         if (userManager != null && userManager.isNotEmpty)
           'user_manager': userManager,
-        if (employeeId != null) 'employee_id': '$employeeId',
+        ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
         // «حركات الموظف»: سطورها (سلفة، قرض، سحب…) ضمن «آخر الحركات» — الخادم لا يرسلها لمن لم يطلبها
         'emp_moves': '1',
       };
@@ -1076,6 +1080,10 @@ class ReportsApi {
       final data = body['data'];
       if (data is! Map) {
         return (ok: false, data: null, error: 'تنسيق غير متوقع');
+      }
+      // اثنان فأكثر بلا علامة الخادم ⇒ لا أرقام غير مفلترة كأنّها مفلترة
+      if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], data)) {
+        return (ok: false, data: null, error: kEmployeesUnsupported);
       }
       final kpisRaw = data['kpis'];
       final logsRaw = data['recentLogs'];
@@ -1142,6 +1150,9 @@ class ReportsApi {
     String? actionManagerId,
     String? userManager,
     int? employeeId,
+
+    /// اثنان فأكثر ⇒ employee_ids ويُشترط employee_filter في الردّ ([employeeFilterHonored]).
+    List<int>? employeeIds,
     int limit = 200,
   }) async {
     try {
@@ -1158,7 +1169,7 @@ class ReportsApi {
           'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
         if (userManager != null && userManager.isNotEmpty)
           'user_manager': userManager,
-        if (employeeId != null) 'employee_id': '$employeeId',
+        ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities',
@@ -1171,6 +1182,9 @@ class ReportsApi {
           rows: const <ActivityRow>[],
           error: body['message']?.toString(),
         );
+      }
+      if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], body)) {
+        return (ok: false, rows: const <ActivityRow>[], error: kEmployeesUnsupported);
       }
       final list = body['data'];
       if (list is! List) {
@@ -1207,6 +1221,9 @@ class ReportsApi {
     String? actionManagerId,
     String? userManager,
     int? employeeId,
+
+    /// اثنان فأكثر ⇒ employee_ids ويُشترط employee_filter في الردّ ([employeeFilterHonored]).
+    List<int>? employeeIds,
     int pageSize = 2000,
     int maxPages = 25,
   }) async {
@@ -1228,12 +1245,15 @@ class ReportsApi {
           else if (userIds != null && userIds.isNotEmpty)
             'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
           if (userManager != null && userManager.isNotEmpty) 'user_manager': userManager,
-          if (employeeId != null) 'employee_id': '$employeeId',
+          ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
         };
         final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/activities', queryParameters: qp);
         final body = r.data ?? const {};
         if (body['success'] != true) {
           return (ok: false, rows: out, error: body['message']?.toString(), complete: false);
+        }
+        if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], body)) {
+          return (ok: false, rows: const <ActivityRow>[], error: kEmployeesUnsupported, complete: false);
         }
         final list = body['data'] is List ? body['data'] as List : const [];
         var got = 0;
@@ -1276,6 +1296,9 @@ class ReportsApi {
     String? actionManagerId,
     String? userManager,
     int? employeeId,
+
+    /// اثنان فأكثر ⇒ employee_ids ويُشترط employee_filter في الردّ ([employeeFilterHonored]).
+    List<int>? employeeIds,
   }) async {
     try {
       final qp = <String, String>{
@@ -1289,7 +1312,7 @@ class ReportsApi {
           'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
         if (userManager != null && userManager.isNotEmpty)
           'user_manager': userManager,
-        if (employeeId != null) 'employee_id': '$employeeId',
+        ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities',
@@ -1302,6 +1325,9 @@ class ReportsApi {
           rows: const <DailyActivationRow>[],
           error: body['message']?.toString(),
         );
+      }
+      if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], body)) {
+        return (ok: false, rows: const <DailyActivationRow>[], error: kEmployeesUnsupported);
       }
       final list = body['data'];
       if (list is! List) {
