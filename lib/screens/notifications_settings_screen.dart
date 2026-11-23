@@ -14,6 +14,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'desktop/desk_widgets.dart';
+import 'my_alerts/employee_ops_pick_sheet.dart';
 import 'my_alerts/money_alerts_section.dart';
 import 'network_devices/agent_alerts_screen.dart';
 import 'network_devices/device_alerts_screen.dart';
@@ -170,6 +171,31 @@ class _NotificationsSettingsScreenState
     }
   }
 
+  /// «من موظّفيك»: الورقة ثمّ حفظ الاختيار وحده (PUT employeeOpsIds) — الرفض يبقي القديم ويقول السبب.
+  Future<void> _pickEmployees() async {
+    final p = _prefs;
+    final list = p?.employeeOpsEmployees;
+    if (p == null || list == null || _saving) return;
+    final r = await showEmployeeOpsPickSheet(context, employees: list, initial: p.employeeOpsIds);
+    if (r == null || !mounted) return;
+    setState(() => _saving = true);
+    final res = await NotificationsApi.saveEmployeeOpsIds(r.ids);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (res.ok && _prefs != null) _prefs = _prefs!.withEmployeeOpsIds(res.ids);
+    });
+    if (!res.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res.message ?? 'notifs.save_failed'.tr()),
+          backgroundColor: AppColors.errorFill,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _pickTime(bool isStart) async {
     final p = _prefs;
     if (p == null) return;
@@ -294,6 +320,22 @@ class _NotificationsSettingsScreenState
                     value: p.pushEmployeeOps,
                     onChanged: p.employeeOpsCanEdit ? (v) => _patch((x) => x.copyWith(pushEmployeeOps: v)) : null,
                     onLockedTap: () => showNoPermission(context, message: kEmployeeOpsLocked),
+                  ),
+                // «من موظّفيك» (المالك ٢٣ نوفمبر: «يحدد اكثر من واحد او واحد مستقل او الكل») — لصاحب الصفحة حين تصل قائمة موظّفيها؛
+                // خافتٌ والمفتاح مطفأ كالموقع
+                if (p.employeeOpsAvailable && p.employeeOpsCanEdit && (p.employeeOpsEmployees?.isNotEmpty ?? false))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Opacity(
+                      opacity: p.pushEmployeeOps ? 1 : 0.6,
+                      child: _LinkRow(
+                        key: const ValueKey('notifs-employee-ops-pick'),
+                        icon: LucideIcons.users,
+                        label: 'من موظّفيك',
+                        sub: employeeOpsPickText(p.employeeOpsIds, p.employeeOpsEmployees!),
+                        onTap: _pickEmployees,
+                      ),
+                    ),
                   ),
                 const SizedBox(height: Sp.md),
                 _SectionLabel('notifs.dnd_section'.tr()),
