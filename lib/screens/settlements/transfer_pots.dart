@@ -68,7 +68,10 @@ class TransferPotsCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
             decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.md)),
             child: Row(children: [
-              Expanded(child: Text('المجموع خارج الصندوق', style: AppType.body(color: AppColors.textMid))),
+              Expanded(
+                child: Text('المجموع خارج الصندوق',
+                    maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid)),
+              ),
               Text('${formatIQD(total.round())} ${'common.currency'.tr()}', style: AppType.bodyBold(color: AppColors.textHi)),
             ]),
           ),
