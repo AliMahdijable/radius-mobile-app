@@ -529,7 +529,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
                       // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
                       // دين» وهو ظاهرٌ له أصلاً.
-                      // «ما يشوفه الموظّف»: الدين مخفيّ (لا يصل) ⇒ «تسديد» قائمٌ دائماً — المالك: «اي يسدّد»
+                      // «ما يراه الموظّف»: الدين مخفيّ (لا يصل) ⇒ «تسديد» قائمٌ دائماً — المالك: «اي يسدّد»
                       onPay: (sub.hasDebt || !Sees.debts) && _has('subscribers.pay_debt') && _debtLock('subscribers.pay_debt') == null
                           ? () => showPayDebtSheet(context, sub)
                           : null,
@@ -2460,7 +2460,7 @@ class _SubscriberHero extends StatelessWidget {
     return [
       // بلا اسمٍ يُعرض المشترك باسم مستخدمه، وتكراره سطرين لا يُفيد.
       if (name.value.trim() != sub.username.trim() || !Sees.usernames) name,
-      // «ما يشوفه الموظّف»: اليوزر مخفيّ عنه ⇒ لا يُنسخ ولا يُشارَك
+      // «ما يراه الموظّف»: اليوزر مخفيّ عنه ⇒ لا يُنسخ ولا يُشارَك
       if (Sees.usernames) _usernameField(sub),
       if (passwordVisible && (password ?? '').isNotEmpty)
         _passwordField(password!),
@@ -2540,7 +2540,7 @@ class _SubscriberHero extends StatelessWidget {
   /// ⚠️ ثلاث حالات لا اثنتان: من رصيده صفر لا دين عليه، ووسمُه بـ«الدين»
   /// يجعل الشاشة تتّهمه بما ليس فيه. والتسمية نفسها تحت رقم البلاطة.
   static CopyField _balanceField(Subscriber sub) {
-    // «ما يشوفه الموظّف»: الدين مخفيّ ⇒ «مخفي» لا «لا دين ولا رصيد»
+    // «ما يراه الموظّف»: الدين مخفيّ ⇒ «مخفي» لا «لا دين ولا رصيد»
     if (!Sees.debts) return const CopyField('الدين والرصيد', kHiddenWord);
     final debt = sub.balanceAmount;
     return CopyField(
@@ -2588,7 +2588,7 @@ class _SubscriberHero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _titleRow(),
-          // «ما يشوفه الموظّف»: لا يوزر ولا كلمة مرور تُعرض ⇒ لا صفّ «بيانات الدخول» فارغاً
+          // «ما يراه الموظّف»: لا يوزر ولا كلمة مرور تُعرض ⇒ لا صفّ «بيانات الدخول» فارغاً
           if (_showCredentials) ...[
             const SizedBox(height: Sp.md),
             _credentialsRow(context),
@@ -2719,7 +2719,7 @@ class _SubscriberHero extends StatelessWidget {
           // تُنسخ، فقصُّ أحدهما يُفقده معناه.
           //
           // ٣:٢ يعطي الاسم ١٠٥ وكلمة السرّ ٧٠ — يكفيان المقيس.
-          // «ما يشوفه الموظّف»: اليوزر مخفيّ عنه ⇒ كلمة المرور وحدها (إن سُمح بها)
+          // «ما يراه الموظّف»: اليوزر مخفيّ عنه ⇒ كلمة المرور وحدها (إن سُمح بها)
           if (Sees.usernames) ...[
             Flexible(
               flex: 3,

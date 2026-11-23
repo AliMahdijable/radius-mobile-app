@@ -67,7 +67,7 @@ class StatsGrid extends StatelessWidget {
   final bool balanceLocked;
   final bool debtLocked;
 
-  /// «ما يشوفه الموظّف» (٢٣ نوفمبر): نصفٌ أخفاه المدير عن الموظّف لا يُرسم ولا يُقفل (ليس قسماً ممنوعاً بل معلومةً مخفيّة)،
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): نصفٌ أخفاه المدير عن الموظّف لا يُرسم ولا يُقفل (ليس قسماً ممنوعاً بل معلومةً مخفيّة)،
   /// والآخر بعرض الصفّ.
   final bool balanceHidden;
   final bool debtHidden;

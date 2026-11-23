@@ -906,7 +906,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     // الحاسبة (منطقة محتوى عريضة): المشتركون بجانب الرصيد والإيرادات بدل عمودٍ واحدٍ يتمدّد.
     final wide = AppPlatform.isDesktop && MediaQuery.sizeOf(context).width >= 860;
-    // «ما يشوفه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ لا كارت (ليس قسماً مقفلاً — معلومةٌ مخفيّة)
+    // «ما يراه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ لا كارت (ليس قسماً مقفلاً — معلومةٌ مخفيّة)
     final subscribersSection = !_shown('subscribers') || !Sees.counts
         ? null
         : (_canSubs
@@ -928,7 +928,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .slideY(begin: 0.03, end: 0);
     // الرصيد يتبع reports.financial والمدينون subscribers.view — كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى
     // مكانه مقفلاً.
-    // «ما يشوفه الموظّف»: الرصيد والمدينون نصفان — المخفيّ منهما لا يُرسم، والاثنان مخفيّان ⇒ لا قسم
+    // «ما يراه الموظّف»: الرصيد والمدينون نصفان — المخفيّ منهما لا يُرسم، والاثنان مخفيّان ⇒ لا قسم
     final walletSection = !_shown('wallet') || (!Sees.balance && !Sees.debts)
         ? null
         : StatsGrid(
@@ -1171,7 +1171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         debtors: _debtorsLoaded ? _debtorsLive : null,
                         debtSplit: _debtorsLoaded && MergedMode.active.value ? _debtSplit : null,
                         subsLocked: !_canSubs,
-                        // «ما يشوفه الموظّف» على الحاسبة: المخفيّ يبقى مكانه مقفلاً (الشبكة بأعمدةٍ ثابتة)
+                        // «ما يراه الموظّف» على الحاسبة: المخفيّ يبقى مكانه مقفلاً (الشبكة بأعمدةٍ ثابتة)
                         balanceLocked: !_canMoney || !Sees.balance,
                         debtLocked: !_canSubs || !Sees.debts,
                         showSubscribers: _shown('subscribers') && Sees.counts,

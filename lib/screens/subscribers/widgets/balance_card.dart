@@ -90,7 +90,7 @@ class BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // «ما يشوفه الموظّف»: الدين مخفيّ عنه — الخادم لا يرسله، فلا «لا دين ولا رصيد» كاذبة: «مخفي»، والتسديد يبقى
+    // «ما يراه الموظّف»: الدين مخفيّ عنه — الخادم لا يرسله، فلا «لا دين ولا رصيد» كاذبة: «مخفي»، والتسديد يبقى
     final hidden = !Sees.debts;
     final isDebt = sub.hasDebt;
     final age = DebtAge.of(sub);

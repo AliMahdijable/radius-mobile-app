@@ -1205,7 +1205,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                     value: '-${formatIQD(_discount.round())} $cur',
                     valueColor: AppColors.brandAccent,
                   ),
-                // «ما يشوفه الموظّف»: الدين مخفيّ ⇒ «مخفي»؛ رصيد الصفحة ونقاطها مخفيّان ⇒ لا صفّ
+                // «ما يراه الموظّف»: الدين مخفيّ ⇒ «مخفي»؛ رصيد الصفحة ونقاطها مخفيّان ⇒ لا صفّ
                 if (Sees.debts)
                   SheetRowData(
                     label: _currentBalance < 0
@@ -1252,7 +1252,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               value: '-${formatIQD(_discount.round())} $cur',
               valueColor: AppColors.brandAccent,
             ),
-          // «ما يشوفه الموظّف»: الدين مخفيّ ⇒ «مخفي»؛ رصيد الصفحة ونقاطها مخفيّان ⇒ لا صفّ
+          // «ما يراه الموظّف»: الدين مخفيّ ⇒ «مخفي»؛ رصيد الصفحة ونقاطها مخفيّان ⇒ لا صفّ
           if (Sees.debts)
             SheetRowData(
               label: _currentBalance < 0
@@ -1399,7 +1399,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ],
         ),
       ),
-      // «ما يشوفه الموظّف»: الدين بعد التفعيل يكشف الدين قبله ⇒ يُخفى معه
+      // «ما يراه الموظّف»: الدين بعد التفعيل يكشف الدين قبله ⇒ يُخفى معه
       if (Sees.debts) ...[
         const SizedBox(height: 14),
         SheetResultBanner(

@@ -112,7 +112,7 @@ class _Row extends StatelessWidget {
         .trim();
     final fullName =
         [firstname, lastname].where((s) => s.isNotEmpty).join(' ').trim();
-    // «ما يشوفه الموظّف»: اليوزر مخفيّ ⇒ الاسم وحده (والفتح بالضغط يبقى باليوزر — للعمليّة لا للعرض)
+    // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وحده (والفتح بالضغط يبقى باليوزر — للعمليّة لا للعرض)
     final title = fullName.isNotEmpty
         ? (username.isNotEmpty && Sees.usernames ? '$fullName ($username)' : fullName)
         : (username.isNotEmpty && Sees.usernames ? username : action);

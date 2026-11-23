@@ -2987,7 +2987,7 @@ class _ListHeader extends StatelessWidget {
             valueListenable: ActiveCompany.listenable,
             builder: (context, company, _) {
               // «متصل» لا «متصل الآن» (٧ نوفمبر): السطر صار زرّ التبديل بسهم ⌄ — «الآن» كانت تُبتر («4 متصل ا…»)، وشريحة «متصل» تحته.
-              // «ما يشوفه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ لا عدد بسطر الشركة
+              // «ما يراه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ لا عدد بسطر الشركة
               final counts = Sees.counts ? '$total مشترك • $online متصل' : null;
               if (company == null) {
                 return Text(
@@ -3271,7 +3271,7 @@ class _ResultSortBar extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            // «ما يشوفه الموظّف»: عدد النتائج عددٌ للمشتركين ⇒ يُخفى معها (الفرز يبقى)
+            // «ما يراه الموظّف»: عدد النتائج عددٌ للمشتركين ⇒ يُخفى معها (الفرز يبقى)
             Sees.counts ? '$count نتيجة' : '',
             style: AppType.muted(color: AppColors.textLow)
                 .copyWith(fontSize: 11.5),

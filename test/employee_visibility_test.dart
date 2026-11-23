@@ -3,7 +3,7 @@ import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/services/employee_visibility.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 
-/// «ما يشوفه الموظّف» (٢٣ نوفمبر): قراءة `hidden` من الخادم، وأسئلة الشاشات ([Sees]) للموظّف وصاحب الحساب.
+/// «ما يراه الموظّف» (٢٣ نوفمبر): قراءة `hidden` من الخادم، وأسئلة الشاشات ([Sees]) للموظّف وصاحب الحساب.
 void main() {
   tearDown(PermissionsService.debugReset);
 

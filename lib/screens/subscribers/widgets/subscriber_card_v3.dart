@@ -132,7 +132,7 @@ class SubscriberCardV3 extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final st = _status();
-    // «ما يشوفه الموظّف»: الخادم يخفي الدين أصلاً — وهنا حارسٌ ثانٍ فلا يُرسم شريط «دين» من بقايا كاش
+    // «ما يراه الموظّف»: الخادم يخفي الدين أصلاً — وهنا حارسٌ ثانٍ فلا يُرسم شريط «دين» من بقايا كاش
     final debt = sub.hasDebt && Sees.debts ? sub.debtAbs : 0.0;
 
     return Material(
@@ -245,7 +245,7 @@ class SubscriberCardV3 extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  // «ما يشوفه الموظّف»: اليوزر مخفيّ عنه ⇒ الحالة وحدها
+                  // «ما يراه الموظّف»: اليوزر مخفيّ عنه ⇒ الحالة وحدها
                   if (Sees.usernames) ...[
                     const SizedBox(width: 7),
                     Container(

@@ -293,7 +293,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final livePreview = _currentBalance + _effectiveAmount;
     // سلّم المبالغ يُقصّ عند الدين — عرض شريحة 50,000 لدين 20,000
     // يدفع المدير لتجاوز المبلغ ثمّ تصحيحه.
-    // «ما يشوفه الموظّف»: الدين مخفيّ (لا يصل) ⇒ يكتب ما استلمه والسلّم كاملاً، بلا «كامل الدين» ولا «المتبقّي» — المالك: «اي يسدّد»
+    // «ما يراه الموظّف»: الدين مخفيّ (لا يصل) ⇒ يكتب ما استلمه والسلّم كاملاً، بلا «كامل الدين» ولا «المتبقّي» — المالك: «اي يسدّد»
     final debtHidden = !Sees.debts;
     final chips = debtHidden ? _chipScale : _chipScale.where((c) => c < _currentDebt).toList();
     final hasDebt = _currentDebt > 0 || debtHidden;

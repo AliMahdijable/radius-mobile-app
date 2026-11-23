@@ -123,7 +123,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         LucideIcons.ban, AppColors.textMid),
   ];
 
-  /// «ما يشوفه الموظّف» (٢٣ نوفمبر): «مديون» يكشف من عليه دين ⇒ لا رقاقة لمن أُخفيت عنه الديون (والخادم يرفض الطلب أصلاً).
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): «مديون» يكشف من عليه دين ⇒ لا رقاقة لمن أُخفيت عنه الديون (والخادم يرفض الطلب أصلاً).
   static List<_ChipDef> get _visibleDefs =>
       [for (final d in _defs) if (d.key != SubscriberFilter.debtors || Sees.debts) d];
 
@@ -240,7 +240,7 @@ class _Chip extends StatelessWidget {
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
-              // «ما يشوفه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ التسمية وحدها
+              // «ما يراه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ التسمية وحدها
               if (Sees.counts) ...[
                 const SizedBox(width: 6),
                 Text(

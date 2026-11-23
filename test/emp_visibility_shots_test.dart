@@ -13,7 +13,7 @@ import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'employee_ledger/ledger_fixture.dart';
 import 'visual_perm/visual_perm_harness.dart';
 
-/// «ما يشوفه الموظّف» (٢٣ نوفمبر — المالك: «المدير يقدر يخلي الموظف ما يشوف الديون او ما يشوف اليوزرية… ونطين الصور»):
+/// «ما يراه الموظّف» (٢٣ نوفمبر — المالك: «المدير يقدر يخلي الموظف ما يشوف الديون او ما يشوف اليوزرية… ونطين الصور»):
 /// لقطات المراجعة لقسم الصلاحيّات الجديد في محرّر الموظّف. تُكتب حين يُعطى VISUAL_OUT وحده.
 const _devices = [
   VisualDevice('390', Size(390, 844), 3),
@@ -28,27 +28,27 @@ final Map<String, Object> catalogJson = {
     'subscribers.activate': {'label': 'تفعيل مشترك', 'category': 'subscribers'},
     'subscribers.pay_debt': {'label': 'تسديد دين', 'category': 'subscribers'},
     'see.debts': {
-      'label': 'يشوف ديون المشتركين',
+      'label': 'يرى ديون المشتركين',
       'category': 'see',
       'hint': 'إذا انطفى: لا مبالغ ولا «مديون» بالقائمة والكرت والتجديد والرئيسيّة والتقارير — ويبقى يسدّد',
     },
     'see.usernames': {
-      'label': 'يشوف يوزر المشترك',
+      'label': 'يرى يوزر المشترك',
       'category': 'see',
       'hint': 'إذا انطفى: الاسم العربي بداله بكلّ الشاشات والتقارير والوصل — والبحث باليوزر يشتغل',
     },
     'see.phones': {
-      'label': 'يشوف هاتف المشترك',
+      'label': 'يرى هاتف المشترك',
       'category': 'see',
       'hint': 'إذا انطفى: بلا رقم ولا أزرار اتصال وواتساب — ورسائل واتسابك توصل',
     },
     'see.counts': {
-      'label': 'يشوف أعداد المشتركين',
+      'label': 'يرى أعداد المشتركين',
       'category': 'see',
       'hint': 'إذا انطفى: بلا كارت المشتركين بالرئيسيّة ولا أعداد التبويبات',
     },
     'see.balance': {
-      'label': 'يشوف رصيد الصفحة',
+      'label': 'يرى رصيد الصفحة',
       'category': 'see',
       'hint': 'إذا انطفى: بلا كارت الرصيد والنقاط بالرئيسيّة',
     },
@@ -57,7 +57,7 @@ final Map<String, Object> catalogJson = {
   },
   'categories': {
     'subscribers': {'label': 'المشتركون'},
-    'see': {'label': 'ما يشوفه الموظّف'},
+    'see': {'label': 'ما يراه الموظّف'},
     'reports': {'label': 'التقارير'},
   },
   'defaults': {
@@ -92,7 +92,7 @@ void main() {
   setUpAll(visualSetUpAll);
 
   for (final d in _devices) {
-    testWidgets('محرّر الموظّف — «ما يشوفه الموظّف» ${d.tag}', (t) async {
+    testWidgets('محرّر الموظّف — «ما يراه الموظّف» ${d.tag}', (t) async {
       await visualSetUp(s1bSasOwner);
       ApiClient.dio.httpClientAdapter = LedgerServer();
       PermissionsService.debugSet(isEmployee: false, permissions: const {});
@@ -134,12 +134,12 @@ void main() {
       await t.tap(find.textContaining('الصلاحيات ('));
       await settle(t, seconds: 1);
       final list = find.byType(ListView).last;
-      for (var i = 0; i < 10 && find.text('ما يشوفه الموظّف').evaluate().isEmpty; i++) {
+      for (var i = 0; i < 10 && find.text('ما يراه الموظّف').evaluate().isEmpty; i++) {
         await t.drag(list, const Offset(0, -200));
         await settle(t, seconds: 1);
       }
-      expect(find.text('ما يشوفه الموظّف'), findsOneWidget);
-      await t.ensureVisible(find.text('ما يشوفه الموظّف'));
+      expect(find.text('ما يراه الموظّف'), findsOneWidget);
+      await t.ensureVisible(find.text('ما يراه الموظّف'));
       await settle(t, seconds: 1);
       await _shot(t, '01_editor', d);
       expect(t.takeException(), isNull);

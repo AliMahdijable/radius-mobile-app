@@ -40,7 +40,7 @@ class PermissionsService {
   static const _kIsEmployee = 'perms.is_employee';
   /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفحات الموظّف (JSON) من `/api/v2/employees/me`.
   static const _kEmployeePages = 'perms.employee_pages';
-  /// «ما يشوفه الموظّف» (٢٣ نوفمبر): الأصناف المخفيّة عن الموظّف (JSON) من `hidden` في `/api/v2/employees/me`.
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): الأصناف المخفيّة عن الموظّف (JSON) من `hidden` في `/api/v2/employees/me`.
   static const _kEmployeeHidden = 'perms.employee_hidden';
   // Pro: قدرات المدير المعياريّة (subscribers.delete/show_password/…) من الساس.
   // المدير الفرعيّ فاعلٌ مقيَّد: الأزرار تُضبَط بهذه الخريطة، منفصلةً عن مسار
@@ -83,7 +83,7 @@ class PermissionsService {
   /// ٨ نوفمبر — صفحات الموظّف (صفحتان فأكثر)، وإلّا [] — «صفحاتي» في سطر الشركة وورقتها ([HeaderSwitch]).
   static List<EmployeePageRef> get employeePages => _isEmployee ? _pages : const [];
 
-  /// «ما يشوفه الموظّف» (٢٣ نوفمبر — المالك: «المدير يقدر يخلي الموظف ما يشوف الديون او ما يشوف اليوزرية … ضيف الهاتف … عدد
+  /// «ما يراه الموظّف» (٢٣ نوفمبر — المالك: «المدير يقدر يخلي الموظف ما يشوف الديون او ما يشوف اليوزرية … ضيف الهاتف … عدد
   /// المشتركين»): ما أخفاه المدير عن هذا الموظّف — debts · usernames · phones · counts · balance. يقرّره الخادم (`hidden` في
   /// /employees/me: الميزة مفتوحةٌ لصفحته وصلاحيّته false) ويخفي هو الديون والهاتف والرصيد من ردوده؛ الشاشات تخفي اليوزر
   /// والأعداد وتكتب «مخفي» بمكان ما أخفاه. صاحب الحساب والمدير يريان كلّ شيء.
@@ -393,7 +393,7 @@ Set<String> hiddenFrom(Object? raw) => raw is List
     ? {for (final e in raw) if (kSeeCategories.contains(e?.toString())) e.toString()}
     : const {};
 
-/// «ما يشوفه الموظّف»: الأصناف الخمسة (debts · usernames · phones · counts · balance).
+/// «ما يراه الموظّف»: الأصناف الخمسة (debts · usernames · phones · counts · balance).
 const kSeeCategories = {'debts', 'usernames', 'phones', 'counts', 'balance'};
 
 /// Alias قصيرة لتقصير الاستعمال:
