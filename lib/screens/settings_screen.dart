@@ -21,6 +21,8 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'app_permissions_screen.dart';
+import '../api/gdrive_backup_api.dart';
+import 'backup/drive_backup_screen.dart';
 import 'devices/device_defaults_screen.dart';
 import 'el/deposit_password_sheet.dart';
 import 'account/account_gate_screen.dart';
@@ -68,6 +70,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_elOwner) ElDepositPassword.load();
     // «المستثنون من الرسائل»: هل الميزة مفتوحةٌ للحساب وكم مستثنى (صفّها في قسم الواتساب) — و«كل الشركات»: قوائم شركاته كلّها
     unawaited(MessageExclusionsState.ensureFresh());
+    // «النسخ الاحتياطيّ إلى Google Drive»: هل البند مفتوحٌ لهذه الصفحة (لكلّ شركةٍ على حدة — لا في «كل الشركات»)
+    if (!MergedMode.active.value) unawaited(GdriveBackupApi.loadMe());
     if (MergedMode.active.value) {
       unawaited(MessageExclusionsState.ensureCompanies([for (final c in MergedMode.usable) c.key]));
     }
@@ -275,6 +279,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: Sp.md),
+                  ],
+                );
+              },
+            ),
+            // «النسخ الاحتياطيّ إلى Google Drive» (٢٣ نوفمبر — المالك: «خليها اسهل»): بندٌ واحد يفتح الشاشة حين تكون الميزة مفتوحةً
+            // لصفحتك ([GdriveBackupApi.me])؛ الموظّف يراه بمكانه مقفلاً (الخادم للمدير وحده). لكلّ شركةٍ على حدة.
+            ValueListenableBuilder<GdbMe?>(
+              valueListenable: GdriveBackupApi.me,
+              builder: (context, me, _) {
+                if (me == null || !me.featureEnabled || MergedMode.active.value) return const SizedBox.shrink();
+                return Column(
+                  key: const ValueKey('settings-drive-backup'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _SectionLabel('النسخ الاحتياطيّ'),
+                    _Row(
+                      key: const ValueKey('settings-drive-backup-row'),
+                      icon: LucideIcons.hardDriveUpload,
+                      label: 'نسخة إكسل في Google Drive',
+                      trailing: me.configured ? 'تلقائيّاً' : 'قيد التجهيز',
+                      locked: EmployeeSession.isActive,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const DriveBackupScreen()),
+                      ),
+                    ),
                     const SizedBox(height: Sp.md),
                   ],
                 );

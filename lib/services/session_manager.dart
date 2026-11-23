@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/balance_reports_api.dart';
+import '../api/gdrive_backup_api.dart';
 import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
@@ -117,6 +118,8 @@ class SessionManager {
     _guardSync('EmployeeLedgerState.reset', () => EmployeeLedgerState.reset());
     // «تقارير الأرصدة» — هل فُتحت لصفحة المدير السابق (كرتها في «التقارير»).
     _guardSync('BalanceReportsState.reset', () => BalanceReportsState.reset());
+    // «النسخ الاحتياطيّ إلى Google Drive» — هل فُتح لصفحة المدير السابق (بنده في الإعدادات).
+    _guardSync('GdriveBackupApi.reset', () => GdriveBackupApi.reset());
     // «الموظف المتّصل الآن» — نبضة الموظّف السابق تتوقّف (الغلاف الجديد يبدؤها لجلسته إن كان موظّفاً).
     _guardSync('EmployeePresenceBeat.stop', () => EmployeePresenceBeat.stop());
     _guardSync('ReceiptsArchiveState.reset', () => ReceiptsArchiveState.reset());
