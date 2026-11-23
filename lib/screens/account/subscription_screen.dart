@@ -67,11 +67,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     HapticFeedback.lightImpact();
     setState(() => _busy = true);
     try {
-      final sub = await AccountApi.redeemCode(code);
+      final r = await AccountApi.redeemCode(code);
+      final sub = r.subscription;
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       setState(() => _sub = sub);
       _codeCtrl.clear();
+      // «مقاعد الموظّفين» (٢٣ نوفمبر): الكود رفع حدّ الموظّفين ولم يمسّ الاشتراك ⇒ يبقى هنا ويُرى سطر المقاعد
+      if (r.isSeats) {
+        showAccountSnack(
+          context,
+          r.seatsUntil == null
+              ? 'account.code_seats_ok_nodate'.tr(args: ['${r.seats}'])
+              : 'account.code_seats_ok'.tr(args: ['${r.seats}', _date(r.seatsUntil)]),
+        );
+        return;
+      }
       showAccountSnack(context, 'account.code_ok'.tr(args: [_date(sub.endsAt)]));
       if (sub.active) {
         final me = AccountMe(
@@ -132,6 +143,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       MaterialPageRoute(builder: (_) => const AccountLoginScreen()),
       (_) => false,
     );
+  }
+
+  /// «مقاعد موظّفين إضافيّة: 2 · حتى 2026/12/14» — أقرب انتهاءٍ بين الفعّالة؛ بلا مقاعد ⇒ null (كالموقع 190cba6).
+  String? _seatsLine() {
+    final s = _sub.employeeSeats;
+    if (s.active <= 0) return null;
+    final end = s.nearestEnd;
+    return end == null
+        ? 'account.seats_line'.tr(args: ['${s.active}'])
+        : 'account.seats_line_until'.tr(args: ['${s.active}', _date(end)]);
   }
 
   ({String title, String body, IconData icon, Color color, Color bg}) _status() {
@@ -218,6 +239,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     Text(st.title, style: AppType.cardTitleBold(color: AppColors.textHi)),
                     const SizedBox(height: Sp.xxs),
                     Text(st.body, style: AppType.body(color: AppColors.textBody)),
+                    if (_seatsLine() case final line?) ...[
+                      const SizedBox(height: Sp.xxs),
+                      Text(line, key: const ValueKey('account-seats-line'), style: AppType.body(color: AppColors.textBody)),
+                    ],
                   ],
                 ),
               ),

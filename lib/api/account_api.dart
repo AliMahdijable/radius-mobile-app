@@ -112,17 +112,24 @@ class AccountApi {
   }
 
   /// تفعيل كود. الخادم يطبّع ما يكتبه المستخدم (شرطات، أرقام عربيّة…).
-  static Future<AccountSubscription> redeemCode(String code) async {
+  /// كود «مقاعد الموظّفين» (٢٣ نوفمبر — الخادم e7c6700) يمنح مقاعد حتى موعدها ولا يمسّ الاشتراك ⇒ [AccountRedeem.seats] و`seatsUntil`.
+  /// الرفض: رمزٌ معروف ⇒ صياغة التطبيق، وإلّا رسالة الخادم العربيّة، وإلّا «حدث خطأ» (كالموقع 190cba6).
+  static Future<AccountRedeem> redeemCode(String code) async {
     final res = await _send('POST', '/api/account/redeem-code', data: {'code': code});
     final b = res.data ?? const {};
     if (res.statusCode == 200 && b['ok'] == true) {
       final s = b['subscription'];
-      return s is Map<String, dynamic>
-          ? AccountSubscription.fromJson(s)
-          : (await me()).subscription;
+      final sub = s is Map<String, dynamic> ? AccountSubscription.fromJson(s) : (await me()).subscription;
+      return AccountRedeem(
+        subscription: sub,
+        seats: _count(b['seats']) ?? 0,
+        seatsUntil: AccountSubscription._d(b['seatsUntil']),
+      );
     }
     final code0 = (b['error'] ?? 'error').toString();
-    throw AccountApiException(code0, _redeemKey(code0), res.statusCode ?? 0);
+    final key = _redeemKey(code0);
+    final msg = (b['message'] as String?)?.trim() ?? '';
+    throw AccountApiException(code0, key == 'account.err_generic' && msg.isNotEmpty ? msg : key, res.statusCode ?? 0);
   }
 
   static String _redeemKey(String code) => switch (code) {
@@ -132,6 +139,9 @@ class AccountApi {
         'revoked' => 'account.code_revoked',
         'too-many-attempts' => 'account.err_too_many',
         'in-progress' => 'account.code_in_progress',
+        // «مقاعد الموظّفين»: الكود يُرفض ولا يُحرق
+        'seats-unlimited' => 'account.code_seats_unlimited',
+        'seats-inactive' => 'account.code_seats_inactive',
         'no-account' => 'account.err_generic',
         _ => 'account.err_generic',
       };
@@ -371,6 +381,8 @@ class AccountSubscription {
     this.validUntil,
     this.maxDevices,
     this.devicesUsed,
+    this.maxEmployees,
+    this.employeeSeats = AccountEmployeeSeats.none,
   });
 
   /// none | trial | active | expired
@@ -385,6 +397,12 @@ class AccountSubscription {
   /// يُرسلهما الخادم (نسخةٌ أقدم).
   final int? maxDevices;
   final int? devicesUsed;
+
+  /// حدّ الموظّفين شاملاً المقاعد الفعّالة — null بلا حدّ (أو خادمٌ أقدم).
+  final int? maxEmployees;
+
+  /// «مقاعد الموظّفين» (٢٣ نوفمبر): الفعّالة الآن ومِنَحها.
+  final AccountEmployeeSeats employeeSeats;
 
   bool get isTrial => status == 'trial';
 
@@ -402,7 +420,72 @@ class AccountSubscription {
         validUntil: _d(j['validUntil']),
         maxDevices: _limit(j['maxDevices']),
         devicesUsed: _count(j['devicesUsed']),
+        maxEmployees: _limit(j['maxEmployees']),
+        employeeSeats: AccountEmployeeSeats.fromJson(j['employeeSeats']),
       );
+}
+
+/// «مقاعد الموظّفين» (٢٣ نوفمبر — `subscription.employeeSeats` من /account/me): الفعّالة الآن (داخلةٌ في [AccountSubscription.maxEmployees])
+/// والمِنَح — الفعّالة وما انتهى خلال ٦٠ يوماً، الأحدث أوّلاً.
+class AccountEmployeeSeats {
+  const AccountEmployeeSeats({this.active = 0, this.grants = const []});
+
+  static const none = AccountEmployeeSeats();
+
+  final int active;
+  final List<AccountSeatGrant> grants;
+
+  /// أقرب انتهاءٍ بين المِنَح الفعّالة (غير الملغاة) — null بلا مقاعد.
+  DateTime? get nearestEnd {
+    DateTime? out;
+    for (final g in grants) {
+      final e = g.expiresAt;
+      if (!g.active || g.revokedAt != null || e == null) continue;
+      if (out == null || e.isBefore(out)) out = e;
+    }
+    return out;
+  }
+
+  factory AccountEmployeeSeats.fromJson(Object? raw) {
+    if (raw is! Map) return none;
+    final list = raw['list'];
+    return AccountEmployeeSeats(
+      active: _count(raw['active']) ?? 0,
+      grants: list is List
+          ? [for (final x in list) if (x is Map) AccountSeatGrant.fromJson(x.cast<String, dynamic>())]
+          : const [],
+    );
+  }
+}
+
+/// منحة مقاعد من كود: عددها ومدّتها وموعدها.
+class AccountSeatGrant {
+  const AccountSeatGrant({required this.seats, required this.days, required this.active, this.expiresAt, this.revokedAt});
+
+  final int seats;
+  final int days;
+  final bool active;
+  final DateTime? expiresAt;
+  final DateTime? revokedAt;
+
+  factory AccountSeatGrant.fromJson(Map<String, dynamic> j) => AccountSeatGrant(
+        seats: _count(j['seats']) ?? 0,
+        days: _count(j['days']) ?? 0,
+        active: j['active'] == true,
+        expiresAt: AccountSubscription._d(j['expiresAt']),
+        revokedAt: AccountSubscription._d(j['revokedAt']),
+      );
+}
+
+/// نتيجة تفعيل كود: الاشتراك كما صار، ولكود المقاعد عددها وموعدها (وإلّا ٠ وnull).
+class AccountRedeem {
+  const AccountRedeem({required this.subscription, this.seats = 0, this.seatsUntil});
+
+  final AccountSubscription subscription;
+  final int seats;
+  final DateTime? seatsUntil;
+
+  bool get isSeats => seats > 0;
 }
 
 /// عددٌ صحيح غير سالب من ردّ الخادم (رقمٌ أو نصّ)، وإلّا null.

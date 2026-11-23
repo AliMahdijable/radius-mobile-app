@@ -498,6 +498,9 @@ class AuthApi {
         final String fallback;
         if (code == 'EMPLOYEE_DISABLED') {
           fallback = 'حساب الموظف معطّل — راجع المدير.';
+        } else if (code == 'employee-limit') {
+          // حدّ الموظّفين (حصّة سوبرنت المجّانيّة، أو «مقاعد الموظّفين» انتهت — ٢٣ نوفمبر): الخادم يرسل سببه، وهذا لخادمٍ صامت
+          fallback = 'حساب مديرك وصل حدّ الموظّفين — تواصل مع مديرك.';
         } else if (code == 'subscription-ended' || status == 402) {
           fallback = 'اشتراك المدير منتهٍ — تواصل مع مديرك.';
         } else if (status == 429) {
