@@ -197,7 +197,11 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     return null;
   }
 
-  int? _employeeId(String group) => int.tryParse(_f!.employees[group] ?? '');
+  /// موظّفو الشركة المختارون — واحدٌ أو أكثر (lib/api/employee_filter.dart).
+  List<int> _employeeIds(String group) => [
+        for (final s in _f!.employees[group] ?? const <String>{})
+          if (int.tryParse(s) != null) int.parse(s),
+      ];
 
   Future<void> _loadPeople(List<String?> keys) async {
     final want = [
@@ -224,7 +228,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
           activityType: t,
           userIds: ids,
           userManager: _ownerUsername(group),
-          employeeId: _employeeId(group),
+          employeeIds: _employeeIds(group),
         ),
     ]);
     final rows = <({ActivityRow r, int at, int order})>[];
@@ -643,7 +647,9 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       }));
     }
     for (final e in f.employees.entries) {
-      out.add(RpChip('الموظّف: ${_nameOf(e.key, e.value, manager: false)}${_groupName(e.key)}', onRemove: () {
+      if (e.value.isEmpty) continue;
+      final names = [for (final id in e.value) _nameOf(e.key, id, manager: false)].join('، ');
+      out.add(RpChip('${e.value.length > 1 ? 'الموظّفون' : 'الموظّف'}: $names${_groupName(e.key)}', onRemove: () {
         final m = {...f.employees}..remove(e.key);
         _apply(f.copyWith(employees: m));
       }));

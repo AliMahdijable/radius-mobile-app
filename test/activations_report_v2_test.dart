@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/employee_filter.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activations_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activations_view.dart';
@@ -74,6 +75,7 @@ class _Server implements HttpClientAdapter {
   /// كلّ السطور (الأحدث أوّلاً) لكلّ شركة (null = المفتوحة).
   final rows = <String?, List<Map<String, Object?>>>{};
   final asked = <(String?, Map<String, dynamic>)>[];
+  bool echoEmployees = true;
   final failing = <String>{};
 
   ResponseBody _json(Object body, String? key) => ResponseBody.fromString(jsonEncode(body), 200, headers: {
@@ -100,10 +102,13 @@ class _Server implements HttpClientAdapter {
       final limit = int.tryParse('${q['limit']}') ?? 100;
       final page = int.tryParse('${q['page'] ?? 1}') ?? 1;
       final slice = all.skip((page - 1) * limit).take(limit).toList();
+      final emps = q['employee_ids']?.toString();
       return _json({
         'success': true,
         'data': slice,
         'pagination': {'total': all.length, 'page': page, 'limit': limit},
+        // خادمٌ بعد dff8f91 يعلّم ردّه بالموظّفين الذين طبّقهم — echoEmployees=false خادمٌ قديم يتجاهلها
+        if (echoEmployees && emps != null) 'employee_filter': [for (final s in emps.split(',')) int.parse(s)],
       }, key);
     }
     if (key != null) return _json({'success': true, 'data': const []}, key);
@@ -300,6 +305,37 @@ void main() {
     }
 
     Map<String, RpKpi> kpis(WidgetTester t) => {for (final k in t.widget<RpKpiGrid>(find.byType(RpKpiGrid)).kpis) k.id: k};
+
+    // المالك (٢٣ نوفمبر): «ماكدر اختار اكثر من موظف بالفلاتر بجميع التقارير»
+    for (final echo in [true, false]) {
+      testWidgets('موظّفان: employee_ids لكلّ نوع — ${echo ? 'الخادم يطبّقها ⇒ الأرقام' : 'خادمٌ قديم ⇒ «لا يدعم بعد» بلا أرقام'}', (t) async {
+        await up(prefs: {
+          'report.v2.activations': jsonEncode({
+            'p': 'thisMonth',
+            'e': {
+              'open': ['9', '7'],
+            },
+            'ot': 'supernet:12',
+          }),
+        });
+        server.echoEmployees = echo;
+        try {
+          await open(t);
+          expect(server.asked, isNotEmpty);
+          expect(server.asked.every((a) => a.$2['employee_ids'] == '7,9' && !a.$2.containsKey('employee_id')), isTrue);
+          if (echo) {
+            expect(find.byType(RpKpiGrid), findsOneWidget);
+            expect(find.textContaining('الموظّفون: '), findsOneWidget);
+          } else {
+            expect(find.textContaining(kEmployeesUnsupported), findsWidgets);
+            expect(find.byType(RpKpiGrid), findsNothing, reason: 'لا أرقامٌ غير مفلترة كأنّها مفلترة');
+          }
+          expect(t.takeException(), isNull);
+        } finally {
+          await down(t);
+        }
+      });
+    }
 
     Future<void> tapExport(WidgetTester t, String label) async {
       await t.scrollUntilVisible(find.text(label), 600, scrollable: find.byType(Scrollable).first);

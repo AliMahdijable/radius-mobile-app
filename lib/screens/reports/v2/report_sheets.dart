@@ -67,8 +67,9 @@ class RpFilterValue {
   final bool withSubs;
   final RpManagerMode managerMode;
 
-  /// موظّفٌ واحد لكلّ شركة (الخادم يسأل بموظّفٍ واحد).
-  final Map<String, String> employees;
+  /// الموظّفون المختارون لكلّ شركة — أكثر من واحد كالمدراء (المالك ٢٣ نوفمبر: «ماكدر اختار اكثر من موظف بالفلاتر بجميع
+  /// التقارير»): واحدٌ ⇒ employee_id، اثنان فأكثر ⇒ employee_ids (lib/api/employee_filter.dart).
+  final Map<String, Set<String>> employees;
   final List<String> types;
 
   /// الباقات المختارة (بند المقترح ١٢: «الباقات تظهر باسم كلّ باقة وشركتها») — «مفتاح الشركة|اسم الباقة» (المفتوحة: «|اسمها»).
@@ -83,7 +84,7 @@ class RpFilterValue {
     Map<String, Set<String>>? managers,
     bool? withSubs,
     RpManagerMode? managerMode,
-    Map<String, String>? employees,
+    Map<String, Set<String>>? employees,
     List<String>? types,
     Set<String>? packages,
   }) =>
@@ -102,7 +103,7 @@ class RpFilterValue {
   /// بلا مدير ولا موظّف ولا نوع ولا باقة (الفترة والشركات والمقارنة ليست «فلاتر»).
   RpFilterValue cleared() => copyWith(managers: const {}, employees: const {}, types: const [], packages: const {});
 
-  bool get hasPeople => managers.values.any((s) => s.isNotEmpty) || employees.isNotEmpty;
+  bool get hasPeople => managers.values.any((s) => s.isNotEmpty) || employees.values.any((s) => s.isNotEmpty);
 }
 
 /// شريحة «طريقة الدفع» = اختصارٌ لأنواع الحركة نفسها (لا فلترٌ ثانٍ بمعنى آخر).
@@ -212,12 +213,13 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
   }
 
   void _toggleEmployee(String group, RpPerson p) {
-    final map = {..._v.employees};
-    if (map[group] == p.id) {
-      map.remove(group);
-    } else {
-      map[group] = p.id;
-    }
+    final map = {
+      for (final e in _v.employees.entries) e.key: {...e.value}
+    };
+    final set = map[group] ?? <String>{};
+    set.contains(p.id) ? set.remove(p.id) : set.add(p.id);
+    map[group] = set;
+    map.removeWhere((_, s) => s.isEmpty);
     _set(_v.copyWith(employees: map));
   }
 
@@ -348,7 +350,7 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
           ],
           if (widget.showPeople) ...[
             const SizedBox(height: Sp.xl),
-            SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة', child: _groups(groups, managers: false)),
+            SheetSection(label: 'الموظّف', hint: 'من نفّذ الحركة — واحدٌ أو أكثر', child: _groups(groups, managers: false)),
           ],
           if (widget.packages.isNotEmpty) ...[
             const SizedBox(height: Sp.xl),
@@ -523,7 +525,7 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
       }
       final items = managers ? _tree(list) : [for (final p in list) (p, 0)];
       for (final (p, depth) in items) {
-        final on = managers ? (_v.managers[grp.key]?.contains(p.id) ?? false) : _v.employees[grp.key] == p.id;
+        final on = (managers ? _v.managers[grp.key] : _v.employees[grp.key])?.contains(p.id) ?? false;
         rows.add(_pick(p, depth, on, () => managers ? _toggleManager(grp.key, p) : _toggleEmployee(grp.key, p)));
       }
     }

@@ -217,7 +217,7 @@ RpFilterSheet _filterSheet({required bool merged}) => RpFilterSheet(
         range: RpRange.of(RpPreset.thisMonth, now: _fixedNow),
         companies: merged ? const {'s', 'e', 'f', 'h'} : const {},
         managers: merged ? const {'s': {'1'}, 'e': {'5'}} : const {'open': {'1'}},
-        employees: merged ? const {'s': '7'} : const {'open': '7'},
+        employees: merged ? const {'s': {'7'}} : const {'open': {'7'}},
         types: const ['SUBSCRIBER_ACTIVATE_CASH', 'BALANCE_DEDUCT'],
       ),
       companies: merged

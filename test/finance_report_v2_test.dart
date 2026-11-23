@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/employee_filter.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
@@ -17,6 +18,7 @@ import 'package:rad_mysvcs/screens/reports/v2/report_prefs.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/services/provider_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -133,6 +135,9 @@ class _Server implements HttpClientAdapter {
   /// خادمٌ بعد نشر d9 (fintyped1122): يطبّق فلتر النوع بالوضع الصارم ويعلّم ردّه بـtype_filter.
   bool strict = false;
 
+  /// خادمٌ بعد dff8f91: يطبّق employee_ids ويعلّم ردّه بـdata.employee_filter — false = خادمٌ قديم يتجاهلها.
+  bool echoEmployees = true;
+
   List<Map<String, Object?>> _slice(Map<String, dynamic> q) {
     final lo = '${q['date_from']}', hi = '${q['date_to']}';
     final limit = int.tryParse('${q['limit_logs']}') ?? 50;
@@ -158,6 +163,8 @@ class _Server implements HttpClientAdapter {
       final prev = o.queryParameters['limit_logs']?.toString() == '1';
       final rows = month == null ? null : _slice(Map<String, dynamic>.from(o.queryParameters));
       final b = _financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows, debt: debtFor.contains(key));
+      final emps = o.queryParameters['employee_ids']?.toString();
+      if (echoEmployees && emps != null) (b['data'] as Map)['employee_filter'] = [for (final s in emps.split(',')) int.parse(s)];
       if (strict && o.queryParameters['strict_types']?.toString() == '1') {
         (b['data'] as Map)['type_filter'] = {
           'strict': true,
@@ -271,6 +278,21 @@ void main() {
   });
 
   group('RpPrefs', () {
+    test('الموظّفون: الحفظ الأقدم (نصٌّ واحد لكلّ شركة) يُقرأ موظّفاً واحداً — وبلا قيمٍ فارغة', () async {
+      SharedPreferences.setMockInitialValues({
+        'report.v2.t': jsonEncode({
+          'p': 'thisMonth',
+          'e': {'open': '7', _kSup: '', _kEarth: null},
+          'ot': '11',
+        }),
+      });
+      final v = await RpPrefs.load('t', now: _now, openTag: '11');
+      expect(v.employees, {
+        RpPrefs.openGroup: {'7'},
+      });
+      expect(v.hasPeople, isTrue);
+    });
+
     test('مدراء الشركة المفتوحة يُحفظون معها ويُسقطون حين تُفتح غيرها — ومفاتيح «كل الشركات» تبقى', () async {
       SharedPreferences.setMockInitialValues({});
       final v = RpFilterValue(
@@ -280,7 +302,10 @@ void main() {
           RpPrefs.openGroup: {'101'},
           _kEarth: {'5'},
         },
-        employees: {RpPrefs.openGroup: '7', _kSup: '8'},
+        employees: {
+          RpPrefs.openGroup: {'7', '9'},
+          _kSup: {'8'},
+        },
         types: const ['ADMIN_EXPENSE'],
       );
       await RpPrefs.save('t', v, openTag: '11');
@@ -292,12 +317,17 @@ void main() {
         RpPrefs.openGroup: {'101'},
         _kEarth: {'5'},
       });
-      expect(same.employees, {RpPrefs.openGroup: '7', _kSup: '8'});
+      expect(same.employees, {
+        RpPrefs.openGroup: {'7', '9'},
+        _kSup: {'8'},
+      });
       final other = await RpPrefs.load('t', now: _now, openTag: 'earthlink:22');
       expect(other.managers, {
         _kEarth: {'5'},
       }, reason: '«علي» (101) في شركةٍ لا يصير 101 في غيرها');
-      expect(other.employees, {_kSup: '8'});
+      expect(other.employees, {
+        _kSup: {'8'},
+      });
       expect(other.range.preset, RpPreset.lastMonth, reason: 'الفترة والنوع ليسا من شركة');
       expect(other.types, ['ADMIN_EXPENSE']);
     });
@@ -549,6 +579,101 @@ void main() {
     }
 
     RpHeroKpi hero(WidgetTester t) => t.widget<RpHeroKpi>(find.byType(RpHeroKpi));
+
+    // المالك (٢٣ نوفمبر): «ماكدر اختار اكثر من موظف بالفلاتر بجميع التقارير»
+    // ايرث لنك (d9 ٢٣ نوفمبر): صرفيّاتها والربح بعد الكلفة للحساب كلّه — لا تُفرز بالموظّف؛ يُقال تحت البطاقة الكبرى
+    testWidgets('ايرث لنك بفلتر موظّف: «الصرفيّات والربح بعد الكلفة للحساب كلّه» تحت البطاقة الكبرى', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          'e': {
+            'open': ['7'],
+          },
+          'ot': 'supernet:12',
+        }),
+      });
+      ProviderService.debugSet('earthlink');
+      try {
+        await open(t);
+        expect(hero(t).notes.any((n) => n.startsWith('ايرث لنك: الصرفيّات والربح بعد الكلفة للحساب كلّه')), isTrue);
+        expect(t.takeException(), isNull);
+      } finally {
+        ProviderService.debugSet(null);
+        await down(t);
+      }
+    });
+
+    testWidgets('الورقة: الموظّف يُختار أكثر من واحد كالمدراء، ولمسةٌ ثانية تلغيه', (t) async {
+      await up();
+      RpFilterValue? got;
+      try {
+        await pumpVisual(t, const VisualDevice('', Size(430, 2400), 2),
+            home: (_) => Scaffold(
+                  body: RpFilterSheet(
+                    subtitle: 'التقرير الماليّ · هذا الشهر',
+                    initial: RpFilterValue(range: RpRange.of(RpPreset.thisMonth, now: _now)),
+                    people: const [
+                      RpPeopleGroup(key: 'open', employees: [RpPerson('7', 'علي الموظّف'), RpPerson('9', 'زينب الموظّفة'), RpPerson('11', 'حسين')]),
+                    ],
+                    types: const [],
+                    now: _now,
+                    onDone: (v) => got = v,
+                  ),
+                ));
+        await t.pump();
+        expect(find.textContaining('واحدٌ أو أكثر'), findsOneWidget);
+        for (final n in ['علي الموظّف', 'زينب الموظّفة', 'حسين', 'حسين']) {
+          await t.ensureVisible(find.text(n));
+          await t.tap(find.text(n));
+          await t.pump();
+        }
+        await t.ensureVisible(find.text('عرض النتائج'));
+        await t.tap(find.text('عرض النتائج'));
+        await t.pump();
+        expect(got?.employees, {
+          'open': {'7', '9'},
+        });
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    for (final echo in [true, false]) {
+      testWidgets('موظّفان: employee_ids لكلّ طلب (الفترة والمقارنة) — ${echo ? 'الخادم يطبّقها ⇒ الأرقام' : 'خادمٌ قديم ⇒ «لا يدعم بعد» بلا أرقام'}',
+          (t) async {
+        await up(prefs: {
+          'report.v2.finance': jsonEncode({
+            'p': 'thisMonth',
+            'c': true,
+            'e': {
+              'open': ['9', '7'],
+            },
+            'ot': 'supernet:12',
+          }),
+        });
+        server.echoEmployees = echo;
+        try {
+          await open(t);
+          expect(server.finance, isNotEmpty);
+          for (final (_, q) in server.finance) {
+            expect(q['employee_ids'], '7,9');
+            expect(q.containsKey('employee_id'), isFalse, reason: 'لا employee_id مع اثنين');
+          }
+          if (echo) {
+            expect(find.byType(RpHeroKpi), findsOneWidget);
+            expect(find.textContaining('الموظّفون: '), findsOneWidget);
+            expect(find.textContaining(kEmployeesUnsupported), findsNothing);
+          } else {
+            expect(find.textContaining(kEmployeesUnsupported), findsWidgets);
+            expect(find.byType(RpHeroKpi), findsNothing, reason: 'لا أرقامٌ غير مفلترة كأنّها مفلترة');
+          }
+          expect(t.takeException(), isNull);
+        } finally {
+          await down(t);
+        }
+      });
+    }
 
     testWidgets('«+ الفرعيّين» على الشارة حين ضُمّوا فعلاً — بشجرة parent_id، ولا قبلها', (t) async {
       for (final tree in [true, false]) {

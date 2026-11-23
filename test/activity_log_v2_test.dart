@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/employee_filter.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
@@ -13,6 +14,7 @@ import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/services/provider_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -65,6 +67,14 @@ class _Server implements HttpClientAdapter {
   final expensesAsked = <(String?, Map<String, dynamic>)>[];
   final failing = <String>{};
 
+  /// خادمٌ بعد dff8f91: يطبّق employee_ids ويعلّم ردّه بـemployee_filter (أعلاه) — false = خادمٌ قديم.
+  bool echoEmployees = true;
+
+  Map<String, Object?> _echo(Map<String, dynamic> q) {
+    final e = q['employee_ids']?.toString();
+    return echoEmployees && e != null ? {'employee_filter': [for (final s in e.split(',')) int.parse(s)]} : const {};
+  }
+
   ResponseBody _json(Object body, String? key) => ResponseBody.fromString(jsonEncode(body), 200, headers: {
         Headers.contentTypeHeader: ['application/json'],
         if (key != null) 'x-company-key': [key],
@@ -94,6 +104,7 @@ class _Server implements HttpClientAdapter {
         'success': true,
         'data': all.skip((page - 1) * limit).take(limit).toList(),
         'pagination': {'total': all.length, 'page': page, 'limit': limit},
+        ..._echo(q),
       }, key);
     }
     if (o.method.toUpperCase() == 'GET' && o.uri.path == '/api/admin/expenses') {
@@ -105,6 +116,7 @@ class _Server implements HttpClientAdapter {
           {'id': 2, 'amount': 5000, 'expense_date': '2026-11-21', 'note': 'قرطاسية'},
         ],
         'total': 20000,
+        ..._echo(q),
       }, key);
     }
     if (key == null && o.method.toUpperCase() == 'GET' && o.uri.path == '/api/v2/managers') {
@@ -279,12 +291,76 @@ void main() {
               expect(server.expensesAsked, isEmpty);
               expect(kpis(t)[LogKpiIds.expenses], 0);
             case 'emp':
-              expect(server.expensesAsked.single.$2['employee_id'], 7);
+              expect('${server.expensesAsked.single.$2['employee_id']}', '7');
             default:
               expect(server.expensesAsked.single.$2.containsKey('employee_id'), isFalse);
               expect(kpis(t)[LogKpiIds.expenses], 2);
           }
           if (want == 'none' && name == 'بمدير المشترك') expect(server.asked.first.$2['user_manager'], 'm55');
+          expect(t.takeException(), isNull);
+        } finally {
+          await down(t);
+        }
+      });
+    }
+
+    // ايرث لنك (d9 ٢٣ نوفمبر): خادمها لا يفرز الصرفيّة بالموظّف ⇒ لا تُدمج تحت فلتره (كانت تظهر كلّها) ويُقال ذلك بالشاشة والرأس
+    testWidgets('ايرث لنك بفلتر موظّف: لا صرفيّات تحته، ويُقال لماذا — بالشاشة ورأس الملفّ', (t) async {
+      await up(prefs: {
+        'report.v2.activity_log': jsonEncode({
+          'p': 'thisMonth',
+          'e': {
+            'open': ['7'],
+          },
+          'ot': 'supernet:12',
+        }),
+      });
+      server.rows[null] = _month();
+      ProviderService.debugSet('earthlink');
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        expect(server.asked, isNotEmpty);
+        expect(server.expensesAsked, isEmpty, reason: 'صرفيّات الحساب كلّه ليست للموظّف');
+        expect(kpis(t)[LogKpiIds.expenses], 0);
+        expect(find.textContaining('ايرث لنك: الصرفيّات لا تُفرز بالموظّف'), findsOneWidget);
+        await tapExport(t, 'Excel');
+        expect(got.single.details.any((d) => d.startsWith('ايرث لنك: الصرفيّات لا تُفرز بالموظّف')), isTrue);
+        expect(t.takeException(), isNull);
+      } finally {
+        ProviderService.debugSet(null);
+        await down(t);
+      }
+    });
+
+    // المالك (٢٣ نوفمبر): «ماكدر اختار اكثر من موظف بالفلاتر بجميع التقارير» — والحفظ الأقدم (نصّ) ما زال موظّفاً واحداً أعلاه
+    for (final echo in [true, false]) {
+      testWidgets('موظّفان: employee_ids للسجلّ وللصرفيّات — ${echo ? 'الخادم يطبّقها ⇒ السطور' : 'خادمٌ قديم ⇒ «لا يدعم بعد» بلا أرقام'}',
+          (t) async {
+        await up(prefs: {
+          'report.v2.activity_log': jsonEncode({
+            'p': 'thisMonth',
+            'e': {
+              'open': ['9', '7'],
+            },
+            'ot': 'supernet:12',
+          }),
+        });
+        server.rows[null] = _month();
+        server.echoEmployees = echo;
+        try {
+          await open(t);
+          expect(server.asked, isNotEmpty);
+          expect(server.asked.every((a) => a.$2['employee_ids'] == '7,9' && !a.$2.containsKey('employee_id')), isTrue);
+          if (echo) {
+            expect(server.expensesAsked.single.$2['employee_ids'], '7,9');
+            expect(kpis(t)[LogKpiIds.all], greaterThan(0));
+            expect(find.textContaining('الموظّفون: '), findsOneWidget);
+          } else {
+            expect(find.textContaining(kEmployeesUnsupported), findsWidgets);
+            expect(find.byType(RpKpiGrid), findsNothing, reason: 'لا أرقامٌ غير مفلترة كأنّها مفلترة');
+          }
           expect(t.takeException(), isNull);
         } finally {
           await down(t);

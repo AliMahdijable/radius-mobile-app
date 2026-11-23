@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/employee_filter.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/package_dist_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
@@ -36,10 +37,19 @@ class _Spy implements HttpClientAdapter {
   final HttpClientAdapter inner;
   final asked = <Map<String, dynamic>>[];
 
+  /// خادمٌ بعد dff8f91 يعلّم ردّه بـemployee_filter (أعلى الردّ) — false = خادمٌ قديم يتجاهل employee_ids.
+  bool echoEmployees = true;
+
   @override
-  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) {
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
     if (o.uri.path == '/api/reports/finance/packages') asked.add(Map.of(o.queryParameters));
-    return inner.fetch(o, rs, cf);
+    final res = await inner.fetch(o, rs, cf);
+    final emps = o.queryParameters['employee_ids']?.toString();
+    if (o.uri.path != '/api/reports/finance/packages' || emps == null || !echoEmployees) return res;
+    final bytes = <int>[for (final c in await res.stream.toList()) ...c];
+    final j = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+    j['employee_filter'] = [for (final s in emps.split(',')) int.parse(s)];
+    return _json(res.statusCode, j, headers: res.headers);
   }
 
   @override
@@ -221,6 +231,39 @@ void main() {
       await down(t);
     }
   });
+
+  // المالك (٢٣ نوفمبر): «ماكدر اختار اكثر من موظف بالفلاتر بجميع التقارير»
+  for (final echo in [true, false]) {
+    testWidgets('موظّفان: employee_ids ويُسمّيان في الشارة والرأس — ${echo ? 'الخادم يطبّقها' : 'خادمٌ قديم ⇒ «لا يدعم بعد» بلا أعداد'}',
+        (t) async {
+      final srv = await single(prefs: {
+        'report.v2.packages': jsonEncode({
+          'p': 'thisMonth',
+          'e': {
+            'open': ['9', '7'],
+          },
+          'ot': 'supernet:12',
+        }),
+      });
+      srv.echoEmployees = echo;
+      try {
+        await open(t);
+        final q = srv.asked.first;
+        expect(q['employee_ids'], '7,9');
+        expect(q.containsKey('employee_id'), isFalse);
+        if (echo) {
+          expect(find.byType(RpHeroKpi), findsOneWidget);
+          expect(find.textContaining('الموظّفون: '), findsOneWidget);
+        } else {
+          expect(find.textContaining(kEmployeesUnsupported), findsWidgets);
+          expect(find.byType(RpHeroKpi), findsNothing, reason: 'لا أعدادٌ غير مفلترة كأنّها مفلترة');
+        }
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+  }
 
   testWidgets('من بطاقة الرئيسيّة ⇒ فترتها نفسها لهذا الفتح وحده؛ والموظّف المحفوظ يذهب للخادم ويُسمّى في الرأس', (t) async {
     final srv = await single(prefs: {

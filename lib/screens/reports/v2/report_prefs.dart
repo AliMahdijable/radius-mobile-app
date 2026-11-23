@@ -35,10 +35,18 @@ class RpPrefs {
           : <String, Set<String>>{};
       final sameOpen = (j['ot']?.toString() ?? '') == (openTag ?? '');
       final managers = sets(j['m'])..removeWhere((k, s) => s.isEmpty || (k == openGroup && !sameOpen));
+      // الموظّفون قائمةٌ لكلّ شركة (٢٣ نوفمبر)؛ والحفظ الأقدم نصٌّ واحد ⇒ موظّفٌ واحد
+      String? one(Object? x) => x == null || '$x'.isEmpty ? null : '$x';
       final employees = j['e'] is Map
-          ? {for (final e in (j['e'] as Map).entries) '${e.key}': '${e.value}'}
-          : <String, String>{};
-      if (!sameOpen) employees.remove(openGroup);
+          ? {
+              for (final e in (j['e'] as Map).entries)
+                '${e.key}': {
+                  for (final x in e.value is List ? e.value as List : [e.value])
+                    if (one(x) != null) one(x)!,
+                },
+            }
+          : <String, Set<String>>{};
+      employees.removeWhere((k, s) => s.isEmpty || (k == openGroup && !sameOpen));
       return RpFilterValue(
         range: RpRange.fromKey(j['p']?.toString(), now: now),
         compare: j['c'] != false,
@@ -73,7 +81,7 @@ class RpPrefs {
           'm': {for (final e in v.managers.entries) e.key: e.value.toList()},
           'ws': v.withSubs,
           'mm': v.managerMode.name,
-          'e': v.employees,
+          'e': {for (final e in v.employees.entries) e.key: e.value.toList()},
           't': v.types,
           'pk': v.packages.toList(),
           'ot': openTag ?? '',
