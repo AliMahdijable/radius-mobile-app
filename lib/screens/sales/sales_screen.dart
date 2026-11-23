@@ -2174,6 +2174,39 @@ Future<bool> showSellToSubscriber(
   return done == true;
 }
 
+/// الكمّيّة والسعر في «بيع جديد» جنباً إلى جنب حين يتّسع سطرهما لأطول مبلغٍ معقول (9,999,999) وكمّيّةٍ بكسر (9999.5) بخطّ الحقول ومقياس
+/// تكبير الهاتف — وإلّا السعر تحت الكمّيّة بعرض السطر كلّه. المالك (٢٣ نوفمبر): «صلّح خانة السعر ببيع جديد» — على 320 كانت «45,000»
+/// تظهر «45,00»: الخانة ثلاثة أخماس السطر، ومنها حشوة [SheetBox] (15 وحدّ 1 بكلّ جهة) وأيقونته (18) وفاصلها، ثمّ في
+/// [AmountTextField] «د.ع» (بخطّ 13) وزرّ المسح (16) بفاصليهما — فلا يبقى للرقم إلّا نحو 48px. القرار بنصٍّ ثابت لا بما كُتب:
+/// لا ينقلب الترتيب أثناء الكتابة.
+@visibleForTesting
+bool saleQtyPriceSideBySide(BuildContext context, double width) {
+  final scaler = MediaQuery.textScalerOf(context);
+  double textW(String s, TextStyle style) {
+    final tp = TextPainter(
+      text: TextSpan(text: s, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final w = tp.width;
+    tp.dispose();
+    return w;
+  }
+
+  const box = 2 * (15 + 1) + 18 + Sp.sm; // SheetBox: الحشوة والحدّ والأيقونة وفاصلها
+  const caret = 3.0 + 4.0; // هامش المؤشّر في الحقل (3) + هامش أمان
+  // خطّ الحقل كما يرسمه TextField: خطّ الثيم (bodyLarge في M3 — فيه تباعد الحروف) مدموجاً بـAppType.input، و«د.ع» بخطّ النصّ المحيط.
+  final theme = Theme.of(context);
+  final base = (theme.useMaterial3 ? theme.textTheme.bodyLarge : theme.textTheme.titleMedium) ?? const TextStyle();
+  final input = base.merge(AppType.input());
+  final label = DefaultTextStyle.of(context).style.merge(AppType.input().copyWith(fontSize: 13));
+  final price = box + textW('9,999,999', input) + caret + Sp.sm + textW('common.currency'.tr(), label) + Sp.sm + 16;
+  final qty = box + textW('9999.5', input) + caret;
+  final avail = width - Sp.sm;
+  return avail * 3 / 5 >= price && avail * 2 / 5 >= qty;
+}
+
 class _Hit {
   const _Hit({required this.idx, required this.username, required this.name, this.phone});
   final String idx;
@@ -2583,36 +2616,43 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
             ],
           ),
           const SizedBox(height: Sp.xs),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: _SheetText(
-                  controller: l.qty,
-                  icon: LucideIcons.hash,
-                  hint: saleUnitLabel(l.item.unit),
-                  maxLength: 12,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ltr: true,
-                  enabled: !_locked,
-                  onChanged: (_) => setState(() => _confirmDebt = false),
-                ),
-              ),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                flex: 3,
-                child: _MoneyField(
-                  controller: l.price,
-                  enabled: !_locked,
-                  shorthand: l.item.unit != 'meter',
-                  onValue: (v) => setState(() {
-                    l.priceValue = v;
-                    _confirmDebt = false;
-                  }),
-                ),
-              ),
-            ],
-          ),
+          LayoutBuilder(builder: (context, c) {
+            final qty = _SheetText(
+              controller: l.qty,
+              icon: LucideIcons.hash,
+              hint: saleUnitLabel(l.item.unit),
+              maxLength: 12,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ltr: true,
+              enabled: !_locked,
+              onChanged: (_) => setState(() => _confirmDebt = false),
+            );
+            final price = _MoneyField(
+              controller: l.price,
+              enabled: !_locked,
+              shorthand: l.item.unit != 'meter',
+              onValue: (v) => setState(() {
+                l.priceValue = v;
+                _confirmDebt = false;
+              }),
+            );
+            if (saleQtyPriceSideBySide(context, c.maxWidth)) {
+              return Row(
+                key: const ValueKey('sale-line-row'),
+                children: [
+                  Expanded(flex: 2, child: qty),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(flex: 3, child: price),
+                ],
+              );
+            }
+            // ضيّق (هاتفٌ صغير أو خطٌّ مكبَّر): السعر تحت الكمّيّة بعرض السطر — لا رقمٌ مقصوص
+            return Column(
+              key: const ValueKey('sale-line-stacked'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [qty, const SizedBox(height: Sp.sm), price],
+            );
+          }),
           if (over)
             Padding(
               padding: const EdgeInsets.only(top: Sp.xs),

@@ -11,6 +11,7 @@ import 'package:rad_mysvcs/api/merged_finance_api.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/api/sales_api.dart';
 import 'package:rad_mysvcs/api/settlements_api.dart';
+import 'package:rad_mysvcs/core/util/amount_input.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
@@ -722,6 +723,71 @@ void main() {
       expect(server.debtStatusIds, hasLength(2));
       expect(t.takeException(), isNull);
     });
+
+    // المالك (٢٣ نوفمبر): «صلّح خانة السعر ببيع جديد» — على 320 كانت «45,000» تظهر «45,00». الحقل لا يُخفي شيئاً من الرقم (لا تمرير
+    // داخله) على أيّ عرضٍ وتكبير؛ جنباً إلى جنب حين يتّسع (430 بالخطّ العاديّ) وإلّا السعر تحت الكمّيّة.
+    for (final (w, s) in const [(320.0, 1.0), (320.0, 1.2), (360.0, 1.2), (390.0, 1.0), (390.0, 1.2), (430.0, 1.0), (480.0, 1.2)]) {
+      testWidgets('«بيع جديد» @$w ×$s: السعر لا يُقصّ (45,000 · 1,250,000 · 9,999,999) والكمّيّة كذلك', (t) async {
+        final server = _SalesServer(await visualSetUp(s1bSasOwner));
+        ApiClient.dio.httpClientAdapter = server;
+        await pumpVisual(
+          t,
+          VisualDevice('', Size(w, 1600), 2),
+          home: (_) => Scaffold(
+            body: Builder(
+              builder: (ctx) => Center(
+                child: TextButton(
+                  onPressed: () => showSellToSubscriber(ctx, idx: '77', username: 'ali.k@sn', name: 'علي كريم', companyKey: null),
+                  child: const Text('SELL'),
+                ),
+              ),
+            ),
+          ),
+          wrap: (child) => Builder(
+            builder: (ctx) => MediaQuery(data: MediaQuery.of(ctx).copyWith(textScaler: TextScaler.linear(s)), child: child),
+          ),
+        );
+        await settle(t, seconds: 1);
+        await t.tap(find.text('SELL'));
+        await settle(t, seconds: 2);
+        await t.tap(find.text('sales.pick_item'.tr()));
+        await settle(t, seconds: 1);
+        // الاسم معزولٌ باتّجاهه (iso) في صفّ الاختيار
+        await t.tap(find.textContaining('TP-Link C6').last);
+        await settle(t, seconds: 1);
+        final price = find.descendant(of: find.byType(AmountTextField), matching: find.byType(TextField));
+        final qty = find.byWidgetPredicate((x) => x is TextField && x.decoration?.hintText == 'قطعة');
+        expect(price, findsOneWidget);
+        expect(qty, findsOneWidget);
+        double hidden(Finder f) => t.state<ScrollableState>(find.descendant(of: f, matching: find.byType(Scrollable))).position.maxScrollExtent;
+        for (final v in const ['45000', '1250000', '9999999']) {
+          await t.enterText(price, v);
+          await settle(t, seconds: 1);
+          expect(hidden(price), 0, reason: '«$v» مقصوصٌ في خانة السعر @$w ×$s');
+        }
+        await t.enterText(qty, '305.5');
+        await settle(t, seconds: 1);
+        expect(hidden(qty), 0, reason: 'الكمّيّة مقصوصة @$w ×$s');
+        final side = find.byKey(const ValueKey('sale-line-row')).evaluate().isNotEmpty;
+        expect(side || find.byKey(const ValueKey('sale-line-stacked')).evaluate().isNotEmpty, isTrue);
+        if (w >= 430 && s == 1.0) expect(side, isTrue, reason: 'يتّسعان جنباً إلى جنب @$w');
+        if (w == 320) expect(side, isFalse, reason: 'على 320 السعر تحت الكمّيّة');
+        // جنباً إلى جنب ⇒ صفٌّ واحد فعلاً (الكمّيّة يمين السعر في RTL)، وإلّا السعر تحتها
+        final rq = t.getRect(qty);
+        final rp = t.getRect(price);
+        if (side) {
+          expect(rp.right, lessThan(rq.left), reason: 'السعر بجانب الكمّيّة');
+        } else {
+          expect(rp.top, greaterThan(rq.bottom), reason: 'السعر تحت الكمّيّة');
+        }
+        if (const String.fromEnvironment('VISUAL_OUT').isNotEmpty) {
+          FocusManager.instance.primaryFocus?.unfocus();
+          await settle(t, seconds: 1);
+          await shoot(t, s1bSasOwner, 'sale_price_${w.round()}_x$s', VisualDevice('', Size(w, 1600), 2), server.inner as VisualServer);
+        }
+        expect(t.takeException(), isNull);
+      });
+    }
 
     testWidgets('«بيع مادّة» من صفحة المشترك: المشترك مختار والدفع على دينه، والبيع يُرسل به', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
