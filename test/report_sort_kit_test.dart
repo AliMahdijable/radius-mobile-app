@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/core/util/order_rules.dart';
+import 'package:rad_mysvcs/screens/desktop/desk_bulk_picker.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -116,6 +117,48 @@ void main() {
     ));
     expect(find.byKey(RpCompanyTable.headKey(0)), findsNothing);
     expect(find.text('الشركة'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('جدول الحاسبة (DeskBulkPicker): العنوان بـsortKey زرٌّ بسهمه، وبلا onSort نصٌّ كما كان', (t) async {
+    t.view.physicalSize = const Size(1280, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final picked = <String>[];
+    Widget picker({OrderValue? value, ValueChanged<String>? onSort}) => MaterialApp(
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Scaffold(
+              body: DeskBulkPicker(
+                searchController: TextEditingController(),
+                searchHint: 'ابحث',
+                columns: const [
+                  DeskPickColumn('المشترك', flex: 3, sortKey: 'name'),
+                  DeskPickColumn('الخصم', width: 110, sortKey: 'discount'),
+                  DeskPickColumn('ملاحظة', width: 110),
+                ],
+                rowCount: 1,
+                cellsOf: (_) => const [Text('a'), Text('b'), Text('c')],
+                selectedOf: (_) => false,
+                onToggle: null,
+                allSelected: false,
+                onToggleAll: null,
+                footer: '1 نتيجة',
+                panel: const SizedBox.shrink(),
+                sortValue: value,
+                onSort: onSort,
+              ),
+            ),
+          ),
+        );
+    await t.pumpWidget(picker(value: const OrderValue('discount', OrderDir.desc), onSort: picked.add));
+    expect(find.byKey(DeskBulkPicker.headKey('name')), findsOneWidget);
+    expect(find.byKey(DeskBulkPicker.headKey('discount')), findsOneWidget);
+    expect(find.byIcon(LucideIcons.arrowDown), findsOneWidget, reason: 'السهم على المرتَّب به وحده');
+    await t.tap(find.byKey(DeskBulkPicker.headKey('name')));
+    expect(picked, ['name']);
+    await t.pumpWidget(picker());
+    expect(find.byKey(DeskBulkPicker.headKey('name')), findsNothing, reason: 'بلا onSort: عناوين للعرض كما كانت');
     expect(t.takeException(), isNull);
   });
 }

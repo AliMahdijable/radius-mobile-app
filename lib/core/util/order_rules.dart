@@ -191,6 +191,20 @@ List<T> sortList<T>(List<T> list, OrderValue value, List<OrderField> fields, Obj
   return [for (final k in keyed) k.item];
 }
 
+// ═══════════════ قائمةٌ بلا حقلٍ افتراضيّ (المدراء، الباقات، الخصومات، الأسعار — المرحلة ٣) ═══════════════
+
+/// نقرة حقلٍ في قائمةٍ ترتيبها الافتراضيّ ليس حقلاً: أوّل نقرة «الأنفع»، الثانية تقلبه، الثالثة ترجع ترتيب القائمة كما وصلت (null) —
+/// كالموقع (lib/sort.ts nextTriSort) حرفاً.
+OrderValue? nextTriOrder(OrderValue? cur, OrderField f) {
+  if (cur == null || cur.key != f.key) return OrderValue(f.key, firstDir(f));
+  if (cur.dir == firstDir(f)) return OrderValue(f.key, cur.dir == OrderDir.asc ? OrderDir.desc : OrderDir.asc);
+  return null;
+}
+
+/// القائمة بترتيب [value]، أو نسخةٌ كما وصلت حين لا ترتيب.
+List<T> sortOrKeep<T>(List<T> list, OrderValue? value, List<OrderField> fields, Object? Function(T item, String key) get) =>
+    value == null ? [...list] : sortList<T>(list, value, fields, get);
+
 // ═══════════════ جدولٌ بلا عمودٍ افتراضيّ («حسب الشركة») ═══════════════
 
 /// عمودٌ مرتَّبٌ به (-1 = الاسم) — null في الحالة = ترتيب القائمة كما وصلت.
@@ -220,6 +234,41 @@ class OrderPrefs {
 
   /// مفتاح ترتيب حركات التقرير — كالموقع «report.v2.<id>.sort».
   static String rowsKey(String report) => 'report.v2.$report.sort';
+
+  /// مفتاح ترتيب قائمةٍ في المرحلة ٣ — كالموقع «list.v2.<id>.sort» (managers · packages · discounts · subprices).
+  static String listKey(String list) => 'list.v2.$list.sort';
+
+  /// ترتيبٌ بثلاث حالات محفوظ — لا شيء/تالف/حقلٌ لم يعد ⇒ null (القائمة كما وصلت).
+  static Future<OrderValue?> loadTri(String key, List<OrderField> fields) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(key);
+      if (raw == null) return null;
+      final j = jsonDecode(raw);
+      if (j is! Map) return null;
+      final d = j['d'];
+      if (d != 'asc' && d != 'desc') return null;
+      for (final f in fields) {
+        if (f.key == j['k']) return OrderValue(f.key, d == 'asc' ? OrderDir.asc : OrderDir.desc);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveTri(String key, OrderValue? v) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (v == null) {
+        await p.remove(key);
+      } else {
+        await p.setString(key, jsonEncode({'k': v.key, 'd': v.dir.name}));
+      }
+    } catch (_) {
+      // تفضيلٌ لا أكثر
+    }
+  }
 
   /// مفتاح ترتيب «حسب الشركة» — كالموقع «report.v2.<id>.cosort».
   static String companiesKey(String report) => 'report.v2.$report.cosort';

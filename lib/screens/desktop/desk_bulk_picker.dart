@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/util/order_rules.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
 /// عمود في جدول [DeskBulkPicker]: عرضٌ ثابت أو حصّةٌ ممّا بقي.
 class DeskPickColumn {
-  const DeskPickColumn(this.label, {this.width, this.flex = 1, this.align = AlignmentDirectional.centerStart});
+  const DeskPickColumn(this.label, {this.width, this.flex = 1, this.align = AlignmentDirectional.centerStart, this.sortKey});
 
   final String label;
+
+  /// «الترتيب بالنقر» (المرحلة ٣): حقل العمود — null = عنوانٌ للعرض.
+  final String? sortKey;
   final double? width;
   final int flex;
   final AlignmentDirectional align;
@@ -36,6 +40,8 @@ class DeskBulkPicker extends StatelessWidget {
     this.loading = false,
     this.empty,
     this.onNearEnd,
+    this.sortValue,
+    this.onSort,
   });
 
   final TextEditingController searchController;
@@ -123,6 +129,45 @@ class DeskBulkPicker extends StatelessWidget {
     );
   }
 
+  /// العمود المرتَّب به — null = الجدول كما وصل.
+  final OrderValue? sortValue;
+
+  /// نقرة عنوانٍ له [DeskPickColumn.sortKey] — null = عناوين للعرض كما كانت.
+  final ValueChanged<String>? onSort;
+
+  static Key headKey(String sortKey) => ValueKey('desk-sort-$sortKey');
+
+  Widget _headLabel(DeskPickColumn c, TextStyle style) {
+    final key = c.sortKey;
+    final text = Text(c.label, style: style, maxLines: 1, overflow: TextOverflow.ellipsis);
+    if (key == null || onSort == null) return text;
+    final on = sortValue?.key == key;
+    return Semantics(
+      button: true,
+      selected: on,
+      label: on ? c.label : 'رتّب حسب ${c.label}',
+      excludeSemantics: true,
+      child: InkWell(
+        key: headKey(key),
+        onTap: () => onSort!(key),
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: on ? Text(c.label, style: style.copyWith(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis) : text),
+              if (on) ...[
+                const SizedBox(width: Sp.xxs),
+                Icon(sortValue!.dir == OrderDir.asc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 13, color: AppColors.textHi),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _header(bool selectable) {
     final style = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13, fontWeight: FontWeight.w700);
     return Container(
@@ -141,7 +186,7 @@ class DeskBulkPicker extends StatelessWidget {
                 : null,
           ),
           for (final c in columns)
-            _box(c, Align(alignment: c.align, child: Text(c.label, style: style, maxLines: 1, overflow: TextOverflow.ellipsis))),
+            _box(c, Align(alignment: c.align, child: _headLabel(c, style))),
         ],
       ),
     );

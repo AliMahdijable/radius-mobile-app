@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -6,6 +8,7 @@ import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/util/order_rules.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
@@ -70,6 +73,9 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('discounts'), _sortFields).then((v) {
+      if (mounted && v != null && _sort == null) setState(() => _sort = v);
+    }));
     _amountCtrl.addListener(_onAmount);
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
@@ -419,11 +425,16 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   /// الهاتف (٩ نوفمبر — المالك: «القائمة الوحيده تصميمها بالهاتف مزعج ورديئ»): بطاقات أرقام، ثمّ «الخصومات الحاليّة» و«حذف الكلّ»،
   /// ثمّ البحث وشرائح «الكلّ · عليهم خصم · بلا خصم»، ثمّ صفٌّ لكلّ مشترك يُلمس للتحديد — بدل شبكة الكرتات الصغيرة.
   Widget _phoneBody(List<Subscriber> filtered, Color accent) {
-    final rows = switch (_deskFilter) {
-      1 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).toList(),
-      2 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) <= 0).toList(),
-      _ => filtered,
-    };
+    final rows = sortOrKeep<Subscriber>(
+      switch (_deskFilter) {
+        1 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).toList(),
+        2 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) <= 0).toList(),
+        _ => filtered,
+      },
+      _sort,
+      _sortFields,
+      _sortValue,
+    );
     final discounted = _all.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).length;
     return RefreshIndicator(
       onRefresh: _load,
@@ -525,6 +536,13 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 ),
               ),
             ),
+            if (!_loading && rows.length > 1)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                  child: RpSortChips(fields: _sortFields, value: _sort, onPick: _pickSort),
+                ),
+              ),
             if (_loading)
               const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
             else if (rows.isEmpty)
@@ -580,12 +598,67 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   /// فلتر جدول الحاسبة: الكلّ · عليهم خصم · بلا خصم.
   int _deskFilter = 0;
 
+  /// «الترتيب بالنقر» (المرحلة ٣ — المالك ٢٣ نوفمبر): الهاتف «رتّب حسب» والحاسبة عنوان العمود — الأنفع (الأسماء أ ← ي، الأرقام
+  /// الأكبر)، ثمّ يقلب، ثمّ الترتيب الأصليّ؛ يُحفظ (list.v2.discounts.sort — كالموقع). «—» فارغٌ آخر القائمة.
+  static const _sortFields = [
+    OrderField('name', 'الاسم', OrderKind.text),
+    OrderField('username', 'المشترك', OrderKind.text),
+    OrderField('package', 'الباقة', OrderKind.text),
+    OrderField('price', 'سعر الباقة', OrderKind.number),
+    OrderField('discount', 'الخصم', OrderKind.number),
+    OrderField('sale', 'سعر البيع', OrderKind.number),
+  ];
+
+  /// «للعرض وحده» (خصومات الشركة): الحقول التي يعرضها صفّها.
+  static const _viewSortFields = [
+    OrderField('name', 'الاسم', OrderKind.text),
+    OrderField('package', 'الباقة', OrderKind.text),
+    OrderField('discount', 'الخصم', OrderKind.number),
+  ];
+  OrderValue? _sort;
+
+  Object? _sortValue(Subscriber s, String k) {
+    final d = _existing[s.username.toLowerCase()];
+    switch (k) {
+      case 'name':
+        return s.fullName.trim().isNotEmpty ? s.fullName : s.username;
+      case 'username':
+        return s.username;
+      case 'package':
+        return (s.profileName ?? '').isEmpty ? null : s.profileName;
+      case 'price':
+        final b = s.packageSalePrice;
+        return b != null && b > 0 ? b : null;
+      case 'discount':
+        return d != null && d > 0 ? d : null;
+      case 'sale':
+        final v = s.saleAfter(d ?? 0);
+        return v != null && v > 0 ? v : null;
+    }
+    return null;
+  }
+
+  void _pickSort(String key) {
+    for (final f in _sortFields) {
+      if (f.key != key) continue;
+      final next = nextTriOrder(_sort, f);
+      setState(() => _sort = next);
+      unawaited(OrderPrefs.saveTri(OrderPrefs.listKey('discounts'), next));
+      return;
+    }
+  }
+
   Widget _desktopBody(List<Subscriber> filtered, Color accent) {
-    final rows = switch (_deskFilter) {
-      1 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).toList(),
-      2 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) <= 0).toList(),
-      _ => filtered,
-    };
+    final rows = sortOrKeep<Subscriber>(
+      switch (_deskFilter) {
+        1 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).toList(),
+        2 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) <= 0).toList(),
+        _ => filtered,
+      },
+      _sort,
+      _sortFields,
+      _sortValue,
+    );
     final allOn = rows.isNotEmpty && rows.every((s) => _selected.contains(s.username));
     final muted = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13);
     final money = AppType.label(color: AppColors.textBody).copyWith(fontSize: 13.5, fontWeight: FontWeight.w600);
@@ -599,12 +672,14 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         onChanged: (v) => setState(() => _deskFilter = v),
       ),
       columns: const [
-        DeskPickColumn('المشترك', flex: 3),
-        DeskPickColumn('الباقة', flex: 2),
-        DeskPickColumn('سعر الباقة', width: 120, align: AlignmentDirectional.centerEnd),
-        DeskPickColumn('الخصم', width: 110, align: AlignmentDirectional.center),
-        DeskPickColumn('سعر البيع', width: 120, align: AlignmentDirectional.centerEnd),
+        DeskPickColumn('المشترك', flex: 3, sortKey: 'name'),
+        DeskPickColumn('الباقة', flex: 2, sortKey: 'package'),
+        DeskPickColumn('سعر الباقة', width: 120, align: AlignmentDirectional.centerEnd, sortKey: 'price'),
+        DeskPickColumn('الخصم', width: 110, align: AlignmentDirectional.center, sortKey: 'discount'),
+        DeskPickColumn('سعر البيع', width: 120, align: AlignmentDirectional.centerEnd, sortKey: 'sale'),
       ],
+      sortValue: _sort,
+      onSort: _pickSort,
       rowCount: rows.length,
       cellsOf: (i) {
         final s = rows[i];
@@ -741,7 +816,18 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   /// للعرض وحده: الملخّص ثمّ خصومات الشركة صفّاً صفّاً (الأكبر أوّلاً).
   Widget _viewOnlyBody(Color accent) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    final rows = [..._viewRows]..sort((a, b) => b.discountAmount.compareTo(a.discountAmount));
+    // الأصل: الأكبر أوّلاً كما كان؛ و«رتّب حسب» فوقه (الحقول التي يعرضها الصفّ)
+    final rows = sortOrKeep(
+      [..._viewRows]..sort((a, b) => b.discountAmount.compareTo(a.discountAmount)),
+      _sort,
+      _viewSortFields,
+      (d, k) => switch (k) {
+        'name' => _viewNames[d.subscriberUsername.toLowerCase()] ?? d.subscriberUsername,
+        'package' => (d.packageName ?? '').isEmpty ? null : d.packageName,
+        'discount' => d.discountAmount > 0 ? d.discountAmount : null,
+        _ => null,
+      },
+    );
     return RefreshIndicator(
       onRefresh: _load,
       color: accent,
@@ -750,6 +836,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         children: [
           _hero(accent),
           const SizedBox(height: Sp.md),
+          if (rows.length > 1) ...[
+            RpSortChips(fields: _viewSortFields, value: _sort, onPick: _pickSort),
+            const SizedBox(height: Sp.sm),
+          ],
           if (rows.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Sp.xl),

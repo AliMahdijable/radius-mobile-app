@@ -136,4 +136,38 @@ void main() {
       expect(await OrderPrefs.loadCol('c4', 3), const ColOrder(2, OrderDir.desc));
     });
   });
+
+  group('المرحلة ٣: ثلاث نقرات (قائمةٌ بلا حقلٍ افتراضيّ)', () {
+    const amount = OrderField('amount', 'المبلغ', OrderKind.number);
+    const name = OrderField('name', 'الاسم', OrderKind.text);
+    test('الأنفع ثمّ يقلب ثمّ الأصل — كالموقع nextTriSort', () {
+      OrderValue? v;
+      v = nextTriOrder(v, amount);
+      expect(v, const OrderValue('amount', OrderDir.desc));
+      v = nextTriOrder(v, amount);
+      expect(v, const OrderValue('amount', OrderDir.asc));
+      v = nextTriOrder(v, amount);
+      expect(v, isNull);
+      expect(nextTriOrder(null, name), const OrderValue('name', OrderDir.asc));
+      expect(nextTriOrder(const OrderValue('amount', OrderDir.asc), name), const OrderValue('name', OrderDir.asc), reason: 'حقلٌ آخر يبدأ من أوّله');
+    });
+    test('sortOrKeep: بلا ترتيبٍ نسخةٌ كما وصلت', () {
+      final base = [3, 1, 2];
+      final kept = sortOrKeep<int>(base, null, const [amount], (x, _) => x);
+      expect(kept, [3, 1, 2]);
+      expect(identical(kept, base), isFalse);
+      expect(sortOrKeep<int>(base, const OrderValue('amount', OrderDir.desc), const [amount], (x, _) => x), [3, 2, 1]);
+    });
+    test('الحفظ: list.v2.<page>.sort كالموقع، والمحو بالأصل', () async {
+      SharedPreferences.setMockInitialValues({'list.v2.managers.sort': jsonEncode({'k': 'name', 'd': 'asc'})});
+      expect(OrderPrefs.listKey('managers'), 'list.v2.managers.sort');
+      expect(await OrderPrefs.loadTri(OrderPrefs.listKey('managers'), const [amount, name]), const OrderValue('name', OrderDir.asc));
+      await OrderPrefs.saveTri(OrderPrefs.listKey('managers'), null);
+      expect(await OrderPrefs.loadTri(OrderPrefs.listKey('managers'), const [amount, name]), isNull);
+      SharedPreferences.setMockInitialValues({'k': '{bad', 'k2': jsonEncode({'k': 'gone', 'd': 'asc'}), 'k3': jsonEncode({'k': 'name', 'd': 'x'})});
+      for (final k in ['k', 'k2', 'k3', 'missing']) {
+        expect(await OrderPrefs.loadTri(k, const [amount, name]), isNull, reason: k);
+      }
+    });
+  });
 }

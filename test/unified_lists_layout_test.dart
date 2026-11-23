@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/big_subscribers_api.dart';
 import 'package:rad_mysvcs/screens/discounts/discounts_screen.dart';
@@ -108,18 +109,60 @@ void main() {
     expect(find.text('\u2068−350,000\u2069'), findsOneWidget, reason: 'رصيدٌ سالب بإشارته — كان «350,000»');
     expect(find.text('معطّل'), findsOneWidget);
     expect(find.textContaining('دين SAS 350,000 د.ع'), findsOneWidget);
-    // الترتيب بالرصيد تنازليّاً ⇒ الأعلى أوّلاً
-    await t.tap(find.byKey(const ValueKey('mgr-sort-balance')));
-    await settle(t, seconds: 1);
-    await t.tap(find.byKey(const ValueKey('mgr-sort-balance')));
+    // «رتّب حسب» الرصيد (المرحلة ٣): أوّل نقرة الأعلى أوّلاً — كان الشريط القديم يبدأ تصاعديّاً فيُنقر مرّتين
+    await t.tap(find.byKey(RpSortChips.chipKey('balance')));
     await settle(t, seconds: 1);
     final top = t.getTopLeft(find.byKey(const ValueKey('mgr-row-31'))).dy;
     expect(top < t.getTopLeft(find.byKey(const ValueKey('mgr-row-32'))).dy, isTrue);
+    // الثانية تقلب: السالب (−350,000) أوّلاً — الأصل كان ٣١ قبل ٣٢ فالنقرة الأولى وحدها لا تُثبت الترتيب
+    await t.tap(find.byKey(RpSortChips.chipKey('balance')));
+    await settle(t, seconds: 1);
+    expect(t.getTopLeft(find.byKey(const ValueKey('mgr-row-32'))).dy < t.getTopLeft(find.byKey(const ValueKey('mgr-row-31'))).dy, isTrue);
+    await t.tap(find.byKey(RpSortChips.chipKey('balance')));
+    await settle(t, seconds: 1);
     await t.enterText(find.descendant(of: find.byKey(const ValueKey('mgr-search')), matching: find.byType(TextField)), 'kufa');
     await settle(t, seconds: 1);
     expect(find.byKey(const ValueKey('mgr-row-32')), findsOneWidget);
     expect(find.byKey(const ValueKey('mgr-row-31')), findsNothing);
     expect(find.text('1 مدير'), findsOneWidget, reason: 'عدد القائمة بعد البحث');
+    expect(t.takeException(), isNull);
+    await close(t);
+  });
+
+  // «الترتيب بالنقر» (المرحلة ٣): «رتّب حسب» فوق قوائم الخصومات والأسعار — الأنفع ثمّ يقلب ثمّ الأصل، ويُحفظ
+  double topOf(WidgetTester t, Key k) => t.getTopLeft(find.byKey(k)).dy;
+
+  testWidgets('الخصومات: «رتّب حسب» الخصم — الأكبر أوّلاً، ثمّ يقلب، ثمّ الترتيب الأصليّ', (t) async {
+    await open(t, 'discounts', 390, 1.0);
+    final chip = find.byKey(RpSortChips.chipKey('discount'));
+    await t.ensureVisible(chip);
+    await t.tap(chip);
+    await settle(t, seconds: 1);
+    const ali = ValueKey('discount-row-ali1@najaf'), zainab = ValueKey('discount-row-zainab.k@najaf');
+    await t.ensureVisible(find.byKey(ali));
+    expect(topOf(t, ali) < topOf(t, zainab), isTrue, reason: 'خصم 10,000 قبل 5,000');
+    await t.ensureVisible(chip);
+    await t.tap(chip);
+    await settle(t, seconds: 1);
+    await t.ensureVisible(find.byKey(zainab));
+    expect(topOf(t, zainab) < topOf(t, ali), isTrue, reason: 'الثانية تقلب: 5,000 قبل 10,000');
+    await t.ensureVisible(chip);
+    await t.tap(chip);
+    await settle(t, seconds: 1);
+    expect(find.byIcon(LucideIcons.arrowUp), findsNothing, reason: 'الثالثة: لا مرتَّبٌ به (الأصل)');
+    expect(t.takeException(), isNull);
+    await close(t);
+  });
+
+  testWidgets('الأسعار: «رتّب حسب» السعر الثابت — الأكبر أوّلاً وبلا سعرٍ آخراً', (t) async {
+    await open(t, 'prices', 390, 1.0);
+    final chip = find.byKey(RpSortChips.chipKey('fixed'));
+    await t.ensureVisible(chip);
+    await t.tap(chip);
+    await settle(t, seconds: 1);
+    const mustafa = ValueKey('price-row-4'), ali = ValueKey('price-row-1');
+    await t.ensureVisible(find.byKey(mustafa));
+    expect(topOf(t, mustafa) < topOf(t, ali), isTrue, reason: '30,000 قبل 25,000');
     expect(t.takeException(), isNull);
     await close(t);
   });

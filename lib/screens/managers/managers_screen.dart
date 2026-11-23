@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -8,6 +10,7 @@ import '../../api/manager_debts_api.dart';
 import '../../api/managers_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/util/order_rules.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../reports/v2/report_kit.dart';
 import '../../theme/colors.dart';
@@ -60,9 +63,19 @@ class _ManagersScreenState extends State<ManagersScreen> {
   bool _loading = true;
   String _query = '';
 
-  /// مطلب 2026-06-12: sort UI مطابق v1 — 5 خيارات + اتجاه.
-  _ManagerSort _sort = _ManagerSort.username;
-  bool _sortAsc = true;
+  /// «الترتيب بالنقر» (المرحلة ٣ — المالك ٢٣ نوفمبر): «رتّب حسب» بحقول البطاقة نفسها وكالموقع (lib/list-sorts.ts MGR_SORT) —
+  /// أوّل نقرة الأنفع (الأسماء أ ← ي، الأرقام الأكبر)، الثانية تقلب، الثالثة ترجع ترتيب الساس (اليوزر) كما وصل؛ يُحفظ على الجهاز.
+  static const _sortFields = [
+    OrderField('username', 'المدير', OrderKind.text),
+    OrderField('name', 'الاسم', OrderKind.text),
+    OrderField('balance', 'الرصيد', OrderKind.number),
+    OrderField('debt', 'الدين', OrderKind.number),
+    OrderField('points', 'النقاط', OrderKind.number),
+    OrderField('users', 'المشتركون', OrderKind.number),
+    OrderField('acl', 'الصلاحية', OrderKind.text),
+    OrderField('status', 'الحالة', OrderKind.number),
+  ];
+  OrderValue? _sort;
 
   /// مطلب 2026-06-11 (مطابق v1 managers_screen.dart:1167): الديون
   /// الخارجية تنضمّ إلى دين الـSAS عند عرضها في الكارت. الـmap يُملأ
@@ -73,6 +86,9 @@ class _ManagersScreenState extends State<ManagersScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('managers'), _sortFields).then((v) {
+      if (mounted && v != null && _sort == null) setState(() => _sort = v);
+    }));
     _load();
     // أعد التحميل تلقائياً لمّا أيّ شاشة ثانية تُغيّر بيانات (إضافة
     // مدير، تسديد دين، شحن، إلخ.) — مطابق سلوك شاشة المشتركين.
@@ -126,24 +142,41 @@ class _ManagersScreenState extends State<ManagersScreen> {
             m.mobile.contains(q);
       });
     }
-    final list = it.toList();
-    int cmp(Manager a, Manager b) {
-      switch (_sort) {
-        case _ManagerSort.username:
-          return a.username.compareTo(b.username);
-        case _ManagerSort.firstname:
-          return a.firstname.compareTo(b.firstname);
-        case _ManagerSort.lastname:
-          return a.lastname.compareTo(b.lastname);
-        case _ManagerSort.balance:
-          return a.balance.compareTo(b.balance);
-        case _ManagerSort.usersCount:
-          return a.usersCount.compareTo(b.usersCount);
-      }
-    }
+    return sortOrKeep<Manager>(it.toList(), _sort, _sortFields, _sortValue);
+  }
 
-    list.sort(_sortAsc ? cmp : (a, b) => -cmp(a, b));
-    return list;
+  /// قيمة المدير كما تعرضها بطاقته: الدين = الساس + «ديون أخرى» و«—» بلا دين، النقاط «—» صفراً.
+  Object? _sortValue(Manager m, String k) {
+    switch (k) {
+      case 'username':
+        return m.username;
+      case 'name':
+        return m.fullName;
+      case 'balance':
+        return m.balance;
+      case 'debt':
+        final d = m.debt + (_customDebtByManager[m.id] ?? 0);
+        return d > 0 ? d : null;
+      case 'points':
+        return m.rewardPoints != 0 ? m.rewardPoints : null;
+      case 'users':
+        return m.usersCount;
+      case 'acl':
+        return m.aclName;
+      case 'status':
+        return m.isActive ? 1 : 0;
+    }
+    return null;
+  }
+
+  void _pickSort(String key) {
+    for (final f in _sortFields) {
+      if (f.key != key) continue;
+      final next = nextTriOrder(_sort, f);
+      setState(() => _sort = next);
+      unawaited(OrderPrefs.saveTri(OrderPrefs.listKey('managers'), next));
+      return;
+    }
   }
 
   num get _totalBalance =>
@@ -423,7 +456,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             onChanged: (v) => setState(() => _query = v.trim()),
           ),
           const SizedBox(height: Sp.sm),
-          _sortBar(),
+          RpSortChips(fields: _sortFields, value: _sort, onPick: _pickSort),
           if (_loading) ...[
             const SizedBox(height: Sp.xl),
             const Center(child: CircularProgressIndicator()),
@@ -454,56 +487,6 @@ class _ManagersScreenState extends State<ManagersScreen> {
     );
   }
 
-  /// الترتيب: شرائح صغيرة تلتفّ (لا شريطٌ يُقصّ آخره على الهاتف) — لمسة النشطة تقلب الاتّجاه.
-  Widget _sortBar() {
-    return Wrap(
-      spacing: Sp.x6,
-      runSpacing: Sp.x6,
-      children: [for (final s in _ManagerSort.values) _sortChip(s)],
-    );
-  }
-
-  Widget _sortChip(_ManagerSort s) {
-    final active = _sort == s;
-    final fg = active ? AppColors.brand : AppColors.textMid;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('mgr-sort-${s.name}'),
-        onTap: () {
-          setState(() {
-            if (_sort == s) {
-              _sortAsc = !_sortAsc;
-            } else {
-              _sort = s;
-              _sortAsc = true;
-            }
-          });
-        },
-        borderRadius: BorderRadius.circular(R.pill),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: 5),
-          decoration: BoxDecoration(
-            color: active ? AppColors.brandSoftBg : AppColors.surfaceSunken,
-            borderRadius: BorderRadius.circular(R.pill),
-            border: Border.all(color: active ? AppColors.brand.withValues(alpha: 0.35) : AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(s.icon, size: 12, color: fg),
-              const SizedBox(width: Sp.xs),
-              Text(s.label, style: AppType.pillBold(color: fg)),
-              if (active) ...[
-                const SizedBox(width: 3),
-                Icon(_sortAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 11, color: fg),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ManagerTile extends StatelessWidget {
@@ -602,19 +585,4 @@ class _ManagerTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// خيارات الترتيب — مطابق v1 (username, firstname, lastname, balance,
-/// users_count).
-enum _ManagerSort {
-  username('sort.username', LucideIcons.atSign),
-  firstname('sort.firstname', LucideIcons.user),
-  lastname('mgr.lastname', LucideIcons.userCheck),
-  balance('dashboard.balance', LucideIcons.wallet),
-  usersCount('nav.subscribers', LucideIcons.users);
-
-  const _ManagerSort(this._key, this.icon);
-  final String _key;
-  String get label => _key.tr();
-  final IconData icon;
 }

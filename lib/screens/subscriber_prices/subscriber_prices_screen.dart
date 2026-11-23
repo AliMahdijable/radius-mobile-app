@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,6 +9,7 @@ import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/util/order_rules.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -56,6 +59,9 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('subprices'), _sortFields).then((v) {
+      if (mounted && v != null && _sort == null) setState(() => _sort = v);
+    }));
     _amountCtrl.addListener(_onAmount);
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
@@ -335,11 +341,16 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
   /// الهاتف (٩ نوفمبر — المالك: «القائمة الوحيده تصميمها بالهاتف مزعج ورديئ»): بطاقتا «سعرٌ ثابت» و«يحتاج تسعير»، ثمّ «الأسعار
   /// الحاليّة»، ثمّ البحث وشرائح «الكلّ · بسعرٍ ثابت · بلا سعر»، ثمّ صفٌّ لكلّ مشترك يُلمس للتحديد — بدل شبكة الكرتات الصغيرة.
   Widget _phoneBody(List<Subscriber> filtered, Color accent) {
-    final rows = switch (_deskFilter) {
-      1 => filtered.where((s) => _prices.containsKey(s.idx)).toList(),
-      2 => filtered.where((s) => !_prices.containsKey(s.idx)).toList(),
-      _ => filtered,
-    };
+    final rows = sortOrKeep<Subscriber>(
+      switch (_deskFilter) {
+        1 => filtered.where((s) => _prices.containsKey(s.idx)).toList(),
+        2 => filtered.where((s) => !_prices.containsKey(s.idx)).toList(),
+        _ => filtered,
+      },
+      _sort,
+      _sortFields,
+      _sortValue,
+    );
     final reprice = _all.where((s) => s.needsRepricing).length;
     return RefreshIndicator(
       onRefresh: _load,
@@ -437,6 +448,13 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                 ),
               ),
             ),
+            if (!_loading && rows.length > 1)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                  child: RpSortChips(fields: _sortFields, value: _sort, onPick: _pickSort),
+                ),
+              ),
             if (_loading)
               const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
             else if (rows.isEmpty)
@@ -491,12 +509,60 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
   /// فلتر جدول الحاسبة: الكلّ · بسعرٍ ثابت · بلا سعر.
   int _deskFilter = 0;
 
+  /// «الترتيب بالنقر» (المرحلة ٣ — المالك ٢٣ نوفمبر): الهاتف «رتّب حسب» والحاسبة عنوان العمود — الأنفع، ثمّ يقلب، ثمّ الترتيب
+  /// الأصليّ؛ يُحفظ (list.v2.subprices.sort — كالموقع). «—» فارغٌ آخر القائمة.
+  static const _sortFields = [
+    OrderField('name', 'الاسم', OrderKind.text),
+    OrderField('username', 'المشترك', OrderKind.text),
+    OrderField('package', 'الباقة', OrderKind.text),
+    OrderField('price', 'سعر الباقة', OrderKind.number),
+    OrderField('fixed', 'السعر الثابت', OrderKind.number),
+    OrderField('sale', 'سعر البيع', OrderKind.number),
+  ];
+  OrderValue? _sort;
+
+  Object? _sortValue(Subscriber s, String k) {
+    switch (k) {
+      case 'name':
+        return s.fullName.trim().isNotEmpty ? s.fullName : s.username;
+      case 'username':
+        return s.username;
+      case 'package':
+        return (s.profileName ?? '').isEmpty ? null : s.profileName;
+      case 'price':
+        final b = s.packageSalePrice;
+        return b != null && b > 0 ? b : null;
+      case 'fixed':
+        final f = _prices[s.idx]?.price;
+        return f != null && f > 0 ? f : null;
+      case 'sale':
+        final v = s.currentSalePrice;
+        return v != null && v > 0 ? v : null;
+    }
+    return null;
+  }
+
+  void _pickSort(String key) {
+    for (final f in _sortFields) {
+      if (f.key != key) continue;
+      final next = nextTriOrder(_sort, f);
+      setState(() => _sort = next);
+      unawaited(OrderPrefs.saveTri(OrderPrefs.listKey('subprices'), next));
+      return;
+    }
+  }
+
   Widget _desktopBody(List<Subscriber> filtered, Color accent) {
-    final rows = switch (_deskFilter) {
-      1 => filtered.where((s) => _prices.containsKey(s.idx)).toList(),
-      2 => filtered.where((s) => !_prices.containsKey(s.idx)).toList(),
-      _ => filtered,
-    };
+    final rows = sortOrKeep<Subscriber>(
+      switch (_deskFilter) {
+        1 => filtered.where((s) => _prices.containsKey(s.idx)).toList(),
+        2 => filtered.where((s) => !_prices.containsKey(s.idx)).toList(),
+        _ => filtered,
+      },
+      _sort,
+      _sortFields,
+      _sortValue,
+    );
     final selectable = rows.where((s) => s.idx != null).toList();
     final allOn = selectable.isNotEmpty && selectable.every((s) => _selected.contains(s.idx));
     final muted = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13);
@@ -511,12 +577,14 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
         onChanged: (v) => setState(() => _deskFilter = v),
       ),
       columns: [
-        DeskPickColumn('desktop.col_name'.tr(), flex: 3),
-        DeskPickColumn('desktop.col_package'.tr(), flex: 2),
-        DeskPickColumn('sp.col_package_price'.tr(), width: 120, align: AlignmentDirectional.centerEnd),
-        DeskPickColumn('sp.col_fixed'.tr(), width: 120, align: AlignmentDirectional.center),
-        DeskPickColumn('sp.col_sale'.tr(), width: 120, align: AlignmentDirectional.centerEnd),
+        DeskPickColumn('desktop.col_name'.tr(), flex: 3, sortKey: 'name'),
+        DeskPickColumn('desktop.col_package'.tr(), flex: 2, sortKey: 'package'),
+        DeskPickColumn('sp.col_package_price'.tr(), width: 120, align: AlignmentDirectional.centerEnd, sortKey: 'price'),
+        DeskPickColumn('sp.col_fixed'.tr(), width: 120, align: AlignmentDirectional.center, sortKey: 'fixed'),
+        DeskPickColumn('sp.col_sale'.tr(), width: 120, align: AlignmentDirectional.centerEnd, sortKey: 'sale'),
       ],
+      sortValue: _sort,
+      onSort: _pickSort,
       rowCount: rows.length,
       cellsOf: (i) {
         final s = rows[i];

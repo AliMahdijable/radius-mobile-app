@@ -2045,7 +2045,9 @@ List<RpDay> rpFlat<T>(List<T> list, int? limit, RpRow Function(T) rowOf, String?
 class RpSortChips extends StatelessWidget {
   const RpSortChips({super.key, required this.fields, required this.value, required this.onPick, this.label = 'رتّب حسب'});
   final List<OrderField> fields;
-  final OrderValue value;
+
+  /// null = لا حقلٌ مرتَّبٌ به (القائمة كما وصلت — المرحلة ٣).
+  final OrderValue? value;
   final ValueChanged<String> onPick;
   final String label;
 
@@ -2054,37 +2056,44 @@ class RpSortChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final head = SizedBox(
+      height: 32,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.arrowDownUp, size: 14, color: AppColors.textMid),
+          const SizedBox(width: Sp.xs),
+          Text(label, style: AppType.microBold(color: AppColors.textMid)),
+        ],
+      ),
+    );
+    final chips = Wrap(
+      spacing: Sp.x6,
+      runSpacing: Sp.x6,
       children: [
-        SizedBox(
-          height: 32,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.arrowDownUp, size: 14, color: AppColors.textMid),
-              const SizedBox(width: Sp.xs),
-              Text(label, style: AppType.microBold(color: AppColors.textMid)),
-            ],
-          ),
-        ),
-        const SizedBox(width: Sp.sm),
-        Expanded(
-          child: Wrap(
-            spacing: Sp.x6,
-            runSpacing: Sp.x6,
-            children: [
-              for (final f in fields) _chip(f),
-            ],
-          ),
-        ),
+        for (final f in fields) _chip(f),
       ],
+    );
+    final scale = MediaQuery.textScalerOf(context).scale(100) / 100;
+    // كالموقع: الرقائق بجانب «رتّب حسب» ما اتّسع لها ~١٩٢ بعد العنوان؛ وإلّا (هاتفٌ ضيّق أو خطٌّ مكبَّر) تحته بعرض السطر كلّه — لا
+    // عمودٌ من رقاقةٍ لكلّ سطر
+    return LayoutBuilder(
+      builder: (context, c) => c.maxWidth >= 280 * scale
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [head, const SizedBox(width: Sp.sm), Expanded(child: chips)],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [head, const SizedBox(height: Sp.xxs), chips],
+            ),
     );
   }
 
   Widget _chip(OrderField f) {
-    final on = f.key == value.key;
-    final tip = on ? '${f.label} — ${orderDirText(f.kind, value.dir)}' : 'رتّب حسب ${f.label}';
+    final v = value;
+    final on = v != null && f.key == v.key;
+    final tip = on ? '${f.label} — ${orderDirText(f.kind, v.dir)}' : 'رتّب حسب ${f.label}';
     return Semantics(
       button: true,
       selected: on,
@@ -2110,7 +2119,7 @@ class RpSortChips extends StatelessWidget {
                 Text(f.label, style: AppType.microBold(color: on ? AppColors.brand : AppColors.textMid), maxLines: 1),
                 if (on) ...[
                   const SizedBox(width: Sp.xxs),
-                  Icon(value.dir == OrderDir.asc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 14, color: AppColors.brand),
+                  Icon(v.dir == OrderDir.asc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 14, color: AppColors.brand),
                 ],
               ],
             ),

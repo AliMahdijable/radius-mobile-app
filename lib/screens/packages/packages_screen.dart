@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,6 +15,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/util/amount_input.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../core/widgets/app_sheet.dart';
@@ -30,6 +34,31 @@ class PackagesScreen extends StatefulWidget {
 
 class _PackagesScreenState extends State<PackagesScreen> {
   List<Package> _packages = const [];
+
+  /// «الترتيب بالنقر» (المرحلة ٣ — المالك ٢٣ نوفمبر): «رتّب حسب» بحقول البطاقة (الاسم وسعر البيع) — الأنفع، ثمّ يقلب، ثمّ ترتيب
+  /// الساس؛ وبالسعر المحفوظ لا المكتوب الآن (البطاقة لا تقفز تحت إصبعك)، كالموقع (PKG_SORT).
+  static const _sortFields = [
+    OrderField('name', 'الباقة', OrderKind.text),
+    OrderField('user_price', 'سعر البيع', OrderKind.number),
+  ];
+  OrderValue? _sort;
+
+  List<Package> get _shownPackages => sortOrKeep<Package>(
+        _packages,
+        _sort,
+        _sortFields,
+        (p, k) => k == 'name' ? p.name : ((p.userPrice ?? 0) > 0 ? p.userPrice : null),
+      );
+
+  void _pickSort(String key) {
+    for (final f in _sortFields) {
+      if (f.key != key) continue;
+      final next = nextTriOrder(_sort, f);
+      setState(() => _sort = next);
+      unawaited(OrderPrefs.saveTri(OrderPrefs.listKey('packages'), next));
+      return;
+    }
+  }
 
   /// مطلب 2026-06-12: عمودان قابلان للتحرير (مطابق screenshots v1).
   /// `_userPriceEdits` = سعر البيع للمشترك (user_price).
@@ -64,6 +93,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('packages'), _sortFields).then((v) {
+      if (mounted && v != null && _sort == null) setState(() => _sort = v);
+    }));
     _bootstrap();
   }
 
@@ -353,6 +385,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 accent: accent,
               ),
               const SizedBox(height: 6),
+              if (!_loading && _packages.length > 1) ...[
+                RpSortChips(fields: _sortFields, value: _sort, onPick: _pickSort),
+                const SizedBox(height: Sp.sm),
+              ],
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
@@ -366,7 +402,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                   minTileWidth: 260,
                   maxColumns: 4,
                   children: [
-                    for (final p in _packages)
+                    for (final p in _shownPackages)
                       _PackageTile(
                         package: p,
                         userPriceCtrl: _userPriceCtrl[p.id]!,
@@ -378,7 +414,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               else
                 Column(
                   children: [
-                    for (final p in _packages) ...[
+                    for (final p in _shownPackages) ...[
                       _PackageTile(
                         package: p,
                         userPriceCtrl: _userPriceCtrl[p.id]!,
