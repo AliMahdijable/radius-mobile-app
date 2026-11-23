@@ -722,11 +722,20 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
         ),
         _SheetRow(
           label: 'النسخ التلقائيّ',
-          child: Switch(
-            key: const ValueKey('gdb-enabled'),
-            value: _s.enabled,
-            onChanged: (v) => setState(() => _s = _s.copyWith(enabled: v)),
-          ),
+          // الحال بكلمةٍ بجانب المفتاح: اتّجاهه ينقلب بالعربيّ (المفتوح يساراً) فيُقرأ أحياناً مطفأً (صور النشر ٢٣ نوفمبر)
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              _s.enabled ? 'مفعّل' : 'موقوف',
+              key: const ValueKey('gdb-enabled-text'),
+              style: AppType.label(color: _s.enabled ? AppColors.success : AppColors.warning),
+            ),
+            const SizedBox(width: Sp.sm),
+            Switch(
+              key: const ValueKey('gdb-enabled'),
+              value: _s.enabled,
+              onChanged: (v) => setState(() => _s = _s.copyWith(enabled: v)),
+            ),
+          ]),
         ),
         const SizedBox(height: Sp.sm),
         Text('نقترح ساعةً بالليل (مثل 03:00) حتى ما تزاحم الشغل.', style: AppType.muted(color: AppColors.textLow)),

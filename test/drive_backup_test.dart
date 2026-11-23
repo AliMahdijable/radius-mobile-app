@@ -312,6 +312,13 @@ void main() {
       await tester.tap(find.text('كل أسبوع'));
       await settle(tester);
       expect(find.byKey(const ValueKey('gdb-weekday')), findsOneWidget);
+      // الحال بكلمةٍ بجانب المفتاح (اتّجاهه ينقلب بالعربيّ)
+      expect(find.text('مفعّل'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('gdb-enabled')));
+      await settle(tester);
+      expect(find.text('موقوف'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('gdb-enabled')));
+      await settle(tester);
       await tester.tap(find.byKey(const ValueKey('gdb-schedule-save')));
       await settle(tester, 12);
       expect(server.bodies['PUT /api/v2/gdrive-backup/schedule'], {'frequency': 'weekly', 'time': '03:00', 'weekday': 6, 'monthday': null, 'enabled': true});
