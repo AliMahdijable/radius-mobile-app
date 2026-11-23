@@ -69,6 +69,7 @@ import '../network_devices/fiber/fiber_subscriber_card.dart';
 import '../national/national_subscriber_extras.dart';
 import 'widgets/foldable_section.dart';
 import '../../core/util/bytes_format.dart';
+import '../../services/employee_visibility.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -528,10 +529,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
                       // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
                       // دين» وهو ظاهرٌ له أصلاً.
-                      onPay: sub.hasDebt && _has('subscribers.pay_debt') && _debtLock('subscribers.pay_debt') == null
+                      // «ما يشوفه الموظّف»: الدين مخفيّ (لا يصل) ⇒ «تسديد» قائمٌ دائماً — المالك: «اي يسدّد»
+                      onPay: (sub.hasDebt || !Sees.debts) && _has('subscribers.pay_debt') && _debtLock('subscribers.pay_debt') == null
                           ? () => showPayDebtSheet(context, sub)
                           : null,
-                      payLocked: sub.hasDebt &&
+                      payLocked: (sub.hasDebt || !Sees.debts) &&
                           (_locked('subscribers.pay_debt') ||
                               (_debtLock('subscribers.pay_debt') != null && _has('subscribers.pay_debt'))),
                       payLockedMessage: _debtLock('subscribers.pay_debt'),
@@ -1019,6 +1021,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       case SubscriberAutoAction.call:
       case SubscriberAutoAction.whatsapp:
         final phone = (sub.phone ?? '').trim();
+        if (!Sees.phones) {
+          showSheetSnack(context, 'هاتف المشترك مخفيٌّ عنك بأمر مديرك', isError: true);
+          return;
+        }
         if (phone.isEmpty) {
           showSheetSnack(context, 'ليس لديه رقم هاتف مسجّل', isError: true);
           return;
@@ -1423,7 +1429,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         color: AppColors.textMid,
         onTap: () => showMoreActionsSheet(
           context,
-          subtitle: sub.username,
+          subtitle: Sees.nameOf(sub.fullName, sub.username),
           groups: _moreGroups(),
         ),
       ),
@@ -2453,8 +2459,9 @@ class _SubscriberHero extends StatelessWidget {
     final parent = sub.parentUsername?.trim() ?? '';
     return [
       // بلا اسمٍ يُعرض المشترك باسم مستخدمه، وتكراره سطرين لا يُفيد.
-      if (name.value.trim() != sub.username.trim()) name,
-      _usernameField(sub),
+      if (name.value.trim() != sub.username.trim() || !Sees.usernames) name,
+      // «ما يشوفه الموظّف»: اليوزر مخفيّ عنه ⇒ لا يُنسخ ولا يُشارَك
+      if (Sees.usernames) _usernameField(sub),
       if (passwordVisible && (password ?? '').isNotEmpty)
         _passwordField(password!),
       if (phone.isNotEmpty) _phoneField(phone),
@@ -2472,7 +2479,7 @@ class _SubscriberHero extends StatelessWidget {
   }
 
   static CopyField _nameField(Subscriber sub) =>
-      CopyField('الاسم', normalizeDigits(sub.fullName) ?? sub.username);
+      CopyField('الاسم', Sees.nameOf(normalizeDigits(sub.fullName), sub.username));
 
   static CopyField _statusField(Subscriber sub) =>
       CopyField('الحالة', _statusPill(sub).$1);
@@ -2533,6 +2540,8 @@ class _SubscriberHero extends StatelessWidget {
   /// ⚠️ ثلاث حالات لا اثنتان: من رصيده صفر لا دين عليه، ووسمُه بـ«الدين»
   /// يجعل الشاشة تتّهمه بما ليس فيه. والتسمية نفسها تحت رقم البلاطة.
   static CopyField _balanceField(Subscriber sub) {
+    // «ما يشوفه الموظّف»: الدين مخفيّ ⇒ «مخفي» لا «لا دين ولا رصيد»
+    if (!Sees.debts) return const CopyField('الدين والرصيد', kHiddenWord);
     final debt = sub.balanceAmount;
     return CopyField(
       debt > 0
@@ -2579,8 +2588,11 @@ class _SubscriberHero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _titleRow(),
-          const SizedBox(height: Sp.md),
-          _credentialsRow(context),
+          // «ما يشوفه الموظّف»: لا يوزر ولا كلمة مرور تُعرض ⇒ لا صفّ «بيانات الدخول» فارغاً
+          if (_showCredentials) ...[
+            const SizedBox(height: Sp.md),
+            _credentialsRow(context),
+          ],
           const SizedBox(height: Sp.lg),
           _statsGrid(),
           if (phone.isNotEmpty) ...[
@@ -2626,7 +2638,8 @@ class _SubscriberHero extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(height: 2),
+              if (_showCredentials) const SizedBox(height: 2),
+              if (_showCredentials)
               Text(
                 'بيانات الدخول',
                 style: AppType.muted(color: AppColors.onBrandTertiary)
@@ -2685,6 +2698,9 @@ class _SubscriberHero extends StatelessWidget {
 
   // ───────── بيانات الدخول ─────────
 
+  /// صفّ «بيانات الدخول» فيه شيء: اليوزر (ما لم يُخفِه المدير عن الموظّف) أو كلمة المرور (بصلاحيّة الساس).
+  bool get _showCredentials => Sees.usernames || MergedMode.can(sub.companyKey, 'subscribers.show_password');
+
   Widget _credentialsRow(BuildContext context) {
     final pass = password;
     return Container(
@@ -2703,37 +2719,41 @@ class _SubscriberHero extends StatelessWidget {
           // تُنسخ، فقصُّ أحدهما يُفقده معناه.
           //
           // ٣:٢ يعطي الاسم ١٠٥ وكلمة السرّ ٧٠ — يكفيان المقيس.
-          Flexible(
-            flex: 3,
-            child: Copyable.field(
-              _usernameField(sub),
-              onBrandSurface: true,
-              child: Text(
-                sub.username,
-                textDirection: ui.TextDirection.ltr,
-                style: AppType.body(color: AppColors.onBrand)
-                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          // «ما يشوفه الموظّف»: اليوزر مخفيّ عنه ⇒ كلمة المرور وحدها (إن سُمح بها)
+          if (Sees.usernames) ...[
+            Flexible(
+              flex: 3,
+              child: Copyable.field(
+                _usernameField(sub),
+                onBrandSurface: true,
+                child: Text(
+                  sub.username,
+                  textDirection: ui.TextDirection.ltr,
+                  style: AppType.body(color: AppColors.onBrand)
+                      .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          _OnBrandIcon(
-            icon: Icons.content_copy_rounded,
-            size: 16,
-            onTap: () =>
-                copyToClipboard(context, sub.username, label: 'اسم المستخدم'),
-          ),
+            const SizedBox(width: 8),
+            _OnBrandIcon(
+              icon: Icons.content_copy_rounded,
+              size: 16,
+              onTap: () =>
+                  copyToClipboard(context, sub.username, label: 'اسم المستخدم'),
+            ),
+          ],
           // Pro: عرض كلمة المرور مُسيَّجٌ بصلاحيّة الساس — أغلب الشركات لا
           // تسمح به. show_password=false → يختفي الفاصل والباسورد معاً.
           if (MergedMode.can(sub.companyKey, 'subscribers.show_password')) ...[
-            Container(
-              width: 1,
-              height: 16,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              color: AppColors.onBrandFill3,
-            ),
+            if (Sees.usernames)
+              Container(
+                width: 1,
+                height: 16,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                color: AppColors.onBrandFill3,
+              ),
             if (pass == null)
               const SizedBox(
                 width: 14,
@@ -2776,7 +2796,7 @@ class _SubscriberHero extends StatelessWidget {
           Expanded(
             child: _stat(
               copy: balance,
-              value: debt == 0 ? '—' : formatIQD(debt.abs()),
+              value: !Sees.debts ? kHiddenWord : (debt == 0 ? '—' : formatIQD(debt.abs())),
               label: balance.label,
               color: debt < 0 ? AppColors.onBrandDanger : AppColors.onBrand,
             ),

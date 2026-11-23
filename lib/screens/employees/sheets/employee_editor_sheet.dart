@@ -825,7 +825,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         // الصلاحيات بحسب الفئة
         for (final entry in byCat.entries) ...[
           _categoryHeader(cats[entry.key]?.label ?? 'أخرى', entry.value),
-          for (final p in entry.value) _permRow(p),
+          for (final p in entry.value) _permRow(p, hint: p.hint),
           const SizedBox(height: Sp.md),
         ],
       ],
@@ -892,7 +892,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         for (final entry in byCat.entries) ...[
           _categoryHeader(cats[entry.key]?.label ?? 'أخرى', entry.value),
           for (final p in entry.value)
-            _permRow(p, hint: ElEmployeePerms.hintFor(p.key)),
+            _permRow(p, hint: ElEmployeePerms.hintFor(p.key) ?? p.hint),
           const SizedBox(height: Sp.md),
         ],
         _elOwnerOnlyNote(),

@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'debt_age.dart';
+import '../../../services/employee_visibility.dart';
 
 /// بطاقة الرصيد — «كم له وكم عليه؟»، السؤال الذي يُسأل في كلّ زيارة.
 ///
@@ -89,6 +90,8 @@ class BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // «ما يشوفه الموظّف»: الدين مخفيّ عنه — الخادم لا يرسله، فلا «لا دين ولا رصيد» كاذبة: «مخفي»، والتسديد يبقى
+    final hidden = !Sees.debts;
     final isDebt = sub.hasDebt;
     final age = DebtAge.of(sub);
     final isZero = sub.balanceAmount == 0;
@@ -101,13 +104,16 @@ class BalanceCard extends StatelessWidget {
     final borderCol = isZero
         ? AppColors.border
         : (isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder);
-    final label = isZero
+    final label = hidden
+        ? 'الدين والرصيد'
+        : isZero
         ? 'الرصيد'
         : (isDebt
             ? 'subscribers.label_debt_on_sub'.tr()
             : 'subscribers.label_balance_credit'.tr());
-    final amount =
-        isZero ? 'لا دين ولا رصيد' : '${formatIQD(sub.debtAbs.round())} د.ع';
+    final amount = hidden
+        ? kHiddenWord
+        : (isZero ? 'لا دين ولا رصيد' : '${formatIQD(sub.debtAbs.round())} د.ع');
 
     final buttons = <_DebtButton>[
       if (onAddDebt != null || addDebtLocked)

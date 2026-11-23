@@ -164,16 +164,22 @@ class PermissionDef {
     required this.key,
     required this.label,
     required this.category,
+    this.hint,
   });
   final String key;
   final String label;
   final String category;
 
+  /// سطرٌ تحت التسمية من الخادم (`hint` في الكتالوج): ما يشمله المفتاح ولا تقوله تسميته —
+  /// «ما يشوفه الموظّف» (٢٣ نوفمبر) يقول أين يختفي كلّ صنف. غائبٌ ⇒ لا سطر.
+  final String? hint;
+
   static PermissionDef? fromJson(String key, dynamic raw) {
     if (raw is! Map) return null;
     final label = raw['label']?.toString() ?? key;
     final category = raw['category']?.toString() ?? 'other';
-    return PermissionDef(key: key, label: label, category: category);
+    final hint = raw['hint']?.toString().trim();
+    return PermissionDef(key: key, label: label, category: category, hint: hint == null || hint.isEmpty ? null : hint);
   }
 }
 
@@ -836,8 +842,12 @@ class CurrentIdentity {
     this.employeeUsername,
     this.permissions,
     this.pages = const [],
+    this.hidden = const {},
   });
   final bool isEmployee;
+
+  /// «ما يشوفه الموظّف» (٢٣ نوفمبر): ما أخفاه المدير عنه فعلاً (`hidden` من الخادم) — [] لصاحب الحساب والميزة المطفأة.
+  final Set<String> hidden;
 
   /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفحاته (صفحتان فأكثر)، وإلّا [].
   final List<EmployeePageRef> pages;
@@ -864,6 +874,7 @@ class CurrentIdentity {
       employeeUsername: j['employee_username']?.toString(),
       permissions: m,
       pages: EmployeePageRef.listFrom(j['pages']),
+      hidden: hiddenFrom(j['hidden']),
     );
   }
 }

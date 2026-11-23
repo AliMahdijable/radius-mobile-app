@@ -23,6 +23,7 @@ import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../widgets/merged_write_lock.dart';
+import '../../../services/employee_visibility.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -292,8 +293,10 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final livePreview = _currentBalance + _effectiveAmount;
     // سلّم المبالغ يُقصّ عند الدين — عرض شريحة 50,000 لدين 20,000
     // يدفع المدير لتجاوز المبلغ ثمّ تصحيحه.
-    final chips = _chipScale.where((c) => c < _currentDebt).toList();
-    final hasDebt = _currentDebt > 0;
+    // «ما يشوفه الموظّف»: الدين مخفيّ (لا يصل) ⇒ يكتب ما استلمه والسلّم كاملاً، بلا «كامل الدين» ولا «المتبقّي» — المالك: «اي يسدّد»
+    final debtHidden = !Sees.debts;
+    final chips = debtHidden ? _chipScale : _chipScale.where((c) => c < _currentDebt).toList();
+    final hasDebt = _currentDebt > 0 || debtHidden;
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.banknote,
@@ -331,8 +334,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
               children: [
                 SheetSummaryBox(
                   label: 'الدين الحالي',
-                  value: '${formatIQD(_currentDebt.round())} د.ع',
-                  valueColor: AppColors.error,
+                  value: debtHidden ? kHiddenWord : '${formatIQD(_currentDebt.round())} د.ع',
+                  valueColor: debtHidden ? AppColors.textMid : AppColors.error,
                 ),
                 const SizedBox(height: Sp.lg),
                 SheetSection(
@@ -367,6 +370,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                             ),
                           // «كامل الدين» بديل عن مفتاح منفصل — المخطّط
                           // يجعلها شريحة في نفس السطر لا صفّاً مستقلّاً.
+                          if (!debtHidden)
                           SheetQuickChip(
                             label: 'كامل الدين',
                             icon: LucideIcons.checkCheck,
@@ -397,7 +401,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     ),
                   ),
                 ),
-                if (_effectiveAmount > 0) ...[
+                if (_effectiveAmount > 0 && !debtHidden) ...[
                   const SizedBox(height: Sp.lg),
                   // القيمة قد تنقلب إلى رصيد دائن حين يتجاوز المسدَّد
                   // الدين — البانر يبدّل التسمية بدل عرض سالب.

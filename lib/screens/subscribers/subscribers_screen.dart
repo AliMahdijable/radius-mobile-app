@@ -76,6 +76,7 @@ import '../whatsapp/connection_alerts_screen.dart';
 import '../../services/agent_net_presence.dart';
 import 'subscribers_check_screen.dart';
 import '../../services/merged_text.dart';
+import '../../services/employee_visibility.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -2986,10 +2987,11 @@ class _ListHeader extends StatelessWidget {
             valueListenable: ActiveCompany.listenable,
             builder: (context, company, _) {
               // «متصل» لا «متصل الآن» (٧ نوفمبر): السطر صار زرّ التبديل بسهم ⌄ — «الآن» كانت تُبتر («4 متصل ا…»)، وشريحة «متصل» تحته.
-              final counts = '$total مشترك • $online متصل';
+              // «ما يشوفه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ لا عدد بسطر الشركة
+              final counts = Sees.counts ? '$total مشترك • $online متصل' : null;
               if (company == null) {
                 return Text(
-                  counts,
+                  counts ?? '',
                   style: AppType.body(color: AppColors.textMid)
                       .copyWith(fontSize: 12.5),
                 );
@@ -3269,7 +3271,8 @@ class _ResultSortBar extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '$count نتيجة',
+            // «ما يشوفه الموظّف»: عدد النتائج عددٌ للمشتركين ⇒ يُخفى معها (الفرز يبقى)
+            Sees.counts ? '$count نتيجة' : '',
             style: AppType.muted(color: AppColors.textLow)
                 .copyWith(fontSize: 11.5),
           ),

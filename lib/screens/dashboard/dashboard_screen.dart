@@ -59,6 +59,7 @@ import '../../widgets/employee_limits_card.dart';
 import '../employees/employee_my_ledger_screen.dart' show EmployeeLedgerCard;
 import '../reports/v2/activity_log_v2_screen.dart';
 import '../reports/v2/finance_report_v2_screen.dart';
+import '../../services/employee_visibility.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -797,7 +798,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool get _deskRevenueChart => _canMoney && _shown('revenue') && !MergedMode.active.value;
 
   /// توزيع المشتركين على الحاسبة — حين تصل أرقامهم.
-  bool get _deskDistribution => _canSubs && _shown('subscribers') && _subscribersStats != null;
+  bool get _deskDistribution => _canSubs && _shown('subscribers') && Sees.counts && _subscribersStats != null;
 
   SubscribersStats? get _subscribersStats {
     if (!_debtorsLoaded) return null;
@@ -905,7 +906,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     // الحاسبة (منطقة محتوى عريضة): المشتركون بجانب الرصيد والإيرادات بدل عمودٍ واحدٍ يتمدّد.
     final wide = AppPlatform.isDesktop && MediaQuery.sizeOf(context).width >= 860;
-    final subscribersSection = !_shown('subscribers')
+    // «ما يشوفه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ لا كارت (ليس قسماً مقفلاً — معلومةٌ مخفيّة)
+    final subscribersSection = !_shown('subscribers') || !Sees.counts
         ? null
         : (_canSubs
                 ? SubscribersCard(
@@ -926,7 +928,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .slideY(begin: 0.03, end: 0);
     // الرصيد يتبع reports.financial والمدينون subscribers.view — كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى
     // مكانه مقفلاً.
-    final walletSection = !_shown('wallet')
+    // «ما يشوفه الموظّف»: الرصيد والمدينون نصفان — المخفيّ منهما لا يُرسم، والاثنان مخفيّان ⇒ لا قسم
+    final walletSection = !_shown('wallet') || (!Sees.balance && !Sees.debts)
         ? null
         : StatsGrid(
             wallet: _walletLoaded ? _walletLive : null,
@@ -935,6 +938,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             debtSplit: _debtorsLoaded && MergedMode.active.value ? _debtSplit : null,
             balanceLocked: !_canMoney,
             debtLocked: !_canSubs,
+            balanceHidden: !Sees.balance,
+            debtHidden: !Sees.debts,
             onOpenDebtors: () => widget.onOpenSubscribers?.call(SubscriberFilter.debtors),
           )
             .animate()
@@ -1166,10 +1171,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         debtors: _debtorsLoaded ? _debtorsLive : null,
                         debtSplit: _debtorsLoaded && MergedMode.active.value ? _debtSplit : null,
                         subsLocked: !_canSubs,
-                        balanceLocked: !_canMoney,
-                        debtLocked: !_canSubs,
-                        showSubscribers: _shown('subscribers'),
-                        showWallet: _shown('wallet'),
+                        // «ما يشوفه الموظّف» على الحاسبة: المخفيّ يبقى مكانه مقفلاً (الشبكة بأعمدةٍ ثابتة)
+                        balanceLocked: !_canMoney || !Sees.balance,
+                        debtLocked: !_canSubs || !Sees.debts,
+                        showSubscribers: _shown('subscribers') && Sees.counts,
+                        showWallet: _shown('wallet') && (Sees.balance || Sees.debts),
                         onOpen: widget.onOpenSubscribers,
                       ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
                     const SizedBox(height: Sp.md),

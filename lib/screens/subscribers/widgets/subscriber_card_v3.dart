@@ -21,6 +21,7 @@ import 'device_chip_micro.dart' show DeviceProbeBus;
 import 'split_fit_row.dart';
 import 'usage_on_demand.dart';
 import '../../../services/vpn_now.dart';
+import '../../../services/employee_visibility.dart';
 import '../../../widgets/vpn_now_bar.dart' show VpnTag;
 
 /// فعل شريط «آخر حركة ماليّة» الأخضر — ما قبل «قبل 5 د».
@@ -131,7 +132,8 @@ class SubscriberCardV3 extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final st = _status();
-    final debt = sub.hasDebt ? sub.debtAbs : 0.0;
+    // «ما يشوفه الموظّف»: الخادم يخفي الدين أصلاً — وهنا حارسٌ ثانٍ فلا يُرسم شريط «دين» من بقايا كاش
+    final debt = sub.hasDebt && Sees.debts ? sub.debtAbs : 0.0;
 
     return Material(
       color: Colors.transparent,
@@ -212,7 +214,7 @@ class SubscriberCardV3 extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      normalizeDigits(sub.fullName) ?? sub.username,
+                      Sees.nameOf(normalizeDigits(sub.fullName), sub.username),
                       style: AppType.listName(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -243,26 +245,29 @@ class SubscriberCardV3 extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 7),
-                  Container(
-                    width: 3,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: AppColors.borderStrong,
-                      shape: BoxShape.circle,
+                  // «ما يشوفه الموظّف»: اليوزر مخفيّ عنه ⇒ الحالة وحدها
+                  if (Sees.usernames) ...[
+                    const SizedBox(width: 7),
+                    Container(
+                      width: 3,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: AppColors.borderStrong,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: Text(
-                      sub.username,
-                      textDirection: TextDirection.ltr,
-                      style: AppType.body(color: AppColors.textLabel)
-                          .copyWith(fontSize: 12.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        sub.username,
+                        textDirection: TextDirection.ltr,
+                        style: AppType.body(color: AppColors.textLabel)
+                            .copyWith(fontSize: 12.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
               // «كل الشركات»: شركة الصفّ (منها يُنفَّذ كلّ ما يخصّه)
