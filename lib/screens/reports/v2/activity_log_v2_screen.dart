@@ -34,8 +34,39 @@ import 'report_sheets.dart';
 /// «سجلّ الحركات» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»): الفترة ← الشركات ← الفلاتر ← «حسب الشركة» ← الأعداد
 /// (ولمسها حركاتها) ← العدد يوماً بيوم ← «قسّم حسب» النوع/المدير/الموظّف/اليوم ← الحركات يوماً يوماً + بحث ← التصدير بالفلاتر حرفاً.
 /// كلّ حركات الفترة صفحةً صفحة بلا الإشعارات الآليّة (الخادم 9bfabd2)؛ الصرفيّات من قائمتها للشركة المفتوحة كما كانت.
+/// إشعار «عمليّات الموظّفين» (data.type = employee_ops — الخادم server/employeeOps.js، ٢٣ نوفمبر) ⇒ «سجلّ الحركات» لهذه الصفحة
+/// بفلتر ذلك الموظّف وفترةٍ تضمّ عمليّاته. ملخّص أوقات السكون (employee_id فارغ) ⇒ كلّ الحركات من أوّل أمس.
+/// الإشعار لصفحةٍ أخرى من شركات الحساب تفتحها [CompanyPush] قبل هذا، فالمفتوحة هنا صفحته.
+Future<bool> openEmployeeOpsPush(NavigatorState nav, Map<String, String> data) async {
+  if (data['type'] != 'employee_ops') return false;
+  final id = (data['employee_id'] ?? '').trim();
+  await nav.push(MaterialPageRoute(
+    builder: (_) => ActivityLogV2Screen(push: EmployeeOpsPush(employeeId: int.tryParse(id) != null ? id : null)),
+  ));
+  return true;
+}
+
+/// ما جاء به الإشعار — لهذا الفتح وحده: لا يُحفظ فوق فلاتر السجلّ المحفوظة.
+class EmployeeOpsPush {
+  const EmployeeOpsPush({this.employeeId});
+
+  /// رقم الموظّف بجدول موظّفينا (acting_employee_id) — null: ملخّص السكون لكلّ الموظّفين.
+  final String? employeeId;
+}
+
+/// فترة الإشعار: اليوم — إلّا ملخّص السكون (يجمع ما جرى منذ بدايته، وقد بدأ أمس) أو الساعة الأولى بعد منتصف الليل (عمليّاتٌ
+/// أُرسلت دفعتُها بعد يومها) ⇒ من أوّل أمس حتى اليوم.
+@visibleForTesting
+RpRange employeeOpsRange(DateTime now, {required bool digest}) {
+  if (!digest && now.hour >= 1) return RpRange.of(RpPreset.today, now: now);
+  return RpRange.of(RpPreset.custom, now: now, from: DateTime(now.year, now.month, now.day - 1), to: now);
+}
+
 class ActivityLogV2Screen extends StatefulWidget {
-  const ActivityLogV2Screen({super.key});
+  const ActivityLogV2Screen({super.key, this.push});
+
+  /// فُتح من إشعار «عمليّات الموظّفين» ⇒ الصفحة المفتوحة وحدها (لا «كل الشركات») بفلتر الموظّف وفترته ([openEmployeeOpsPush]).
+  final EmployeeOpsPush? push;
 
   @visibleForTesting
   static DateTime Function() clock = DateTime.now;
@@ -86,7 +117,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
   String _q = '';
   int _visible = _page;
 
-  bool get _merged => MergedMode.active.value;
+  bool get _merged => widget.push == null && MergedMode.active.value;
   DateTime get _now => ActivityLogV2Screen.clock();
 
   /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
@@ -113,7 +144,16 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
 
   Future<void> _start() async {
     _openTag = await MergedMode.openAdminId();
-    final f = await RpPrefs.load(_id, now: _now, openTag: _openTag, fallback: RpPreset.thisWeek);
+    final push = widget.push;
+    final emp = push?.employeeId;
+    final f = push != null
+        ? RpFilterValue(
+            range: employeeOpsRange(_now, digest: emp == null),
+            employees: {
+              if (emp != null) _open: {emp},
+            },
+          )
+        : await RpPrefs.load(_id, now: _now, openTag: _openTag, fallback: RpPreset.thisWeek);
     if (!mounted) return;
     setState(() => _f = f.copyWith(compare: false));
     _loadIfAllowed();
@@ -147,7 +187,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       _f = f;
       _visible = _page;
     });
-    unawaited(RpPrefs.save(_id, f, openTag: _openTag));
+    // فتح الإشعار لا يكتب فوق فلاتر الوكيل المحفوظة (موظّفه وفترته لهذا الفتح وحده)
+    if (widget.push == null) unawaited(RpPrefs.save(_id, f, openTag: _openTag));
     _load();
   }
 

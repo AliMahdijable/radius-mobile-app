@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api/agent_alerts_api.dart';
 import '../api/agent_notifs_api.dart';
 import '../api/notifications_api.dart';
+import '../core/widgets/permission_locked.dart';
 import '../services/active_company.dart';
 import '../services/provider_service.dart';
 import '../theme/colors.dart';
@@ -32,6 +33,11 @@ bool showManagerDebtToggle() {
 
 /// «تذاكر المشروع الوطني»: الوطنيّ على providerKit (`watani`) وحده — FTTH القديم وبقيّة الشركات بلا هذا التنبيه.
 bool showNationalTicketToggle() => ProviderService.isKit && ProviderService.parentIsZone;
+
+/// «عمليّات الموظّفين» — نصوص الموقع نفسها (MyAlerts.tsx، W25).
+const kEmployeeOpsLabel = 'عمليّات الموظّفين';
+const kEmployeeOpsHint = 'إشعارٌ بكلّ عمليّةٍ يجريها موظّفوك — تفعيل، تسديد، تعديل… — مجمّعاً بالدقيقة، ويحترم أوقات السكون';
+const kEmployeeOpsLocked = 'لصاحب الحساب وحده — يصله إشعارٌ بعمليّات الموظّفين';
 
 /// «إشعاراتي» — ما يصل الوكيلَ نفسه: «تنبيهات المال» (٢٠ نوفمبر، حين يقدّمها الخادم)، «تنبيهات الأجهزة»، toggles إشعارات FCM،
 /// وأوقات السكون (DND) التي تؤجّل كلّ ذلك. كل تغيير يُحفظ تلقائياً بـPUT مع snackbar.
@@ -277,6 +283,18 @@ class _NotificationsSettingsScreenState
                     onChanged: (v) =>
                         _patch((x) => x.copyWith(pushWataniTicket: v)),
                   ),
+                // «عمليّات الموظّفين» (المالك ٢٣ نوفمبر: «اي موظف يسوي عمليه يذهب اشعار للمدير») — حين يقدّمها الخادم لهذه
+                // الصفحة (مفتاحها وموظّفون فعّالون). الإشعار لصاحب الصفحة وحده ⇒ الموظّف يراه بمكانه مقفلاً كالموقع.
+                if (p.employeeOpsAvailable)
+                  _Toggle(
+                    key: const ValueKey('notifs-employee-ops'),
+                    icon: LucideIcons.userCog,
+                    label: kEmployeeOpsLabel,
+                    sub: p.employeeOpsCanEdit ? kEmployeeOpsHint : kEmployeeOpsLocked,
+                    value: p.pushEmployeeOps,
+                    onChanged: p.employeeOpsCanEdit ? (v) => _patch((x) => x.copyWith(pushEmployeeOps: v)) : null,
+                    onLockedTap: () => showNoPermission(context, message: kEmployeeOpsLocked),
+                  ),
                 const SizedBox(height: Sp.md),
                 _SectionLabel('notifs.dnd_section'.tr()),
                 _Toggle(
@@ -421,22 +439,34 @@ class _LinkRow extends StatelessWidget {
 
 class _Toggle extends StatelessWidget {
   const _Toggle({
+    super.key,
     required this.icon,
     required this.label,
     required this.sub,
     required this.value,
     required this.onChanged,
+    this.onLockedTap,
   });
 
   final IconData icon;
   final String label;
   final String sub;
   final bool value;
-  final ValueChanged<bool> onChanged;
+
+  /// null ⇒ مقفل: المفتاح خافتٌ بحاله، ولمس الصفّ يقول السبب ([onLockedTap]) ولا يغيّر شيئاً.
+  final ValueChanged<bool>? onChanged;
+  final VoidCallback? onLockedTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final row = _row();
+    if (onChanged != null || onLockedTap == null) return row;
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onLockedTap, child: row);
+  }
+
+  Widget _row() {
+    final locked = onChanged == null;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 8),
@@ -472,11 +502,26 @@ class _Toggle extends StatelessWidget {
                       .copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  sub,
-                  style: AppType.muted(color: AppColors.textMid)
-                      .copyWith(fontSize: 11, height: 1.4),
-                ),
+                if (locked)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Icon(LucideIcons.lock, size: 11, color: AppColors.textLow),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(sub, style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11, height: 1.4)),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    sub,
+                    style: AppType.muted(color: AppColors.textMid)
+                        .copyWith(fontSize: 11, height: 1.4),
+                  ),
               ],
             ),
           ),

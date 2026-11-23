@@ -16,6 +16,9 @@ class NotificationPrefs {
     required this.pushExpiredToday,
     required this.pushManagerDebt,
     this.pushWataniTicket = true,
+    this.pushEmployeeOps = true,
+    this.employeeOpsAvailable = false,
+    this.employeeOpsCanEdit = true,
     required this.quietHoursEnabled,
     required this.quietHoursStart,
     required this.quietHoursEnd,
@@ -27,6 +30,14 @@ class NotificationPrefs {
 
   /// «تذاكر المشروع الوطني» (push_watani_ticket، الخادم ١ نوفمبر) — غائبٌ من خادمٍ أقدم ⇒ مفعّل.
   final bool pushWataniTicket;
+
+  /// «عمليّات الموظّفين» (push_employee_ops، الخادم ٢٣ نوفمبر — server/employeeOps.js) — غائبٌ ⇒ مفعّل كافتراض الخادم.
+  final bool pushEmployeeOps;
+
+  /// ليسا تفضيلاً: هل يقدّم الخادم «عمليّات الموظّفين» لهذه الصفحة (GET `employee_ops.available` — مفتاحها وموظّفون فعّالون)،
+  /// وهل يعدّله هذا الداخل (`can_edit` — صاحب الصفحة وحده). ردّ الحفظ لا يحملهما ⇒ يُنقلان من الطلب ([NotificationsApi.save]).
+  final bool employeeOpsAvailable;
+  final bool employeeOpsCanEdit;
   final bool quietHoursEnabled;
   final String quietHoursStart;
   final String quietHoursEnd;
@@ -47,6 +58,7 @@ class NotificationPrefs {
     bool? pushExpiredToday,
     bool? pushManagerDebt,
     bool? pushWataniTicket,
+    bool? pushEmployeeOps,
     bool? quietHoursEnabled,
     String? quietHoursStart,
     String? quietHoursEnd,
@@ -56,12 +68,17 @@ class NotificationPrefs {
         pushExpiredToday: pushExpiredToday ?? this.pushExpiredToday,
         pushManagerDebt: pushManagerDebt ?? this.pushManagerDebt,
         pushWataniTicket: pushWataniTicket ?? this.pushWataniTicket,
+        pushEmployeeOps: pushEmployeeOps ?? this.pushEmployeeOps,
+        employeeOpsAvailable: employeeOpsAvailable,
+        employeeOpsCanEdit: employeeOpsCanEdit,
         quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
         quietHoursStart: quietHoursStart ?? this.quietHoursStart,
         quietHoursEnd: quietHoursEnd ?? this.quietHoursEnd,
       );
 
-  factory NotificationPrefs.fromJson(Map<String, dynamic> j) {
+  /// [employeeOps] = `employee_ops` من ردّ GET (`{available, can_edit}`) — غائبٌ ⇒ غير متاح.
+  factory NotificationPrefs.fromJson(Map<String, dynamic> j, {Object? employeeOps}) {
+    final eo = employeeOps is Map ? employeeOps : const {};
     bool b(dynamic v, bool fallback) {
       if (v is bool) return v;
       if (v is num) return v != 0;
@@ -81,6 +98,9 @@ class NotificationPrefs {
       pushExpiredToday: b(j['push_expired_today'], true),
       pushManagerDebt: b(j['push_manager_debt'], true),
       pushWataniTicket: b(j['push_watani_ticket'], true),
+      pushEmployeeOps: b(j['push_employee_ops'], true),
+      employeeOpsAvailable: eo['available'] == true,
+      employeeOpsCanEdit: eo['can_edit'] != false,
       quietHoursEnabled: b(j['quiet_hours_enabled'], false),
       quietHoursStart: t(j['quiet_hours_start'], '22:00'),
       quietHoursEnd: t(j['quiet_hours_end'], '08:00'),
@@ -101,7 +121,7 @@ class NotificationsApi {
       if (body['success'] != true) return null;
       final prefs = body['prefs'];
       if (prefs is! Map) return null;
-      return NotificationPrefs.fromJson(Map<String, dynamic>.from(prefs));
+      return NotificationPrefs.fromJson(Map<String, dynamic>.from(prefs), employeeOps: body['employee_ops']);
     } on DioException catch (e) {
       _log('notification-prefs (GET)', e);
       return null;
@@ -122,6 +142,9 @@ class NotificationsApi {
           'pushExpiredToday': p.pushExpiredToday,
           'pushManagerDebt': p.pushManagerDebt,
           'pushWataniTicket': p.pushWataniTicket,
+          // «عمليّات الموظّفين» حين عُرض مفتاحها لصاحب الصفحة وحده — وإلّا يبقى المحفوظ (الحفظ دمجٌ بالخادم)، فلا تعيده
+          // شاشةٌ لم تعرضه إلى قيمتها القديمة
+          if (p.employeeOpsAvailable && p.employeeOpsCanEdit) 'pushEmployeeOps': p.pushEmployeeOps,
           'quietHoursEnabled': p.quietHoursEnabled,
           'quietHoursStart': p.quietHoursStart,
           'quietHoursEnd': p.quietHoursEnd,
@@ -132,8 +155,10 @@ class NotificationsApi {
       NotificationPrefs? returned;
       final returnedRaw = body['prefs'];
       if (returnedRaw is Map) {
-        returned =
-            NotificationPrefs.fromJson(Map<String, dynamic>.from(returnedRaw));
+        returned = NotificationPrefs.fromJson(
+          Map<String, dynamic>.from(returnedRaw),
+          employeeOps: {'available': p.employeeOpsAvailable, 'can_edit': p.employeeOpsCanEdit},
+        );
       }
       return (
         ok: ok,

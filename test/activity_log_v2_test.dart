@@ -11,6 +11,7 @@ import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activity_log_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activity_log_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
+import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
@@ -431,6 +432,88 @@ void main() {
       } finally {
         await down(t);
       }
+    });
+
+    // «عمليّات الموظّفين» (٢٣ نوفمبر): نقر الإشعار يفتح السجلّ بفلتر الموظّف وفترة عمليّاته — لهذا الفتح وحده
+    Future<void> openPush(WidgetTester t, EmployeeOpsPush push) async {
+      await pumpVisual(t, const VisualDevice('', Size(430, 2600), 2), home: (_) => ActivityLogV2Screen(push: push));
+      await settleAsync(t);
+    }
+
+    testWidgets('إشعار «عمليّات الموظّفين»: اليوم بفلتر موظّفه، وإزالته لا تكتب فوق فلاتر الوكيل المحفوظة', (t) async {
+      final saved = jsonEncode({'p': 'thisMonth', 'ot': 'supernet:12'});
+      await up(prefs: {'report.v2.activity_log': saved});
+      server.rows[null] = _month();
+      try {
+        await openPush(t, const EmployeeOpsPush(employeeId: '7'));
+        expect(server.asked, isNotEmpty);
+        final q = server.asked.first.$2;
+        expect(q['date_from'], '2026-11-22 00:00:00', reason: 'اليوم لا «هذا الشهر» المحفوظ');
+        expect('${q['date_to']}', startsWith('2026-11-22 '));
+        expect('${q['employee_id']}', '7');
+        expect('${server.expensesAsked.single.$2['employee_id']}', '7', reason: 'صرفيّاته وحده كفلتر الموظّف');
+        expect(find.textContaining('الموظّف: '), findsOneWidget);
+        server.asked.clear();
+        await t.tap(find.textContaining('الموظّف: '));
+        await settleAsync(t);
+        expect(server.asked, isNotEmpty);
+        expect(server.asked.first.$2.containsKey('employee_id'), isFalse, reason: 'أُزيل ⇒ كلّ حركات اليوم');
+        final p = await t.runAsync(SharedPreferences.getInstance);
+        expect(p!.getString('report.v2.activity_log'), saved, reason: 'فلاتر الوكيل المحفوظة كما هي');
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('ملخّص السكون (بلا موظّف): كلّ الحركات من أوّل أمس', (t) async {
+      await up();
+      server.rows[null] = _month();
+      try {
+        await openPush(t, const EmployeeOpsPush());
+        final q = server.asked.first.$2;
+        expect(q['date_from'], '2026-11-21 00:00:00');
+        expect(q.containsKey('employee_id'), isFalse);
+        expect(find.textContaining('الموظّف: '), findsNothing);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('إشعار «عمليّات الموظّفين» و«كل الشركات» مفتوحة ⇒ صفحته وحدها بفلتر موظّفه', (t) async {
+      await up();
+      server.rows[null] = _month();
+      server.rows[_kSup] = _month();
+      server.rows[_kEarth] = _month();
+      try {
+        AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+        MergedMode.reset();
+        MergedMode.fetchRaw = () async => Map<String, dynamic>.from(_companies());
+        expect(await t.runAsync(() => MergedMode.enter()), isTrue);
+        await openPush(t, const EmployeeOpsPush(employeeId: '7'));
+        expect(server.asked, isNotEmpty);
+        expect(server.asked.any((a) => a.$1 == _kEarth), isFalse, reason: 'لا طلب لشركةٍ أخرى');
+        expect(server.asked.every((a) => '${a.$2['employee_id']}' == '7'), isTrue);
+        expect(find.byType(RpCompanyTable), findsNothing);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+  });
+
+  group('فترة إشعار «عمليّات الموظّفين»', () {
+    test('اليوم؛ والساعة الأولى بعد منتصف الليل أو ملخّص السكون ⇒ من أوّل أمس حتى آخر اليوم', () {
+      final day = employeeOpsRange(DateTime(2026, 11, 23, 10), digest: false);
+      expect(day.preset, RpPreset.today);
+      expect(day.from, DateTime(2026, 11, 23));
+      final night = employeeOpsRange(DateTime(2026, 11, 23, 0, 40), digest: false);
+      expect(night.preset, RpPreset.custom);
+      expect((night.from, night.to), (DateTime(2026, 11, 22), DateTime(2026, 11, 23, 23, 59, 59)));
+      expect(employeeOpsRange(DateTime(2026, 11, 23, 1), digest: false).preset, RpPreset.today);
+      final dig = employeeOpsRange(DateTime(2026, 12, 1, 8, 5), digest: true);
+      expect((dig.from, dig.to), (DateTime(2026, 11, 30), DateTime(2026, 12, 1, 23, 59, 59)), reason: 'أوّل الشهر ⇒ آخر يومٍ قبله');
     });
   });
 }
