@@ -451,7 +451,8 @@ List<AppModule> buildAppModules() {
         unavailable: TicketsState.gate.value!.scoped ? 'لموظّفي الحساب كلّه' : null,
         icon: LucideIcons.ticket,
         tone: AppTone.info,
-        title: 'التذاكر',
+        // «تذاكر المشتركين» بصفحة الوطنيّ — بجانب «التذاكر» لدعم بوّابته أعلاه (المالك ٢٣ نوفمبر)؛ وغيرها «التذاكر».
+        title: ticketsSectionTitle(),
         subtitle: switch (TicketsState.bellBadge) {
           0 => 'تذاكر مشتركيك من تطبيقهم — ردّ وتابع حتى الحلّ',
           final n => ticketsBadgeLabel(n, TicketsState.badgeRule),

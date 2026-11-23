@@ -26,7 +26,7 @@ class TicketsScreen extends StatefulWidget {
       prefixes: const [TicketsApi.base],
       serves: (c) => c.provider != MergedProvider.ftth,
       servesNote: 'التذاكر لا تخدم بوّابة FTTH القديمة',
-      lockTitle: 'التذاكر',
+      lockTitle: ticketsSectionTitle(),
       openCompany: openCompany,
       child: const TicketsScreen());
 
@@ -120,6 +120,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     _viewOnly = MergedSection.viewOnlyOf(context);
+    // «تذاكر المشتركين» بصفحة الوطنيّ، و«التذاكر» لغيرها — اسم بطاقتها نفسه ([ticketsSectionTitle]).
+    final title = ticketsSectionTitle();
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -129,9 +131,9 @@ class _TicketsScreenState extends State<TicketsScreen> {
           elevation: 0,
           scrolledUnderElevation: 0,
           iconTheme: IconThemeData(color: AppColors.textHi),
-          title: Text('التذاكر', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          title: Text(title, style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         ),
-        title: 'التذاكر',
+        title: title,
       ),
       body: MergedSectionBody(
         child: _loading
@@ -150,7 +152,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
   List<Widget> _body() {
     final a = _access;
     if (a == null) return [_center(LucideIcons.wifiOff, 'تعذّر جلب التذاكر الآن', 'اسحب للأسفل لإعادة المحاولة')];
-    if (!a.available) return [_center(LucideIcons.ticket, 'قسم التذاكر غير متاحٍ لهذا الحساب', '')];
+    if (!a.available) return [_center(LucideIcons.ticket, 'قسم ${ticketsSectionTitle()} غير متاحٍ لهذا الحساب', '')];
     if (!a.canView) {
       return [
         _center(

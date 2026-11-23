@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/api/tickets_api.dart';
+import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
 import 'package:rad_mysvcs/screens/more_modules_screen.dart';
@@ -176,6 +177,7 @@ void main() {
       TicketsState.debugSet(TicketsAccess.fromJson(_summary(unread: 2)), bell: const TicketsBell(outside: 1));
       final c = card()!;
       expect([c.locked, c.unavailable, c.badge, c.group], [false, null, 3, AppModuleGroup.comms]);
+      expect(c.title, 'التذاكر', reason: 'غير الوطنيّ: اسمها كما كان');
       expect(c.badge, TicketsState.bellBadge);
       expect(c.subtitle, '3 تذاكر بانتظارك');
       // والقاعدة الأخرى تُقلب للاثنين معاً
@@ -193,9 +195,15 @@ void main() {
       expect(card()!.unavailable, 'لموظّفي الحساب كلّه');
       ProviderService.debugSet('earthlink');
       expect(card(), isNotNull, reason: 'موظّف ايرث لنك يراها (مفتاحها في محرّره)');
+      expect(card()!.title, 'التذاكر');
       ProviderService.debugSet('watani', label: 'المشروع الوطني');
       TicketsState.debugSet(TicketsAccess.fromJson(_summary()));
       expect(card(), isNotNull, reason: 'الوطنيّ بالتذاكر منذ ٢٢ نوفمبر (المالك: «التذاكر هسه افتحها»)');
+      // بصفحة الوطنيّ بطاقتان: «التذاكر» لدعم بوّابة الوطنيّ نفسها، وهذه «تذاكر المشتركين» (المالك ٢٣ نوفمبر: «اي سمّيها تذاكر المشتركين»)
+      expect(card()!.title, 'تذاكر المشتركين');
+      expect(buildAppModules().singleWhere((m) => m.id == 'national_tickets').title, 'التذاكر', reason: 'دعم بوّابة الوطنيّ كما هو');
+      ProviderService.debugSet('nabd');
+      expect(card()!.title, 'التذاكر', reason: 'شركةٌ مُضافة غير الوطنيّ: بطاقةٌ واحدة باسمها كما كان');
       ProviderService.debugSet('ftth');
       expect(card(), isNull, reason: 'FTTH القديم بلا تذاكر');
     });
@@ -237,6 +245,61 @@ void main() {
       expect(find.text('سارة محمد'), findsOneWidget);
       expect(find.text('علي عباس'), findsNothing);
       expect(t.takeException(), isNull);
+      await simDrain(t);
+    });
+
+    // اسم القسم (المالك ٢٣ نوفمبر «اي سمّيها تذاكر المشتركين»): بصفحة الوطنيّ «تذاكر المشتركين» — بجانب «التذاكر» لدعم بوّابته —
+    // في عنوان الهاتف ورأس الحاسبة وقفل «كل الشركات» وسطر «غير متاح»؛ وغيرها «التذاكر» كما كانت.
+    String lockTitle() => (TicketsScreen.mergedPage() as MergedSection).lockTitle!;
+
+    testWidgets('اسم القسم لغير الوطنيّ: «التذاكر» كما كان (الهاتف والقفل)', (t) async {
+      for (final p in ['ftth', 'nabd', 'earthlink', 'fiberx']) {
+        ProviderService.debugSet(p);
+        expect(lockTitle(), 'التذاكر', reason: '$p — الوطنيّ وحده (watani) فيه بطاقتان؛ FTTH القديم ليس هو');
+      }
+      ProviderService.debugSet(null);
+      expect(lockTitle(), 'التذاكر');
+      server.reply('GET', '/api/v2/portal/tickets/summary', 200, _summary());
+      server.reply('GET', '/api/v2/portal/tickets', 200, _page([_ticket(9, 'open')]));
+      await pumpSim(t, _v, home: (_) => const TicketsScreen());
+      await t.pumpAndSettle();
+      expect(find.text('التذاكر'), findsOneWidget);
+      expect(find.text('تذاكر المشتركين'), findsNothing);
+      await simDrain(t);
+    });
+
+    testWidgets('اسم القسم بصفحة الوطنيّ: «تذاكر المشتركين» بعنوان الهاتف وقفل «كل الشركات»', (t) async {
+      ProviderService.debugSet('watani', label: 'المشروع الوطني');
+      expect(lockTitle(), 'تذاكر المشتركين');
+      server.reply('GET', '/api/v2/portal/tickets/summary', 200, _summary());
+      server.reply('GET', '/api/v2/portal/tickets', 200, _page([_ticket(9, 'open')]));
+      await pumpSim(t, _v, home: (_) => const TicketsScreen());
+      await t.pumpAndSettle();
+      expect(find.text('تذاكر المشتركين'), findsOneWidget);
+      expect(find.text('التذاكر'), findsNothing);
+      expect(find.text('علي عباس'), findsOneWidget, reason: 'القائمة نفسها');
+      await simDrain(t);
+    });
+
+    testWidgets('اسم القسم بصفحة الوطنيّ: «تذاكر المشتركين» برأس الحاسبة', (t) async {
+      ProviderService.debugSet('watani', label: 'المشروع الوطني');
+      server.reply('GET', '/api/v2/portal/tickets/summary', 200, _summary());
+      server.reply('GET', '/api/v2/portal/tickets', 200, _page([_ticket(9, 'open')]));
+      await pumpSim(t, const SimVariant(1280, dark: false), home: (_) => const DesktopScope(child: TicketsScreen()));
+      await t.pumpAndSettle();
+      expect(find.byType(AppBar), findsNothing, reason: 'رأس الحاسبة لا شريط الهاتف');
+      expect(find.text('تذاكر المشتركين'), findsOneWidget);
+      expect(find.text('التذاكر'), findsNothing);
+      await simDrain(t);
+    });
+
+    testWidgets('اسم القسم بصفحة الوطنيّ في سطر «غير متاح»', (t) async {
+      ProviderService.debugSet('watani', label: 'المشروع الوطني');
+      server.reply('GET', '/api/v2/portal/tickets/summary', 200, _summary(available: false));
+      await pumpSim(t, _v, home: (_) => const TicketsScreen());
+      await t.pumpAndSettle();
+      expect(find.text('قسم تذاكر المشتركين غير متاحٍ لهذا الحساب'), findsOneWidget);
+      expect(server.calls('GET', '/api/v2/portal/tickets'), isEmpty);
       await simDrain(t);
     });
 

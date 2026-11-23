@@ -8,6 +8,7 @@ import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/util/server_time.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -15,6 +16,11 @@ import 'ticket_thread_screen.dart';
 import 'tickets_screen.dart';
 
 /// «التذاكر» (المالك ٩ نوفمبر): ألوان الحالة ونصوصها، صفّ التذكرة في القائمة، ونقر إشعارها.
+
+/// اسم القسم — بطاقته في «قوائم أخرى» وعنوان شاشته (الهاتف والحاسبة) وقفله في «كل الشركات». صفحة المشروع الوطنيّ (watani —
+/// شرط بطاقة «التذاكر» لدعم بوّابة الوطنيّ نفسها `national_tickets` في buildAppModules) فيها بطاقتان؛ فهذا القسم «تذاكر المشتركين»
+/// هناك — كالموقع (`/subscriber-tickets`) — المالك ٢٣ نوفمبر: «اي سمّيها تذاكر المشتركين». وغيرها «التذاكر» كما كانت.
+String ticketsSectionTitle() => ProviderService.isKit && ProviderService.parentIsZone ? 'تذاكر المشتركين' : 'التذاكر';
 
 ({String label, Color fg, Color bg, IconData icon}) ticketStatusMeta(String status) => switch (status) {
       'open' => (label: 'بانتظارك', fg: AppColors.warningOnSoft, bg: AppColors.warningSoftBg, icon: LucideIcons.hourglass),
