@@ -465,9 +465,9 @@ class _ExpenseTile extends StatelessWidget {
                       _Tag(
                         key: ValueKey('exp-payslip-${row.id}'),
                         // «كشف راتب 3 · أحمد» — صرفيّةٌ كتبها صرف الراتب
-                        label: (row.payslipEmployee ?? '').isEmpty
-                            ? 'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'})
-                            : '${'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'})} · ${row.payslipEmployee}',
+                        // «من مالي الخاص» (٢٣ نوفمبر): «· من مال المدير» — لا يُحسب على الصندوق
+                        label: '${(row.payslipEmployee ?? '').isEmpty ? 'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'}) : '${'exp.payslip_chip'.tr(namedArgs: {'n': '${row.payslipNumber}'})} · ${row.payslipEmployee}'}'
+                            '${row.payslipOwn ? ' · من مال المدير' : ''}',
                         icon: LucideIcons.users,
                         tone: AppTone.brand,
                       ),

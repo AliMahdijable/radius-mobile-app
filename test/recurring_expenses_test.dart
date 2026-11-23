@@ -24,6 +24,9 @@ class _RecServer implements HttpClientAdapter {
 
   /// فترةٌ بلا مصاريف (القائمة فارغة) — حالة البطاقة الفارغة.
   bool noExpenses = false;
+
+  /// كشفا راتب بين المصاريف: «من مالي الخاص» (٢٣ نوفمبر) و«من الصندوق».
+  bool withSlips = false;
   final posts = <(String, String, Map<String, dynamic>)>[];
 
   static Map<String, dynamic> run(int id, int tid, String period, String due, String status, {String? how, num amount = 75000, String? name}) => {
@@ -56,6 +59,12 @@ class _RecServer implements HttpClientAdapter {
           {'id': 741, 'amount': '250000.00', 'note': 'إيجار المحل (ثابتة 2026-10)', 'expense_date': '2026-10-01T00:00:00.000Z',
             'recurring': {'template_id': 1, 'name': 'إيجار المحل', 'period': '2026-10', 'how': 'auto'}},
           {'id': 735, 'amount': '15000.00', 'note': 'قرطاسية', 'expense_date': '2026-10-12T00:00:00.000Z'},
+          if (withSlips) ...[
+            {'id': 760, 'amount': '425000.00', 'note': 'راتب علي — تشرين الأوّل 2026 — من مال المدير الخاص', 'expense_date': '2026-10-28T09:00:00.000Z',
+              'payslip': {'id': 9, 'number': 4, 'employee_id': 7, 'employee_name': 'علي', 'source': 'own'}},
+            {'id': 761, 'amount': '300000.00', 'note': 'راتب زين — تشرين الأوّل 2026', 'expense_date': '2026-10-28T09:05:00.000Z',
+              'payslip': {'id': 10, 'number': 2, 'employee_id': 8, 'employee_name': 'زين', 'source': 'box'}},
+          ],
         ],
       });
     }
@@ -272,6 +281,18 @@ void main() {
       expect((post.$3['name'], post.$3['amount'], post.$3['day'], post.$3['every'], post.$3['start_period'], post.$3['mode']),
           ('إيجار المخزن', 120000, 1, 1, '2026-10', 'auto'));
       expect((post.$3['client_ref'] as String).length, 24);
+      expect(t.takeException(), isNull);
+    });
+
+    // «من مالي الخاص» (٢٣ نوفمبر): شارة الكشف تقول مصدره — «من الصندوق» كما كانت
+    testWidgets('كشف راتب «من مالي الخاص» بين المصاريف: «كشف راتب 4 · علي · من مال المدير»، و«من الصندوق» بلاها', (t) async {
+      final server = _RecServer(await visualSetUp(s1bSasOwner))..withSlips = true;
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const ExpensesScreen());
+      await settle(t, seconds: 2);
+      expect(find.text('كشف راتب 4 · علي · من مال المدير'), findsOneWidget);
+      expect(find.text('كشف راتب 2 · زين'), findsOneWidget);
+      expect(find.textContaining('زين · من مال المدير'), findsNothing);
       expect(t.takeException(), isNull);
     });
 

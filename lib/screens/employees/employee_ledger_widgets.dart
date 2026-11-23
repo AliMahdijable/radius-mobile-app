@@ -321,6 +321,7 @@ class EmployeeLedgerPanel extends StatelessWidget {
               note: [
                 if (p.deducted > 0) 'استُقطع ${formatIQD(p.deducted)}',
                 if (p.fromHand) 'من النقد الذي بيده',
+                if (p.fromOwn) 'من مال المدير الخاص',
                 if (!p.paid && p.voidReason != null) 'سبب الإلغاء: ${p.voidReason}',
               ].join(' · '),
               amount: _iqd(p.net),
@@ -1045,6 +1046,10 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
   bool _loading = true;
   bool _busy = false;
   bool _fromHand = false;
+
+  /// «صرف» ⇒ خطوة «من أين تدفع الراتب؟» (٢٣ نوفمبر) حين يرسل الخادم مصادرها، والمصدر الذي اختاره (لا اختيار مسبق).
+  bool _step = false;
+  String? _paySrc;
   final _noteCtrl = TextEditingController();
 
   /// مفتاح منع التكرار لهذه المعاينة: أرقامٌ جديدة ⇒ نيّةٌ جديدة، وإعادة الضغط على الأرقام نفسها ⇒ الكشف نفسه.
@@ -1098,22 +1103,142 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
   Future<void> _pay() async {
     final pv = _pv;
     if (pv == null || !pv.canPay || _busy || _loading) return;
+    // «من أين يُدفع؟» (٢٣ نوفمبر — المالك: «بعد ما ينقر يخيره النظام من مالي الخاص او من الصندوق»): ما اختاره من مصادر الخادم —
+    // صافٍ صفر ⇒ الصندوق (لا نقد يُدفع)؛ خادمٌ أقدم بلا مصادر ⇒ الاختيار القديم قبل الزرّ
+    final source = pv.sources.isNotEmpty ? (pv.net > 0 ? _paySrc : 'box') : (_fromHand && pv.net > 0 ? 'hand' : 'box');
+    if (source == null) return;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _busy = true);
-    final r = await EmployeeLedgerApi.payPayslip(widget.employeeId, pv, fromHand: _fromHand && pv.net > 0, note: _noteCtrl.text, clientRef: _ref);
+    final r = await EmployeeLedgerApi.payPayslip(widget.employeeId, pv, source: source, note: _noteCtrl.text, clientRef: _ref);
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
-      Navigator.of(context).pop('صُرف كشف ${widget.name} — ${_iqd(pv.net)}');
+      Navigator.of(context).pop('صُرف كشف ${widget.name} — ${_iqd(pv.net)}${source == 'own' && pv.net > 0 ? ' من مالك الخاص' : ''}');
       return;
     }
     showSheetSnack(context, r.message ?? 'تعذّر الصرف', isError: true);
-    // تغيّرت الأرقام ⇒ معاينةٌ جديدة بالاختيار نفسه؛ تغيّرت الفترات ⇒ من جديد
+    // تغيّرت الأرقام ⇒ معاينةٌ جديدة بالاختيار نفسه (والمراجعة من جديد)؛ تغيّرت الفترات ⇒ من جديد
     if (r.code == 'STALE') {
+      setState(() => _step = false);
       _load(periods: pv.selectedKeys);
     } else if (r.code == 'PERIOD_CHANGED') {
+      setState(() => _step = false);
       _load();
+    } else if ((r.code ?? '').startsWith('OWN_')) {
+      // «من مالي الخاص» لم يعد متاحاً (أُطفئ، أو ليس لموظّف الصلاحيّة) ⇒ المصادر من جديد بلا اختيار
+      setState(() => _paySrc = null);
+      _load(periods: pv.selectedKeys);
     }
+  }
+
+  /// «من أين تدفع الراتب؟» — بعد «صرف»: مصادر الخادم بأثر كلٍّ منها، بلا اختيارٍ مسبق، وتحت المختار «كيف يُسجَّل في النظام» سطراً
+  /// سطراً (المصروف، الاستقطاع، أثره على الصندوق). صافٍ صفر (المستحقّ كلّه استُقطع) ⇒ لا اختيار: ما يُسجَّل وحده.
+  Widget _sourceStep(PayslipPreview pv) {
+    final choose = pv.net > 0;
+    PayoutSource? sel;
+    for (final s in pv.sources) {
+      if (choose ? s.key == _paySrc : s.key == 'box') sel = s;
+    }
+    if (!choose && sel == null && pv.sources.isNotEmpty) sel = pv.sources.first;
+    return Opacity(
+      opacity: _loading ? 0.55 : 1,
+      child: Column(
+        key: const ValueKey('emp-payslip-step-source'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(choose ? 'من أين تدفع الراتب؟' : 'صرف الكشف', style: AppType.bodyBold(color: AppColors.textHi)),
+          const SizedBox(height: 2),
+          Text(
+            '${widget.name} يستلم ${_iqd(pv.net)} — المستحقّ ${_iqd(pv.gross < 0 ? 0 : pv.gross)}',
+            key: const ValueKey('emp-payslip-step-net'),
+            style: AppType.body(color: AppColors.textMid),
+          ),
+          const SizedBox(height: Sp.md),
+          if (choose)
+            for (final s in pv.sources) ...[
+              _sourceOption(s),
+              const SizedBox(height: Sp.sm),
+            ]
+          else ...[
+            Container(
+              padding: const EdgeInsets.all(Sp.md),
+              decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.md)),
+              child: Text('لا نقد يُدفع — المستحقّ كلّه استُقطع من سلفه وأقساطه.', style: AppType.body(color: AppColors.textMid)),
+            ),
+            const SizedBox(height: Sp.sm),
+          ],
+          if (sel != null)
+            Container(
+              key: const ValueKey('emp-payslip-src-lines'),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(R.lg),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('كيف يُسجَّل في النظام', style: AppType.bodyBold(color: AppColors.textHi)),
+                  const SizedBox(height: Sp.x6),
+                  // كلّ سطرٍ يُقرأ كاملاً: يلتفّ ولا يُقصّ مهما ضاق الهاتف أو كبر الخطّ
+                  for (final l in sel.lines)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('•  $l', style: AppType.body(color: AppColors.textMid)),
+                    ),
+                ],
+              ),
+            )
+          else
+            Text('اختر من أين تدفعه لترى كيف يُسجَّل.',
+                key: const ValueKey('emp-payslip-src-pick'), style: AppType.micro(color: AppColors.textLow)),
+        ],
+      ),
+    );
+  }
+
+  Widget _sourceOption(PayoutSource s) {
+    final on = _paySrc == s.key;
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      checked: on,
+      button: true,
+      child: Material(
+        color: on ? AppColors.brandSoftBg : AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        child: InkWell(
+          key: ValueKey('emp-payslip-src-${s.key}'),
+          borderRadius: BorderRadius.circular(R.lg),
+          onTap: _busy ? null : () => setState(() => _paySrc = s.key),
+          child: Container(
+            padding: const EdgeInsets.all(Sp.md),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: on ? AppColors.brand : AppColors.border, width: on ? 1.5 : 1),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(on ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                    size: 22, color: on ? AppColors.brand : AppColors.textLow),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.label, style: AppType.bodyBold(color: AppColors.textHi)),
+                      const SizedBox(height: 2),
+                      Text(s.summary, style: AppType.body(color: AppColors.textMid)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _skip(PayslipPeriod p) async {
@@ -1271,7 +1396,7 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
               ],
             ),
           ),
-          if (pv.canPay && pv.net > 0) ...[
+          if (pv.canPay && pv.net > 0 && pv.sources.isEmpty) ...[
             const SizedBox(height: Sp.lg),
             SheetSection(
               label: 'من أين يُدفع؟',
@@ -1315,20 +1440,35 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
       ),
       footer: pv == null
           ? null
-          : SheetFooterBar(
-              key: const ValueKey('emp-payslip-pay'),
-              label: _busy
-                  ? 'جارٍ الصرف...'
-                  : pv.canPay
-                      ? 'صرف — يستلم ${_iqd(pv.net)}'
-                      : 'لا شيء يُصرف الآن',
-              icon: LucideIcons.check,
-              busy: _busy,
-              enabled: pv.canPay && !_loading,
-              onPressed: _pay,
-            ),
+          : _step && pv.sources.isNotEmpty
+              ? SheetFooterBar(
+                  key: const ValueKey('emp-payslip-confirm'),
+                  label: _busy ? 'جارٍ الصرف...' : 'تأكيد الصرف',
+                  icon: LucideIcons.check,
+                  busy: _busy,
+                  enabled: pv.canPay && !_loading && (pv.net <= 0 || _paySrc != null),
+                  onPressed: _pay,
+                  leading: SheetSecondaryButton(
+                    key: const ValueKey('emp-payslip-back'),
+                    label: 'رجوع',
+                    onTap: _busy ? () {} : () => setState(() => _step = false),
+                  ),
+                )
+              : SheetFooterBar(
+                  key: const ValueKey('emp-payslip-pay'),
+                  label: _busy
+                      ? 'جارٍ الصرف...'
+                      : pv.canPay
+                          ? 'صرف — يستلم ${_iqd(pv.net)}'
+                          : 'لا شيء يُصرف الآن',
+                  icon: LucideIcons.check,
+                  busy: _busy,
+                  enabled: pv.canPay && !_loading,
+                  // مصادر من الخادم ⇒ «من أين تدفع الراتب؟» أوّلاً؛ خادمٌ أقدم ⇒ الصرف مباشرةً بالاختيار القديم
+                  onPressed: pv.sources.isNotEmpty ? () => setState(() => _step = true) : _pay,
+                ),
       body: pv != null
-          ? _body(pv)
+          ? (_step && pv.sources.isNotEmpty ? _sourceStep(pv) : _body(pv))
           : _loading
               ? const Padding(padding: EdgeInsets.all(Sp.xl), child: Center(child: CircularProgressIndicator()))
               : Column(

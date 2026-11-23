@@ -254,6 +254,7 @@ class LedgerPayslip {
     this.installmentSum = 0,
     this.net = 0,
     this.fromHand = false,
+    this.fromOwn = false,
     this.periodLabels = const [],
     this.voidReason,
   });
@@ -272,6 +273,9 @@ class LedgerPayslip {
   /// ما استلمه نقداً.
   final double net;
   final bool fromHand;
+
+  /// صُرف «من مالي الخاص» (٢٣ نوفمبر) — مصروفٌ كغيره لا يُحسب على الصندوق.
+  final bool fromOwn;
   final List<String> periodLabels;
   final String? voidReason;
 
@@ -293,6 +297,7 @@ class LedgerPayslip {
       installmentSum: _n(raw['installment_sum']),
       net: _n(raw['net']),
       fromHand: raw['source'] == 'hand',
+      fromOwn: raw['source'] == 'own',
       periodLabels: periods is List
           ? periods.map((p) => p is Map ? _periodLabelOf(p) : null).whereType<String>().toList()
           : const [],
@@ -440,6 +445,54 @@ class PayslipPeriod {
   }
 }
 
+/// مصدر دفع الكشف بعد «صرف» (٢٣ نوفمبر — server/employeeLedger.js payoutSources): من الصندوق · من مالي الخاص (للمدير وحده،
+/// بمفتاحه) · من النقد الذي بيده — بأثره بالأرقام ونصّه «كيف يُسجَّل في النظام» من الخادم نفسه (كالموقع حرفاً).
+class PayoutSource {
+  const PayoutSource({
+    required this.key,
+    required this.label,
+    this.summary = '',
+    this.lines = const [],
+    this.expense = 0,
+    this.boxChange = 0,
+    this.handChange = 0,
+  });
+
+  /// box | own | hand — يُرسَل كما هو.
+  final String key;
+  final String label;
+
+  /// سطرٌ تحت الاسم: ما يحدث للنقد.
+  final String summary;
+
+  /// «كيف يُسجَّل في النظام» سطراً سطراً.
+  final List<String> lines;
+  final double expense;
+
+  /// أثره على متوقَّع «تسوية الحساب» (سالب = نقص).
+  final double boxChange;
+
+  /// أثره على ما يسلّمه الموظّف في «تسوية مع الموظف».
+  final double handChange;
+
+  static PayoutSource? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final key = _s(raw['key']);
+    final label = _s(raw['label']);
+    if (key == null || label == null || !const {'box', 'own', 'hand'}.contains(key)) return null;
+    final lines = raw['lines'];
+    return PayoutSource(
+      key: key,
+      label: label,
+      summary: _s(raw['summary']) ?? '',
+      lines: lines is List ? lines.map((x) => x?.toString().trim() ?? '').where((x) => x.isNotEmpty).toList() : const [],
+      expense: _n(raw['expense']),
+      boxChange: _n(raw['box_change']),
+      handChange: _n(raw['hand_change']),
+    );
+  }
+}
+
 /// معاينة «كشف الراتب» — كلّ أرقامها من الخادم، وتُعاد إليه كما هي عند «صرف».
 class PayslipPreview {
   const PayslipPreview({
@@ -465,6 +518,7 @@ class PayslipPreview {
     this.net = 0,
     this.canPay = false,
     this.problem,
+    this.sources = const [],
   });
   final List<PayslipPeriod> periods;
 
@@ -500,6 +554,9 @@ class PayslipPreview {
 
   /// سبب عدم الصرف (رسالة الخادم العربيّة).
   final String? problem;
+
+  /// «من أين يُدفع؟» بعد «صرف» (٢٣ نوفمبر). فارغة = خادمٌ أقدم ⇒ الاختيار القديم (الصندوق أو بيده) قبل الزرّ.
+  final List<PayoutSource> sources;
 
   List<String> get selectedKeys => [for (final p in periods) if (p.selected) p.key];
 
@@ -540,6 +597,9 @@ class PayslipPreview {
       net: _n(raw['net']),
       canPay: raw['can_pay'] == true && raw['expected'] is Map,
       problem: problem is Map ? _s(problem['message']) : null,
+      sources: raw['sources'] is List
+          ? (raw['sources'] as List).map(PayoutSource.fromJson).whereType<PayoutSource>().toList()
+          : const [],
     );
   }
 }
@@ -744,14 +804,15 @@ class EmployeeLedgerApi {
     }
   }
 
-  /// «صرف» بما عُرض — تغيّر شيء ⇒ 409 STALE / PERIOD_CHANGED (تُعاد المعاينة).
-  static Future<LedgerResult<bool>> payPayslip(int id, PayslipPreview p, {bool fromHand = false, String? note, required String clientRef}) async {
+  /// «صرف» بما عُرض — تغيّر شيء ⇒ 409 STALE / PERIOD_CHANGED (تُعاد المعاينة). [source] box | own | hand (غائب ⇒ [fromHand]).
+  static Future<LedgerResult<bool>> payPayslip(int id, PayslipPreview p,
+      {bool fromHand = false, String? source, String? note, required String clientRef}) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/$id/payslip', options: _open, data: {
         'periods': p.selectedKeys,
         'cut': p.cut,
         'expected': p.expected,
-        'source': fromHand ? 'hand' : 'box',
+        'source': source ?? (fromHand ? 'hand' : 'box'),
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         'client_ref': clientRef,
       });

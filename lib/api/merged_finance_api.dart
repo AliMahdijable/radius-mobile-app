@@ -236,6 +236,7 @@ class MergedFinanceApi {
       // «حركات الموظف»: للعرض — تُجمع كما هي (شركةٌ بلا القسم أصفار)
       hasEmployeeMoves: ks.any((k) => k.hasEmployeeMoves),
       empSalariesSum: n((k) => k.empSalariesSum),
+      empSalariesOwnSum: n((k) => k.empSalariesOwnSum),
       empGivenSum: n((k) => k.empGivenSum),
       empBackSum: n((k) => k.empBackSum),
       empOutstanding: n((k) => k.empOutstanding),

@@ -20,6 +20,7 @@ class ExpenseRow {
     this.recurringPeriod,
     this.payslipNumber,
     this.payslipEmployee,
+    this.payslipOwn = false,
   });
   final int id;
   final num amount;
@@ -47,6 +48,9 @@ class ExpenseRow {
   /// الصرفيات (الخادم يرفضها 409 PAYSLIP_EXPENSE): يُلغى الكشف من حساب الموظف فتُحذف معه.
   final int? payslipNumber;
   final String? payslipEmployee;
+
+  /// صُرف «من مال المدير الخاص» (٢٣ نوفمبر) — مصروفٌ كغيره لا يُحسب على الصندوق.
+  final bool payslipOwn;
   bool get isPayslip => payslipNumber != null;
 
   static ExpenseRow? fromJson(Map<String, dynamic> j) {
@@ -76,6 +80,7 @@ class ExpenseRow {
       recurringPeriod: j['recurring'] is Map ? (j['recurring'] as Map)['period']?.toString() : null,
       payslipNumber: j['payslip'] is Map ? int.tryParse('${(j['payslip'] as Map)['number'] ?? ''}') : null,
       payslipEmployee: j['payslip'] is Map ? (j['payslip'] as Map)['employee_name']?.toString() : null,
+      payslipOwn: j['payslip'] is Map && (j['payslip'] as Map)['source'] == 'own',
     );
   }
 }

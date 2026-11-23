@@ -29,6 +29,7 @@ class FinanceKpiIds {
   static const goodsLoss = 'goods_loss';
   static const packageCost = 'package_cost';
   static const salaries = 'salaries';
+  static const salariesOwn = 'salaries_own';
   static const empOutstanding = 'emp_outstanding';
 }
 
@@ -121,6 +122,9 @@ class FinanceView {
       // «حركات الموظف» (١٣ نوفمبر) — للعرض: رواتبهم داخلةٌ أصلاً في المصاريف، والسلف ليست مصروفاً.
       if (k.hasEmployeeMoves && k.empSalariesSum > 0)
         m(FinanceKpiIds.salaries, 'منها رواتب ومكافآت', (x) => x.empSalariesSum, LucideIcons.users, RpTone.loss, upIsGood: false),
+      // «من مالي الخاص» (٢٣ نوفمبر): منها ما دفعه المدير من ماله — مصروفٌ كغيره لم يخرج من الصندوق
+      if (k.hasEmployeeMoves && k.empSalariesOwnSum > 0)
+        m(FinanceKpiIds.salariesOwn, 'دُفع من مال المدير', (x) => x.empSalariesOwnSum, LucideIcons.wallet, RpTone.neutral, upIsGood: false),
       if (k.showEmployeeReceivable)
         m(FinanceKpiIds.empOutstanding, 'سلف وقروض الموظفين', (x) => x.empOutstanding, LucideIcons.handCoins, RpTone.debt,
             upIsGood: false),
@@ -151,6 +155,7 @@ class FinanceView {
         return (l) => at(l) == 'BALANCE_ADD' && !l.isCredit && !l.isSaleDebtLine;
       case FinanceKpiIds.expenses:
       case FinanceKpiIds.salaries:
+      case FinanceKpiIds.salariesOwn:
         return (l) => t(l, 'ADMIN_EXPENSE');
       case FinanceKpiIds.creditCash:
         return (l) => at(l) == 'BALANCE_ADD' && l.isCredit && l.creditKind == 'cash';

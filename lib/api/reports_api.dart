@@ -176,6 +176,7 @@ class FinanceKPIs {
     this.goodsLossCount = 0,
     this.hasEmployeeMoves = false,
     this.empSalariesSum = 0,
+    this.empSalariesOwnSum = 0,
     this.empGivenSum = 0,
     this.empBackSum = 0,
     this.empOutstanding = 0,
@@ -195,6 +196,9 @@ class FinanceKPIs {
 
   /// صرفيّات كشوف الرواتب ضمن الصرفيات («رواتب ومكافآت»).
   final num empSalariesSum;
+
+  /// منها ما صُرف «من مال المدير الخاص» (٢٣ نوفمبر) — للعرض: داخلٌ في المصاريف ولم يخرج من الصندوق.
+  final num empSalariesOwnSum;
 
   /// سلف وسحوبات وقروض خرجت بالفترة.
   final num empGivenSum;
@@ -335,6 +339,7 @@ class FinanceKPIs {
       goodsLossCount: _i(j['sales_loss_count']),
       hasEmployeeMoves: j['emp_receivable_outstanding'] != null || j['emp_salaries_sum'] != null,
       empSalariesSum: _n(j['emp_salaries_sum']),
+      empSalariesOwnSum: _n(j['emp_salaries_own_sum']),
       empGivenSum: _n(j['emp_given_sum']),
       empBackSum: _n(j['emp_recovered_sum']) + _n(j['emp_repaid_sum']),
       empOutstanding: _n(j['emp_receivable_outstanding']),

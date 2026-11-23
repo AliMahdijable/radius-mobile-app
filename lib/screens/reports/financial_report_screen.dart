@@ -758,6 +758,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         _KpiItem('منها رواتب ومكافآت', formatIQD(k.empSalariesSum),
             AppColors.error, LucideIcons.users,
             isDebit: true),
+      // «من مالي الخاص» (٢٣ نوفمبر): منها ما دفعه المدير من ماله — لم يخرج من الصندوق
+      if (k.hasEmployeeMoves && k.empSalariesOwnSum > 0)
+        _KpiItem('دُفع من مال المدير', formatIQD(k.empSalariesOwnSum),
+            AppColors.textMid, LucideIcons.wallet),
       if (k.showEmployeeReceivable)
         _KpiItem('سلف وقروض الموظفين', formatIQD(k.empOutstanding),
             AppColors.warning, LucideIcons.handCoins,

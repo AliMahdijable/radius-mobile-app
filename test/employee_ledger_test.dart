@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
@@ -9,6 +12,7 @@ import 'package:rad_mysvcs/api/employee_ledger_api.dart';
 import 'package:rad_mysvcs/api/employee_limits_api.dart' hide MoneyCount;
 import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/api/expenses_api.dart';
+import 'package:rad_mysvcs/api/merged_finance_api.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/api/settlements_api.dart';
 import 'package:rad_mysvcs/core/util/format.dart';
@@ -20,6 +24,8 @@ import 'package:rad_mysvcs/screens/employees/sheets/employee_editor_sheet.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_log_tile.dart';
 import 'package:rad_mysvcs/screens/settlements/settle_widgets.dart';
+import 'package:rad_mysvcs/screens/reports/v2/finance_view.dart';
+import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -836,6 +842,244 @@ void main() {
       await t.tap(find.text('إعادة المحاولة'));
       await settle(t);
       expect(find.text('صرف — يستلم 375,000 د.ع'), findsOneWidget);
+    });
+  });
+
+  // «من مالي الخاص» (٢٣ نوفمبر — المالك: «بعد ما ينقر يخيره النظام من مالي الخاص او من الصندوق على ان تنبه للحركه كيف تسجل بالنظام
+  // بدقة»): المصادر ونصّها من payoutSources الحقيقيّ في الخادم (test/employee_ledger/payout_sources_contract.json — لا تُكتب باليد).
+  group('«من مالي الخاص» بعد «صرف»', () {
+    final contract = jsonDecode(File('test/employee_ledger/payout_sources_contract.json').readAsStringSync()) as Map<String, dynamic>;
+    Map<String, dynamic> pv(String which) {
+      final p = ledgerPreviewJson()..['sources'] = contract[which];
+      if (which == 'zero') {
+        p
+          ..['gross'] = 100000
+          ..['recover'] = 100000
+          ..['installment_sum'] = 0
+          ..['net'] = 0
+          ..['loans'] = <Object>[]
+          ..['expected'] = {'gross': 100000, 'net': 0};
+      }
+      return p;
+    }
+
+    Finder key(String k) => find.byKey(ValueKey(k));
+    Future<void> openOwn(WidgetTester t, void Function(Object?) onResult, {String which = 'manager'}) async {
+      server.preview = pv(which);
+      await opener(t, (c) => showEmployeePayslipSheet(c, employeeId: 7, name: 'أحمد'), onResult);
+    }
+
+    testWidgets('«صرف» لا يصرف: يسأل من أين بثلاثة مصادر بلا اختيار، و«من مالي الخاص» يقول ما يُسجَّل ثمّ يُرسَل', (t) async {
+      await phone(t);
+      Object? result = 'x';
+      await openOwn(t, (r) => result = r);
+      expect(find.text('من أين يُدفع؟'), findsNothing, reason: 'الاختيار القديم قبل الزرّ يختفي حين يرسل الخادم المصادر');
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip'), isEmpty, reason: 'الضغطة الأولى تسأل ولا تصرف');
+      expect(key('emp-payslip-step-source'), findsOneWidget);
+      expect(find.text('من أين تدفع الراتب؟'), findsOneWidget);
+      expect(t.widget<Text>(key('emp-payslip-step-net')).data, 'أحمد يستلم 375,000 د.ع — المستحقّ 525,000 د.ع');
+      for (final k in ['box', 'own', 'hand']) {
+        expect(key('emp-payslip-src-$k'), findsOneWidget);
+      }
+      // الترتيب كالخادم: الصندوق، مالي الخاص، بيده
+      final ys = [for (final k in ['box', 'own', 'hand']) t.getTopLeft(key('emp-payslip-src-$k')).dy];
+      expect(ys[0] < ys[1] && ys[1] < ys[2], isTrue, reason: '$ys');
+      expect(find.text('يخرج من الصندوق 375,000 د.ع'), findsOneWidget);
+      expect(find.text('تدفع 375,000 د.ع من مالك — الصندوق لا يتغيّر'), findsOneWidget);
+      expect(find.text('يسلّمك أقلّ بـ375,000 د.ع في «تسوية مع الموظف»'), findsOneWidget);
+      // لا اختيار مسبق: «تأكيد الصرف» مقفلٌ لا يصرف حتى يختار
+      expect(key('emp-payslip-src-pick'), findsOneWidget);
+      expect(t.widget<SheetFooterBar>(key('emp-payslip-confirm')).enabled, isFalse);
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t, frames: 5);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip'), isEmpty);
+      await t.tap(key('emp-payslip-src-own'));
+      await t.pump();
+      expect(key('emp-payslip-src-lines'), findsOneWidget);
+      for (final l in (contract['manager'] as List)[1]['lines'] as List) {
+        expect(find.text('•  $l'), findsOneWidget, reason: l as String);
+      }
+      expect(find.text('•  الصندوق لا يتغيّر: لا صرفيّة ولا استقطاع في «تسوية الحساب»'), findsOneWidget);
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t);
+      final b = server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip').single;
+      expect(b['source'], 'own');
+      expect(b['periods'], ['2026-11']);
+      expect(b['cut'], {'ledger_id': 42, 'comm_to': null});
+      expect(b['expected'], {'gross': 525000, 'net': 375000});
+      expect(RegExp(r'^[A-Za-z0-9_-]{8,64}$').hasMatch(b['client_ref'] as String), isTrue);
+      expect(result, 'صُرف كشف أحمد — 375,000 د.ع من مالك الخاص');
+    });
+
+    testWidgets('«رجوع» يعيد المراجعة والاختيار باقٍ، و«من الصندوق» يرسل box بما قاله', (t) async {
+      await phone(t);
+      Object? result;
+      await openOwn(t, (r) => result = r);
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      await t.tap(key('emp-payslip-src-box'));
+      await t.pump();
+      expect(find.text('•  ينقص متوقَّع «تسوية الحساب» 375,000 د.ع — ما يستلمه نقداً'), findsOneWidget);
+      await t.tap(find.text('رجوع'));
+      await settle(t, frames: 5);
+      expect(key('emp-payslip'), findsOneWidget);
+      expect(key('emp-payslip-step-source'), findsNothing);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip'), isEmpty);
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      expect(find.text('•  ينقص متوقَّع «تسوية الحساب» 375,000 د.ع — ما يستلمه نقداً'), findsOneWidget, reason: 'الاختيار باقٍ');
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip').single['source'], 'box');
+      expect(result, 'صُرف كشف أحمد — 375,000 د.ع');
+    });
+
+    testWidgets('موظّف الصلاحيّة (بلا «مالي الخاص» من الخادم): مصدران، و«من النقد الذي بيده» يرسل hand', (t) async {
+      await phone(t);
+      await openOwn(t, (_) {}, which: 'employee');
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      expect(key('emp-payslip-src-own'), findsNothing);
+      expect(key('emp-payslip-src-box'), findsOneWidget);
+      await t.tap(key('emp-payslip-src-hand'));
+      await t.pump();
+      expect(find.text('•  يأخذ 375,000 د.ع من النقد الذي جمعه — ينقص ما يسلّمه، ومتوقَّع «تسوية الحساب» 375,000 د.ع'), findsOneWidget);
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip').single['source'], 'hand');
+    });
+
+    testWidgets('OWN_OFF: رسالة الخادم، والمصادر من جديد بلا «مالي الخاص» ولا اختيار — والورقة باقية', (t) async {
+      await phone(t);
+      Object? result = 'x';
+      await openOwn(t, (r) => result = r);
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      await t.tap(key('emp-payslip-src-own'));
+      await t.pump();
+      server.payReplies.add((409, {'success': false, 'code': 'OWN_OFF', 'message': '«من مالي الخاص» غير مفعّل لحسابك — اختر «من الصندوق» أو «من النقد الذي بيده»'}));
+      server.preview = pv('employee');
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t, frames: 40);
+      expect(server.previewQueries, [null, '2026-11']);
+      expect(key('emp-payslip-step-source'), findsOneWidget, reason: 'الخطوة باقية بمصادرها الجديدة');
+      expect(key('emp-payslip-src-own'), findsNothing);
+      expect(key('emp-payslip-src-pick'), findsOneWidget, reason: 'بلا اختيار');
+      expect(t.widget<SheetFooterBar>(key('emp-payslip-confirm')).enabled, isFalse, reason: 'لا يُعاد «مالي الخاص» بضغطة');
+      expect(result, 'x');
+      await t.tap(key('emp-payslip-src-box'));
+      await t.pump();
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t);
+      final posts = server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip');
+      expect(posts.map((b) => b['source']).toList(), ['own', 'box']);
+      expect(posts[0]['client_ref'], isNot(posts[1]['client_ref']), reason: 'معاينةٌ جديدة ⇒ نيّةٌ جديدة');
+    });
+
+    testWidgets('STALE من الخطوة الثانية ⇒ المراجعة من جديد بمعاينةٍ جديدة', (t) async {
+      await phone(t);
+      await openOwn(t, (_) {});
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      await t.tap(key('emp-payslip-src-own'));
+      await t.pump();
+      server.payReplies.add((409, {'success': false, 'code': 'STALE', 'message': 'تغيّرت الأرقام منذ فتحت الكشف — راجعه وأكّد من جديد'}));
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t, frames: 40);
+      expect(server.previewQueries, [null, '2026-11']);
+      expect(key('emp-payslip'), findsOneWidget);
+      expect(key('emp-payslip-step-source'), findsNothing);
+    });
+
+    testWidgets('صافٍ صفر: لا اختيار — ما يُسجَّل وحده، و«تأكيد الصرف» يصرف بالصندوق', (t) async {
+      await phone(t);
+      await openOwn(t, (_) {}, which: 'zero');
+      await t.tap(find.text('صرف — يستلم 0 د.ع'));
+      await settle(t, frames: 5);
+      expect(find.text('لا نقد يُدفع — المستحقّ كلّه استُقطع من سلفه وأقساطه.'), findsOneWidget);
+      expect(key('emp-payslip-src-own'), findsNothing);
+      expect(find.text('•  الصندوق لا يتغيّر'), findsOneWidget);
+      await t.tap(find.text('تأكيد الصرف'));
+      await settle(t);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/payslip').single['source'], 'box');
+    });
+
+    testWidgets('أضيق هاتف (320) وخطٌّ ×1.3: الخطوة كاملة بلا فيضان، وكلّ سطرٍ يُقرأ', (t) async {
+      await phone(t, width: 320);
+      t.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+      await openOwn(t, (_) {});
+      await t.tap(find.text('صرف — يستلم 375,000 د.ع'));
+      await settle(t, frames: 5);
+      for (final k in ['own', 'hand', 'box']) {
+        await t.tap(key('emp-payslip-src-$k'));
+        await t.pump();
+        expect(t.takeException(), isNull, reason: k);
+        final texts = [
+          ...t.renderObjectList<RenderParagraph>(find.descendant(of: key('emp-payslip-src-lines'), matching: find.byType(RichText))),
+          ...t.renderObjectList<RenderParagraph>(find.descendant(of: key('emp-payslip-src-$k'), matching: find.byType(RichText))),
+        ];
+        expect(texts.length, greaterThan(3));
+        for (final r in texts) {
+          expect(r.didExceedMaxLines, isFalse, reason: '$k: ${r.text.toPlainText()}');
+        }
+      }
+    });
+
+    testWidgets('قائمة الكشوف: الكشف «من مالي الخاص» يقول «من مال المدير الخاص»، وكشف الصندوق بلاها', (t) async {
+      await phone(t);
+      final json = ledgerAccountJson();
+      final slips = (json['payslips'] as List).cast<Map<String, dynamic>>();
+      slips.firstWhere((s) => s['id'] == 3)['source'] = 'own';
+      await t.pumpWidget(app(Scaffold(
+        body: SingleChildScrollView(
+          child: EmployeeLedgerPanel(account: LedgerAccount.fromJson(json)!, onMove: () {}, onPayslip: () {}, onVoidMove: (_) {}, onVoidPayslip: (_) {}),
+        ),
+      )));
+      await t.pump();
+      expect(find.descendant(of: key('emp-ledger-slip-3'), matching: find.textContaining('من مال المدير الخاص')), findsOneWidget);
+      expect(find.descendant(of: key('emp-ledger-slip-2'), matching: find.textContaining('من مال المدير الخاص')), findsNothing);
+    });
+
+    test('التقرير الماليّ: بطاقة «دُفع من مال المدير» حين يوجد وحدها — والرواتب كلّها كما كانت', () {
+      final k = FinanceKPIs.fromJson({'emp_salaries_sum': 900000, 'emp_salaries_own_sum': 525000, 'emp_receivable_outstanding': 0});
+      final byId = {for (final x in FinanceView.kpis(k, null)) x.id: x};
+      expect(byId['salaries']?.value, 900000);
+      expect(byId['salaries_own']?.value, 525000);
+      expect(byId['salaries_own']?.label, 'دُفع من مال المدير');
+      final none = {for (final x in FinanceView.kpis(FinanceKPIs.fromJson({'emp_salaries_sum': 900000, 'emp_receivable_outstanding': 0}), null)) x.id};
+      expect(none.contains('salaries'), isTrue);
+      expect(none.contains('salaries_own'), isFalse);
+      expect(FinanceView.drill('salaries_own')(FinanceLog.fromJson({'id': 1, 'action_type': 'ADMIN_EXPENSE', 'amount': 1, 'created_at': '2026-11-28T09:00:00Z'})!), isTrue);
+      expect(FinanceView.drill('salaries_own')(FinanceLog.fromJson({'id': 2, 'action_type': 'SUBSCRIBER_ACTIVATE', 'amount': 1, 'created_at': '2026-11-28T09:00:00Z'})!), isFalse,
+          reason: 'لمسها يعرض الصرفيات وحدها');
+      // «كل الشركات»: يُجمع كما هو
+      final merged = MergedFinanceApi.sumKpis([k, FinanceKPIs.fromJson({'emp_salaries_sum': 100000, 'emp_salaries_own_sum': 100000, 'emp_receivable_outstanding': 0})]);
+      expect([merged.empSalariesSum, merged.empSalariesOwnSum], [1000000, 625000]);
+    });
+
+    test('النماذج: مصادر الخادم تُقرأ (ومصدرٌ مجهول يُسقط)، والكشف والصرفيّة والتقرير يعرفون «من مالي الخاص»', () {
+      final p = PayslipPreview.fromJson(pv('manager')..['sources'] = [...(contract['manager'] as List), {'key': 'card', 'label': 'بطاقة'}])!;
+      expect(p.sources.map((s) => s.key).toList(), ['box', 'own', 'hand']);
+      expect(p.sources[1].boxChange, 0);
+      expect(p.sources[0].boxChange, -375000);
+      expect(p.sources[2].handChange, -375000);
+      expect(p.sources[1].lines, hasLength(3));
+      expect(PayslipPreview.fromJson(ledgerPreviewJson())!.sources, isEmpty, reason: 'خادمٌ أقدم ⇒ لا مصادر');
+      final slip = LedgerPayslip.fromJson({'id': 9, 'number': 3, 'status': 'paid', 'source': 'own', 'gross': 525000, 'net': 375000})!;
+      expect([slip.fromOwn, slip.fromHand], [true, false]);
+      final row = ExpenseRow.fromJson({
+        'id': 77, 'amount': 525000, 'expense_date': '2026-11-28 12:00:00',
+        'payslip': {'id': 9, 'number': 3, 'employee_id': 7, 'employee_name': 'أحمد', 'source': 'own'},
+      })!;
+      expect([row.isPayslip, row.payslipOwn], [true, true]);
+      final plain = ExpenseRow.fromJson({'id': 78, 'amount': 1000, 'expense_date': '2026-11-28 12:00:00', 'payslip': {'id': 8, 'number': 2, 'source': 'box'}})!;
+      expect(plain.payslipOwn, isFalse);
+      final k = FinanceKPIs.fromJson({'emp_salaries_sum': 900000, 'emp_salaries_own_sum': 525000, 'emp_receivable_outstanding': 0});
+      expect([k.empSalariesSum, k.empSalariesOwnSum], [900000, 525000]);
+      expect(FinanceKPIs.fromJson({'emp_salaries_sum': 900000}).empSalariesOwnSum, 0);
     });
   });
 
