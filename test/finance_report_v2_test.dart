@@ -189,13 +189,13 @@ void main() {
   // ═══════════════════════════════ ١) الفترات ═══════════════════════════════
 
   group('RpRange', () {
-    test('الفترات الجاهزة من الأحد ٢٢ نوفمبر — الأسبوع يبدأ الإثنين', () {
+    test('الفترات الجاهزة من الأحد ٢٢ نوفمبر — الأسبوع يبدأ السبت (أسبوع العراق)', () {
       RpRange of(RpPreset p) => RpRange.of(p, now: _now);
       expect([_d(of(RpPreset.today).from), _d(of(RpPreset.today).to)], ['2026/11/22', '2026/11/22']);
       expect(of(RpPreset.today).to, DateTime(2026, 11, 22, 23, 59, 59));
       expect(_d(of(RpPreset.yesterday).from), '2026/11/21');
-      expect([_d(of(RpPreset.thisWeek).from), _d(of(RpPreset.thisWeek).to)], ['2026/11/16', '2026/11/22']);
-      expect([_d(of(RpPreset.lastWeek).from), _d(of(RpPreset.lastWeek).to)], ['2026/11/09', '2026/11/15']);
+      expect([_d(of(RpPreset.thisWeek).from), _d(of(RpPreset.thisWeek).to)], ['2026/11/21', '2026/11/22']);
+      expect([_d(of(RpPreset.lastWeek).from), _d(of(RpPreset.lastWeek).to)], ['2026/11/14', '2026/11/20']);
       expect([_d(of(RpPreset.thisMonth).from), _d(of(RpPreset.thisMonth).to)], ['2026/11/01', '2026/11/22']);
       expect([_d(of(RpPreset.lastMonth).from), _d(of(RpPreset.lastMonth).to)], ['2026/10/01', '2026/10/31']);
       expect([_d(of(RpPreset.last30).from), _d(of(RpPreset.last30).to)], ['2026/10/24', '2026/11/22']);
@@ -206,11 +206,39 @@ void main() {
       expect([_d(c.from), _d(c.to), c.days], ['2026/11/03', '2026/11/10', 8]);
     });
 
+    // المالك (٢٣ نوفمبر، سجلّ النشاط يوم إثنين): «اختار يوم يقره، سبوع ميقره» — كان الأسبوع يبدأ الإثنين فصار «هذا الأسبوع» اليوم وحده
+    test('الأسبوع يبدأ السبت: الإثنين ٢٣ ⇐ من السبت ٢١، والسبت وحده يومٌ واحد، والجمعة سبعة، والماضي سبتٌ إلى جمعة', () {
+      String w(RpPreset p, DateTime now) {
+        final r = RpRange.of(p, now: now);
+        return '${_d(r.from)}–${_d(r.to)} (${r.days})';
+      }
+
+      expect(w(RpPreset.thisWeek, DateTime(2026, 11, 23, 2)), '2026/11/21–2026/11/23 (3)', reason: 'الإثنين فجراً — لا «اليوم وحده»');
+      expect(w(RpPreset.lastWeek, DateTime(2026, 11, 23, 2)), '2026/11/14–2026/11/20 (7)');
+      expect(w(RpPreset.thisWeek, DateTime(2026, 11, 21, 9)), '2026/11/21–2026/11/21 (1)', reason: 'السبت أوّل الأسبوع');
+      expect(w(RpPreset.thisWeek, DateTime(2026, 11, 27, 23)), '2026/11/21–2026/11/27 (7)', reason: 'الجمعة آخره');
+      expect(w(RpPreset.lastWeek, DateTime(2026, 11, 27, 23)), '2026/11/14–2026/11/20 (7)');
+      expect(w(RpPreset.lastWeek, DateTime(2026, 11, 28)), '2026/11/21–2026/11/27 (7)', reason: 'السبت التالي ⇒ الأسبوع الماضي هو الذي انتهى أمس');
+      // عبر الشهر والسنة
+      expect(w(RpPreset.thisWeek, DateTime(2026, 12, 1)), '2026/11/28–2026/12/01 (4)');
+      expect(w(RpPreset.lastWeek, DateTime(2027, 1, 2)), '2026/12/26–2027/01/01 (7)');
+      for (var i = 0; i < 400; i++) {
+        final now = DateTime(2026, 1, 1 + i, 12);
+        final tw = RpRange.of(RpPreset.thisWeek, now: now), lw = RpRange.of(RpPreset.lastWeek, now: now);
+        expect(tw.from.weekday, DateTime.saturday, reason: '$now');
+        expect(lw.from.weekday, DateTime.saturday, reason: '$now');
+        expect(lw.to.weekday, DateTime.friday, reason: '$now');
+        expect(DateTime(lw.to.year, lw.to.month, lw.to.day + 1), tw.from, reason: 'الماضي ينتهي قبل بداية هذا بيوم — $now');
+        expect(tw.days, inInclusiveRange(1, 7));
+      }
+    });
+
     test('ما تُقارن به: الأيّام نفسها من الشهر/الأسبوع الماضي، والكاملة بالكاملة، والطول نفسه قبلها', () {
       String pv(RpRange r) => '${_d(r.previous.from)}–${_d(r.previous.to)}';
       expect(pv(RpRange.of(RpPreset.thisMonth, now: _now)), '2026/10/01–2026/10/22');
       expect(pv(RpRange.of(RpPreset.lastMonth, now: _now)), '2026/09/01–2026/09/30');
-      expect(pv(RpRange.of(RpPreset.thisWeek, now: _now)), '2026/11/09–2026/11/15');
+      expect(pv(RpRange.of(RpPreset.thisWeek, now: _now)), '2026/11/14–2026/11/15');
+      expect(pv(RpRange.of(RpPreset.lastWeek, now: _now)), '2026/11/07–2026/11/13');
       expect(pv(RpRange.of(RpPreset.today, now: _now)), '2026/11/21–2026/11/21');
       expect(pv(RpRange.of(RpPreset.last30, now: _now)), '2026/09/24–2026/10/23');
       expect(pv(RpRange.of(RpPreset.thisYear, now: _now)), '2025/01/01–2025/11/22');
