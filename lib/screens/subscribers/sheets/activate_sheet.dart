@@ -36,6 +36,8 @@ import '../../../services/receipt_pdf.dart';
 import '../../../api/national_wallet_api.dart' show CustomerWalletInfo;
 import '../../national/national_wallet_topup_sheet.dart';
 import '../../../widgets/merged_write_lock.dart';
+import '../../../services/transfer_pay.dart';
+import '../../../widgets/paid_via_picker.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -152,6 +154,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // Default = آجل (dept/deferred). المستخدم صرّح 2026-07-11: أغلب
   // التفعيلات تكون آجلة، فنجعله الافتراضي بدل نقدي.
   _PayType _pay = _PayType.debt;
+
+  /// «استلمته» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها — للنقديّ والجزئيّ وحدهما.
+  PaidVia _paidVia = PaidVia.cash;
   bool _printReceiptChecked = false;
   final _partialCtrl = TextEditingController();
   int _partialAmount = 0;
@@ -1323,6 +1328,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SheetChoiceTiles(
+              compact: true,
               labels: [
                 'sheets.pay_cash'.tr(),
                 'sheets.pay_debt'.tr(),
@@ -1348,7 +1354,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             if (_pay == _PayType.partial) ...[
               const SizedBox(height: Sp.md),
               SheetSection(
-                label: 'sheets.cash_paid_amount'.tr(),
+                // «الحوالات»: المدفوع قد يكون حوالة ⇒ «المبلغ المدفوع» (وقبلها «… نقداً» كما كان)
+                label: TransferPay.available.value ? 'المبلغ المدفوع' : 'sheets.cash_paid_amount'.tr(),
                 gap: 9,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1385,6 +1392,21 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                 ),
               ),
             ],
+            // «استلمته»: النقديّ والجزئيّ (بعد مبلغه) — كاش (الافتراضيّ) أو حوالة بطريقتها؛ الخادم الذي يعرفها وحده يُظهرها
+            if (_pay != _PayType.debt)
+              ValueListenableBuilder<bool>(
+                valueListenable: TransferPay.available,
+                builder: (context, on, _) => !on
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(top: Sp.md),
+                        child: PaidViaPicker(
+                          value: _paidVia,
+                          enabled: !_submitting,
+                          onChanged: (v) => setState(() => _paidVia = v),
+                        ),
+                      ),
+              ),
           ],
         ),
       ),

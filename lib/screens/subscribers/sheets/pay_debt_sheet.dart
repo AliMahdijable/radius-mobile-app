@@ -23,6 +23,8 @@ import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../widgets/merged_write_lock.dart';
+import '../../../services/transfer_pay.dart';
+import '../../../widgets/paid_via_picker.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -81,6 +83,9 @@ class _PayDebtSheet extends StatefulWidget {
 }
 
 class _PayDebtSheetState extends State<_PayDebtSheet> {
+  /// «استلمته» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها.
+  PaidVia _paidVia = PaidVia.cash;
+
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   // 2026-07-13: checkbox داخل المودل — الافتراضي false
@@ -378,6 +383,19 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                       ),
                     ],
                   ),
+                ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: TransferPay.available,
+                  builder: (context, on, _) => !on
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: Sp.lg),
+                          child: PaidViaPicker(
+                            value: _paidVia,
+                            enabled: !_submitting && !_done,
+                            onChanged: (v) => setState(() => _paidVia = v),
+                          ),
+                        ),
                 ),
                 const SizedBox(height: Sp.lg),
                 SheetBox(

@@ -894,6 +894,7 @@ class SheetChoiceTiles extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelect,
     this.enabled = true,
+    this.compact = false,
   });
 
   final List<String> labels;
@@ -901,6 +902,10 @@ class SheetChoiceTiles extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelect;
   final bool enabled;
+
+  /// صغيرة (٢٣ نوفمبر — المالك عن «نقدي/آجل»: «لا تخليها شكل كبير… حتى تكون انسب»): الأيقونة بجانب التسمية بسطرٍ واحد
+  /// (~٤٠ بدل ~٧٠)، والمختارة مملوءة كما هي.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -924,16 +929,21 @@ class SheetChoiceTiles extends StatelessWidget {
                   width: on ? BW.selected : BW.normal,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(
-                  vertical: Sp.md, horizontal: Sp.x6),
-              child: Column(
+              padding: compact
+                  ? const EdgeInsets.symmetric(vertical: 9, horizontal: Sp.x6)
+                  : const EdgeInsets.symmetric(vertical: Sp.md, horizontal: Sp.x6),
+              child: Flex(
+                direction: compact ? Axis.horizontal : Axis.vertical,
                 mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(icons[i],
-                      size: 20,
+                      size: compact ? 16 : 20,
                       color: on ? AppColors.onBrand : AppColors.textLabel),
-                  const SizedBox(height: Sp.x6),
-                  Text(
+                  compact ? const SizedBox(width: Sp.x6) : const SizedBox(height: Sp.x6),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: Text(
                     labels[i],
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -941,6 +951,7 @@ class SheetChoiceTiles extends StatelessWidget {
                       color: on ? AppColors.onBrand : AppColors.textBody,
                     ).copyWith(
                         fontWeight: on ? FontWeight.w600 : FontWeight.w500),
+                  ),
                   ),
                 ],
               ),

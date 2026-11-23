@@ -15,6 +15,8 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../widgets/merged_write_lock.dart';
+import '../../../services/transfer_pay.dart';
+import '../../../widgets/paid_via_picker.dart';
 
 /// Bottom sheet لإضافة رصيدٍ دائنٍ للمشترك — **عكس «إضافة الدين»** (طلب المالك
 /// ٢٧ أكتوبر «اضافة مبلغ رصيد للمشترك … عكس الدين»). مرآةٌ لـ`showAddDebtSheet`
@@ -57,6 +59,9 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
 
   /// `cash` | `comp` | null (لم يُختر بعد — الزرّ معطّل).
   String? _kind;
+
+  /// «استلمته» تحت «استلمت المبلغ» (٢٣ نوفمبر — «الحوالات»): كاش افتراضيّاً، أو حوالة بطريقتها.
+  PaidVia _paidVia = PaidVia.cash;
 
   late final double _currentBalance = widget.sub.balanceAmount;
   late final double _currentDebt =
@@ -257,16 +262,29 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SheetChoiceTiles(
-                  labels: const ['استلمت نقداً', 'تعويض بلا نقد'],
+                  compact: true,
+                  // «الحوالات»: «استلمت المبلغ» كاشاً أو حوالة (تحتها)؛ قبل أن يعرفها الخادم «استلمت نقداً» كما كانت
+                  labels: [TransferPay.available.value ? 'استلمت المبلغ' : 'استلمت نقداً', 'تعويض بلا نقد'],
                   icons: const [LucideIcons.banknote, LucideIcons.gift],
                   selectedIndex: _kind == 'cash' ? 0 : _kind == 'comp' ? 1 : -1,
                   enabled: !_submitting,
                   onSelect: (i) => setState(() => _kind = i == 0 ? 'cash' : 'comp'),
                 ),
+                if (_kind == 'cash' && TransferPay.available.value) ...[
+                  const SizedBox(height: Sp.md),
+                  PaidViaPicker(
+                    value: _paidVia,
+                    enabled: !_submitting,
+                    onChanged: (v) => setState(() => _paidVia = v),
+                  ),
+                ],
                 const SizedBox(height: 7),
                 Text(
                   _kind == 'cash'
-                      ? 'يدخل الصندوق والنقد المُستلم الآن، والتفعيل منه لاحقاً لا يُحسب نقداً مرّةً ثانية.'
+                      // «الحوالات»: أين يذهب المبلغ يقوله سطر «استلمته» فوق — هنا ما بعده وحده
+                      ? (TransferPay.available.value
+                          ? 'يُحسب مستلَماً الآن، والتفعيل منه لاحقاً لا يُحسب مرّةً ثانية.'
+                          : 'يدخل الصندوق والنقد المُستلم الآن، والتفعيل منه لاحقاً لا يُحسب نقداً مرّةً ثانية.')
                       : _kind == 'comp'
                           ? 'لا نقد: لا يدخل الصندوق ولا النقد المُستلم.'
                           : 'اختر: استلمت المبلغ من المشترك نقداً، أم هو تعويضٌ منك بلا نقد؟',
