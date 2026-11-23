@@ -493,7 +493,8 @@ class BalanceMoveRow extends StatelessWidget {
   final BalanceMove move;
   final int? nowMs;
 
-  /// اسم المشترك العربيّ بعد يوزره (٢٠ نوفمبر) — للتفعيل وتسديد الدين وحدهما؛ null ⇒ اليوزر وحده كما كان.
+  /// اسم المشترك العربيّ (٢٠ نوفمبر) — للتفعيل وتسديد الدين وحدهما: العنوان، واليوزر بعده (المالك ٢٣ نوفمبر: «العربي ومن ثم
+  /// اليوزر»)؛ null ⇒ اليوزر عنوانٌ وحده كما كان.
   final String? name;
 
   @override
@@ -595,10 +596,17 @@ class BalanceMoveRow extends StatelessWidget {
                           runSpacing: 2,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
-                            // الاسم العربيّ بعد اليوزر — يلتفّ تحته كاملاً إن ضاق السطر، ولا يُقصّ (كالويب)
+                            // «العربي ومن ثم اليوزر» (المالك ٢٣ نوفمبر): الاسم العربيّ عنواناً كاملاً لا يُقصّ، واليوزر بعده — يلتفّ تحته
+                            // كاملاً إن ضاق السطر (LTR وحده: يوزرٌ يبدأ برقمٍ لا ينقلب)؛ بلا اسمٍ اليوزر عنوانٌ كما كان
                             if (subName != null)
-                              Text(subName, key: const ValueKey('bal-move-name'), style: AppType.body(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
+                              Text(subName, key: const ValueKey('bal-move-name'), style: AppType.bodyBold(color: AppColors.textHi))
+                            else
+                              Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                            if (subName != null)
+                              Text(title,
+                                  key: const ValueKey('bal-move-user'),
+                                  textDirection: TextDirection.ltr,
+                                  style: AppType.body(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
                             for (final t in tags) ToneChip(label: t.text, tone: t.tone, dense: true),
                           ],
                         ),

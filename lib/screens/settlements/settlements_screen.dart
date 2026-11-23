@@ -508,11 +508,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     );
   }
 
-  /// حركةٌ تطابق البحث: المشترك، البند/الوصف، المنفّذ، الباقة.
+  /// حركةٌ تطابق البحث: المشترك (اسمه العربيّ ويوزره)، البند/الوصف، المنفّذ، الباقة.
   static bool _matches(BoxMovement m, String q) {
     final s = q.toLowerCase();
     bool has(String? v) => (v ?? '').toLowerCase().contains(s);
-    return has(m.subscriber) || has(m.description) || has(m.employeeName) || has(m.employeeUsername) || has(m.packageName);
+    return has(m.subscriberName) || has(m.subscriber) || has(m.description) || has(m.employeeName) || has(m.employeeUsername) || has(m.packageName);
   }
 
   /// «حركات الفترة» ببطاقة التقارير الموحّدة: العنوان وعددها، البحث، ثمّ الحركات تحت أيّامها بوقتها «7:34 مساءً» — وزرّ إلغاء

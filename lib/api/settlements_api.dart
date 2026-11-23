@@ -403,6 +403,7 @@ class BoxMovement {
     required this.amount,
     required this.createdAt,
     required this.subscriber,
+    this.subscriberName,
     required this.packageName,
     required this.description,
     required this.expenseDate,
@@ -428,6 +429,9 @@ class BoxMovement {
   final num amount;
   final DateTime? createdAt;
   final String? subscriber;
+
+  /// اسم المشترك العربيّ (٢٣ نوفمبر — الخادم 93cd0f9، بدليل التقارير): يُرسل حين يُعرف ولا يساوي اليوزر — العنوان، واليوزر بعده.
+  final String? subscriberName;
   final String? packageName;
   final String? description;
 
@@ -455,6 +459,7 @@ class BoxMovement {
       amount: _num(j['amount']),
       createdAt: parseServerUtc(_str(j['created_at'])),
       subscriber: _str(j['subscriber']),
+      subscriberName: _str(j['subscriber_name']),
       packageName: _str(j['package_name']),
       description: _str(j['description']),
       expenseDate: _str(j['expense_date']),

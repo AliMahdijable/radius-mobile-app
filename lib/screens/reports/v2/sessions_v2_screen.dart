@@ -9,10 +9,12 @@ import '../../../api/company_route.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
+import '../../../core/util/bidi.dart';
 import '../../../core/util/server_time.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
+import '../../../services/balance_sub_names.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -76,6 +78,23 @@ class _SessionsV2State extends State<SessionsV2Screen> {
   int _visible = _page;
 
   bool get _merged => MergedMode.active.value && widget.initialUsername == null;
+
+  /// الاسم العربيّ للمشترك (المالك ٢٣ نوفمبر: «لازم بجميع التقارير اسم المشترك بالعربي الاولية اله») — من قائمة المشتركين
+  /// المخبّأة، وللحساب الكبير أسماء الصفوف المعروضة وحدها ([BalanceSubNames]، كتقارير الأرصدة). لا أسماء في «كل الشركات»
+  /// (القائمة لشركة الجلسة لا لكلّ شركة) ولا لموظّفٍ بلا «عرض المشتركين» — اليوزر عنوانٌ كما كان.
+  late final BalanceSubNames _names = BalanceSubNames(companyKey: widget.companyKey);
+
+  String? _nameOf(SessionRow s) => _merged ? null : _names.of(s.username ?? '');
+
+  /// يكمل أسماء الصفوف المعروضة ممّا لم يُسأل عنه (لا شيء يُطلب مرّتين)، ويرسم حين يصل اسمٌ جديد.
+  void _fillNames(Iterable<SessionRow> shown) {
+    if (_merged) return;
+    final users = [for (final s in shown) if ((s.username ?? '').trim().isNotEmpty) s.username!.trim()];
+    if (users.isEmpty) return;
+    unawaited(_names.fill(users).then((got) {
+      if (got && mounted) setState(() {});
+    }));
+  }
 
   /// الأقسام الفرعيّة المطويّة (المالك ٢٢ نوفمبر: «المهمّات تظهر والفرعيّة هو ينقر عليها ويظهرها»).
   late final _folds = RpFolds('sessions', const {'rows': true});
@@ -229,17 +248,25 @@ class _SessionsV2State extends State<SessionsV2Screen> {
 
   RpRow _row(SessionRow s, {RpCompany? company}) {
     final t = parseSasLocal((s.startedAt ?? '').trim());
+    final user = (s.username ?? '').trim();
+    final name = _nameOf(s);
+    final net = [
+      if ((s.ipAddress ?? '').isNotEmpty) s.ipAddress!,
+      if ((s.mac ?? '').isNotEmpty) s.mac!,
+      if ((s.userManager ?? '').isNotEmpty) s.userManager!,
+    ].join(' · ');
     return RpRow(
       icon: s.isOnline ? LucideIcons.wifi : LucideIcons.wifiOff,
       tone: s.isOnline ? RpTone.money : RpTone.neutral,
-      title: s.username ?? '—',
-      detail: [
-        if ((s.ipAddress ?? '').isNotEmpty) s.ipAddress!,
-        if ((s.mac ?? '').isNotEmpty) s.mac!,
-        if ((s.userManager ?? '').isNotEmpty) s.userManager!,
-      ].join(' · '),
+      // «العربي ومن ثم اليوزر»: الاسم عنواناً، واليوزر بسطره تحته ثمّ سطر الشبكة — على 320 ×1.2 كان اليوزر الطويل ينكسر مع IP
+      // في سطرٍ واحد ويُقصّ ما بعده؛ بلا اسمٍ السطر كما كان
+      title: name ?? (s.username ?? '—'),
+      detail: name != null && user.isNotEmpty ? '${iso(user)}\n$net' : net,
+      // اليوزر الطويل وسطر الشبكة على 320 ×1.2 قد يأخذان ستّة أسطر — لا قصّ (بلا اسمٍ كما كان)
+      detailLines: name != null && user.isNotEmpty ? 6 : 2,
       amount: null,
-      trailing: s.bytesIn > 0 || s.bytesOut > 0 ? '↓${bytes(s.bytesIn)}  ↑${bytes(s.bytesOut)}' : null,
+      // سطران قصيران: ↓ فوق ↑ (كالموقع) — سطرٌ واحد كان يأخذ نصف السطر فيُقصّ الاسم وسطر الشبكة على 320–390
+      trailing: s.bytesIn > 0 || s.bytesOut > 0 ? '↓${bytes(s.bytesIn)}\n↑${bytes(s.bytesOut)}' : null,
       time: t == null ? '' : clock12Ar(t),
       company: company,
     );
@@ -306,10 +333,13 @@ class _SessionsV2State extends State<SessionsV2Screen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('انتظر حتى تكتمل الجلسات ثمّ صدّر')));
       return;
     }
+    // عمود «الاسم» حين عُرف اسمٌ على الأقلّ — ما على الشاشة
+    final withNames = !_merged && v.rows.any((s) => _nameOf(s) != null);
     final rows = [
       for (final s in v.rows)
         [
           if (_merged) MergedMode.companyOf(v.co[s])?.name ?? '',
+          if (withNames) _nameOf(s) ?? '',
           s.username ?? '',
           s.ipAddress ?? '',
           s.mac ?? '',
@@ -323,6 +353,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
     ];
     final columns = [
       if (_merged) 'الشركة',
+      if (withNames) 'الاسم',
       'reports.col_username'.tr(),
       'IP',
       'MAC',
@@ -489,6 +520,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
           if (s.name != '—') SheetQuickChip(label: 'حصر بـ${s.name}', selected: false, onTap: () => setState(() => _manager = s.name)),
       ]));
     }
+    _fillNames(v.rows.take(_visible));
     parts.add(RpRowsCard(
       fold: _fold('rows'),
       total: v.rows.length,

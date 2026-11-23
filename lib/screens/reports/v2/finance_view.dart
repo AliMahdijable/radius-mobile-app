@@ -206,12 +206,16 @@ class FinanceView {
     }
     final label = arabicActionLabel(l.actionType, desc);
     final actor = (l.actingEmployeeFullName ?? '').trim().isNotEmpty ? l.actingEmployeeFullName!.trim() : (l.adminUsername ?? '').trim();
+    final name = [l.userFullName, l.targetName, l.userUsername].firstWhere((s) => (s ?? '').trim().isNotEmpty, orElse: () => null);
+    final head = desc.isNotEmpty ? desc : label;
+    // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد الاسم ما لم يحمله الوصف أصلاً
+    final user = rpUserAfterName(title: name ?? label, username: l.userUsername ?? l.targetName, detail: head);
     final detail = [
-      desc.isNotEmpty ? desc : label,
+      head,
+      if (user != null) user,
       if (actor.isNotEmpty) actor,
     ].join(' · ');
     final t = timeOf(l);
-    final name = [l.userFullName, l.targetName, l.userUsername].firstWhere((s) => (s ?? '').trim().isNotEmpty, orElse: () => null);
     return RpRow(
       icon: icon,
       tone: tone,

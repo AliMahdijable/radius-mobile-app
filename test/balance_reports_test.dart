@@ -783,7 +783,7 @@ void main() {
     });
   });
 
-  group('الاسم العربيّ بجانب اليوزر (٢٠ نوفمبر)', () {
+  group('الاسم العربيّ أوّلاً ثمّ اليوزر (٢٠ نوفمبر، والترتيب ٢٣ نوفمبر: «العربي ومن ثم اليوزر»)', () {
     Subscriber sub(String u, String first, String last) => Subscriber.fromJson({'username': u, 'firstname': first, 'lastname': last});
     final subs = [
       sub('user0@net', 'علي', 'حسين'),
@@ -803,7 +803,7 @@ void main() {
       expect(balanceSubName('Ali', firstname: 'ali', lastname: null), isNull);
     });
 
-    testWidgets('الحساب العاديّ: الاسم بعد اليوزر للتفعيل والتسديد، والقائمة مرّةً واحدة ولو زادت الحركات', (t) async {
+    testWidgets('الحساب العاديّ: الاسم عنواناً واليوزر بعده للتفعيل والتسديد، والقائمة مرّةً واحدة ولو زادت الحركات', (t) async {
       var loads = 0;
       var probes = 0;
       BalanceSubNames.probe = () async {
@@ -818,7 +818,19 @@ void main() {
       await open(t);
       await tap(t, k('bal-detail-1'));
       expect(nameOf(t, 'a500'), 'علي حسين');
-      expect(inKey('bal-move-a500', 'user0@net'), findsOneWidget, reason: 'العنوان يبقى اليوزر');
+      expect(inKey('bal-move-a500', 'user0@net'), findsOneWidget, reason: 'اليوزر باقٍ بعد الاسم');
+      // الاسم أوّلاً: يمين السطر (RTL) أو فوق اليوزر حين يلتفّ — وبخطّ العنوان
+      Finder userIn(String row) => find.descendant(of: k('bal-move-$row'), matching: k('bal-move-user'));
+      for (final row in ['a500', 'a503', 'p905']) {
+        final n = t.getRect(nameIn(row));
+        final u = t.getRect(userIn(row));
+        final sameLine = (n.top - u.top).abs() < 2;
+        expect(sameLine ? n.right > u.right : n.top < u.top, isTrue, reason: '$row: الاسم قبل اليوزر ($n / $u)');
+        expect(t.widget<Text>(nameIn(row)).style?.fontWeight, FontWeight.w700, reason: '$row: الاسم بخطّ العنوان');
+        expect(t.widget<Text>(userIn(row)).textDirection, TextDirection.ltr, reason: '$row: اليوزر LTR وحده');
+      }
+      expect(t.widget<Text>(userIn('a500')).data, 'user0@net');
+      expect(userIn('a501'), findsNothing, reason: 'بلا اسمٍ: اليوزر عنوانٌ وحده');
       expect(nameOf(t, 'a501'), isNull, reason: 'الاسم = اليوزر');
       expect(nameOf(t, 'a502'), 'محمد جاسم', reason: 'حالة الأحرف');
       expect(nameOf(t, 'a504'), isNull, reason: 'ليس بالقائمة');
@@ -919,7 +931,7 @@ void main() {
       expect([loads, n.of('user5@net')], [2, 'زينب كاظم']);
     });
 
-    testWidgets('أضيق هاتف وخطٌّ ×1.2: الاسم الطويل كاملاً تحت اليوزر بلا قصّ، داخل سطره ولا يركب المبلغ', (t) async {
+    testWidgets('أضيق هاتف وخطٌّ ×1.2: الاسم الطويل كاملاً عنواناً بلا قصّ واليوزر بعده، داخل سطره ولا يركب المبلغ', (t) async {
       BalanceSubNames.loadAll = () async => subs;
       for (final width in [320.0, 390.0]) {
         use(BalanceServer.ownerExample());
@@ -937,6 +949,9 @@ void main() {
         expect(r.left >= row.left - 0.5 && r.right <= row.right + 0.5, isTrue, reason: 'داخل سطره @$width: $r / $row');
         final amount = t.getRect(find.descendant(of: k('bal-move-a503'), matching: find.textContaining('د.ع')).first);
         expect(r.overlaps(amount), isFalse, reason: 'لا يركب المبلغ @$width');
+        final user = t.getRect(find.descendant(of: k('bal-move-a503'), matching: k('bal-move-user')));
+        expect(user.left >= row.left - 0.5 && user.right <= row.right + 0.5, isTrue, reason: 'اليوزر داخل سطره @$width: $user / $row');
+        expect(user.overlaps(amount) || user.overlaps(r), isFalse, reason: 'اليوزر لا يركب المبلغ ولا الاسم @$width');
         await done(t);
       }
     });

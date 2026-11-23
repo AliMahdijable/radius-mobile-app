@@ -179,8 +179,12 @@ class ActivationsView {
     final m = moneyOf(r);
     final t = timeOf(r);
     final amount = k == ActKind.debt ? m.debt : m.cash;
+    final title = r.userFullName ?? r.targetName ?? r.userUsername ?? kindLabel(k);
+    // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد النوع حين العنوان الاسم — كالتقرير الماليّ
+    final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName);
     final detail = [
       kindLabel(k),
+      if (user != null) user,
       if ((r.packageName ?? '').isNotEmpty) r.packageName!,
       if (actorOf(r).isNotEmpty) actorOf(r),
     ].join(' · ');
@@ -197,7 +201,7 @@ class ActivationsView {
         ActKind.sas => RpTone.neutral,
         ActKind.extend => RpTone.info,
       },
-      title: r.userFullName ?? r.targetName ?? r.userUsername ?? kindLabel(k),
+      title: title,
       detail: detail,
       // التمديد والمزامَن من الساس بلا مال ⇒ بلا رقم؛ والمبلغ المجهول كذلك
       amount: k == ActKind.extend || k == ActKind.sas ? null : amount,

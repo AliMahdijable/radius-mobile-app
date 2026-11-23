@@ -160,6 +160,17 @@ class RpCompanyLine {
   final num? c;
 }
 
+/// «العربي ومن ثم اليوزر» (المالك ٢٣ نوفمبر: «لازم بجميع التقارير اسم المشترك بالعربي الاولية اله»): العنوان الاسم العربيّ،
+/// واليوزر بعده بسطر التفاصيل — معزولاً (يوزرٌ يبدأ برقمٍ لا ينقلب بين العربيّ). null حين العنوان هو اليوزر نفسه (لا اسم)، أو لا
+/// يوزر، أو [detail] يحمله أصلاً («تفعيل نقدي - المستخدم: ali | …»).
+String? rpUserAfterName({required String title, String? username, String detail = ''}) {
+  final u = (username ?? '').trim();
+  if (u.isEmpty) return null;
+  final low = u.toLowerCase();
+  if (title.trim().toLowerCase() == low || detail.toLowerCase().contains(low)) return null;
+  return iso(u);
+}
+
 class RpRow {
   const RpRow({
     required this.icon,
@@ -173,7 +184,11 @@ class RpRow {
     this.cost,
     this.balanceAfter,
     this.trailing,
+    this.detailLines = 2,
   });
+
+  /// أسطر [detail] قبل «…» — ٢ افتراضاً؛ أكثر لسطرٍ يحمل اليوزر بسطره ثمّ ما بعده («الجلسات»: اليوزر ثمّ IP · MAC · المدير).
+  final int detailLines;
 
   /// نصّ مكان المبلغ حين ليس مالاً («↓1.2 GB · ↑300 MB» في الجلسات) — يُعرض حين [amount] null.
   final String? trailing;
@@ -1800,7 +1815,7 @@ class RpRowsCard extends StatelessWidget {
               children: [
                 // لا قصّ على شاشةٍ ضيّقة أو خطٍّ كبير: الاسم والوصف والكلفة تلتفّ لسطرين قبل أيّ «…»
                 Text(r.title, style: AppType.bodyBold(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis),
-                Text(r.detail, style: AppType.micro(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(r.detail, style: AppType.micro(color: AppColors.textMid), maxLines: r.detailLines, overflow: TextOverflow.ellipsis),
                 if (r.cost != null)
                   Text(r.cost!, style: AppType.micro(color: AppColors.textLow), maxLines: 2, overflow: TextOverflow.ellipsis),
                 if (r.balanceAfter != null) _balanceLine(r.balanceAfter!),
@@ -1831,7 +1846,8 @@ class RpRowsCard extends StatelessWidget {
               else if (r.trailing != null)
                 Directionality(
                   textDirection: TextDirection.ltr,
-                  child: Text(r.trailing!, style: AppType.microBold(color: r.tone.fg), maxLines: 1),
+                  // سطرٌ أو سطران («↓…\n↑…» في الجلسات) بطرف السطر
+                  child: Text(r.trailing!, style: AppType.microBold(color: r.tone.fg), maxLines: 2, textAlign: TextAlign.right),
                 ),
               // «7:34 مساءً» بسطرٍ RTL: الرقم ثمّ الكلمة (LTR كان يقلبها «مساءً 7:34»)
               Text(r.time, style: AppType.micro(color: AppColors.textLow), maxLines: 1),

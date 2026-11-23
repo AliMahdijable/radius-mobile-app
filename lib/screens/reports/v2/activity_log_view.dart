@@ -105,14 +105,19 @@ class ActivityLogView {
     };
     final tm = timeOf(r);
     // التعديل بما تغيّر «من … إلى …» (المالك ٢٢ نوفمبر) — لا «تعديل المشترك — phone»
+    final title = r.userFullName ?? r.targetName ?? r.userUsername ?? label;
+    final head = r.editSummary ?? (desc.isNotEmpty ? desc : label);
+    // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد الاسم ما لم يحمله الوصف أصلاً
+    final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName, detail: head);
     final detail = [
-      r.editSummary ?? (desc.isNotEmpty ? desc : label),
+      head,
+      if (user != null) user,
       if (actorOf(r).isNotEmpty) actorOf(r),
     ].join(' · ');
     return RpRow(
       icon: icon,
       tone: tone,
-      title: r.userFullName ?? r.targetName ?? r.userUsername ?? label,
+      title: title,
       detail: detail,
       amount: moneyOf(r),
       negative: expenseTypes.contains(t) && (moneyOf(r) ?? 0) != 0,

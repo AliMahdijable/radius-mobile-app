@@ -222,15 +222,21 @@ class MovementTile extends StatelessWidget {
     final empTitle = isEmployee
         ? (m.description ?? '').replaceFirst(RegExp(r'^[^:]{1,60}:\s*'), '').trim()
         : '';
+    // «العربي ومن ثم اليوزر» (المالك ٢٣ نوفمبر): الاسم العربيّ عنواناً واليوزر بعد النوع بسطر التفاصيل — للتفعيل والتسديد وإضافة
+    // الرصيد وبيع المواد ليوزر؛ بلا اسمٍ معروف (خادمٌ أقدم، أو لم يصل خلال مهلته) اليوزر عنوانٌ كما كان.
+    final subName = (m.subscriberName ?? '').trim();
+    final named = subName.isNotEmpty && (m.subscriber ?? '').trim().isNotEmpty && (m.source == 'activity' || isSale);
     final title = m.kind == 'expense'
         ? (m.description ?? 'settle.kind_expense'.tr())
         : isEmployee
             ? (empTitle.isEmpty ? kindLabel : iso(empTitle))
         : isPurchase
             ? (buyTitle.isEmpty ? kindLabel : iso(buyTitle))
-            : isSale
-                ? (m.subscriber ?? 'sales.walkin'.tr())
-                : (m.subscriber ?? '—');
+            : named
+                ? subName
+                : isSale
+                    ? (m.subscriber ?? 'sales.walkin'.tr())
+                    : (m.subscriber ?? '—');
     final who = m.employeeId == null
         ? 'settle.manager'.tr()
         : (m.employeeName ?? m.employeeUsername ?? 'settle.employee'.tr());
@@ -240,6 +246,7 @@ class MovementTile extends StatelessWidget {
     final details = Text(
       isoJoin([
         kindLabel,
+        if (named) m.subscriber!.trim(),
         if ((m.packageName ?? '').isNotEmpty) m.packageName!,
         // ما بيع (الوصف بلا بادئة «بيع:»/«إلغاء بيع:»).
         if (isSale && (m.description ?? '').isNotEmpty)
@@ -249,8 +256,10 @@ class MovementTile extends StatelessWidget {
         if (!grouped) settleWhen(m.createdAt),
       ], ' · '),
       style: grouped ? AppType.micro(color: AppColors.textMid) : AppType.muted(),
-      maxLines: grouped ? 2 : 1,
-      overflow: TextOverflow.ellipsis,
+      // الشكل الموحّد يلتفّ كاملاً ولا يُقصّ (كالموقع): اليوزر بعد النوع (٢٣ نوفمبر) جعل «النوع · اليوزر · الباقة · المنفّذ» ثلاثة أسطر
+      // على 320 ×1.2 فكان المنفّذ يُقصّ
+      maxLines: grouped ? null : 1,
+      overflow: grouped ? null : TextOverflow.ellipsis,
     );
     // زرّ الفتح بلا معالجٍ لا يُعرض؛ والمقفل («لا صلاحيّة») لا يحتاج معالجاً.
     final action = voidAction == PaymentVoidAction.open && onVoid == null ? PaymentVoidAction.none : voidAction;
