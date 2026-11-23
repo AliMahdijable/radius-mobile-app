@@ -378,6 +378,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     });
     _scopeIds ??= await loadScopeUserIds();
     if (f.managers.isNotEmpty) await _loadPeople([null]);
+    // موظّفون محفوظون ⇒ أسماؤهم للشارة ورأس الملفّ (بالخلفيّة — لا تؤخّر التقرير؛ كانت «موظّف، موظّف» حتى تُفتح الورقة)
+    if (f.employees.isNotEmpty) unawaited(_loadPeople([for (final k in f.employees.keys) k == _open ? null : k]));
     if (!mounted || seq != _seq || _merged) return;
     Future<({bool ok, FinanceReport? data, String? error})> fetch(RpRange r, int limit) => _fetchSingle(r.from, r.to, limit);
     final cur = await fetch(f.range, 2000);
@@ -444,6 +446,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       _visible = _page;
     });
     if (f.managers.isNotEmpty) await _loadPeople([for (final c in cs) c.key]);
+    // موظّفون محفوظون ⇒ أسماؤهم للشارة ورأس الملفّ (بالخلفيّة — لا تؤخّر التقرير؛ كانت «موظّف، موظّف» حتى تُفتح الورقة)
+    if (f.employees.isNotEmpty) unawaited(_loadPeople([for (final k in f.employees.keys) k == _open ? null : k]));
     if (!mounted || seq != _seq) return;
     await Future.wait([for (final c in cs) _loadCo(c, seq)]);
   }
