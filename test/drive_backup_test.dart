@@ -240,7 +240,7 @@ void main() {
         ..job = 'running';
       await settle(tester, 10);
       expect(closed, 1, reason: 'صفحة Google تُغلق وحدها');
-      expect(find.text('تمّ ربط Google Drive ✓ — أوّل نسخة تُحفظ الآن'), findsOneWidget);
+      expect(find.text('تمّ ربط Google Drive — أوّل نسخة تُحفظ الآن'), findsOneWidget);
       expect(find.byKey(const ValueKey('gdb-status')), findsOneWidget);
       expect(find.text('جارٍ حفظ نسخة الآن…'), findsOneWidget);
       // انتهت أوّل نسخة ⇒ يظهر سطر «آخر نسخة»

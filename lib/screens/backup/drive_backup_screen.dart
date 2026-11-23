@@ -126,7 +126,7 @@ class _DriveBackupScreenState extends State<DriveBackupScreen> with WidgetsBindi
       if (done) {
         _waitingSince = null;
         unawaited(DriveBackupScreen.closeBrowser());
-        _snack('تمّ ربط Google Drive ✓ — أوّل نسخة تُحفظ الآن');
+        _snack('تمّ ربط Google Drive — أوّل نسخة تُحفظ الآن');
       } else if (DriveBackupScreen.now() - since > _waitMax.inMilliseconds) {
         setState(() => _waitingSince = null);
       }
@@ -407,7 +407,7 @@ class _WaitingLine extends StatelessWidget {
         const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
         const SizedBox(width: Sp.md),
         Expanded(
-          child: Text('بانتظار موافقتك في صفحة Google… بعد «Allow» ارجع هنا (✕ أعلى الصفحة).',
+          child: Text('بانتظار موافقتك في صفحة Google… بعد «Allow» ارجع هنا (زرّ الإغلاق أعلى الصفحة).',
               style: AppType.body(color: AppColors.brandOnSoft)),
         ),
       ]),
@@ -676,6 +676,13 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
           ],
           selected: {freq},
           showSelectedIcon: false,
+          // بلا هذا يأخذ المختار لون Material الافتراضيّ الفيروزيّ (secondaryContainer) — خارج ألوان التطبيق
+          style: SegmentedButton.styleFrom(
+            selectedBackgroundColor: AppColors.brandSoftBg,
+            selectedForegroundColor: AppColors.brand,
+            foregroundColor: AppColors.textBody,
+            side: BorderSide(color: AppColors.border),
+          ),
           onSelectionChanged: (v) => setState(() => _s = _s.copyWith(frequency: v.first)),
         ),
         const SizedBox(height: Sp.lg),
