@@ -9,6 +9,9 @@ import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
 import '../../../services/manager_notice_prefs.dart';
+import '../../../services/manager_money.dart';
+import '../../../services/transfer_pay.dart';
+import '../../../widgets/paid_via_picker.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -65,6 +68,9 @@ class _PayDebtSheet extends StatefulWidget {
 class _PayDebtSheetState extends State<_PayDebtSheet> {
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
+
+  /// «كاش المدراء يدخل الصندوق» (٢٣ نوفمبر): كيف استُلم تسديد دين الساس — كاش (الافتراضيّ) أو حوالة بطريقتها.
+  PaidVia _paidVia = PaidVia.cash;
   int _amount = 0;
   bool _suppressFormat = false;
   bool _submitting = false;
@@ -108,6 +114,10 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     _amountCtrl.addListener(_onAmount);
     _loadFresh();
     if (!_tgLinked) _refreshTgStatus();
+    // «كاش المدراء يدخل الصندوق»: هل تُعرض «استلمته» لهذه الصفحة (الخادم: money-settings)، وأسماء «أخرى» السريعة
+    // (TransferPay.recentOthers — شيتات «الحوالات» تسأل عند فتحها، ومرّةً كلّ ٦٠ث)
+    ManagerMoneyState.ensureFresh();
+    unawaited(TransferPay.refresh());
     // الاختيار المحفوظ (آخر عمليّةٍ نجحت) — نفس حفظ نافذة الشحن/السحب (ManagerNoticePrefs).
     ManagerNoticePrefs.load().then((p) {
       if (!mounted || _noticeTouched) return;
@@ -205,8 +215,18 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   bool get _canSubmit =>
       !_submitting && _amount > 0 && _amount <= _maxForSource;
 
+  /// ما يُرسل مع تسديد دين الساس: الطريقة حين تُعرض «استلمته» — وإلّا {} (كاشٌ كما كان). «ديون أخرى» بلا طريقة بعد.
+  Map<String, Object?> _wayBody() => _source == _PaySource.sas && ManagerMoneyState.gate.value.transfers && _paidVia.valid
+      ? _paidVia.toBody()
+      : const <String, Object?>{};
+
   Future<void> _submit() async {
     if (!_canSubmit) return;
+    if (_source == _PaySource.sas && ManagerMoneyState.gate.value.transfers && !_paidVia.valid) {
+      showSheetSnack(context, 'اكتب اسم الطريقة (أخرى)', isError: true);
+      return;
+    }
+    final way = _wayBody();
     setState(() => _submitting = true);
     final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
     bool ok;
@@ -218,6 +238,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         debtForMe: _sasDebtForMe,
         totalDebt: _sasDebt,
         note: note,
+        paidVia: way,
       );
       ok = r.ok;
       message = r.message;
@@ -230,6 +251,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     if (!ok) {
       setState(() => _submitting = false);
       showSheetSnack(context, message ?? 'تعذّر تسديد الدين', isError: true);
+      if (way.isNotEmpty) ManagerMoneyState.ensureFresh(force: true);
       return;
     }
 
@@ -424,6 +446,28 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                       ),
                     ],
                   ),
+                  // «كاش المدراء يدخل الصندوق» (٢٣ نوفمبر): كيف استلمت تسديد دين الساس — حين يقول الخادم
+                  if (_source == _PaySource.sas)
+                    ValueListenableBuilder<ManagerMoney>(
+                      valueListenable: ManagerMoneyState.gate,
+                      builder: (context, mm, _) => !mm.box
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(top: Sp.md),
+                              child: mm.transfers
+                                  ? PaidViaPicker(
+                                      key: const ValueKey('mgr-paid-via'),
+                                      value: _paidVia,
+                                      enabled: !_submitting,
+                                      onChanged: (v) => setState(() => _paidVia = v),
+                                    )
+                                  : Text(
+                                      'يدخل الصندوق.',
+                                      key: const ValueKey('mgr-box-note'),
+                                      style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12.5),
+                                    ),
+                            ),
+                    ),
                   const SizedBox(height: Sp.md),
                   TextField(
                     controller: _noteCtrl,

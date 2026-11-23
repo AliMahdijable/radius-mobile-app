@@ -316,6 +316,12 @@ class _DetailSheetState extends State<_DetailSheet> {
                 value: transferBoxLine(s.transferWithdrawals).value,
                 valueColor: transferBoxLine(s.transferWithdrawals).out ? AppColors.error : AppColors.success,
               ),
+            if (s.managerMoves.count > 0)
+              SheetRowData(
+                label: '${managerBoxLine(s.managerMoves).label} · ${s.managerMoves.count}',
+                value: managerBoxLine(s.managerMoves).value,
+                valueColor: managerBoxLine(s.managerMoves).out ? AppColors.error : AppColors.success,
+              ),
             SheetRowData(
               label: 'settle.expected'.tr(),
               value: settleMoney(s.expected),

@@ -610,6 +610,7 @@ class ManagersApi {
     String? note,
     bool isLoan = false,
     Map<String, Object>? fee,
+    Map<String, Object?> paidVia = const {},
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -619,6 +620,8 @@ class ManagersApi {
           if (note != null && note.isNotEmpty) 'comment': note,
           'isLoan': isLoan,
           if (fee != null) 'fee': fee,
+          // «استلمته» (PaidVia.toBody — {} للكاش): الخادم يرفضها 409 قبل أيّ نداء إن لم تُفتح للصفحة
+          ...paidVia,
         },
       );
       final body = r.data ?? const {};
@@ -645,6 +648,7 @@ class ManagersApi {
     required int id,
     required num amount,
     String? note,
+    Map<String, Object?> paidVia = const {},
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -652,6 +656,8 @@ class ManagersApi {
         data: {
           'amount': amount,
           if (note != null && note.isNotEmpty) 'comment': note,
+          // «أرجعته» (PaidVia.toBody — {} للكاش)
+          ...paidVia,
         },
       );
       final body = r.data ?? const {};
@@ -678,6 +684,7 @@ class ManagersApi {
     String? note,
     num? debtForMe,
     num? totalDebt,
+    Map<String, Object?> paidVia = const {},
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -687,6 +694,8 @@ class ManagersApi {
           if (note != null && note.isNotEmpty) 'comment': note,
           if (debtForMe != null) 'debtForMe': debtForMe,
           if (totalDebt != null) 'totalDebt': totalDebt,
+          // «استلمته» (PaidVia.toBody — {} للكاش)
+          ...paidVia,
         },
       );
       final body = r.data ?? const {};

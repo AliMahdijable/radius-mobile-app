@@ -35,6 +35,7 @@ import 'dashboard_cache.dart';
 import 'subscribers_offline_cache.dart';
 import 'device_alerts_service.dart';
 import 'employee_session.dart';
+import 'manager_money.dart';
 import '../api/network_devices_api.dart';
 import 'device_stats_cache.dart';
 import 'fiber/fiber_monitor.dart';
@@ -118,6 +119,8 @@ class SessionManager {
     _guardSync('SalesState.reset', () => SalesState.reset());
     // «حركات الموظف» — حال المفتاح وصلاحيّة الرواتب لحساب المدير السابق.
     _guardSync('EmployeeLedgerState.reset', () => EmployeeLedgerState.reset());
+    // «كاش المدراء يدخل الصندوق»: حال الصفحة لا تنتقل لصفحةٍ أخرى
+    _guardSync('ManagerMoneyState.reset', () => ManagerMoneyState.reset());
     // «تقارير الأرصدة» — هل فُتحت لصفحة المدير السابق (كرتها في «التقارير»).
     _guardSync('BalanceReportsState.reset', () => BalanceReportsState.reset());
     // «النسخ الاحتياطيّ إلى Google Drive» — هل فُتح لصفحة المدير السابق (بنده في الإعدادات).

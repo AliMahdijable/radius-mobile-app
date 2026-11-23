@@ -60,6 +60,7 @@ class SettleCollector {
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
     this.transferWithdrawals = const MoneyCount(0, 0),
+    this.managerMoves = const MoneyCount(0, 0),
   });
 
   final int? employeeId;
@@ -84,6 +85,10 @@ class SettleCollector {
   /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
   final MoneyCount transferWithdrawals;
 
+  /// «حركات المدراء» (٢٣ نوفمبر — server/managerBox.js): نقد المدراء الفرعيّين في الصندوق — الشحن النقديّ وتسديد دينهم (داخل)
+  /// وسحب الرصيد (خارج)، الكاش وحده (حوالتهم لرصيد طريقتها). داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount managerMoves;
+
   bool get isManager => employeeId == null;
   int get inCount => cashActivations.count + debtPayments.count + salesCash.count;
 
@@ -102,6 +107,7 @@ class SettleCollector {
         goodsPurchases: MoneyCount.fromJson(j['goods_purchases']),
         employeeMoves: MoneyCount.fromJson(j['employee_moves']),
         transferWithdrawals: MoneyCount.fromJson(j['transfer_withdrawals']),
+        managerMoves: MoneyCount.fromJson(j['manager_moves']),
       );
 }
 
@@ -140,6 +146,7 @@ class SettlementRecord {
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
     this.transferWithdrawals = const MoneyCount(0, 0),
+    this.managerMoves = const MoneyCount(0, 0),
   });
 
   final int id;
@@ -178,10 +185,15 @@ class SettlementRecord {
   /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
   final MoneyCount transferWithdrawals;
 
+  /// «حركات المدراء» (٢٣ نوفمبر — server/managerBox.js): نقد المدراء الفرعيّين في الصندوق — الشحن النقديّ وتسديد دينهم (داخل)
+  /// وسحب الرصيد (خارج)، الكاش وحده (حوالتهم لرصيد طريقتها). داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount managerMoves;
+
   bool get isOpening => kind == 'opening';
   bool get isVoided => status == 'voided';
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count + transferWithdrawals.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count +
+      transferWithdrawals.count + managerMoves.count;
 
   static SettlementRecord? fromJson(Object? raw) {
     final j = _map(raw);
@@ -213,6 +225,7 @@ class SettlementRecord {
       goodsPurchases: MoneyCount.fromJson(j['goods_purchases']),
         employeeMoves: MoneyCount.fromJson(j['employee_moves']),
         transferWithdrawals: MoneyCount.fromJson(j['transfer_withdrawals']),
+        managerMoves: MoneyCount.fromJson(j['manager_moves']),
     );
   }
 }
@@ -270,6 +283,7 @@ class CurrentAccount {
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
     this.transferWithdrawals = const MoneyCount(0, 0),
+    this.managerMoves = const MoneyCount(0, 0),
     this.routedWrites,
   });
 
@@ -310,8 +324,13 @@ class CurrentAccount {
   /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
   final MoneyCount transferWithdrawals;
 
+  /// «حركات المدراء» (٢٣ نوفمبر — server/managerBox.js): نقد المدراء الفرعيّين في الصندوق — الشحن النقديّ وتسديد دينهم (داخل)
+  /// وسحب الرصيد (خارج)، الكاش وحده (حوالتهم لرصيد طريقتها). داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount managerMoves;
+
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count + transferWithdrawals.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count +
+      transferWithdrawals.count + managerMoves.count;
   bool get hasEmployees => collectors.any((c) => !c.isManager);
 
   static CurrentAccount? fromJson(Object? raw) {
@@ -340,6 +359,7 @@ class CurrentAccount {
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
       employeeMoves: MoneyCount.fromJson(t['employee_moves']),
       transferWithdrawals: MoneyCount.fromJson(t['transfer_withdrawals']),
+      managerMoves: MoneyCount.fromJson(t['manager_moves']),
       routedWrites: j['routed_writes'] is bool ? j['routed_writes'] as bool : null,
     );
   }
@@ -368,6 +388,7 @@ class StartPreview {
     this.goodsPurchases = const MoneyCount(0, 0),
     this.employeeMoves = const MoneyCount(0, 0),
     this.transferWithdrawals = const MoneyCount(0, 0),
+    this.managerMoves = const MoneyCount(0, 0),
   });
 
   /// ما أرسلناه كما ردّه الخادم: `now` أو `YYYY-MM-DD`. تُقرأ منه
@@ -392,8 +413,13 @@ class StartPreview {
   /// كما حسبه الخادم، وإلغاؤه سالب؛ صفرٌ من خادمٍ قبله.
   final MoneyCount transferWithdrawals;
 
+  /// «حركات المدراء» (٢٣ نوفمبر — server/managerBox.js): نقد المدراء الفرعيّين في الصندوق — الشحن النقديّ وتسديد دينهم (داخل)
+  /// وسحب الرصيد (خارج)، الكاش وحده (حوالتهم لرصيد طريقتها). داخلٌ في المتوقَّع كما حسبه الخادم؛ صفرٌ من خادمٍ قبله.
+  final MoneyCount managerMoves;
+
   int get moveCount =>
-      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count + transferWithdrawals.count;
+      cashActivations.count + debtPayments.count + expenses.count + salesCash.count + goodsPurchases.count + employeeMoves.count +
+      transferWithdrawals.count + managerMoves.count;
 
   static StartPreview? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -413,6 +439,7 @@ class StartPreview {
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
       employeeMoves: MoneyCount.fromJson(t['employee_moves']),
       transferWithdrawals: MoneyCount.fromJson(t['transfer_withdrawals']),
+      managerMoves: MoneyCount.fromJson(t['manager_moves']),
     );
   }
 }
@@ -436,6 +463,7 @@ class BoxMovement {
     required this.employeeUsername,
     required this.employeeName,
     this.paymentActivityId,
+    this.manager,
   });
 
   final String source;
@@ -472,6 +500,9 @@ class BoxMovement {
   /// الحركات أرقام دفتر، فهذا الحقل لا [id] هو ما يُلغى به).
   final int? paymentActivityId;
 
+  /// «حركات المدراء» (`source == 'manager'`): اسم المدير الفرعيّ — العنوان.
+  final String? manager;
+
   static BoxMovement? fromJson(Map<String, dynamic> j) {
     final id = _intOrNull(j['id']);
     if (id == null) return null;
@@ -492,6 +523,7 @@ class BoxMovement {
       employeeUsername: _str(j['employee_username']),
       employeeName: _str(j['employee_name']),
       paymentActivityId: _paymentId(j),
+      manager: _str(j['manager']),
     );
   }
 

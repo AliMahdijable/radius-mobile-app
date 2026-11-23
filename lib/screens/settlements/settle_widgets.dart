@@ -54,6 +54,17 @@ String settleMoney(num n) =>
   );
 }
 
+/// سطر «المدراء الفرعيّون» بالصندوق («كاش المدراء يدخل الصندوق»، ٢٣ نوفمبر): صافيه موجبٌ ⇒ دخل (شحنٌ نقديّ وتسديد دين)، سالبٌ ⇒
+/// خرج (سحب رصيدٍ أُعيد ثمنه). القيمة بإشارتها كما تُحسب في المتوقَّع.
+({String label, String value, bool out}) managerBoxLine(MoneyCount m) {
+  final out = m.sum < 0;
+  return (
+    label: out ? 'أُعيد للمدراء الفرعيّين' : 'من المدراء الفرعيّين',
+    value: '${out ? '−' : '+'}${formatIQD(m.sum.abs())}',
+    out: out,
+  );
+}
+
 /// «الخميس 2026/10/01 · 21:40» بتوقيت الجهاز (الأجهزة في العراق). [clock12] = الساعة «9:40 مساءً» كالتقارير الموحّدة (المالك ٢٢
 /// نوفمبر: «الأوقات خلّي صباحاً ومساءً») — شاشة الصندوق بها، والسند والطباعة كما كانا.
 String settleWhen(DateTime? d, {bool weekday = false, bool clock12 = false}) {
@@ -129,7 +140,9 @@ class CollectorsList extends StatelessWidget {
                               // «سحب من الحوالات» إلى الصندوق (المدير وحده يسحب) — داخلٌ في صافيه
                               (collectors[i].transferWithdrawals.count > 0
                                   ? ' · سحب من الحوالات ${collectors[i].transferWithdrawals.count}'
-                                  : ''),
+                                  : '') +
+                              // نقد المدراء الفرعيّين الذي مرّ بيده (شحنٌ نقديّ، تسديد دين، سحب رصيد) — داخلٌ في صافيه
+                              (collectors[i].managerMoves.count > 0 ? ' · حركات مدراء ${collectors[i].managerMoves.count}' : ''),
                           style: AppType.muted(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -201,6 +214,7 @@ class MovementTile extends StatelessWidget {
       // «سحب للصندوق» من رصيد الحوالات (٢٣ نوفمبر): داخل، وإلغاؤه خارج
       'transfer_withdraw' => LucideIcons.arrowLeftRight,
       'transfer_withdraw_void' => LucideIcons.undo2,
+      'manager_deposit' || 'manager_debt_pay' || 'manager_withdraw' => LucideIcons.userCog,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
@@ -228,6 +242,10 @@ class MovementTile extends StatelessWidget {
       'emp_payslip_recover' => 'settle.kind_emp_payslip_recover'.tr(),
       'transfer_withdraw' => 'سحب من الحوالات',
       'transfer_withdraw_void' => 'إلغاء سحب من الحوالات',
+      // «كاش المدراء يدخل الصندوق» (٢٣ نوفمبر): نقد المدير الفرعيّ — العنوان اسمه
+      'manager_deposit' => 'شحن رصيد مدير فرعيّ',
+      'manager_debt_pay' => 'تسديد دين مدير فرعيّ',
+      'manager_withdraw' => 'سحب رصيد مدير فرعيّ',
       _ => 'settle.kind_debt_payment'.tr(),
     };
     // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
@@ -263,7 +281,9 @@ class MovementTile extends StatelessWidget {
                 ? subName
                 : isSale
                     ? (m.subscriber ?? 'sales.walkin'.tr())
-                    : (m.subscriber ?? '—');
+                    : m.source == 'manager'
+                        ? (m.manager ?? kindLabel)
+                        : (m.subscriber ?? '—');
     final who = m.employeeId == null
         ? 'settle.manager'.tr()
         : (m.employeeName ?? m.employeeUsername ?? 'settle.employee'.tr());

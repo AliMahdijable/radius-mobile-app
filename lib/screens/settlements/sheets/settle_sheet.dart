@@ -230,6 +230,12 @@ class _SettleSheetState extends State<_SettleSheet> {
               value: transferBoxLine(p.transferWithdrawals).value,
               valueColor: transferBoxLine(p.transferWithdrawals).out ? AppColors.error : AppColors.success,
             ),
+          if (p.managerMoves.count > 0)
+            SheetRowData(
+              label: '${managerBoxLine(p.managerMoves).label} · ${p.managerMoves.count}',
+              value: managerBoxLine(p.managerMoves).value,
+              valueColor: managerBoxLine(p.managerMoves).out ? AppColors.error : AppColors.success,
+            ),
           SheetRowData(
             label: 'settle.expected'.tr(),
             value: settleMoney(p.expected),

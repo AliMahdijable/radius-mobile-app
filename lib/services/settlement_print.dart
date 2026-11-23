@@ -144,6 +144,11 @@ class SettlementPrint {
           s.transferWithdrawals.sum < 0
               ? row('− إلغاء سحب من الحوالات (${s.transferWithdrawals.count})', _money(-s.transferWithdrawals.sum))
               : row('+ سحب من الحوالات (${s.transferWithdrawals.count})', _money(s.transferWithdrawals.sum)),
+        // «كاش المدراء يدخل الصندوق»: صافي نقد المدراء الفرعيّين — دخل (شحنٌ نقديّ وتسديد) أو أُعيد (سحب رصيد)
+        if (s.managerMoves.count > 0)
+          s.managerMoves.sum < 0
+              ? row('− أُعيد للمدراء الفرعيّين (${s.managerMoves.count})', _money(-s.managerMoves.sum))
+              : row('+ من المدراء الفرعيّين (${s.managerMoves.count})', _money(s.managerMoves.sum)),
         pw.Divider(thickness: 0.8),
         row('المتوقّع في الصندوق', _money(s.expected), strong: true),
         row('المستلَم فعلاً', _money(s.received), strong: true),

@@ -9,6 +9,9 @@ import '../../../api/topup_fee_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
 import '../../../services/manager_notice_prefs.dart';
+import '../../../services/manager_money.dart';
+import '../../../services/transfer_pay.dart';
+import '../../../widgets/paid_via_picker.dart';
 import '../../../services/provider_limits.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
@@ -100,6 +103,9 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   /// كـدين على المدير الفرعي بدل شحن نقدي. مطابق v1 isLoan.
   bool _isLoan = false;
 
+  /// «كاش المدراء يدخل الصندوق» (٢٣ نوفمبر): كيف استُلم الشحن النقديّ / أُعيد ثمن السحب — كاش (الافتراضيّ) أو حوالة بطريقتها.
+  PaidVia _paidVia = PaidVia.cash;
+
   /// مطلب 2026-06-12 (إشعارات): toggles إرسال واتساب + push للمدير
   /// بعد العملية. الـwhatsapp يقفل تلقائياً لو المدير ما عنده رقم.
   bool _sendWhatsApp = ManagerNoticePrefs.defaults.whatsApp;
@@ -163,6 +169,12 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     _amountCtrl.addListener(_onAmount);
     _feeCtrl.addListener(_onFee);
     if (!_tgLinked) _refreshTgStatus();
+    // «كاش المدراء يدخل الصندوق»: هل تُعرض «استلمته»/«أرجعته» لهذه الصفحة (الخادم: money-settings)، وأسماء «أخرى» السريعة
+    // (TransferPay.recentOthers — شيتات «الحوالات» تسأل عند فتحها، ومرّةً كلّ ٦٠ث)
+    if (!sessionIsKit) {
+      ManagerMoneyState.ensureFresh();
+      unawaited(TransferPay.refresh());
+    }
     // الشركة المُضافة: لا آجل عند مزوّدها فلا فائدة — لا سؤال
     if (!sessionIsKit) _loadFeeConfig();
     // الاختيار المحفوظ (آخر عمليّةٍ نجحت) — المالك ٢٨ أكتوبر: «يحفظهن مره وحده ويبقن ثابتات».
@@ -224,6 +236,12 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       return;
     }
     final fee = _useFee ? TopupFee.body(_feeKind, _feeCtrl.text, _amount) : null;
+    // «استلمته»/«أرجعته»: «أخرى» بلا اسمٍ لا تُرسل
+    final way = _wayBody();
+    if (_wayShown && ManagerMoneyState.gate.value.transfers && !_paidVia.valid) {
+      showSheetSnack(context, 'اكتب اسم الطريقة (أخرى)', isError: true);
+      return;
+    }
     setState(() => _submitting = true);
     final id = widget.manager.id;
     final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
@@ -236,12 +254,12 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     switch (_op) {
       case _BalanceOp.deposit:
         final d = await ManagersApi.deposit(
-            id: id, amount: _amount, note: note, isLoan: _isLoan, fee: fee);
+            id: id, amount: _amount, note: note, isLoan: _isLoan, fee: fee, paidVia: way);
         r = (ok: d.ok, message: d.message);
         feeOut = d.fee;
         warning = d.warning;
       case _BalanceOp.withdraw:
-        r = await ManagersApi.withdraw(id: id, amount: _amount, note: note);
+        r = await ManagersApi.withdraw(id: id, amount: _amount, note: note, paidVia: way);
       case _BalanceOp.addPoints:
         r = await ManagersApi.addPoints(id: id, points: _amount, note: note);
     }
@@ -249,6 +267,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     if (!r.ok) {
       setState(() => _submitting = false);
       showSheetSnack(context, r.message ?? 'فشلت العملية', isError: true);
+      // حوالةٌ رُفضت (أُغلقت للصفحة بعد فتح النافذة) ⇒ يُسأل الخادم من جديد فيختفي الاختيار أو يبقى
+      if (way.isNotEmpty) ManagerMoneyState.ensureFresh(force: true);
       return;
     }
     // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد
@@ -494,6 +514,12 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               ),
             ),
           ],
+          // «كاش المدراء يدخل الصندوق» (٢٣ نوفمبر): كيف استلمت الشحن النقديّ / أرجعت ثمن السحب — حين يقول الخادم
+          if (_wayShown)
+            ValueListenableBuilder<ManagerMoney>(
+              valueListenable: ManagerMoneyState.gate,
+              builder: (context, mm, _) => _moneyWay(mm),
+            ),
           const SizedBox(height: Sp.md),
           _label('المبلغ *'),
           AmountShorthandBox(
@@ -707,6 +733,42 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           ],
         ),
       ),
+    );
+  }
+
+  /// الشحن النقديّ والسحب وحدهما يحملان نقداً (الآجل والنقاط بلا استلام)؛ والشركة المُضافة مسارها غير هذا.
+  bool get _wayShown => !sessionIsKit && (_op == _BalanceOp.withdraw || (_op == _BalanceOp.deposit && !_isLoan));
+
+  /// ما يُرسل مع العمليّة: الطريقة حين تُعرض «استلمته»/«أرجعته» — وإلّا {} (كاشٌ كما كان).
+  Map<String, Object?> _wayBody() =>
+      _wayShown && ManagerMoneyState.gate.value.transfers && _paidVia.valid ? _paidVia.toBody() : const <String, Object?>{};
+
+  /// السحب: المال يخرج — من الصندوق، أو من رصيد طريقته إن أُعيد حوالة.
+  static String _outNote(PaidVia v) => v.isCash
+      ? 'يخرج من الصندوق.'
+      : v.valid
+          ? 'يُخصم من رصيد «${v.label}».'
+          : 'اكتب اسم الطريقة.';
+
+  Widget _moneyWay(ManagerMoney mm) {
+    if (!mm.box) return const SizedBox.shrink();
+    final out = _op == _BalanceOp.withdraw;
+    return Padding(
+      padding: const EdgeInsets.only(top: Sp.md),
+      child: mm.transfers
+          ? PaidViaPicker(
+              key: const ValueKey('mgr-paid-via'),
+              value: _paidVia,
+              enabled: !_submitting,
+              label: out ? 'أرجعته' : 'استلمته',
+              noteOf: out ? _outNote : null,
+              onChanged: (v) => setState(() => _paidVia = v),
+            )
+          : Text(
+              out ? 'يخرج من الصندوق.' : 'يدخل الصندوق.',
+              key: const ValueKey('mgr-box-note'),
+              style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12.5),
+            ),
     );
   }
 

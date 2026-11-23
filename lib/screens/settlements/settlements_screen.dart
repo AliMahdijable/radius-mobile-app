@@ -893,6 +893,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
               label: transferBoxLine(p.transferWithdrawals).label,
               value: transferBoxLine(p.transferWithdrawals).value,
             ),
+          if (p.managerMoves.count > 0)
+            _Line(
+              label: managerBoxLine(p.managerMoves).label,
+              value: managerBoxLine(p.managerMoves).value,
+            ),
           if (_opening != 0)
             _Line(
               label: 'settle.opening_label'.tr(),
@@ -1031,6 +1036,7 @@ class _BoxKpis extends StatelessWidget {
     final goods = goodsBoxLine(cur.goodsPurchases);
     final emp = employeeBoxLine(cur.employeeMoves);
     final tw = transferBoxLine(cur.transferWithdrawals);
+    final mgr = managerBoxLine(cur.managerMoves);
     final kpis = [
       if (cur.openingBalance != 0)
         RpKpi(
@@ -1082,6 +1088,16 @@ class _BoxKpis extends StatelessWidget {
           icon: LucideIcons.arrowLeftRight,
           tone: tw.out ? RpTone.loss : RpTone.money,
           hint: n(cur.transferWithdrawals.count),
+        ),
+      // «كاش المدراء يدخل الصندوق» (٢٣ نوفمبر): شحنٌ نقديّ وتسديد دين المدراء الفرعيّين ناقص ما أُعيد لهم
+      if (cur.managerMoves.count > 0)
+        RpKpi(
+          id: 'managers',
+          label: mgr.label,
+          value: cur.managerMoves.sum.abs(),
+          icon: LucideIcons.userCog,
+          tone: mgr.out ? RpTone.loss : RpTone.money,
+          hint: n(cur.managerMoves.count),
         ),
     ];
     return RpKpiGrid(kpis: kpis, compareWith: '', keyPrefix: 'settle-kpi-');
