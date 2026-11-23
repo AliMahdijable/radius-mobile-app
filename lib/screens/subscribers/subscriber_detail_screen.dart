@@ -901,7 +901,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         await showSubscriberPriceSheet(
           context,
           idx: sub.idx!,
-          name: sub.fullName.trim().isNotEmpty ? sub.fullName : sub.username,
+          name: Sees.nameOf(sub.fullName, sub.username),
           companyKey: sub.companyKey,
         );
       case SubscriberAutoAction.sell:

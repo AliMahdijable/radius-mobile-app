@@ -24,6 +24,7 @@ import '../../core/platform/desktop_layout.dart';
 import '../../widgets/company_tag.dart';
 import '../../services/merged_text.dart';
 import '../../core/util/bytes_format.dart';
+import '../../services/employee_visibility.dart';
 
 /// Spotlight-style search overlay: TextField at the top, mic button on
 /// the trailing side for voice input, suggestion list below.
@@ -709,10 +710,13 @@ class _ResultsState extends State<_Results> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
+                // «ما يراه الموظّف»: أعداد المشتركين مخفيّة ⇒ لا مجموع (بحثٌ بحرفٍ عامّ يكشف العدد كلّه)
                 child: Text(
-                  hasMore
-                      ? 'أول $_limit من ${matches.length} نتيجة'
-                      : '${matches.length} نتيجة',
+                  !Sees.counts
+                      ? (hasMore ? 'أول $_limit نتيجة' : 'النتائج')
+                      : hasMore
+                          ? 'أول $_limit من ${matches.length} نتيجة'
+                          : '${matches.length} نتيجة',
                   style: AppType.muted(color: AppColors.textLow)
                       .copyWith(fontSize: 10.5, letterSpacing: 0.4),
                 ),
@@ -729,7 +733,7 @@ class _ResultsState extends State<_Results> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Center(
                       child: Text(
-                        'عرض ${matches.length - _limit} نتيجة أخرى',
+                        Sees.counts ? 'عرض ${matches.length - _limit} نتيجة أخرى' : 'عرض نتائج أخرى',
                         style: AppType.bodyStrong(color: AppColors.brand),
                       ),
                     ),
@@ -930,7 +934,9 @@ class _BigResultsState extends State<_BigResults> {
           Padding(
             padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
             child: Text(
-              p.total > p.rows.length ? 'أول ${p.rows.length} من ${p.total} نتيجة' : '${p.total} نتيجة',
+              !Sees.counts
+                  ? (p.total > p.rows.length ? 'أول ${p.rows.length} نتيجة' : 'النتائج')
+                  : p.total > p.rows.length ? 'أول ${p.rows.length} من ${p.total} نتيجة' : '${p.total} نتيجة',
               style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 10.5, letterSpacing: 0.4),
             ),
           ),
@@ -1175,7 +1181,8 @@ class _ResultRow extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            sub.fullName,
+                            // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وإلّا «بلا اسم» (البحث باليوزر يبقى)
+                            Sees.nameOf(sub.fullName, sub.username),
                             style:
                                 AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
@@ -1185,7 +1192,8 @@ class _ResultRow extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (sub.username.isNotEmpty &&
+                        if (Sees.usernames &&
+                            sub.username.isNotEmpty &&
                             sub.username != sub.fullName) ...[
                           const SizedBox(width: 4),
                           Flexible(

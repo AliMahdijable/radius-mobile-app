@@ -20,6 +20,7 @@ import '../widgets/report_export.dart';
 import '../widgets/report_permission_gate.dart';
 import 'report_kit.dart';
 import 'report_prefs.dart';
+import '../../../services/employee_visibility.dart';
 
 // تقريرا ايرث لنك على الشكل الموحّد (٢٢ نوفمبر — بند المقترح: «كشف حساب المشترك، وتقريرا ايرث لنك: نفس الشكل الموحّد»):
 // «استخدام التجريبيّ» و«المشتركون حسب الباقة». حالٌ الآن لا فترة (الخادم يحدّده) ⇒ بلا شريط فترة. «كل الشركات»: شركات ايرث لنك
@@ -345,7 +346,7 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
                 icon: LucideIcons.flaskConical,
                 tone: RpTone.info,
                 title: r.row.name,
-                detail: r.row.username ?? '',
+                detail: Sees.usernames ? (r.row.username ?? '') : '',
                 amount: null,
                 trailing: r.row.usage == null ? null : formatIQD(r.row.usage!),
                 time: _time(r.row.date),
@@ -368,7 +369,7 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
           [
             if (merged) coOf(r.key)?.name ?? '',
             r.row.name,
-            r.row.username ?? '',
+            Sees.usernames ? (r.row.username ?? '') : kHiddenWord,
             exportLocalAr(r.row.date),
             r.row.usage == null ? '' : '${r.row.usage}',
           ],

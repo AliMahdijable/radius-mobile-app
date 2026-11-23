@@ -38,6 +38,7 @@ import '../reports/widgets/report_permission_gate.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../../services/merged_text.dart';
 import '../portal_settings/widgets/package_image.dart';
+import '../../services/employee_visibility.dart';
 
 part 'store_tab.dart';
 
@@ -2809,8 +2810,8 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
           for (final h in _hits)
             _PickRow(
               icon: LucideIcons.user,
-              title: iso(h.name.isNotEmpty ? h.name : h.username),
-              subtitle: h.username,
+              title: iso(Sees.nameOf(h.name, h.username)),
+              subtitle: Sees.usernames ? h.username : '',
               subtitleLtr: true,
               onTap: () => setState(() {
                 _picked = h;
@@ -3068,7 +3069,7 @@ class _VoidSheetState extends State<_VoidSheet> {
             children: [
               Expanded(
                 child: Text(
-                  'sales.void_balance_now'.tr(namedArgs: {'user': iso(_s.username ?? _s.customerName ?? '—')}),
+                  'sales.void_balance_now'.tr(namedArgs: {'user': Sees.usernames ? iso(_s.username ?? _s.customerName ?? '—') : 'المشترك'}),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
@@ -3332,8 +3333,8 @@ class _ResolveSheetState extends State<_ResolveSheet> {
     final vDebt = s.voidDebt ?? 0;
     final vRefund = s.voidMode == 'cash' ? (s.voidRefund ?? 0) : 0;
     final info = isVoid
-        ? 'sales.resolve_void_info'.tr(namedArgs: {'amount': _money(vDebt), 'user': iso(s.username ?? '—')})
-        : 'sales.resolve_info'.tr(namedArgs: {'amount': _money(s.total), 'user': iso(s.username ?? '—')});
+        ? 'sales.resolve_void_info'.tr(namedArgs: {'amount': _money(vDebt), 'user': Sees.usernames ? iso(s.username ?? '—') : 'المشترك'})
+        : 'sales.resolve_info'.tr(namedArgs: {'amount': _money(s.total), 'user': Sees.usernames ? iso(s.username ?? '—') : 'المشترك'});
     final hints = isVoid
         ? '• ${'sales.resolve_void_yes_hint'.tr(namedArgs: {
             'after': _balanceText(before + vDebt),

@@ -29,6 +29,7 @@ import 'v2/report_prefs.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_permission_gate.dart';
 import '../../services/merged_text.dart';
+import '../../services/employee_visibility.dart';
 
 /// «ديون المشتركين المحذوفين» (٢٣ أكتوبر) — GET/POST /api/v2/deleted-debts
 /// (الخادم 5ab928a، الويب b412016). المالك: «مرات شركه تحذف يوزرات معينه احنه
@@ -676,8 +677,8 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
         [
           if (merged) MergedMode.companyOf(r.key ?? '')?.name ?? '',
           r.row.name,
-          r.row.username ?? '',
-          r.row.phone ?? '',
+          Sees.usernames ? (r.row.username ?? '') : kHiddenWord,
+          Sees.phones ? (r.row.phone ?? '') : kHiddenWord,
           r.row.managerUsername ?? '',
           _originLabel(r.row.origin),
           r.row.at == null ? '' : iqDateOf(r.row.at!),
@@ -907,10 +908,11 @@ class _DebtTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final phone = row.localPhone;
+    // «ما يراه الموظّف»: لا يوزر ولا هاتف حين أخفاهما المدير
+    final phone = Sees.phones ? row.localPhone : null;
     final at = row.at;
     final meta = <Widget>[
-      if (row.username != null)
+      if (row.username != null && Sees.usernames)
         _MetaText(row.username!, icon: LucideIcons.atSign, ltr: true),
       if (row.managerUsername != null)
         _MetaText('dd.manager'.tr(args: [row.managerUsername!]),

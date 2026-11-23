@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../core/util/error_text.dart';
 import 'api_client.dart';
 import 'company_route.dart';
+import '../services/employee_visibility.dart';
 
 /// «متجر الوكيل» (٢٣ نوفمبر — الخادم server/portalStore.js `80796b3`، الويب W28 `f16bb3b`، بوّابة المشترك `79cd47f`). المالك: «الوكيل
 /// يختار منتجات من مخزونه الي بالمبيعات يعرضهن ويحطلهن صور ووصف ويظهرن بتطبيق المتشرك ويكدر المشترك يطلب شراء ايضا».
@@ -225,8 +226,10 @@ class StoreOrder {
   /// اسم المشترك كما يُعرض: الاسم، وإلّا اليوزر، وإلّا رقمه.
   String get who {
     final n = (subName ?? '').trim();
-    if (n.isNotEmpty) return n;
     final u = (subUsername ?? '').trim();
+    // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وإلّا «بلا اسم»
+    if (!Sees.usernames && u.isNotEmpty) return Sees.nameOf(n, u);
+    if (n.isNotEmpty) return n;
     return u.isNotEmpty ? u : 'مشترك $subIdx';
   }
 

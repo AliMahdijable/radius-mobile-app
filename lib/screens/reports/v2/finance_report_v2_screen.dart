@@ -34,6 +34,7 @@ import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_prefs.dart';
 import 'report_sheets.dart';
+import '../../../services/employee_visibility.dart';
 
 /// التقرير الماليّ على الشكل الموحّد (٢٢ نوفمبر — المالك: «اي التطبيق أوّلاً … وانطلق» بعد صور المقترح).
 ///
@@ -709,12 +710,12 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         for (final l in logs)
           [
             if (_merged) MergedMode.companyOf(companyOf(l))?.name ?? '',
-            l.userFullName ?? l.targetName ?? l.userUsername ?? '',
-            l.userUsername ?? '',
+            rpSubjectTitle(fullName: l.userFullName, target: l.targetName, username: l.userUsername, fallback: ''),
+            Sees.usernames ? (l.userUsername ?? '') : kHiddenWord,
             l.amount == 0 ? '' : l.amount.toString(),
             if (showCost) l.packageCost == null ? '' : FinanceLogs.plainNumber(l.packageCost!),
             exportTimeAr(l.createdAt),
-            (l.actionDescription ?? '').replaceAll('\n', ' '),
+            rpHideUser((l.actionDescription ?? '').replaceAll('\n', ' '), l.userUsername ?? l.targetName),
             arabicActionLabel(l.actionType, l.actionDescription ?? ''),
             l.actingEmployeeFullName ?? l.adminUsername ?? '',
           ],

@@ -16,6 +16,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/payment_void_bits.dart';
 import '../reports/v2/report_kit.dart';
+import '../../services/employee_visibility.dart';
 
 /// مبلغٌ بإشارته: `formatIQD` يُسقطها عمداً، والصندوق قد يكون سالباً.
 String settleMoney(num n) =>
@@ -235,8 +236,9 @@ class MovementTile extends StatelessWidget {
             : named
                 ? subName
                 : isSale
-                    ? (m.subscriber ?? 'sales.walkin'.tr())
-                    : (m.subscriber ?? '—');
+                    ? (m.subscriber == null ? 'sales.walkin'.tr() : (Sees.usernames ? m.subscriber! : kNoNameWord))
+                    // «ما يراه الموظّف»: يوزر المشترك مخفيّ ⇒ «بلا اسم»
+                    : (Sees.usernames ? (m.subscriber ?? '—') : kNoNameWord);
     final who = m.employeeId == null
         ? 'settle.manager'.tr()
         : (m.employeeName ?? m.employeeUsername ?? 'settle.employee'.tr());
@@ -246,7 +248,7 @@ class MovementTile extends StatelessWidget {
     final details = Text(
       isoJoin([
         kindLabel,
-        if (named) m.subscriber!.trim(),
+        if (named && Sees.usernames) m.subscriber!.trim(),
         if ((m.packageName ?? '').isNotEmpty) m.packageName!,
         // ما بيع (الوصف بلا بادئة «بيع:»/«إلغاء بيع:»).
         if (isSale && (m.description ?? '').isNotEmpty)

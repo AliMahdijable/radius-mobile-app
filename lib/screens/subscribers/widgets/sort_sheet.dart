@@ -8,6 +8,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../services/employee_visibility.dart';
 
 enum SortField {
   username,
@@ -68,8 +69,16 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.deviceLan, 'sort.device_lan', LucideIcons.cable),
 ];
 
+/// «ما يراه الموظّف» (٢٣ نوفمبر): لا ترتيب بصنفٍ أخفاه المدير عن الموظّف — كالموقع («ولا ترتيب بالدين»).
+bool sortFieldSeen(SortField f) => switch (f) {
+      SortField.username => Sees.usernames,
+      SortField.phone => Sees.phones,
+      SortField.notes || SortField.debtAge => Sees.debts,
+      _ => true,
+    };
+
 /// حقول الفرز بترتيب الورقة — لقائمة الترتيب المنسدلة على الحاسبة.
-List<SortField> get sortFieldOptions => [for (final d in _fieldDefs) d.$1];
+List<SortField> get sortFieldOptions => [for (final d in _fieldDefs) if (sortFieldSeen(d.$1)) d.$1];
 
 /// تسمية حقل الفرز المترجَمة — يستعملها شريط النتيجة أعلى القائمة
 /// ليعرض «الأيام المتبقية» بجانب سهم الاتجاه (مطابق للمخطّط).
@@ -162,7 +171,7 @@ class _SortSheetState extends State<_SortSheet> {
             spacing: Sp.sm,
             runSpacing: Sp.sm,
             children: [
-              for (final d in _fieldDefs)
+              for (final d in _fieldDefs.where((d) => sortFieldSeen(d.$1)))
                 _FieldChip(
                   label: d.$2.tr(),
                   icon: d.$3,

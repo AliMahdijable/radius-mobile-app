@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'field_team_widgets.dart';
+import '../../services/employee_visibility.dart';
 
 typedef _Picked = ({String name, String username, String? phone});
 
@@ -312,8 +313,8 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
             const SizedBox(width: Sp.md),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(iso(p.name), style: AppType.bodyBold(color: AppColors.textHi)),
-                Text(isoJoin([p.username, if ((p.phone ?? '').isNotEmpty) p.phone!], ' · '),
+                Text(iso(Sees.nameOf(p.name, p.username)), style: AppType.bodyBold(color: AppColors.textHi)),
+                Text(isoJoin([if (Sees.usernames) p.username, if (Sees.phones && (p.phone ?? '').isNotEmpty) p.phone!], ' · '),
                     style: AppType.micro(color: AppColors.textMid)),
               ]),
             ),
@@ -388,8 +389,8 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
                     const SizedBox(width: Sp.md),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(iso(h.name), style: AppType.bodyStrong(color: AppColors.textHi)),
-                        Text(isoJoin([h.username, if ((h.phone ?? '').isNotEmpty) h.phone!], ' · '),
+                        Text(iso(Sees.nameOf(h.name, h.username)), style: AppType.bodyStrong(color: AppColors.textHi)),
+                        Text(isoJoin([if (Sees.usernames) h.username, if (Sees.phones && (h.phone ?? '').isNotEmpty) h.phone!], ' · '),
                             style: AppType.micro(color: AppColors.textMid)),
                       ]),
                     ),

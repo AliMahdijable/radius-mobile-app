@@ -19,6 +19,7 @@ import '../subscribers/subscriber_detail_screen.dart';
 import 'ticket_image.dart';
 import 'ticket_widgets.dart';
 import '../field_team/field_ticket_task.dart';
+import '../../services/employee_visibility.dart';
 
 /// محادثة تذكرة (المالك ٩ نوفمبر): رسائل المشترك والوكيل وأحداث الحالة، والردّ، وأزرار الحالة (قيد المعالجة · تمّ الحلّ · إغلاق ·
 /// إعادة فتح). الموظّف يردّ ويغيّر الحالة بـ«التذاكر — الردّ» وحدها؛ «كل الشركات» لشركةٍ غير المفتوحة للعرض.
@@ -316,7 +317,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              isoJoin([t.subscriber.username ?? '', if ((t.subject ?? '').isNotEmpty) t.subject!], ' · '),
+              isoJoin([if (Sees.usernames) t.subscriber.username ?? '', if ((t.subject ?? '').isNotEmpty) t.subject!], ' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppType.muted(color: AppColors.textMid),

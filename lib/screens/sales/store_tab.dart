@@ -431,8 +431,8 @@ class _StoreOrderTile extends StatelessWidget {
                         Flexible(child: Text(iso(o.who), style: AppType.body(color: AppColors.textBody).copyWith(fontSize: 13))),
                       ],
                     ),
-                    if (user.isNotEmpty && user != o.who) Text(iso(user), style: meta),
-                    if (phone.isNotEmpty)
+                    if (Sees.usernames && user.isNotEmpty && user != o.who) Text(iso(user), style: meta),
+                    if (Sees.phones && phone.isNotEmpty)
                       InkWell(
                         key: ValueKey('store-order-call-${o.id}'),
                         borderRadius: BorderRadius.circular(R.sm),

@@ -21,6 +21,7 @@ import 'connection_alerts.dart';
 import 'employee_session.dart';
 import 'merged_rows.dart';
 import 'permissions_service.dart';
+import 'employee_visibility.dart';
 
 /// «كل الشركات» في التطبيق (٢١ أكتوبر، المالك: «ابدي بيها خل نكملها» — تصميمنا): الرئيسية والمشتركين تعرض شركات حساب Pro
 /// كلّها معاً، والعمليّات على المشترك تُنفَّذ في مكانها — كلّ نداءٍ موجَّهٌ لشركة صفّه بتوكن الحساب وحده (CompanyRoute).
@@ -797,7 +798,8 @@ class MergedOps {
 
   /// سطر رأس شيت مال المشترك (تسديد، دين، رصيد، تفعيل، تمديد، خصم، سعر): اسمه، وفي «كل الشركات» شركته معه (بلا مفتاح ⇒
   /// المفتوحة) — المال يُكتب لشركةٍ يراها المدير قبل التأكيد (التحقّق الثالث من 179). خارج الوضع: الاسم وحده كما كان.
-  static String sheetSubtitle(Subscriber s) => withCompany(s.fullName, s.companyKey);
+  // «ما يراه الموظّف»: الاسم، واليوزر مخفيّ ⇒ «بلا اسم» لمن لا اسم له
+  static String sheetSubtitle(Subscriber s) => withCompany(Sees.nameOf(s.fullName, s.username), s.companyKey);
 
   /// [text] ومعه اسم شركة الصفّ [key] في «كل الشركات» ([MergedMode.rowCompanyName]) — وخارجه [text] كما هو.
   static String withCompany(String text, String? key) {

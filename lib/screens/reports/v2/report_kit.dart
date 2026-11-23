@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/employee_visibility.dart';
 
 // «التقارير — الشكل الموحّد» (٢٢ نوفمبر — المالك: «التقارير بشكل عامة اريد تهتم بتصميمها من جديد كل انواع التقارير بوضع كل
 // الشركات من ناحيه الفلاتر وبوضع الشركه المنفرده»، ثمّ «صور وشرح تكدر تسوي حتى وراها نبلش؟»).
@@ -163,7 +164,27 @@ class RpCompanyLine {
 /// «العربي ومن ثم اليوزر» (المالك ٢٣ نوفمبر: «لازم بجميع التقارير اسم المشترك بالعربي الاولية اله»): العنوان الاسم العربيّ،
 /// واليوزر بعده بسطر التفاصيل — معزولاً (يوزرٌ يبدأ برقمٍ لا ينقلب بين العربيّ). null حين العنوان هو اليوزر نفسه (لا اسم)، أو لا
 /// يوزر، أو [detail] يحمله أصلاً («تفعيل نقدي - المستخدم: ali | …»).
+/// «ما يراه الموظّف» (٢٣ نوفمبر): عنوان سطرٍ في التقارير — كما كان (الاسم ثمّ الهدف ثمّ اليوزر ثمّ [fallback])، واليوزر مخفيّ عن
+/// الموظّف ⇒ الاسم، وإلّا «بلا اسم» لسطر مشترك، وإلّا [fallback] (نوع الحركة) — لا يوزر ولا هدفٌ هو اليوزر.
+String rpSubjectTitle({String? fullName, String? target, String? username, required String fallback}) {
+  if (Sees.usernames) return fullName ?? target ?? username ?? fallback;
+  final n = (fullName ?? '').trim();
+  final u = (username ?? '').trim();
+  if (n.isNotEmpty && n.toLowerCase() != u.toLowerCase()) return n;
+  // مشتركٌ بلا اسم (له يوزر) ⇒ «بلا اسم» كبقيّة الشاشات؛ وسطرٌ لا مشترك فيه ⇒ نوع الحركة
+  return u.isNotEmpty ? kNoNameWord : fallback;
+}
+
+/// «ما يراه الموظّف»: الوصف بلا اليوزر حين أخفاه المدير («تفعيل نقدي - المستخدم: ali» ⇒ «… المستخدم: —»).
+String rpHideUser(String text, String? username) {
+  final u = (username ?? '').trim();
+  if (Sees.usernames || u.isEmpty || text.isEmpty) return text;
+  return text.replaceAll(RegExp(RegExp.escape(u), caseSensitive: false), '—');
+}
+
 String? rpUserAfterName({required String title, String? username, String detail = ''}) {
+  // «ما يراه الموظّف» (٢٣ نوفمبر): اليوزر مخفيّ عن الموظّف ⇒ لا سطر له
+  if (!Sees.usernames) return null;
   final u = (username ?? '').trim();
   if (u.isEmpty) return null;
   final low = u.toLowerCase();

@@ -47,6 +47,7 @@ import '../app_modules.dart';
 import '../settings_screen.dart';
 import '../shell_nav.dart';
 import '../../services/merged_text.dart';
+import '../../services/employee_visibility.dart';
 
 /// «أمر صوتي» (٧ نوفمبر — المالك: «المساعد الصوتي… وكيل يامره يفعل مشترك يطفي مشترك يفحص جهاز»).
 ///
@@ -1336,9 +1337,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         for (final x in m.items)
           _pickTile(
             key: ValueKey('voice-sub-${x.item.companyKey ?? ''}${x.item.idx ?? x.item.username}'),
-            title: x.item.fullName.trim().isEmpty ? x.item.username : x.item.fullName,
+            title: Sees.nameOf(x.item.fullName, x.item.username),
             subtitle: [
-              x.item.username,
+              if (Sees.usernames) x.item.username,
               if ((x.item.profileName ?? '').isNotEmpty) x.item.profileName!,
               // «كل الشركات»: الشركة باسمها — اليوزر نفسه قد يكون بشركتين
               if (_merged && MergedMode.companyOf(x.item.companyKey) != null)

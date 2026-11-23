@@ -24,6 +24,7 @@ import '../../../widgets/package_picker_field.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../widgets/merged_write_lock.dart';
+import '../../../services/employee_visibility.dart';
 
 /// متى تتغيّر باقة مشتركٍ **فعّال** في SAS4 — خيار الساس نفسه (`user/changeProfile`
 /// بـ`change_type`)، بقرار المالك ١٨ أكتوبر. غير الفعّال «حالاً» وحدها كالساس.
@@ -653,7 +654,7 @@ class _EditSheetState extends State<_EditSheet> {
     final originalPh = (original.phone ?? '').isNotEmpty
         ? original.phone!
         : (original.mobile ?? '');
-    if (ph != originalPh) out['phone'] = ph;
+    if (Sees.phones && ph != originalPh) out['phone'] = ph;
     // مقفلةٌ أو حالها لم يصل ⇒ لا تُرسَل الباقة (وبقيّة الحقول تُحفظ).
     if (_changesPackage && !_packageLocked && !_pkgWaiting) {
       out['profile_id'] = _profileId;
@@ -983,7 +984,7 @@ class _EditSheetState extends State<_EditSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.pencil,
         title: 'تعديل المشترك',
-        subtitle: widget.sub.fullName,
+        subtitle: Sees.nameOf(widget.sub.fullName, widget.sub.username),
         onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
@@ -1020,14 +1021,17 @@ class _EditSheetState extends State<_EditSheet> {
             ),
             const SizedBox(height: Sp.md),
           ],
-          const _FieldLabel(label: 'اسم المستخدم'),
-          _Field(
-            controller: _username,
-            hint: 'username@admin',
-            enabled: !_saving,
-            icon: LucideIcons.user,
-          ),
-          const SizedBox(height: Sp.md),
+          // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ لا حقل له (ولا يُرسَل: يبقى كما هو)
+          if (Sees.usernames) ...[
+            const _FieldLabel(label: 'اسم المستخدم'),
+            _Field(
+              controller: _username,
+              hint: 'username@admin',
+              enabled: !_saving,
+              icon: LucideIcons.user,
+            ),
+            const SizedBox(height: Sp.md),
+          ],
           // ايرث لنك: نميّزها «كلمة سرّ الخدمة» لأنّ تحتها كلمة سرّ الحساب.
           // SAS4: تبقى «كلمة السر» حرفيّاً.
           _FieldLabel(
@@ -1113,6 +1117,8 @@ class _EditSheetState extends State<_EditSheet> {
             ],
           ),
           const SizedBox(height: Sp.md),
+          // «ما يراه الموظّف»: الهاتف مخفيّ (يصل فارغاً) ⇒ لا حقل له ولا يُرسَل — كالموقع
+          if (Sees.phones) ...[
           const _FieldLabel(label: 'رقم الهاتف'),
           _Field(
             controller: _phone,
@@ -1139,6 +1145,7 @@ class _EditSheetState extends State<_EditSheet> {
             ),
           ),
           const SizedBox(height: Sp.md),
+          ],
           const _FieldLabel(label: 'الباقة'),
           if (_isEarthlink) ...[
             PackagePickerField(

@@ -105,8 +105,8 @@ class ActivityLogView {
     };
     final tm = timeOf(r);
     // التعديل بما تغيّر «من … إلى …» (المالك ٢٢ نوفمبر) — لا «تعديل المشترك — phone»
-    final title = r.userFullName ?? r.targetName ?? r.userUsername ?? label;
-    final head = r.editSummary ?? (desc.isNotEmpty ? desc : label);
+    final title = rpSubjectTitle(fullName: r.userFullName, target: r.targetName, username: r.userUsername, fallback: label);
+    final head = rpHideUser(r.editSummary ?? (desc.isNotEmpty ? desc : label), r.userUsername ?? r.targetName);
     // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد الاسم ما لم يحمله الوصف أصلاً
     final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName, detail: head);
     final detail = [

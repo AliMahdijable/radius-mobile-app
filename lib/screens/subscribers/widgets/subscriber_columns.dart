@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../services/provider_service.dart';
 import 'sort_sheet.dart';
+import '../../../services/employee_visibility.dart';
 
 /// أعمدة جدول المشتركين على الحاسبة. «المشترك» (الاسم واليوزر) والإجراءات ثابتان؛ الباقي يُظهَر
 /// ويُخفى ويُرتَّب من زرّ «الأعمدة»، ويُحفظ على هذا الجهاز.
@@ -71,7 +72,13 @@ extension SubColInfo on SubCol {
       };
 
   /// متاحٌ لهذا المزوّد؟ (استهلاك المشروع الوطنيّ في لوحته لا هنا).
-  bool get available => this != SubCol.usage || !ProviderService.isFtth;
+  /// و«ما يراه الموظّف» (٢٣ نوفمبر): الهاتف والرصيد وأيّام الدين لا تُعرض لموظّفٍ أخفاها المدير (الخادم يرسلها فارغة) — كالموقع.
+  bool get available => switch (this) {
+        SubCol.usage => !ProviderService.isFtth,
+        SubCol.phone => Sees.phones,
+        SubCol.balance || SubCol.debtAge => Sees.debts,
+        _ => true,
+      };
 }
 
 /// ترتيب الأعمدة وظهورها — على هذا الجهاز وحده (كالموقع: v2_subs_hidden_cols).

@@ -22,6 +22,7 @@ import '../../core/widgets/app_sheet.dart';
 import '../../widgets/merged_section.dart';
 import '../../widgets/list_kit.dart';
 import '../reports/v2/report_kit.dart';
+import '../../services/employee_visibility.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -459,10 +460,10 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                       final fixed = _prices[s.idx]?.price;
                       final hasName = s.fullName.trim().isNotEmpty && s.fullName != s.username;
                       final sale = s.currentSalePrice;
-                      final sub = [if (hasName) s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · ');
+                      final sub = [if (hasName && Sees.usernames) s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · ');
                       return ListSubscriberRow(
                         key: ValueKey('price-row-${s.idx}'),
-                        title: hasName ? s.fullName : s.username,
+                        title: hasName ? s.fullName : Sees.nameOf(null, s.username),
                         subtitle: sub,
                         selectable: _canManage,
                         selected: _selected.contains(s.idx),

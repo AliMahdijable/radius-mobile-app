@@ -14,6 +14,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'balance_reports_screen.dart';
 import 'v2/report_kit.dart';
+import '../../services/employee_visibility.dart';
 
 /// تفاصيل فترة من «تقارير الأرصدة»: خلاصتها سطراً سطراً حتى «صافي ربح الفترة»، ثمّ حركاتها — عشرةٌ ثمّ «عرض المزيد» — بفلاترها
 /// وبحثها. لكلّ تفعيل آجل حاله بكلمة (المالك: «كون أكو فد شي يبيّن إنّه كان دين وتحوّل إلى نقدي أو إلى دخل»): «كان دين وتسدّد»،
@@ -601,8 +602,10 @@ class BalanceMoveRow extends StatelessWidget {
                             if (subName != null)
                               Text(subName, key: const ValueKey('bal-move-name'), style: AppType.bodyBold(color: AppColors.textHi))
                             else
-                              Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
-                            if (subName != null)
+                              // «ما يراه الموظّف»: يوزر المشترك مخفيّ ⇒ «بلا اسم» لحركته (حركة المدير الفرعيّ كما هي)
+                              Text(!Sees.usernames && (m is BalanceActMove || m is BalancePayMove) ? kNoNameWord : title,
+                                  maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                            if (subName != null && Sees.usernames)
                               Text(title,
                                   key: const ValueKey('bal-move-user'),
                                   textDirection: TextDirection.ltr,

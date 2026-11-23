@@ -25,6 +25,7 @@ import '../widgets/report_permission_gate.dart';
 import 'report_kit.dart';
 import 'report_prefs.dart';
 import '../../../core/util/bytes_format.dart';
+import '../../../services/employee_visibility.dart';
 
 /// «الجلسات» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»): المتّصلون الآن أو سجلّ الجلسات من الساس (أحدث 2000 صفّ —
 /// الساس لا يعطي سجلّاً بفترة)، البحث باليوزر/IP/MAC من الخادم، والشركات و«حسب الشركة»، والأعداد والأحجام، و«قسّم حسب» المدير/اليوم،
@@ -260,10 +261,11 @@ class _SessionsV2State extends State<SessionsV2Screen> {
       tone: s.isOnline ? RpTone.money : RpTone.neutral,
       // «العربي ومن ثم اليوزر»: الاسم عنواناً، واليوزر بسطره تحته ثمّ سطر الشبكة — على 320 ×1.2 كان اليوزر الطويل ينكسر مع IP
       // في سطرٍ واحد ويُقصّ ما بعده؛ بلا اسمٍ السطر كما كان
-      title: name ?? (s.username ?? '—'),
-      detail: name != null && user.isNotEmpty ? '${iso(user)}\n$net' : net,
+      // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وإلّا «بلا اسم»، ولا سطر يوزر
+      title: name ?? (Sees.usernames ? (s.username ?? '—') : kNoNameWord),
+      detail: name != null && user.isNotEmpty && Sees.usernames ? '${iso(user)}\n$net' : net,
       // اليوزر الطويل وسطر الشبكة على 320 ×1.2 قد يأخذان ستّة أسطر — لا قصّ (بلا اسمٍ كما كان)
-      detailLines: name != null && user.isNotEmpty ? 6 : 2,
+      detailLines: name != null && user.isNotEmpty && Sees.usernames ? 6 : 2,
       amount: null,
       // سطران قصيران: ↓ فوق ↑ (كالموقع) — سطرٌ واحد كان يأخذ نصف السطر فيُقصّ الاسم وسطر الشبكة على 320–390
       trailing: s.bytesIn > 0 || s.bytesOut > 0 ? '↓${bytes(s.bytesIn)}\n↑${bytes(s.bytesOut)}' : null,
@@ -340,7 +342,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
         [
           if (_merged) MergedMode.companyOf(v.co[s])?.name ?? '',
           if (withNames) _nameOf(s) ?? '',
-          s.username ?? '',
+          Sees.usernames ? (s.username ?? '') : kHiddenWord,
           s.ipAddress ?? '',
           s.mac ?? '',
           s.userManager ?? '',
@@ -394,7 +396,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
             scrolledUnderElevation: 0,
             title: Text(
               widget.initialUsername != null
-                  ? 'سجلّ جلسات ${widget.initialUsername}'
+                  ? (Sees.usernames ? 'سجلّ جلسات ${widget.initialUsername}' : 'سجلّ الجلسات')
                   : (_merged ? 'الجلسات · كل الشركات' : 'reports.sessions'.tr()),
               style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
             ),

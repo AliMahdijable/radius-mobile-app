@@ -22,6 +22,7 @@ import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_prefs.dart';
 import 'report_sheets.dart';
+import '../../../services/employee_visibility.dart';
 
 /// «كشف حساب المشترك» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»). الأرقام كما كانت حرفاً ([StatementSummary]: المدفوع
 /// بالفترة، والدين من دفتره/ملاحظاته، والصافي = المدفوع − الدين — معناها قرار المالك لا الشكل)؛ يتغيّر الشكل: الفترات الجاهزة (آخر
@@ -61,7 +62,8 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
   int _visible = _page;
 
   DateTime get _now => AccountStatementV2Screen.clock();
-  String get _name => widget.displayName ?? widget.username;
+  // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وإلّا «بلا اسم»، ولا يوزر بالرأس ولا بالتصدير
+  String get _name => Sees.usernames ? (widget.displayName ?? widget.username) : Sees.nameOf(widget.displayName, widget.username);
 
   @override
   void initState() {
@@ -219,7 +221,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       for (final r in rows)
         [
           _name,
-          widget.username,
+          Sees.usernames ? widget.username : kHiddenWord,
           r.amount == 0 ? '' : '${r.amount}',
           exportTimeAr(r.createdAt),
           (r.description ?? '').replaceAll('\n', ' '),
@@ -240,7 +242,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
     ];
     final company = MergedMode.rowCompanyName(widget.companyKey);
     final details = [
-      'المشترك: $_name (${widget.username})',
+      Sees.usernames ? 'المشترك: $_name (${widget.username})' : 'المشترك: $_name',
       if (company != null) 'الشركة: $company',
       for (final c in _chips()) c.label,
       if (_q.trim().isNotEmpty) 'بحث: «${_q.trim()}»',
@@ -281,7 +283,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('reports.account_statement'.tr(), style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-                Text('$_name · ${widget.username}',
+                Text(Sees.usernames ? '$_name · ${widget.username}' : _name,
                     style: AppType.micro(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
             ),

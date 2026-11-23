@@ -20,6 +20,7 @@ import '../../widgets/merged_section.dart';
 import '../../services/merged_mode.dart';
 import '../../widgets/list_kit.dart';
 import '../reports/v2/report_kit.dart';
+import '../../services/employee_visibility.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -547,10 +548,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                       final d = _existing[s.username.toLowerCase()];
                       final hasName = s.fullName.trim().isNotEmpty && s.fullName != s.username;
                       final sale = s.saleAfter(d ?? 0);
-                      final sub = [if (hasName) s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · ');
+                      final sub = [if (hasName && Sees.usernames) s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · ');
                       return ListSubscriberRow(
                         key: ValueKey('discount-row-${s.username}'),
-                        title: hasName ? s.fullName : s.username,
+                        title: hasName ? s.fullName : Sees.nameOf(null, s.username),
                         subtitle: sub,
                         selectable: _canManage,
                         selected: _selected.contains(s.username),

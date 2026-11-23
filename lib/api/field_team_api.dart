@@ -8,6 +8,7 @@ import '../core/util/server_time.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 import 'company_route.dart';
+import '../services/employee_visibility.dart';
 
 /// «الصيانة والمبيعات» — الفريق الميدانيّ لكلّ مدير (٢٣ نوفمبر — المالك: «كل مدير عنده قسم خاص به اللي هو قسم الصيانة … بموظفين
 /// منفصلين … او يقدر يسند نفس الموظف … رابط تطبيق»). الخادم server/fieldTeam (`/api/v2/field/*`)، والموقع /v2/field-team (7ccfb8e)
@@ -264,8 +265,8 @@ class FieldSubscriber {
   final String? username;
   final String? phone;
 
-  /// الاسم، وإلّا اسم الدخول.
-  String? get title => name ?? username;
+  /// الاسم، وإلّا اسم الدخول — و«ما يراه الموظّف»: اليوزر مخفيّ ⇒ «بلا اسم».
+  String? get title => !Sees.usernames && (username ?? '').isNotEmpty ? Sees.nameOf(name, username!) : (name ?? username);
 }
 
 class FieldTask {

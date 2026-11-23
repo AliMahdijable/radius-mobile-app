@@ -17,6 +17,7 @@ import '../../../core/widgets/app_sheet.dart';
 import '../../../services/merged_mode.dart';
 import '../../../widgets/company_tag.dart';
 import '../../../services/merged_text.dart';
+import '../../../services/employee_visibility.dart';
 
 /// Bottom sheet that lets the admin pick a subscriber to operate on.
 /// Used by the FAB → 'إضافة سريعة' shortcuts for تفعيل / تجديد /
@@ -462,7 +463,7 @@ class _Row extends StatelessWidget {
                         // أحدهما لأخيه — راجع `report_log_tile`.
                         Expanded(
                           child: Text(
-                            sub.fullName,
+                            Sees.nameOf(sub.fullName, sub.username),
                             style:
                                 AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
@@ -472,7 +473,7 @@ class _Row extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (sub.username != sub.fullName) ...[
+                        if (Sees.usernames && sub.username != sub.fullName) ...[
                           const SizedBox(width: 4),
                           Text(
                             '(${sub.username})',

@@ -2808,7 +2808,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final addLabel = _mergedOn && sessionName.isNotEmpty ? 'مشترك جديد · $sessionName' : null;
     return SubscribersDesktopHeader(
       title: 'subscribers.title'.tr(),
-      subtitle: ValueListenableBuilder<bool>(
+      // «ما يراه الموظّف»: أعداد المشتركين مخفيّة ⇒ لا سطر «N مشترك، وM متّصل الآن» (الموظّف لا يدخل «كل الشركات»)
+      subtitle: !Sees.counts ? null : ValueListenableBuilder<bool>(
         valueListenable: MergedMode.active,
         builder: (context, merged, _) => Text(
           merged

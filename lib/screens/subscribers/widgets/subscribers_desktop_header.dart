@@ -40,7 +40,8 @@ class SubscribersDesktopHeader extends StatelessWidget {
   });
 
   final String title;
-  final Widget subtitle;
+  /// null = بلا سطر (موظّفٌ أخفى عنه مديره أعداد المشتركين).
+  final Widget? subtitle;
   final TextEditingController searchController;
 
   final List<String> managers;

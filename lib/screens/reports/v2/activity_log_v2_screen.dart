@@ -30,6 +30,7 @@ import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_prefs.dart';
 import 'report_sheets.dart';
+import '../../../services/employee_visibility.dart';
 
 /// «سجلّ الحركات» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»): الفترة ← الشركات ← الفلاتر ← «حسب الشركة» ← الأعداد
 /// (ولمسها حركاتها) ← العدد يوماً بيوم ← «قسّم حسب» النوع/المدير/الموظّف/اليوم ← الحركات يوماً يوماً + بحث ← التصدير بالفلاتر حرفاً.
@@ -500,11 +501,11 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
         for (final r in rows)
           [
             if (_merged) MergedMode.companyOf(co[r])?.name ?? '',
-            r.userFullName ?? r.targetName ?? r.userUsername ?? '',
-            r.userUsername ?? '',
+            rpSubjectTitle(fullName: r.userFullName, target: r.targetName, username: r.userUsername, fallback: ''),
+            Sees.usernames ? (r.userUsername ?? '') : kHiddenWord,
             ActivityLogView.moneyOf(r) == null ? '' : '${ActivityLogView.moneyOf(r)}',
             exportTimeAr(r.createdAt),
-            r.editSummary ?? (r.actionDescription ?? '').replaceAll('\n', ' '),
+            rpHideUser(r.editSummary ?? (r.actionDescription ?? '').replaceAll('\n', ' '), r.userUsername ?? r.targetName),
             arabicActionLabel(r.actionType, r.actionDescription ?? ''),
             ActivityLogView.actorOf(r),
           ],

@@ -22,10 +22,13 @@ abstract final class Sees {
   static bool get balance => PermissionsService.sees('balance');
 
   /// اسم المشترك للعرض: الاسم، وإلّا اليوزر حين يُرى، وإلّا «بلا اسم».
+  /// اليوزر مخفيّ ⇒ اسمٌ هو اليوزر نفسه «بلا اسم» أيضاً: `Subscriber.fullName` يرجع اليوزر لمن لا اسم له، وبعض
+  /// الوكلاء يكتبون اليوزر بحقل الاسم.
   static String nameOf(String? name, String username) {
     final n = (name ?? '').trim();
-    if (n.isNotEmpty) return n;
-    return usernames ? username : kNoNameWord;
+    if (usernames) return n.isNotEmpty ? n : username;
+    if (n.isEmpty || n.toLowerCase() == username.trim().toLowerCase()) return kNoNameWord;
+    return n;
   }
 }
 
