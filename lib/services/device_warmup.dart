@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../api/network_devices_api.dart';
 import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
 import 'deep_probe_scheduler.dart';
@@ -143,6 +144,16 @@ class DeviceWarmup {
       return;
     }
     _done.add(d.id);
+
+    // ٢٤ نوفمبر (N+1): اعتمادات هذا الجهاز والتسعة عشر التالية في الطابور بطلبٍ واحد — كانت تُطلب جهازاً جهازاً. تعذّرها لا
+    // يغيّر شيئاً (كلٌّ يسأل وحده كما كان)، والإيقاف أثناءه يُحترم.
+    try {
+      await NetworkDevicesApi.prefetchCredentials([d.id, ..._queue.take(19).map((x) => x.id)]);
+    } catch (_) {}
+    if (!_running || gen != _gen) {
+      _done.remove(d.id); // أوقف أثناء الطلب ⇒ لم يُسخَّن: يعود مؤهَّلاً للتشغيل التالي
+      return;
+    }
 
     // ⚠️ **ننتظر اكتمالها** قبل التالي.
     //

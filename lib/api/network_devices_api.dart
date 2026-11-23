@@ -267,6 +267,61 @@ class NetworkDevicesApi {
     return result;
   }
 
+  /// ٢٤ نوفمبر (N+1 — المالك: «كمل على الباقي»): اعتمادات عدّة أجهزة بطلبٍ واحد (GET /api/v2/admin/devices/credentials?ids=…) —
+  /// كانت تُطلب جهازاً جهازاً (١٦ ألف طلب/يوم، حتى ٥٠ بالدقيقة من هاتفٍ واحد). تملأ المخبأ بعمره نفسه، فـ[getCredentials] يجدها ولا
+  /// يسأل. ما لم يرجع (جهازٌ ليس للحساب) أو تعذّر الطلب ⇒ لا شيء: كلٌّ يسأل وحده كما كان. خادمٌ أقدم بلا المسار ⇒ يُتذكَّر فلا يُعاد.
+  static bool _credsBatchUnsupported = false;
+  static const _credsBatchMax = 300;
+
+  static Future<void> prefetchCredentials(Iterable<int> ids) async {
+    if (_credsBatchUnsupported) return;
+    final now = DateTime.now();
+    final need = <int>[];
+    for (final id in ids) {
+      if (id <= 0 || need.contains(id)) continue;
+      final c = _credsCache[id];
+      if (c != null && now.difference(c.at) < _credsCacheTtl) continue;
+      need.add(id);
+    }
+    if (need.length < 2) return; // جهازٌ واحد ⇒ طلبه المعتاد يكفي
+    for (var i = 0; i < need.length; i += _credsBatchMax) {
+      final chunk = need.skip(i).take(_credsBatchMax).toList();
+      try {
+        final r = await ApiClient.dio.get<dynamic>(
+          '/api/v2/admin/devices/credentials',
+          queryParameters: {'ids': chunk.join(',')},
+        );
+        final code = r.statusCode ?? 0;
+        if (code == 404 || code == 405) {
+          _credsBatchUnsupported = true;
+          return;
+        }
+        final data = r.data;
+        if (data is! Map || data['success'] != true) continue;
+        final creds = data['credentials'];
+        if (creds is! Map) continue;
+        final at = DateTime.now();
+        for (final id in chunk) {
+          final v = creds['$id'];
+          if (v is! Map) continue;
+          _credsCache[id] = (creds: Map<String, dynamic>.from(v), at: at);
+          _servedStale.remove(id);
+        }
+      } on DioException catch (e) {
+        final code = e.response?.statusCode;
+        if (code == 404 || code == 405) {
+          _credsBatchUnsupported = true;
+          return;
+        }
+      } catch (_) {
+        // أفضل جهد — كلٌّ يسأل وحده كما كان
+      }
+    }
+  }
+
+  @visibleForTesting
+  static void debugResetCredentialsBatch() => _credsBatchUnsupported = false;
+
   /// يمسح cache creds لجهاز معيّن (بعد edit save) أو الكل (بعد logout).
   static void invalidateCredentialsCache([int? id]) {
     if (id == null) {

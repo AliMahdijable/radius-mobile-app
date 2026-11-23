@@ -365,6 +365,18 @@ class DeviceConfigApi {
   /// تُرجع `null` حين لا يكون هذا المستخدم في الكاش أو شاخ سجلّه، و
   /// `DeviceConfig()` فارغاً حين يكون مفحوصاً ولا إعداد له. والفرق
   /// بينهما جوهريّ لمن يبني عليه قراراً: «لا أعرف» ليست «لا يوجد».
+  /// يُشيّخ كلّ المخبأ بمدّة — للاختبار وحده (موجةٌ أطول من عمر المخبأ بلا انتظار خمس دقائق).
+  @visibleForTesting
+  static void debugAgeAll(Duration by) {
+    for (final k in _cache.keys.toList()) {
+      final c = _cache[k]!;
+      _cache[k] = _CachedConfig(c.cfg, c.at.subtract(by));
+    }
+  }
+
+  /// ٢٤ نوفمبر (N+1): لإعداد هذا المشترك نسخةٌ طازجة في المخبأ؟ — موجة الفحص تجدّد دفعة ما شاخ بطلبٍ واحد قبل فحصه.
+  static bool isFresh(String username, {String? company}) => peekConfig(username, company: company) != null;
+
   static DeviceConfig? peekConfig(String username, {String? company}) {
     if (username.trim().isEmpty) return null;
     final c = _cache[scoped(company, username.trim())];

@@ -888,6 +888,39 @@ class DeviceProbeApi {
     var done = 0;
     var canceled = false;
 
+    // ٢٤ نوفمبر (N+1 — المالك: «كمل على الباقي»): موجةٌ أطول من عمر مخبأ الإعدادات (٥ د) كانت تسأل الخادم عن إعداد كلّ مشترك
+    // بعدها وحده (GET /api/subscribers/:u/device — حتى ٤٤ بالدقيقة من هاتفٍ واحد). الآن أوّل هدفٍ شاخ إعداده يجدّد إعدادات
+    // الخمسين التي تبدأ به بطلبٍ واحد (warmBatch يتخطّى الطازج)، والعمّال على الموضع نفسه ينتظرون الطلب نفسه. شركةٌ تعذّرت دفعتها
+    // (في البدء أو هنا) لا تُعاد لها في هذه الموجة: كلٌّ يسأل وحده كما كان.
+    final refills = <int, Future<void>>{};
+    final refillOff = <String?>{
+      for (final e in authoritative.entries)
+        if (e.value != true) e.key,
+    };
+    Future<void> refillFrom(int i) {
+      final t = ordered[i];
+      if (refillOff.contains(t.company) ||
+          DeviceConfigApi.isFresh(t.username, company: t.company)) {
+        return Future<void>.value();
+      }
+      return refills.putIfAbsent(i ~/ _refillBlock, () async {
+        final byCompany = <String?, List<String>>{};
+        for (final x in ordered.skip(i).take(_refillBlock)) {
+          if (refillOff.contains(x.company)) continue;
+          (byCompany[x.company] ??= <String>[]).add(x.username);
+        }
+        await Future.wait(byCompany.entries.map((e) async {
+          var ok = false;
+          try {
+            ok = await DeviceConfigApi.warmBatch(e.value, company: e.key);
+          } catch (_) {
+            ok = false;
+          }
+          if (!ok) refillOff.add(e.key);
+        }));
+      });
+    }
+
     Future<void> worker() async {
       while (true) {
         if (canceled) return;
@@ -902,6 +935,7 @@ class DeviceProbeApi {
         final i = next++;
         if (i >= ordered.length) return;
         final t = ordered[i];
+        await refillFrom(i);
         try {
           await probe(
               fallbackIp: t.ip,
@@ -939,6 +973,9 @@ class DeviceProbeApi {
     final workers = wanted < ordered.length ? wanted : ordered.length;
     await Future.wait(List.generate(workers, (_) => worker()));
   }
+
+  /// ٢٤ نوفمبر (N+1): كم هدفاً يجدّد طلبُ الإعدادات الواحد في موجة الفحص.
+  static const _refillBlock = 50;
 
   static void invalidateAdminDefaults() {
     _adminFetch = null;
