@@ -1,3 +1,4 @@
+import '../api/etag_cache.dart';
 import 'dart:async';
 import 'notification_router.dart';
 
@@ -92,6 +93,8 @@ class SessionManager {
         'SubscribersApi.clearAllCaches', () => SubscribersApi.clearAllCaches());
     _guardSync('DeviceConfigApi.clearAllCaches',
         () => DeviceConfigApi.clearAllCaches());
+    // «ما تغيّر شي»: أجسام القوائم المحفوظة في الذاكرة لا تبقى للمدير التالي
+    _guardSync('EtagCache.clear', () => EtagCache.clear());
     _guardSync('AlertsService.reset', () => AlertsService.reset());
     // §١٢: عدّاد الكارتات المتبقّية — لا يرى المدير التالي مخزون سابقه.
     _guardSync('CardsState.reset', () => CardsState.reset());

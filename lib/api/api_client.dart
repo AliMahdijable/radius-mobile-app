@@ -1,3 +1,4 @@
+import 'etag_cache.dart';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -71,7 +72,7 @@ class ApiClient {
   static const String baseUrl =
       String.fromEnvironment('BASE_URL', defaultValue: 'https://pro.mysvcs.net');
 
-  static final Dio dio = _buildDio(baseUrl);
+  static final Dio dio = _buildDio(baseUrl, etag: true);
 
   /// ممرّ «وضع VPN» (٧ نوفمبر — [VpnPipe]): الخادم نفسه ([baseUrl]) بمعترضاته نفسها، لكن بحوض اتّصالاتٍ منفصل — كلّ اتّصالٍ بجهاز
   /// عبر الـVPN يُبقي قراءةً معلّقة (≤ ١٥ث) تنتظر بايتاته، فلا تزاحم نداءات التطبيق الأخرى على اتّصالاتها الثمانية.
@@ -100,7 +101,7 @@ class ApiClient {
   static Future<RefreshOutcome> refreshSession() =>
       _AuthInterceptor.sharedRefresh();
 
-  static Dio _buildDio(String url, {int maxConnections = 8}) {
+  static Dio _buildDio(String url, {int maxConnections = 8, bool etag = false}) {
     final d = Dio(BaseOptions(
       baseUrl: url,
       connectTimeout: const Duration(seconds: 20),
@@ -130,7 +131,11 @@ class ApiClient {
         ..idleTimeout = const Duration(seconds: 15)
         ..maxConnectionsPerHost = maxConnections,
     );
+    // «ما تغيّر شي» (٢٤ نوفمبر، lib/api/etag_cache.dart): الردّ أوّلاً — 304 يصير 200 بالجسم المحفوظ قبل أيّ معترض.
+    if (etag) d.interceptors.add(EtagResponseInterceptor());
     d.interceptors.add(_AuthInterceptor(d));
+    // والطلب بعد معترض الجلسة — يرى التوكن وقرار «كل الشركات» (الموجَّه خارجها).
+    if (etag) d.interceptors.add(EtagRequestInterceptor());
     // «اشرحلي» (المساعد الذكيّ): آخر ردودٍ مرفوضة في الذاكرة — الرمز والرسالة
     // والمسار، بلا أيّ قيمةٍ من جسم الطلب. بعد معترض الجلسة: يرى الردّ النهائيّ.
     d.interceptors.add(ApiErrorTap());
