@@ -261,6 +261,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     });
     _scopeIds ??= await loadScopeUserIds();
     if (f.managers.isNotEmpty) await _loadPeople([null]);
+    // موظّفون محفوظون ⇒ أسماؤهم للشارة ورأس الملفّ (بالخلفيّة — لا تؤخّر التقرير؛ كانت «موظّف، موظّف» حتى تُفتح الورقة)
+    if (f.employees.isNotEmpty) unawaited(_loadPeople([for (final k in f.employees.keys) k == _open ? null : k]));
     if (!mounted || seq != _seq || _merged) return;
     final ids = _actorIds(_open) ?? _scopeIds;
     final cur = await _fetch(f.range, group: _open, ids: ids);
@@ -301,6 +303,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       _visible = _page;
     });
     if (f.managers.isNotEmpty) await _loadPeople([for (final c in cs) c.key]);
+    // موظّفون محفوظون ⇒ أسماؤهم للشارة ورأس الملفّ (بالخلفيّة — لا تؤخّر التقرير؛ كانت «موظّف، موظّف» حتى تُفتح الورقة)
+    if (f.employees.isNotEmpty) unawaited(_loadPeople([for (final k in f.employees.keys) k == _open ? null : k]));
     if (!mounted || seq != _seq) return;
     await Future.wait([for (final c in cs) _loadCo(c, seq)]);
   }

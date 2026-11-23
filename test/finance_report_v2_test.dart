@@ -184,6 +184,33 @@ class _Server implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// موظّفو الصفحة (/api/v2/employees) فوق الخادم الوهميّ.
+class _People implements HttpClientAdapter {
+  _People(this.inner);
+  final HttpClientAdapter inner;
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
+    if (o.method.toUpperCase() == 'GET' && o.uri.path == '/api/v2/employees') {
+      return ResponseBody.fromString(
+          jsonEncode({
+            'success': true,
+            'data': [
+              {'id': 7, 'username': 'ali.k', 'full_name': 'علي كاظم', 'is_active': 1},
+              {'id': 9, 'username': 'zainab.h', 'full_name': 'زينب حسن', 'is_active': 1},
+            ],
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          });
+    }
+    return inner.fetch(o, body, cancel);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 /// يفتح قسماً مطويّاً بلمسة عنوانه (المالك ٢٢ نوفمبر: الأقسام الفرعيّة مقفولةٌ حتى يُنقر عليها).
 Future<void> unfold(WidgetTester t, Type card) async {
   final title = find.descendant(of: find.byType(card), matching: find.byType(RpTitle)).first;
@@ -599,6 +626,35 @@ void main() {
         expect(t.takeException(), isNull);
       } finally {
         ProviderService.debugSet(null);
+        await down(t);
+      }
+    });
+
+    testWidgets('موظّفون محفوظون ⇒ أسماؤهم في الشارة ورأس الملفّ بلا فتح الورقة (كانت «موظّف، موظّف»)', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({
+          'p': 'thisMonth',
+          'e': {
+            'open': ['7', '9'],
+          },
+          'ot': 'supernet:12',
+        }),
+      });
+      ApiClient.dio.httpClientAdapter = _People(server);
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        expect(find.text('الموظّفون: علي كاظم، زينب حسن'), findsOneWidget);
+        await t.scrollUntilVisible(find.text('Excel'), 600, scrollable: find.byType(Scrollable).first);
+        await t.tap(find.text('Excel'));
+        for (var i = 0; i < 10; i++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        expect(got.single.details, contains('الموظّفون: علي كاظم، زينب حسن'));
+        expect(t.takeException(), isNull);
+      } finally {
         await down(t);
       }
     });
