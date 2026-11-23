@@ -20,16 +20,14 @@ import 'network_devices/device_alerts_screen.dart';
 /// اسم الشاشة وصفّها بالإعدادات (٢٠ نوفمبر): ما يصل الوكيلَ نفسه — المال والأجهزة والاشتراكات وأوقات السكون.
 const kMyAlertsTitle = 'إشعاراتي';
 
-/// تنبيه «دين على مدير فرعي» لهذه الجلسة؟ شركات SAS4 نعم؛ ايرث لنك والمشروع
-/// الوطنيّ (FTTH) لا مدراء فرعيّين لهما ولا ديون مدراء، فلا يقع أبداً.
+/// تنبيه «دين على مدير فرعي» لهذه الجلسة؟ شركات SAS4 نعم، وايرث لنك نعم منذ صار لها «المدراء» و«ديون أخرى» على حساباتها
+/// التابعة (المالك ٢٣ نوفمبر: «ايرث لنك ممابيها هاي الميزه… تاكد هاي ميزه موجوده لكل انواع الساسات» — الخادم يرسله لحسابها
+/// التابع كالساس: /api/admin/manager-debts ⇒ sendFcmToAdmin(earthlink:<idx>)). المشروع الوطنيّ القديم (FTTH) بلا مدراء فرعيّين.
 @visibleForTesting
 bool showManagerDebtToggle() {
   // والشركة المفتوحة احتياطاً قبل أن يصل `/api/auth/me` بالمزوّد.
   final code = ActiveCompany.current?.sasCode;
-  return !ProviderService.isEarthlink &&
-      !ProviderService.isFtth &&
-      code != 'earthlink' &&
-      code != 'ftth-iq';
+  return !ProviderService.isFtth && code != 'ftth-iq';
 }
 
 /// «تذاكر المشروع الوطني»: الوطنيّ على providerKit (`watani`) وحده — FTTH القديم وبقيّة الشركات بلا هذا التنبيه.
@@ -257,7 +255,7 @@ class _NotificationsSettingsScreenState
                   onChanged: (v) =>
                       _patch((x) => x.copyWith(pushExpiredToday: v)),
                 ),
-                // «دين على مدير فرعي»: ايرث لنك والمشروع الوطنيّ بلا مدراء
+                // «دين على مدير فرعي»: الساس وايرث لنك (٢٣ نوفمبر)؛ المشروع الوطنيّ القديم بلا مدراء
                 // فرعيّين ولا ديون مدراء — تنبيهٌ لا يقع أبداً، فلا يُعرض (ما لا
                 // يدعمه المزوّد يُخفى). قيمته المحفوظة تبقى كما هي في الحفظ.
                 if (showManagerDebtToggle())

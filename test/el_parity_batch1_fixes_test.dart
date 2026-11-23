@@ -684,10 +684,12 @@ void main() {
       await visualTearDown();
     }
 
-    testWidgets('🚨 مالك ايرث لنك: لا مدراء فرعيّين ⇒ لا تنبيه لهم', (t) async {
+    // المالك (٢٣ نوفمبر): «ايرث لنك ممابيها هاي الميزه… تاكد هاي ميزه موجوده لكل انواع الساسات» — صار لايرث لنك «المدراء»
+    // و«ديون أخرى» على حساباتها التابعة، والخادم يرسل التنبيه لحسابها التابع كالساس.
+    testWidgets('مالك ايرث لنك: «دين على مدير فرعي» ظاهرٌ كالساس', (t) async {
       await show(t, s1Owner);
       expect(find.text(nearExpiry), findsOneWidget);
-      expect(find.text(mgrDebt), findsNothing);
+      expect(find.text(mgrDebt), findsOneWidget);
       await drain(t);
     });
 
