@@ -2,6 +2,7 @@ import 'employee_filter.dart';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/util/bidi.dart';
@@ -1247,7 +1248,7 @@ class ReportsApi {
           if (userManager != null && userManager.isNotEmpty) 'user_manager': userManager,
           ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
         };
-        final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/activities', queryParameters: qp);
+        final r = await _activitiesPage(qp);
         final body = r.data ?? const {};
         if (body['success'] != true) {
           return (ok: false, rows: out, error: body['message']?.toString(), complete: false);
@@ -1274,13 +1275,48 @@ class ReportsApi {
         }
       }
       return (ok: true, rows: out, error: null, complete: false);
-    } on DioException catch (e) {
+    } on DioException catch (e, st) {
       _log('activities all', e);
+      _reportActivities(e, st);
       return (ok: false, rows: out, error: _friendly(e), complete: false);
-    } catch (e) {
+    } catch (e, st) {
       _log('activities all', e);
+      _reportActivities(e, st);
       return (ok: false, rows: out, error: 'تعذّر التحميل', complete: false);
     }
+  }
+
+  /// صفحة حركاتٍ واحدة — بإعادتين صامتتين لعطل نقلٍ قبل أيّ ردّ (المالك ٢٣ نوفمبر: «سجل النشاط … يعرض تعذّر التحميل» بأوّل فتح:
+  /// خرجت الصرفيّات ولم يصل طلب الحركات الخادم أصلاً — لا سطر له في nginx — والفتح التالي نجح). المعترض يعيد مرّةً فوراً؛ هنا
+  /// مرّتان بعد مهلةٍ قصيرة (400 ثمّ 1000 ms) فلا يرى المالك «تعذّر التحميل» لعطلٍ عابر. ردٌّ وصل (أيّ حالة) لا يُعاد.
+  @visibleForTesting
+  static Duration Function(int attempt) activitiesRetryDelay = (a) => Duration(milliseconds: a == 0 ? 400 : 1000);
+
+  static Future<Response<Map<String, dynamic>>> _activitiesPage(Map<String, String> qp) async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        return await ApiClient.dio.get<Map<String, dynamic>>('/api/activities', queryParameters: qp);
+      } on DioException catch (e) {
+        final transport = e.response == null && e.type != DioExceptionType.cancel;
+        if (!transport || attempt >= 2) rethrow;
+        await Future<void>.delayed(activitiesRetryDelay(attempt));
+      }
+    }
+  }
+
+  /// سبب الفشل الحقيقيّ إلى Crashlytics (غير قاتل) — النوع والرسالة بلا عنوان الطلب ولا قيمه: لنعرف بعد اليوم ما الذي منع الطلب.
+  static void _reportActivities(Object e, StackTrace st) {
+    try {
+      final inner = e is DioException ? e.error : null;
+      final kind = e is DioException ? 'dio:${e.type.name}' : e.runtimeType.toString();
+      final msg = '${inner ?? (e is DioException ? e.message : e)}'.replaceAll(RegExp(r'https?://\S+'), '<url>');
+      FirebaseCrashlytics.instance.recordError(
+        'activities all: $kind ${inner?.runtimeType ?? ''} ${msg.length > 160 ? msg.substring(0, 160) : msg}',
+        st,
+        reason: 'ReportsApi.activitiesAll',
+        fatal: false,
+      );
+    } catch (_) {/* Firebase غير مهيّأ (الاختبارات، سطح المكتب) */}
   }
 
   /// التفعيلات اليومية — مُجمَّعة حسب اليوم عبر الفترة.
