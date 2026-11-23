@@ -25,10 +25,10 @@ String _today(int minute) {
 }
 
 class _Srv implements HttpClientAdapter {
-  _Srv(this.inner, {this.managers = 70, this.busyRows = 600, this.failCore = false});
+  _Srv(this.inner, {this.failCore = false});
   final HttpClientAdapter inner;
-  final int managers;
-  final int busyRows;
+  final int managers = 70;
+  final int busyRows = 600;
   final bool failCore;
   final movementLimits = <String, String>{};
 
