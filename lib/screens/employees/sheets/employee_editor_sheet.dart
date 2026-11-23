@@ -21,6 +21,17 @@ import '../employee_account_screen.dart' show EmployeeLimitsFields;
 import '../employee_ledger_widgets.dart' show EmployeeSalaryFields, EmployeeSalaryForm;
 import '../employee_form_kit.dart';
 
+/// نفس المدير؟ (٢٣ نوفمبر) الخادم يحفظ قيد ساسٍ غير الأصليّ مؤهَّلاً بساس الصفحة («super-xwifi:15» — 4e46ed9) وقائمة «المدراء»
+/// ترجعه عارياً («15») ⇒ المقارنة بالرقم المحلّيّ داخل الصفحة الواحدة، وإلّا ظهر المدير مرّتين وعُدّ اختياره «تغييراً». ايرث لنك
+/// (`earthlink:<رقم>`) حرفاً، وnull و'' = بلا قيد.
+bool sameScopeId(String? a, String? b) {
+  final x = a ?? '';
+  final y = b ?? '';
+  if (x == y) return true;
+  if (x.isEmpty || y.isEmpty || x.startsWith('earthlink:') || y.startsWith('earthlink:')) return false;
+  return x.substring(x.lastIndexOf(':') + 1) == y.substring(y.lastIndexOf(':') + 1);
+}
+
 /// Sheet إنشاء/تعديل موظف. tab1 = معلومات، tab2 = صلاحيات. الـpresets
 /// (3 افتراضية من backend: cashier/assistant_manager/viewer) تطبّق
 /// مجموعة جاهزة بضغطة واحدة.
@@ -391,7 +402,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       // نستفسر: هل الـscope تغيّر عن الأصلي؟
       // فايبر اكس والمُضافة: لا قيد بمدير فرعي — لا يُرسَل الحقل؛ ايرث لنك منذ ٢٢ نوفمبر كالساس.
       final currentEditScope = widget.employee!.scopeAdminId;
-      final scopeChanged = _scopeOn && _scopeAdminId != currentEditScope;
+      // نفس المدير بصيغتين (المحفوظ مؤهَّل والقائمة عارية) ليس تغييراً — sameScopeId
+      final scopeChanged = _scopeOn && !sameScopeId(_scopeAdminId, currentEditScope);
       final r = await EmployeesApi.update(
         id: widget.employee!.id,
         fullName: _fullNameCtrl.text.trim(),
@@ -1176,10 +1188,21 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       );
     }
     if (list.isEmpty) return const SizedBox.shrink();
-    final selected = _scopeAdminId;
+    // القيمة المعروضة = خيار القائمة لنفس المدير إن وُجد: القيد المحفوظ قد يكون مؤهَّلاً («super-xwifi:15») والقائمة عارية («15»)
+    final stored = _scopeAdminId;
+    ({String value, String label})? match;
+    if (stored != null) {
+      for (final o in list) {
+        if (sameScopeId(o.value, stored)) {
+          match = o;
+          break;
+        }
+      }
+    }
+    final selected = match?.value ?? stored;
     // قيدٌ محفوظ لمديرٍ لم يعد في القائمة: يبقى ظاهراً باسمه (لا يُمسح صامتاً، ولا يتعطّل الـdropdown بقيمةٍ بلا عنصر)
-    final keep = selected != null && !list.any((o) => o.value == selected)
-        ? (value: selected, label: widget.employee?.scopeAdminUsername ?? selected)
+    final keep = stored != null && match == null
+        ? (value: stored, label: widget.employee?.scopeAdminUsername ?? stored)
         : null;
     final options = [...list, if (keep != null) keep];
     return Column(
