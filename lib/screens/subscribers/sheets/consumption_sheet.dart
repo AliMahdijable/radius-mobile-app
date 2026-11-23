@@ -11,6 +11,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/util/bytes_format.dart';
 
 /// استهلاك المشترك — يوميّ عبر أيّام الشهر، أو شهريّ عبر شهور السنة.
 ///
@@ -48,13 +49,9 @@ Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
 /// الوحدات بـ1024 كبقيّة التطبيق والويب (تفاصيل المشترك، قائمة الاستهلاك،
 /// تقرير الجلسات) وتطبيق MyServices للمشترك — فيرى الوكيل ومشتركه الرقم نفسه.
 ({int div, String name}) _unitFor(int peak) {
-  const gb = 1024 * 1024 * 1024;
-  const mb = 1024 * 1024;
-  const kb = 1024;
-  if (peak >= gb) return (div: gb, name: 'GB');
-  if (peak >= mb) return (div: mb, name: 'MB');
-  if (peak >= kb) return (div: kb, name: 'KB');
-  return (div: 1, name: 'B');
+  // الوحدة تكبر وحدها حتى TB وPB (bytes_format.dart)
+  final s = scaleBytes(peak);
+  return (div: s.div.toInt(), name: s.unit);
 }
 
 /// فاصلة الآلاف. `4896` تُقرأ ببطء و`4,896` تُقرأ بلمحة — والفرق
@@ -89,15 +86,10 @@ String groupForTest(String n) => _group(n);
 
 String fmtBytes(int b) {
   if (b <= 0) return '0';
-  const gb = 1024 * 1024 * 1024;
-  const mb = 1024 * 1024;
-  const kb = 1024;
-  if (b >= gb) {
-    return '${_group((b / gb).toStringAsFixed(b >= 10 * gb ? 0 : 1))} GB';
-  }
-  if (b >= mb) return '${_group((b / mb).toStringAsFixed(0))} MB';
-  if (b >= kb) return '${_group((b / kb).toStringAsFixed(0))} KB';
-  return '${_group('$b')} B';
+  // الوحدة من الدالّة الموحّدة (حتى TB وPB)، والشكل كما كان: GB فصاعداً بمنزلةٍ تحت العشرة، وما دونها أعدادٌ صحيحة
+  final s = scaleBytes(b);
+  if (s.index >= 3) return '${_group(s.value.toStringAsFixed(s.value >= 10 ? 0 : 1))} ${s.unit}';
+  return '${_group(s.value.toStringAsFixed(0))} ${s.unit}';
 }
 
 class _ConsumptionSheet extends StatefulWidget {

@@ -27,6 +27,7 @@ import '../renew/renew_widgets.dart';
 import '../tickets/ticket_widgets.dart';
 import '../../api/renew_requests_api.dart';
 import '../../api/tickets_api.dart';
+import '../../core/util/bytes_format.dart';
 
 /// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
 ///   1. **إشعارات التطبيق** — FCM inbox items (المستلمة).
@@ -891,14 +892,8 @@ String _formatLastOnlineInbox(String raw) {
 
 String _fmtBytesInbox(int bytes) {
   if (bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  var i = 0;
-  var v = bytes.toDouble();
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
+  final s = scaleBytes(bytes); // الوحدة الموحّدة — حتى PB
+  return '${s.value.toStringAsFixed(s.value >= 100 ? 0 : 1)} ${s.unit}';
 }
 
 class _Group {

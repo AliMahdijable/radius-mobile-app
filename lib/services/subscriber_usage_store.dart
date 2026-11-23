@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/company_route.dart';
 import '../core/util/error_text.dart';
 import 'provider_service.dart';
+import '../core/util/bytes_format.dart';
 
 /// استهلاك مشتركٍ واحد (بايت) — `today` null لشهرٍ مضى.
 @immutable
@@ -364,5 +365,6 @@ String formatUsageBytes(int? b) {
   if (gb < 1024) {
     return '${gb < 10 ? gb.toStringAsFixed(2) : gb < 100 ? gb.toStringAsFixed(1) : gb.round()} GB';
   }
-  return '${(gb / 1024).toStringAsFixed(2)} TB';
+  final s = scaleBytes(b); // TB فما فوق — الوحدة الموحّدة
+  return '${s.value.toStringAsFixed(2)} ${s.unit}';
 }

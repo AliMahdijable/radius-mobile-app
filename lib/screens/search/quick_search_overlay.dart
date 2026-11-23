@@ -23,6 +23,7 @@ import '../subscribers/subscriber_detail_screen.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/company_tag.dart';
 import '../../services/merged_text.dart';
+import '../../core/util/bytes_format.dart';
 
 /// Spotlight-style search overlay: TextField at the top, mic button on
 /// the trailing side for voice input, suggestion list below.
@@ -1387,14 +1388,8 @@ String _formatLastOnlineShort(String raw) {
 
 String _fmtBytes(int bytes) {
   if (bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  var i = 0;
-  var v = bytes.toDouble();
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
+  final s = scaleBytes(bytes); // الوحدة الموحّدة — حتى PB
+  return '${s.value.toStringAsFixed(s.value >= 100 ? 0 : 1)} ${s.unit}';
 }
 
 /// شارة معلومة صغيرة (أيقونة + نصّ) — تُستعمل لعرض الاستهلاك/IP/الجهاز

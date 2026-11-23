@@ -22,6 +22,7 @@ import '../widgets/report_export.dart';
 import '../widgets/report_permission_gate.dart';
 import 'report_kit.dart';
 import 'report_prefs.dart';
+import '../../../core/util/bytes_format.dart';
 
 /// «الجلسات» على الشكل الموحّد (٢٢ نوفمبر — «كمل بقية التقارير»): المتّصلون الآن أو سجلّ الجلسات من الساس (أحدث 2000 صفّ —
 /// الساس لا يعطي سجلّاً بفترة)، البحث باليوزر/IP/MAC من الخادم، والشركات و«حسب الشركة»، والأعداد والأحجام، و«قسّم حسب» المدير/اليوم،
@@ -223,12 +224,8 @@ class _SessionsV2State extends State<SessionsV2Screen> {
     return c == null ? null : _rp(c.c);
   }
 
-  static String bytes(num b) {
-    if (b < 1024) return '${b.round()} B';
-    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)} KB';
-    if (b < 1024 * 1024 * 1024) return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(b / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
+  /// المجاميع والصفوف والتصدير بدالّة الأحجام الموحّدة — تكبر حتى TB وPB (كانت تقف عند GB: «9022.83 GB»).
+  static String bytes(num b) => formatBytes(b);
 
   RpRow _row(SessionRow s, {RpCompany? company}) {
     final t = parseSasLocal((s.startedAt ?? '').trim());

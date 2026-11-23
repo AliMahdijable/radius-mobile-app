@@ -21,6 +21,7 @@ import 'widgets/report_permission_gate.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/copyable.dart';
 import '../../services/merged_text.dart';
+import '../../core/util/bytes_format.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
 /// Toggle بين "متصلون الآن" و "كل الجلسات (أحدث 200)".
@@ -597,14 +598,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     );
   }
 
-  String _humanBytes(num b) {
-    if (b < 1024) return '${b.round()} B';
-    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)} KB';
-    if (b < 1024 * 1024 * 1024) {
-      return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(b / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
+  String _humanBytes(num b) => formatBytes(b);
 
   Widget _emptyState() => ListView(
         children: [
