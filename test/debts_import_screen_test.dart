@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -9,6 +10,7 @@ import 'package:rad_mysvcs/api/big_subscribers_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
 import 'package:rad_mysvcs/screens/debts_import/debts_import_screen.dart';
+import 'package:rad_mysvcs/services/debts_import/pdf_reader.dart';
 import 'package:rad_mysvcs/services/debts_import/xlsx_lite.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
@@ -142,6 +144,7 @@ void main() {
   Future<void> down(WidgetTester t) async {
     DebtsImportScreen.debugPick = null;
     DebtsImportScreen.debugExport = null;
+    DebtsImportScreen.debugPdfReader = null;
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 6));
     await visualTearDown();
@@ -316,12 +319,12 @@ void main() {
     }
   });
 
-  testWidgets('ملفّ PDF أو xls ⇒ رسالةٌ واضحة ولا معاينة', (t) async {
+  testWidgets('ملفّ PDF على الحاسبة ⇒ يُحال للموقع (القراءة على الهاتف)، وxls ⇒ «احفظه xlsx» — ولا معاينة', (t) async {
     await open(t);
     try {
       DebtsImportScreen.debugPick = () async => (name: 'r.pdf', bytes: Uint8List.fromList(utf8.encode('%PDF-1.7 ...')));
       await tapKey(t, 'dimp-pick');
-      expect(find.textContaining('تقرير PDF يُقرأ من الموقع الآن'), findsOneWidget);
+      expect(find.textContaining('قراءة الـPDF على الهاتف'), findsOneWidget, reason: 'بيئة الاختبار ليست هاتفاً (لا WebView)');
       expect(find.byKey(const ValueKey('dimp-preview')), findsNothing);
       DebtsImportScreen.debugPick = () async => (name: 'old.xls', bytes: Uint8List.fromList([0xd0, 0xcf, 0x11, 0xe0, 0, 0, 0, 0]));
       await settle(t, seconds: 4);
@@ -331,6 +334,107 @@ void main() {
     } finally {
       await down(t);
     }
+  });
+
+  // ناتج قارئ الموقع الحقيقيّ (صفحة pdf-reader.html الحيّة في chromium) على test/debts_import/debts_sample.pdf: تقرير ديونٍ عربيّ بصفحتين
+  // و٦٠ صفّاً — كلّ رابعٍ بلا يوزر (يُطابَق بالهاتف)، دينٌ فارغ كلّ تاسع، وسالبٌ كلّ ثالث عشر. القراءة نفسها مثبتةٌ هناك (60/60 = المصدر).
+  testWidgets('PDF (قارئ الموقع): اليوزر ثمّ الهاتف، الفارغ والسالب «غير صالح»، والتطبيق بيوزر المطابَق — كالموقع', (t) async {
+    final fixture = jsonDecode(File('test/debts_import/pdf_sample_result.json').readAsStringSync()) as Map<String, dynamic>;
+    // مشتركو الحساب: u1..u30 باليوزر، وأصحاب الأرقام ٤…٢٨ (صفوفٌ بلا يوزر) بأسمائهم كما في الـPDF
+    final subs = <Map<String, Object?>>[
+      for (var i = 1; i <= 30; i++)
+        if (i % 4 != 0) {'idx': '$i', 'username': 'u$i@najaf', 'firstname': 'مشترك', 'lastname': '$i', 'phone': '0780${2000000 + i}'},
+      for (final i in [4, 12, 20, 28]) {'idx': 'p$i', 'username': 'p$i', 'firstname': 'فاطمة', 'lastname': 'علي', 'phone': '0770${1000000 + i}'},
+      for (final i in [8, 16, 24]) {'idx': 'p$i', 'username': 'p$i', 'firstname': 'علي', 'lastname': 'حسن الموسوي', 'phone': '0770${1000000 + i}'},
+    ];
+    final srv = await open(t, subs: subs);
+    final asked = <int>[];
+    DebtsImportScreen.debugPick = () async => (name: 'تقرير_الديون.pdf', bytes: File('test/debts_import/debts_sample.pdf').readAsBytesSync());
+    DebtsImportScreen.debugPdfReader = (bytes) async {
+      asked.add(bytes.length);
+      return PdfDebtsResult.fromJson(fixture);
+    };
+    try {
+      await tapKey(t, 'dimp-pick');
+      expect(asked, [File('test/debts_import/debts_sample.pdf').lengthSync()], reason: 'الملفّ كلّه للقارئ');
+      // ٦٠ صفّاً: ١٨ باليوزر + ٧ بالهاتف = ٢٥ مطابق، ٢٥ غير موجود (١٩ يوزر + ٦ أرقام)، ١٠ غير صالح (٦ فارغ + ٤ سالب)
+      expect(find.text('مطابق 25 (بالهاتف 7)'), findsOneWidget);
+      expect(find.text('غير موجود 25'), findsOneWidget);
+      expect(find.text('غير صالح 10'), findsOneWidget);
+      expect(find.text('تطبيق (25) — استبدال'), findsOneWidget);
+      await tapKey(t, 'dimp-apply');
+      await t.tap(find.text('تطبيق 25'));
+      await settle(t, seconds: 3);
+      final sent = [
+        for (final x in srv.posts)
+          if (x.$1 == '/api/v2/debts/bulk-import') for (final r in x.$2['rows'] as List) ((r as Map)['username'], r['amount']),
+      ];
+      expect(sent.length, 25);
+      expect(sent.first, ('u1@najaf', 2500), reason: 'u1: 2,500 من الـPDF');
+      expect(sent.contains(('p4', 10000)), isTrue, reason: 'صفّ ٤ بلا يوزر ⇒ بالهاتف ⇒ يوزر المشترك p4 بمبلغ الصفّ');
+      expect(sent.contains(('p28', 70000)), isTrue);
+      expect(sent.any((x) => x.$1 == 'u13@najaf' || x.$1 == 'u9@najaf'), isFalse, reason: 'السالب والفارغ لا يُطبَّقان');
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  test('PdfDebtsResult: الصفوف كما يبنيها الموقع — دينٌ فارغ أو سالب ⇒ NaN، والترقيم المكسور يُسمّى', () {
+    final r = PdfDebtsResult.fromJson({
+      'rows': [
+        {'username': 'a', 'name': 'علي', 'debt': 2500, 'negative': false, 'phone': '0770', 'raw': 'x', 'seq': 1},
+        {'username': '', 'name': 'ب', 'debt': null, 'negative': false, 'phone': '0771', 'raw': 'y', 'seq': 2},
+        {'username': 'c', 'name': 'ج', 'debt': 5000, 'negative': true, 'phone': '', 'raw': 'z', 'seq': 4},
+      ],
+      'pages': 1,
+      'missingSeq': [3],
+      'duplicateSeq': [],
+    });
+    final rows = r.fileRows;
+    expect(rows.map((x) => x.username), ['a', '', 'c']);
+    expect(rows[0].amount, 2500);
+    expect(rows[1].amount.isNaN, isTrue);
+    expect(rows[2].amount.isNaN, isTrue);
+    expect(r.seqBroken, isTrue);
+  });
+
+  testWidgets('PDF: لا جدول ⇒ «لم نجد جدول ديون»، ملفٌّ تالف أو قارئٌ لا يعمل ⇒ رسالته — ولا معاينة، والزرّ يعود', (t) async {
+    await open(t);
+    final outcomes = <Future<PdfDebtsResult> Function()>[
+      () async => const PdfDebtsResult(rows: [], pages: 3),
+      () async => throw PdfReadError.fromReader('Invalid PDF structure.'),
+      () async => throw const PdfReadError('قارئ الـPDF لا يعمل على هذا الجهاز — حدّث نظام الهاتف، أو ارفع الملفّ Excel، أو الـPDF من الموقع'),
+    ];
+    var call = 0;
+    DebtsImportScreen.debugPick = () async => (name: 'r.pdf', bytes: Uint8List.fromList(utf8.encode('%PDF-1.7 ...')));
+    DebtsImportScreen.debugPdfReader = (bytes) => outcomes[call++]();
+    try {
+      for (final want in [
+        'لم نجد جدول ديون في الـPDF — جرّب Excel',
+        'الملفّ ليس PDF سليماً — جرّب ملفّ Excel',
+        'قارئ الـPDF لا يعمل على هذا الجهاز',
+      ]) {
+        await tapKey(t, 'dimp-pick');
+        expect(find.textContaining(want), findsOneWidget, reason: want);
+        expect(find.byKey(const ValueKey('dimp-preview')), findsNothing);
+        expect(find.text('اختر ملف Excel أو CSV أو PDF'), findsOneWidget, reason: 'الزرّ يعود بعد الخطأ (لا «جارٍ القراءة»)');
+        await settle(t, seconds: 5);
+      }
+      expect(call, 3);
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  test('PdfReadError.fromReader: رسالة pdf.js ⇒ عربيّةٌ تقول ما العمل', () {
+    expect(PdfReadError.fromReader('No password given').message, 'الملفّ محميّ بكلمة سرّ — احفظه بلا كلمة سرّ أو صدّره Excel');
+    expect(PdfReadError.fromReader('Incorrect Password').message, contains('كلمة سرّ'));
+    expect(PdfReadError.fromReader('Invalid PDF structure.').message, 'الملفّ ليس PDF سليماً — جرّب ملفّ Excel');
+    expect(PdfReadError.fromReader('Missing PDF "x".').message, 'الملفّ ليس PDF سليماً — جرّب ملفّ Excel');
+    expect(PdfReadError.fromReader('Bad FCHECK in flate stream').message, 'تعذّرت قراءة الـPDF: Bad FCHECK in flate stream — جرّب ملفّ Excel');
+    expect(PdfReadError.fromReader(null).message, 'تعذّرت قراءة الـPDF — جرّب ملفّ Excel');
   });
 
   testWidgets('الحساب الكبير (≥ ٥٠٠٠) ⇒ يقول ذلك ولا يطلب القائمة ولا يعرض الاستيراد', (t) async {

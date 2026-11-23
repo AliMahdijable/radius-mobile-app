@@ -18,6 +18,7 @@ import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../models/subscriber.dart';
 import '../../services/debts_import/debts_match.dart';
+import '../../services/debts_import/pdf_reader.dart';
 import '../../services/debts_import/xlsx_lite.dart';
 import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
@@ -42,6 +43,10 @@ class DebtsImportScreen extends StatefulWidget {
   /// للاختبار: ما يُصدَّر (اسم الملفّ وبايتاته) بدل المشاركة.
   @visibleForTesting
   static Future<void> Function(String fileName, Uint8List bytes)? debugExport;
+
+  /// للاختبار: قارئ الـPDF بلا WebView (الاختبار لا يملك متصفّحاً) — ناتج قارئ الموقع الحقيقيّ مخزّناً.
+  @visibleForTesting
+  static Future<PdfDebtsResult> Function(Uint8List bytes)? debugPdfReader;
 
   @override
   State<DebtsImportScreen> createState() => _DebtsImportScreenState();
@@ -100,6 +105,9 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
 
   _Progress? _progress;
   DebtImportResult? _result;
+
+  /// قارئ الـPDF (قارئ الموقع في WebView مخفيّ) — الـWebView في الشجرة أثناء القراءة وحدها.
+  final _pdf = PdfDebtsReader();
 
   bool _deletedEnabled = false;
   DeletedImportResult? _deletedResult;
@@ -251,7 +259,7 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
     if (hook != null) return hook();
     final desktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
     final f = await openFile(acceptedTypeGroups: [
-      if (desktop) const XTypeGroup(label: 'Excel / CSV', extensions: ['xlsx', 'csv', 'txt']),
+      if (desktop) const XTypeGroup(label: 'Excel / CSV / PDF', extensions: ['xlsx', 'csv', 'txt', 'pdf']),
     ]);
     if (f == null) return null;
     if (await f.length() > 20 * 1024 * 1024) {
@@ -281,29 +289,30 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
       final lower = f.name.toLowerCase();
       final isPdf =
           lower.endsWith('.pdf') || (bytes.length > 4 && bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46);
+      List<DebtFileRow> extracted;
+      var seqWarning = false;
       if (isPdf) {
-        setState(() => _reading = false);
-        return _say('تقرير PDF يُقرأ من الموقع الآن — ارفعه هناك، أو احفظه Excel وارفعه هنا', error: true);
-      }
-      final kind = sheetKindOf(bytes);
-      List<List<String>> table;
-      switch (kind) {
-        case SheetKind.xlsx:
-          table = readXlsxRows(bytes);
-        case SheetKind.xls:
-        case SheetKind.ods:
+        // تقرير PDF (من نظامٍ آخر غالباً): يُقرأ بقارئ الموقع نفسه — بمواضع الكلمات، وصفٌّ بلا يوزر يُطابَق بالهاتف كالموقع
+        final hook = DebtsImportScreen.debugPdfReader;
+        if (hook == null && !PdfDebtsReader.supported) {
           setState(() => _reading = false);
-          return _say('هذه صيغة Excel قديمة (${kind == SheetKind.xls ? 'xls' : 'ods'}) — احفظ الملفّ xlsx أو CSV ثمّ ارفعه', error: true);
-        case SheetKind.other:
-          var text = utf8.decode(bytes, allowMalformed: true);
-          if (text.startsWith('\uFEFF')) text = text.substring(1); // TextDecoder يحذف BOM كالموقع
-          table = parseCsv(text);
+          return _say('قراءة الـPDF على الهاتف — على الحاسبة ارفعه من الموقع، أو احفظه Excel', error: true);
+        }
+        final res = hook != null
+            ? await hook(bytes)
+            : await _pdf.read(bytes, onChange: () {
+                if (mounted) setState(() {});
+              });
+        if (!mounted) return;
+        extracted = res.fileRows;
+        if (extracted.isEmpty) {
+          setState(() => _reading = false);
+          return _say('لم نجد جدول ديون في الـPDF — جرّب Excel', error: true);
+        }
+        seqWarning = res.seqBroken;
+      } else {
+        extracted = _tableRows(bytes);
       }
-      if (table.isEmpty) {
-        setState(() => _reading = false);
-        return _say('الملف فارغ', error: true);
-      }
-      final extracted = debtRowsOfTable(table);
       final matches = matchDebtRows([for (final r in extracted) r.input], subs);
       final parsed = [for (var i = 0; i < extracted.length; i++) _Parsed(extracted[i], matches[i])];
       if (!mounted) return;
@@ -317,7 +326,14 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
       final c = _counts;
       _say('${c[DebtMatchKind.username]! + c[DebtMatchKind.phone]!} مطابق'
           '${c[DebtMatchKind.phone]! > 0 ? ' (منها ${c[DebtMatchKind.phone]} بالهاتف)' : ''}، '
-          '${c[DebtMatchKind.review]! + c[DebtMatchKind.ambiguous]!} للمراجعة، ${c[DebtMatchKind.notFound]} غير موجود، ${c[DebtMatchKind.invalid]} غير صالح');
+          '${c[DebtMatchKind.review]! + c[DebtMatchKind.ambiguous]!} للمراجعة، ${c[DebtMatchKind.notFound]} غير موجود، ${c[DebtMatchKind.invalid]} غير صالح'
+          '${seqWarning ? ' — ترقيم الـPDF غير متّصل: قارن عدد الصفوف بالملف قبل التطبيق' : ''}');
+    } on _ReadStop catch (e) {
+      if (mounted) setState(() => _reading = false);
+      _say(e.message, error: true);
+    } on PdfReadError catch (e) {
+      if (mounted) setState(() => _reading = false);
+      _say(e.message, error: true);
     } on XlsxReadError catch (e) {
       if (mounted) setState(() => _reading = false);
       _say(e.message, error: true);
@@ -325,6 +341,25 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
       if (mounted) setState(() => _reading = false);
       _say('فشل قراءة الملف', error: true);
     }
+  }
+
+  /// Excel (xlsx) أو CSV ⇒ صفوف الديون — ‎.xls/.ods القديمة برسالةٍ ([_ReadStop]).
+  List<DebtFileRow> _tableRows(Uint8List bytes) {
+    final kind = sheetKindOf(bytes);
+    List<List<String>> table;
+    switch (kind) {
+      case SheetKind.xlsx:
+        table = readXlsxRows(bytes);
+      case SheetKind.xls:
+      case SheetKind.ods:
+        throw _ReadStop('هذه صيغة Excel قديمة (${kind == SheetKind.xls ? 'xls' : 'ods'}) — احفظ الملفّ xlsx أو CSV ثمّ ارفعه');
+      case SheetKind.other:
+        var text = utf8.decode(bytes, allowMalformed: true);
+        if (text.startsWith('\uFEFF')) text = text.substring(1); // TextDecoder يحذف BOM كالموقع
+        table = parseCsv(text);
+    }
+    if (table.isEmpty) throw const _ReadStop('الملف فارغ');
+    return debtRowsOfTable(table);
   }
 
   Map<DebtMatchKind, int> get _counts {
@@ -683,15 +718,21 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(LucideIcons.upload, size: 16),
             label: Text(
-              _fileName.isEmpty ? 'اختر ملف Excel أو CSV' : 'الملفّ: ${iso(_fileName)}',
+              _reading
+                  ? 'جارٍ قراءة الملفّ…'
+                  : _fileName.isEmpty
+                      ? 'اختر ملف Excel أو CSV أو PDF'
+                      : 'الملفّ: ${iso(_fileName)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppType.bodyBold(color: AppColors.onBrand),
             ),
           ),
+          // قارئ الـPDF (١×١) في الشجرة أثناء القراءة وحدها
+          if (_pdf.active) Align(alignment: AlignmentDirectional.centerStart, child: _pdf.view()),
           const SizedBox(height: Sp.sm),
           Text(
-            'Excel (xlsx) أو CSV — صفٌّ بلا اسم مستخدم يُطابَق برقم الهاتف (رقمٌ لمشتركٍ واحد فقط، وما لا يُحسم لا يُطبَّق). راجع المعاينة قبل التطبيق.',
+            'Excel (xlsx) أو CSV أو تقرير PDF (يُقرأ بأعمدته على جهازك) — صفٌّ بلا اسم مستخدم يُطابَق برقم الهاتف (رقمٌ لمشتركٍ واحد فقط، وما لا يُحسم لا يُطبَّق). راجع المعاينة قبل التطبيق.',
             style: AppType.micro(color: AppColors.textMid),
           ),
           if (_rows.isNotEmpty) ...[
@@ -1097,4 +1138,10 @@ class _DebtsImportScreenState extends State<DebtsImportScreen> {
           ),
         ),
       );
+}
+
+/// سببٌ يوقف قراءة الملفّ برسالته (صيغةٌ قديمة، ملفٌّ فارغ).
+class _ReadStop implements Exception {
+  const _ReadStop(this.message);
+  final String message;
 }

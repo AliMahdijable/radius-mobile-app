@@ -1,0 +1,136 @@
+// فحص الجهاز الحقيقيّ لقراءة الـPDF (٢٣ نوفمبر): مشروع Flutter صغير منفصل (webview_flutter 4.14.1 + integration_test) فيه
+// lib/debts_import/{pdf_reader,debts_match,nfkc_table}.dart منسوخةً حرفاً من التطبيق، وassets/: debts_sample.pdf وpdf_sample_result.json
+// ونسخةٌ مبطّنة (+600KB بعد %%EOF) وملفٌّ تالف. التشغيل: flutter test integration_test/pdf_reader_test.dart -d <جهاز> --dart-define=PAGE=<رابط>
+// النتيجة: iOS 26.5 (محاكي)، أندرويد WebView 149، أندرويد 12 WebView 95 (MuMu، Impeller مطفأ لعطل Vulkan في المحاكي) — الخمسة ✓.
+// محفوظٌ نصّاً (.txt) كي لا يلتقطه flutter test/analyze في التطبيق (integration_test ليس من تبعيّاته).
+
+// تحقّقٌ على جهاز/محاكٍ حقيقيّ: lib/debts_import/pdf_reader.dart منسوخٌ حرفاً من التطبيق، يفتح صفحة الموقع الحيّة pdf-reader.html في
+// WebView حقيقيّ مخفيّ (١×١) داخل بطاقةٍ في قائمة — كما في شاشة «استيراد / تصدير الديون» — ويقارن الصفوف بناتج قارئ الموقع في chromium.
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:pdfcheck/debts_import/pdf_reader.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
+class Host extends StatefulWidget {
+  const Host({super.key});
+  @override
+  State<Host> createState() => HostState();
+}
+
+class HostState extends State<Host> {
+  static const _pageArg = String.fromEnvironment('PAGE');
+  final pdf = PdfDebtsReader(page: _pageArg.isEmpty ? null : Uri.parse(_pageArg));
+  // صفحةٌ تُحمَّل لكنّها ليست القارئ (= محرّكٌ لا يشغّله، أو صفحةٌ غيرها) ⇒ رسالةٌ واضحة خلال ثوانٍ لا ٤٥ ثانية
+  final bad = PdfDebtsReader(page: Uri.parse('https://pro.mysvcs.net/v2/favicon.svg'));
+  Future<PdfDebtsResult> read(Uint8List b, {bool wrongPage = false}) => (wrongPage ? bad : pdf).read(b, onChange: () {
+        if (mounted) setState(() {});
+      });
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: ListView(padding: const EdgeInsets.all(16), children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const Text('استيراد الديون'),
+                  FilledButton(onPressed: () {}, child: const Text('اختر ملف Excel أو CSV أو PDF')),
+                  if (pdf.active) Align(alignment: AlignmentDirectional.centerStart, child: pdf.view()),
+                  if (bad.active) Align(alignment: AlignmentDirectional.centerStart, child: bad.view()),
+                  const Text('…'),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('قراءة الـPDF بالتطبيق: WebView حقيقيّ + صفحة الموقع الحيّة = ناتج قارئ الموقع', (t) async {
+    await t.pumpWidget(const Host());
+    final st = t.state<HostState>(find.byType(Host));
+    final exp = PdfDebtsResult.fromJson(jsonDecode(await rootBundle.loadString('assets/pdf_sample_result.json')) as Map<String, dynamic>);
+    Future<Uint8List> asset(String n) async => (await rootBundle.load('assets/$n')).buffer.asUint8List();
+
+    // يضخّ الإطارات حتى ينتهي المستقبل (الـWebView يحتاج أن يُرسم) ويسجّل هل ظهر الـWebView في الشجرة
+    Future<(T?, Object?, bool, int)> run<T>(Future<T> f) async {
+      var done = false;
+      T? v;
+      Object? err;
+      f.then((x) {
+        v = x;
+        done = true;
+      }, onError: (Object e, StackTrace _) {
+        err = e;
+        done = true;
+      });
+      var sawView = false;
+      final sw = Stopwatch()..start();
+      while (!done) {
+        await t.pump(const Duration(milliseconds: 100));
+        if (find.byType(WebViewWidget).evaluate().isNotEmpty) sawView = true;
+        if (sw.elapsed > const Duration(minutes: 4)) fail('مهلة');
+      }
+      await t.pump();
+      return (v, err, sawView, sw.elapsedMilliseconds);
+    }
+
+    void same(PdfDebtsResult r, String tag) {
+      expect(r.pages, exp.pages, reason: '$tag pages');
+      expect(r.rows.length, exp.rows.length, reason: '$tag rows');
+      for (var i = 0; i < r.rows.length; i++) {
+        final a = r.rows[i], b = exp.rows[i];
+        expect([a.username, a.name, a.debt, a.negative, a.phone, a.raw, a.seq], [b.username, b.name, b.debt, b.negative, b.phone, b.raw, b.seq],
+            reason: '$tag row $i');
+      }
+      expect(r.missingSeq, exp.missingSeq);
+      expect(r.duplicateSeq, exp.duplicateSeq);
+      expect(r.fileRows.length, 60);
+      expect(r.fileRows.where((x) => x.amount.isNaN).length, 10, reason: '$tag: ٦ فارغ + ٤ سالب');
+    }
+
+    // ١) الملفّ نفسه الذي قرأه الموقع في chromium
+    var (r, e, saw, ms) = await run(st.read(await asset('debts_sample.pdf')));
+    expect(e, isNull, reason: '$e');
+    same(r!, 'sample');
+    expect(saw, isTrue, reason: 'الـWebView يوضع في الشجرة أثناء القراءة');
+    expect(find.byType(WebViewWidget), findsNothing, reason: 'ويُزال بعدها');
+    expect(st.pdf.active, isFalse);
+    debugPrint('PDFCHECK page=${st.pdf.page} sample ok ${r.rows.length} rows in ${ms}ms');
+
+    // ٢) ملفٌّ أكبر (~٦٢٠ ك.ب ⇒ ٥ قطع base64) — النتيجة نفسها
+    (r, e, saw, ms) = await run(st.read(await asset('debts_padded.pdf')));
+    expect(e, isNull, reason: '$e');
+    same(r!, 'padded');
+    debugPrint('PDFCHECK padded ok in ${ms}ms');
+
+    // ٣) ملفٌّ تالف ⇒ رسالةٌ واضحة لا تعليق
+    (r, e, saw, ms) = await run(st.read(await asset('corrupt.pdf')));
+    expect(r, isNull);
+    expect(e, isA<PdfReadError>());
+    expect('$e', 'الملفّ ليس PDF سليماً — جرّب ملفّ Excel');
+    expect(st.pdf.active, isFalse);
+    debugPrint('PDFCHECK corrupt -> "$e" in ${ms}ms');
+
+    // ٤) بعد الخطأ يعمل القارئ نفسه من جديد
+    (r, e, saw, ms) = await run(st.read(await asset('debts_sample.pdf')));
+    expect(e, isNull, reason: '$e');
+    same(r!, 'again');
+    debugPrint('PDFCHECK again ok in ${ms}ms');
+
+    // ٥) صفحةٌ ليست القارئ ⇒ «لا يعمل على هذا الجهاز» بعد مهلة ٥ ثوانٍ من انتهاء التحميل
+    (r, e, saw, ms) = await run(st.read(await asset('debts_sample.pdf'), wrongPage: true));
+    expect(r, isNull);
+    expect('$e', contains('قارئ الـPDF لا يعمل على هذا الجهاز'));
+    expect(ms, lessThan(30000));
+    debugPrint('PDFCHECK not-reader -> "$e" in ${ms}ms');
+    expect(t.takeException(), isNull);
+  });
+}
