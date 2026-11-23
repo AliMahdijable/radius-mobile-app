@@ -100,7 +100,7 @@ class _BannerCardState extends State<_BannerCard>
     // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته لا الصندوق — أسرع للتفعيل، والموجِّه يبدّل الشركة أوّلاً إن كان لغيرها (٤ نوفمبر).
     // و«التذاكر» (٩ نوفمبر) كذلك ⇒ المحادثة نفسها (للشركة المفتوحة صراحةً — openTicketPush).
     final type = widget.notification.data['type'];
-    if (type == 'renew_request' || type == 'portal_ticket') {
+    if (type == 'renew_request' || type == 'portal_ticket' || type == 'store_order') {
       unawaited(NotificationRouter.handle(widget.notification));
       return;
     }

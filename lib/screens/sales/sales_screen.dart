@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/merged_dashboard_api.dart';
+import '../../api/portal_store_api.dart';
 import '../../api/sales_api.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../core/util/ar_date.dart';
@@ -35,6 +37,9 @@ import '../reports/v2/report_sheets.dart';
 import '../reports/widgets/report_permission_gate.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../../services/merged_text.dart';
+import '../portal_settings/widgets/package_image.dart';
+
+part 'store_tab.dart';
 
 /// «المبيعات» (٢٣ أكتوبر) — `/api/v2/sales/*` (الخادم server/sales.js، الويب
 /// pages/Sales.tsx). المالك: «وكيل انترنت عنده مواد يبيعها ويعرف شكد سعرها
@@ -51,7 +56,10 @@ import '../../services/merged_text.dart';
 /// مكانها — كلّ نداءٍ يحمل شركتها صراحةً ([_SalesScreenState._co]؛ لا وجهة مشتركة — مراجعة 179)، وكلّ شيتٍ يأخذها لحظة فتحه.
 /// البيع والمخزون والإلغاء لها حين يفتحها الخادم (routed_writes)، وإلّا أزرارها مقفلةٌ بسببها.
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key});
+  const SalesScreen({super.key, this.openStore = false});
+
+  /// فُتحت من إشعار «طلب شراء من المتجر» ([openStoreOrderPush]) ⇒ على «المتجر» حين يظهر.
+  final bool openStore;
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -103,6 +111,17 @@ class _SalesScreenState extends State<SalesScreen> {
   /// الشركة التي تعرض الشاشة بياناتها (null = المفتوحة أو الوضع العاديّ).
   String? _shownKey;
 
+  // ─── «المتجر» (٢٣ نوفمبر — store_tab.dart) ───
+  /// متجر الصفحة المفتوحة — null حتى يُقرأ، أو حين لا يُعرض (شركةٌ موجَّهة أو «الكل»).
+  StoreView? _store;
+  int _storeSeq = 0;
+
+  /// يتغيّر بالتحديث وبعد كلّ بيعٍ من طلب ⇒ التبويب يقرأ طلباته.
+  int _storeTick = 0;
+
+  /// [SalesScreen.openStore] يُطبَّق مرّةً حين يظهر التبويب.
+  late bool _openStorePending = widget.openStore;
+
   @override
   void initState() {
     super.initState();
@@ -118,6 +137,7 @@ class _SalesScreenState extends State<SalesScreen> {
       } else {
         _loadItems();
         _loadSales();
+        unawaited(_loadStore());
       }
     } else {
       _loadingItems = false;
@@ -192,6 +212,8 @@ class _SalesScreenState extends State<SalesScreen> {
   void _applyScope() {
     final key = _routedCompany?.key;
     _gen++;
+    // «المتجر» للصفحة المفتوحة وحدها: يُقرأ لها، ويُخفى في «الكل» ولشركةٍ موجَّهة
+    unawaited(_loadStore());
     if (_overviewMode) {
       setState(() => _loadingOverview = _overview == null);
       unawaited(_loadOverview());
@@ -430,7 +452,120 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  Future<void> _refresh() => _overviewMode ? _loadOverview() : Future.wait([_loadItems(), _loadSales()]);
+  Future<void> _refresh() {
+    if (_overviewMode) return _loadOverview();
+    if (mounted) setState(() => _storeTick++);
+    return Future.wait([_loadItems(), _loadSales(), _loadStore()]);
+  }
+
+  // ─────────────────────── «المتجر» ───────────────────────
+  /// للصفحة المفتوحة وحدها (لا «الكل» ولا شركةٌ موجَّهة) — كالويب.
+  bool get _storeAllowed => Perms.has('sales.view') && !_overviewMode && _routedCompany == null;
+
+  /// التبويب ظاهر: المتجر متاحٌ للصفحة أو لها معروضٌ سابق.
+  bool get _showStore => _storeAllowed && (_store?.showTab ?? false);
+
+  /// التبويب المعروض فعلاً: «المتجر» مختارٌ وقد اختفى ⇒ «المبيعات».
+  int get _shownTab => _tab == 2 && !_showStore ? 0 : _tab;
+
+  Future<void> _loadStore() async {
+    final seq = ++_storeSeq;
+    if (!_storeAllowed) {
+      if (_store != null && mounted) setState(() => _store = null);
+      return;
+    }
+    final r = await PortalStoreApi.view();
+    // تعذّر ⇒ يبقى ما كان (أو لا تبويب) — «المبيعات» كما كانت
+    if (!mounted || seq != _storeSeq || r.view == null) return;
+    setState(() {
+      _store = r.view;
+      if (_openStorePending && _showStore) {
+        _openStorePending = false;
+        _tab = 2;
+      }
+    });
+  }
+
+  /// «بيع» من طلب: نافذة البيع المعتادة معبّأةً بالمادّة والكمّيّة وسعر الطلب والمشترك (تُعدَّل كأيّ بيع) — فإذا سُجّل البيع صار
+  /// الطلب «تمّ» برقمه ([_markStoreDone]). لا مسار مالٍ جديد: البيع والمخزون والدين من «المبيعات» نفسها.
+  Future<void> _sellStoreOrder(StoreOrder o) async {
+    final items = _items?.active ?? const <SaleItem>[];
+    SaleItem? item;
+    for (final i in items) {
+      if (i.id == o.salesItemId) {
+        item = i;
+        break;
+      }
+    }
+    if (item == null) {
+      showSheetSnack(context, '«${o.name}» غير فعّالة بالمخزون الآن — فعّلها من «الموادّ والمخزون» أوّلاً', isError: true);
+      return;
+    }
+    await _after(_showSheet(
+      context,
+      _NewSaleSheet(
+        items: items,
+        initial: _Hit(idx: o.subIdx, username: o.subUsername ?? '', name: o.subName ?? '', phone: o.subPhone),
+        initialLines: [(item: item, qty: o.qty, price: o.unitPrice)],
+        // التبويب للصفحة المفتوحة وحدها (_storeAllowed) ⇒ _co هنا null دائماً — من شجرة القسم كبقيّة بيوعه
+        companyKey: _co,
+        onSold: (sale) => unawaited(_markStoreDone(o, sale.id)),
+      ),
+    ));
+  }
+
+  Future<void> _markStoreDone(StoreOrder o, int saleId) async {
+    final r = await PortalStoreApi.done(o.id, saleId: saleId);
+    if (!mounted) return;
+    showSheetSnack(
+      context,
+      r.ok
+          ? 'طلب المتجر «تمّ» — أُبلغ المشترك'
+          : 'سُجّل البيع، وتعذّر إغلاق طلب المتجر: ${r.message ?? 'sales.not_saved'.tr()} — اضغط «تمّ التسليم» من «المتجر»',
+      isError: !r.ok,
+      duration: Duration(seconds: r.ok ? 3 : 8),
+    );
+    setState(() => _storeTick++);
+    unawaited(_loadStore());
+  }
+
+  /// التبويبات. مع «المتجر» على الهاتف: بلا أيقونات و«المخزون» بدل «الموادّ والمخزون» (ثلاثةٌ بأيقوناتها لا تتّسع لعرض 320 —
+  /// والنصّ لا يُقصّ)، والطلبات المفتوحة بجانب «المتجر».
+  Widget _segments() {
+    if (!_showStore) {
+      return SheetSegmented(
+        labels: ['sales.tab_sales'.tr(), 'sales.tab_items'.tr()],
+        icons: const [LucideIcons.shoppingCart, LucideIcons.boxes],
+        selectedIndex: _shownTab,
+        onSelect: (i) => setState(() => _tab = i),
+      );
+    }
+    final open = _store?.counts.open ?? 0;
+    final desk = DesktopScope.of(context);
+    return SheetSegmented(
+      key: const ValueKey('sales-tabs-store'),
+      labels: ['sales.tab_sales'.tr(), desk ? 'sales.tab_items'.tr() : 'المخزون', open > 0 ? 'المتجر ($open)' : 'المتجر'],
+      icons: desk ? const [LucideIcons.shoppingCart, LucideIcons.boxes, LucideIcons.store] : null,
+      selectedIndex: _shownTab,
+      onSelect: (i) => setState(() => _tab = i),
+    );
+  }
+
+  List<Widget> _storeTab() {
+    final view = _store;
+    if (view == null) return const [];
+    return [
+      _StoreTab(
+        view: view,
+        canItems: Perms.has('sales.items') && _enabled,
+        canSell: Perms.has('sales.sell') && _enabled,
+        lockMessage: _enabled ? null : 'sales.paused'.tr(),
+        refreshTick: _storeTick,
+        onSell: (o) => unawaited(_sellStoreOrder(o)),
+        onChanged: () => unawaited(_loadStore()),
+      ),
+    ];
+  }
 
   /// تحت «بيع بالدين»: ما بقي منه على المشتركين الآن — حين قُرئت حالات المبيعات كلّها، وإلّا «على المشتركين» كما كان.
   String _debtSub(num sold) {
@@ -470,9 +605,9 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          primary: _enabled && !_overviewMode ? _deskPrimary() : null,
+          primary: _enabled && !_overviewMode && _shownTab != 2 ? _deskPrimary() : null,
         ),
-        floatingActionButton: _enabled && !_overviewMode && !DesktopScope.of(context) ? _fab() : null,
+        floatingActionButton: _enabled && !_overviewMode && _shownTab != 2 && !DesktopScope.of(context) ? _fab() : null,
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -680,14 +815,13 @@ class _SalesScreenState extends State<SalesScreen> {
         _Banner(icon: LucideIcons.info, text: 'sales.paused'.tr()),
         const SizedBox(height: Sp.md),
       ],
-      SheetSegmented(
-        labels: ['sales.tab_sales'.tr(), 'sales.tab_items'.tr()],
-        icons: const [LucideIcons.shoppingCart, LucideIcons.boxes],
-        selectedIndex: _tab,
-        onSelect: (i) => setState(() => _tab = i),
-      ),
+      _segments(),
       const SizedBox(height: Sp.md),
-      ...(_tab == 0 ? _salesTab() : _itemsTab()),
+      ...switch (_shownTab) {
+        1 => _itemsTab(),
+        2 => _storeTab(),
+        _ => _salesTab(),
+      },
     ];
   }
 
@@ -1314,6 +1448,7 @@ class _Chip extends StatelessWidget {
 
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
+    super.key,
     required this.label,
     required this.icon,
     required this.tone,
@@ -2048,8 +2183,21 @@ class _Hit {
 }
 
 class _NewSaleSheet extends StatefulWidget {
-  const _NewSaleSheet({required this.items, this.initial, this.company, required this.companyKey});
+  const _NewSaleSheet({
+    required this.items,
+    this.initial,
+    this.company,
+    required this.companyKey,
+    this.initialLines,
+    this.onSold,
+  });
   final List<SaleItem> items;
+
+  /// «متجر الوكيل»: المادّة والكمّيّة والسعر من طلب المشترك — تُعدَّل قبل البيع كأيّ سطر.
+  final List<({SaleItem item, num qty, int price})>? initialLines;
+
+  /// بعد بيعٍ سُجّل (ولو مكرّراً محفوظاً) — طلب المتجر يُغلق برقمه.
+  final void Function(Sale sale)? onSold;
 
   /// شركة البيع كما كانت لحظة فتح الشيت (null = المفتوحة) — البحث والبيع لها صراحةً مهما تبدّل تحته.
   final String? companyKey;
@@ -2086,6 +2234,18 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
 
   bool get _canDebt => Perms.has('subscribers.add_debt');
   bool get _locked => _busy || _ambiguous != null;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final l in widget.initialLines ?? const <({SaleItem item, num qty, int price})>[]) {
+      if (_lines.any((x) => x.item.id == l.item.id)) continue;
+      final c = _CartLine(l.item)..priceValue = l.price;
+      c.qty.text = _qty(l.qty);
+      c.price.text = AmountShorthand.format(l.price);
+      _lines.add(c);
+    }
+  }
 
   @override
   void dispose() {
@@ -2212,6 +2372,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
         }));
       }
       showSheetSnack(context, msg);
+      widget.onSold?.call(s);
       Navigator.of(context).pop(true);
       return;
     }

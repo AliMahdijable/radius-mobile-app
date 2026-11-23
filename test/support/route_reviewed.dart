@@ -269,7 +269,8 @@ const reviewedMoneyKeys = <String, int>{
   'lib/screens/sales/sales_screen.dart _DefectSheet companyKey: _co': 1,
   'lib/screens/sales/sales_screen.dart _ItemSheet companyKey: _co': 3,
   'lib/screens/sales/sales_screen.dart _MovesSheet companyKey: _co': 1,
-  'lib/screens/sales/sales_screen.dart _NewSaleSheet companyKey: _co': 2,
+  // +١ «متجر الوكيل» (٢٣ نوفمبر): «بيع» من طلب المتجر — التبويب للمفتوحة وحدها (لا «الكل» ولا موجَّهة) ⇒ _co = null
+  'lib/screens/sales/sales_screen.dart _NewSaleSheet companyKey: _co': 3,
   'lib/screens/sales/sales_screen.dart _NewSaleSheet companyKey: companyKey': 1,
   'lib/screens/sales/sales_screen.dart _ResolveSheet companyKey: _co': 1,
   'lib/screens/sales/sales_screen.dart _StockSheet companyKey: _co': 1,

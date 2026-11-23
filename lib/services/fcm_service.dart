@@ -92,7 +92,8 @@ class FcmService {
   static const _channelName = 'إشعارات الحساب';
 
   /// أنواعٌ تحتاج صوتاً ونافذةً منبثقة ولو كان التطبيق مفتوحاً: كانت شريطاً صامتاً ٤ ثوانٍ بلا أثرٍ في شريط الإشعارات فيفوت الوكيل.
-  static const urgentTypes = {'portal_ticket', 'renew_request'};
+  /// و«طلب شراء من المتجر» (٢٣ نوفمبر): مشتركٌ ينتظر وكيله كطلب التجديد.
+  static const urgentTypes = {'portal_ticket', 'renew_request', 'store_order'};
 
   @visibleForTesting
   static Future<void> Function(AppNotification n)? debugShowSystem;
