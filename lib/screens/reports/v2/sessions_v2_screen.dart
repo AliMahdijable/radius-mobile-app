@@ -10,6 +10,7 @@ import '../../../api/merged_dashboard_api.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/bidi.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/merged_company.dart';
@@ -77,6 +78,15 @@ class _SessionsV2State extends State<SessionsV2Screen> {
   bool _tabAll = false;
   int _visible = _page;
 
+  /// «رتّب حسب» فوق الحركات (المالك ٢٣ نوفمبر) — القواعد كالموقع حرفاً (core/util/order_rules.dart)، والمفتاح نفسه.
+  static const _rowFields = [
+    rpDateField,
+    OrderField('down', 'التحميل', OrderKind.number),
+    OrderField('up', 'الرفع', OrderKind.number),
+    OrderField('name', 'المشترك', OrderKind.text),
+  ];
+  OrderValue _rowSort = rpDateDesc;
+
   bool get _merged => MergedMode.active.value && widget.initialUsername == null;
 
   /// الاسم العربيّ للمشترك (المالك ٢٣ نوفمبر: «لازم بجميع التقارير اسم المشترك بالعربي الاولية اله») — من قائمة المشتركين
@@ -105,6 +115,9 @@ class _SessionsV2State extends State<SessionsV2Screen> {
     super.initState();
     unawaited(_folds.load().then((_) {
       if (mounted) setState(() {});
+    }));
+    unawaited(OrderPrefs.load(OrderPrefs.rowsKey('sessions'), _rowFields, rpDateDesc).then((v) {
+      if (mounted && v != _rowSort) setState(() => _rowSort = v);
     }));
     final u = widget.initialUsername?.trim() ?? '';
     if (u.isNotEmpty) {
@@ -310,6 +323,34 @@ class _SessionsV2State extends State<SessionsV2Screen> {
 
   List<String> get _tabs => [if (_merged) 'الشركة', 'المدير', if (!_online) 'اليوم'];
 
+
+  /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
+  void _pickSort(String key) {
+    for (final f in _rowFields) {
+      if (f.key != key) continue;
+      final next = nextOrder(_rowSort, f);
+      setState(() {
+        _rowSort = next;
+        _visible = _page;
+      });
+      unawaited(OrderPrefs.save(OrderPrefs.rowsKey('sessions'), next));
+      return;
+    }
+  }
+
+  /// «المشترك» بالاسم العربيّ حين تُعرف الأسماء كلّها (لا الحساب الكبير: أسماؤه تصل للصفوف المعروضة وحدها فالترتيب بها يقفز).
+  Object? _rowValue(SessionRow s, String k) => switch (k) {
+        'down' => s.bytesIn,
+        'up' => s.bytesOut,
+        'name' => (_names.complete ? _nameOf(s) : null) ?? s.username,
+        _ => null,
+      };
+
+  static String? _dateOf(SessionRow s) {
+    final t = parseSasLocal((s.startedAt ?? '').trim());
+    return t == null ? null : iqDateOf(t);
+  }
+
   // ═══════════════ التصدير ═══════════════
 
   List<String> _details(int count, bool capped) {
@@ -321,6 +362,7 @@ class _SessionsV2State extends State<SessionsV2Screen> {
       if (_merged && out.isNotEmpty) 'خارج الملفّ: ${out.join('، ')}',
       if (_value.trim().isNotEmpty) 'بحث (${_field == 'ip' ? 'IP' : (_field == 'mac' ? 'MAC' : 'اليوزر')}): «${_value.trim()}»',
       if (_manager != null) 'مدير المشترك: $_manager',
+      if (_rowSort != rpDateDesc) orderLine(_rowFields, _rowSort) ?? '',
       'عدد الصفوف: $count',
       if (!_online && _note != null) 'ملاحظة: $_note',
       if (capped) 'ناقص: بلغ الحدّ ($_cap صفّ من الساس) — ضيّق البحث لترى الباقي',
@@ -335,8 +377,9 @@ class _SessionsV2State extends State<SessionsV2Screen> {
     }
     // عمود «الاسم» حين عُرف اسمٌ على الأقلّ — ما على الشاشة
     final withNames = !_merged && v.rows.any((s) => _nameOf(s) != null);
+    // الملفّ بترتيب الشاشة («رتّب حسب»)
     final rows = [
-      for (final s in v.rows)
+      for (final s in sortList(v.rows, _rowSort, _rowFields, _rowValue))
         [
           if (_merged) MergedMode.companyOf(v.co[s])?.name ?? '',
           if (withNames) _nameOf(s) ?? '',
@@ -520,11 +563,16 @@ class _SessionsV2State extends State<SessionsV2Screen> {
           if (s.name != '—') SheetQuickChip(label: 'حصر بـ${s.name}', selected: false, onTap: () => setState(() => _manager = s.name)),
       ]));
     }
-    _fillNames(v.rows.take(_visible));
+    final sorted = sortList(v.rows, _rowSort, _rowFields, _rowValue);
+    _fillNames(sorted.take(_visible));
     parts.add(RpRowsCard(
       fold: _fold('rows'),
       total: v.rows.length,
-      days: _days(v.rows, v.co, limit: _visible),
+      // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
+      days: _rowSort.key == 'date'
+          ? _days(sorted, v.co, limit: _visible)
+          : rpFlat(sorted, _visible, (s) => _row(s, company: _merged ? _coOf(s, v.co) : null), _dateOf),
+      sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: v.rows.length > _visible ? 'عرض المزيد (${v.rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
       note: v.capped ? 'بلغ الحدّ ($_cap صفّ من الساس) — ضيّق البحث لترى الباقي' : null,

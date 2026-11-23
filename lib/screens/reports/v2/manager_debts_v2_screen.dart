@@ -8,6 +8,7 @@ import '../../../api/company_route.dart';
 import '../../../api/manager_movements_api.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../core/util/ar_date.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_manager_debts.dart';
@@ -68,6 +69,15 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
   bool _tabAll = false;
   int _visible = _page;
 
+  /// «رتّب حسب» فوق الحركات (المالك ٢٣ نوفمبر) — القواعد كالموقع حرفاً (core/util/order_rules.dart)، والمفتاح نفسه.
+  static const _rowFields = [
+    rpDateField,
+    OrderField('amount', 'المبلغ', OrderKind.number),
+    OrderField('manager', 'المدير', OrderKind.text),
+    OrderField('type', 'النوع', OrderKind.text),
+  ];
+  OrderValue _rowSort = rpDateDesc;
+
   bool get _merged => MergedMode.active.value;
   DateTime get _now => ManagerDebtsV2Screen.clock();
   bool get _all => _f!.range.preset == RpPreset.all;
@@ -81,6 +91,9 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
     super.initState();
     unawaited(_folds.load().then((_) {
       if (mounted) setState(() {});
+    }));
+    unawaited(OrderPrefs.load(OrderPrefs.rowsKey(_id), _rowFields, rpDateDesc).then((v) {
+      if (mounted && v != _rowSort) setState(() => _rowSort = v);
     }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
@@ -350,13 +363,38 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
 
   bool get _busy => _cos.isEmpty || _cos.values.any((c) => c.loading);
 
+
+  /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
+  void _pickSort(String key) {
+    for (final f in _rowFields) {
+      if (f.key != key) continue;
+      final next = nextOrder(_rowSort, f);
+      setState(() {
+        _rowSort = next;
+        _visible = _page;
+      });
+      unawaited(OrderPrefs.save(OrderPrefs.rowsKey(_id), next));
+      return;
+    }
+  }
+
+  static Object? _rowValue(MgrEvent e, String k) => switch (k) {
+        'amount' => e.amount == 0 ? null : e.amount.abs(),
+        'manager' => e.managerName,
+        'type' => e.meta.label,
+        _ => null,
+      };
+
+  static String? _dateOf(MgrEvent e) => iqDateOf(e.date.toLocal());
+
   Future<void> _export(String how, {bool Function(MgrEvent)? pick, String? drill}) async {
     if (_busy) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('انتظر حتى تكتمل الأرقام ثمّ صدّر')));
       return;
     }
     var events = _events();
-    if (pick != null) events = events.where(pick).toList();
+    // الملفّ بترتيب الشاشة («رتّب حسب») — نافذة الرقم بترتيبها هي
+    events = pick != null ? events.where(pick).toList() : sortList(events, _rowSort, _rowFields, _rowValue);
     final rows = [
       for (final e in events)
         [
@@ -393,6 +431,7 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       for (final c in _chips()) c.label,
       if (drill != null) 'الحركات: $drill',
       if (_q.trim().isNotEmpty) 'المدير: «${_q.trim()}»',
+      if (pick == null && _rowSort != rpDateDesc) orderLine(_rowFields, _rowSort) ?? '',
       'إيرادات مستحصَلة: ${ManagerDebtsView.money(ManagerDebtsView.incomingOf(events))}',
       'المتبقّي: SAS ${_hasSas ? ManagerDebtsView.money(_sas) : '—'} · أخرى ${ManagerDebtsView.money(_custom)} · الإجمالي ${ManagerDebtsView.money(_sas + _custom)}',
       if (_someNoSas) _hasSas ? 'SAS بلا ايرث لنك — $_noSasNote' : _noSasNote,
@@ -586,11 +625,16 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       more: shares.length > cap ? 'عرض الكلّ (${shares.length})' : null,
       onMore: () => setState(() => _tabAll = true),
     ));
+    final ordered = sortList(events, _rowSort, _rowFields, _rowValue);
     parts.add(RpRowsCard(
       fold: _fold('rows'),
       query: _q,
       total: events.length,
-      days: ManagerDebtsView.days(events, companyOf: _merged ? _coOf : null, limit: _visible),
+      // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
+      days: _rowSort.key == 'date'
+          ? ManagerDebtsView.days(ordered, companyOf: _merged ? _coOf : null, limit: _visible)
+          : rpFlat(ordered, _visible, (e) => ManagerDebtsView.row(e, company: _merged ? _coOf(e) : null), _dateOf),
+      sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: events.length > _visible ? 'عرض المزيد (${events.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
       onSearch: (q) => setState(() {

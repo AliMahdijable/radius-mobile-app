@@ -125,7 +125,8 @@ class _BalanceCompaniesCardState extends State<BalanceCompaniesCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        RpCompanyTable(
+        RpSortedCompanyTable(
+          sortKey: 'balances',
           heads: const ['المحصَّل', 'المتبقّي', 'ربحك'],
           tones: const [RpTone.money, RpTone.debt, RpTone.brand],
           lines: lines,

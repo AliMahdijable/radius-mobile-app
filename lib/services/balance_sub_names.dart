@@ -48,6 +48,9 @@ class BalanceSubNames {
   /// الاسم العربيّ ليوزر (بلا حساسيّة الأحرف)، أو null.
   String? of(String username) => _names[username.trim().toLowerCase()];
 
+  /// الأسماء كلّها معروفة (قائمة المشتركين وصلت كاملةً — لا الحساب الكبير): الترتيب بالاسم ثابتٌ لا يقفز كلّما وصلت أسماء صفحة.
+  bool get complete => _big == false && _allLoaded;
+
   /// يوزرات الحركات التي تحمل اسم مشترك: التفعيل وتسديد الدين (لا المدراء الفرعيّون ولا التسوية).
   static Iterable<String> usersOf(Iterable<BalanceMove> moves) sync* {
     for (final m in moves) {

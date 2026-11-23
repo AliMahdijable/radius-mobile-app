@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/company_route.dart';
 import '../../../api/earthlink_api.dart';
 import '../../../api/merged_dashboard_api.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../core/util/format.dart';
 import '../../../models/merged_company.dart';
@@ -281,11 +282,43 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
   String get reportId => 'el_test_usage';
   int _visible = _pageSize;
 
+  /// «رتّب حسب» فوق المشتركين (المالك ٢٣ نوفمبر): التاريخ (الأحدث أوّلاً كما كانت) والاستهلاك والاسم — كالموقع.
+  static const _rowFields = [
+    OrderField('date', 'التاريخ', OrderKind.date),
+    OrderField('usage', 'الاستهلاك', OrderKind.number),
+    OrderField('name', 'الاسم', OrderKind.text),
+  ];
+  OrderValue _rowSort = rpDateDesc;
+
   @override
   void initState() {
     super.initState();
+    unawaited(OrderPrefs.load(OrderPrefs.rowsKey('el_test_usage'), _rowFields, rpDateDesc).then((v) {
+      if (mounted && v != _rowSort) setState(() => _rowSort = v);
+    }));
     startLoad();
   }
+
+  /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
+  void _pickSort(String key) {
+    for (final f in _rowFields) {
+      if (f.key != key) continue;
+      final next = nextOrder(_rowSort, f);
+      setState(() {
+        _rowSort = next;
+        _visible = _pageSize;
+      });
+      unawaited(OrderPrefs.save(OrderPrefs.rowsKey('el_test_usage'), next));
+      return;
+    }
+  }
+
+  static Object? _rowValue(({String? key, ElTestUsageRow row}) r, String k) => switch (k) {
+        'date' => r.row.date,
+        'usage' => r.row.usage,
+        'name' => r.row.name,
+        _ => null,
+      };
 
   @override
   void dispose() {
@@ -323,8 +356,21 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
     return h == null || m == null || h > 23 || m > 59 ? '' : clock12Ar(DateTime(2000, 1, 1, h, m));
   }
 
+  RpRow _rowOf(({String? key, ElTestUsageRow row}) r) => RpRow(
+        icon: LucideIcons.flaskConical,
+        tone: RpTone.info,
+        title: r.row.name,
+        detail: r.row.username ?? '',
+        amount: null,
+        trailing: r.row.usage == null ? null : formatIQD(r.row.usage!),
+        time: _time(r.row.date),
+        company: merged ? coOf(r.key) : null,
+      );
+
+  /// [rows] مرتّبةٌ بـ«رتّب حسب»: بالتاريخ يوماً بيوم كما كانت، وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه.
   List<RpDay> _days(List<({String? key, ElTestUsageRow row})> rows) {
-    final sorted = [...rows]..sort((a, b) => (b.row.date ?? '').compareTo(a.row.date ?? ''));
+    if (_rowSort.key != 'date') return rpFlat(rows, _visible, _rowOf, (r) => _day(r.row.date));
+    final sorted = rows;
     final byDay = <String, List<({String? key, ElTestUsageRow row})>>{};
     for (final r in sorted.take(_visible)) {
       (byDay[_day(r.row.date)] ??= []).add(r);
@@ -339,25 +385,14 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
           date: e.key,
           count: counts[e.key] ?? e.value.length,
           sum: null,
-          rows: [
-            for (final r in e.value)
-              RpRow(
-                icon: LucideIcons.flaskConical,
-                tone: RpTone.info,
-                title: r.row.name,
-                detail: r.row.username ?? '',
-                amount: null,
-                trailing: r.row.usage == null ? null : formatIQD(r.row.usage!),
-                time: _time(r.row.date),
-                company: merged ? coOf(r.key) : null,
-              ),
-          ],
+          rows: [for (final r in e.value) _rowOf(r)],
         ),
     ];
   }
 
   void _export(String how) {
-    final rows = _rows;
+    // الملفّ بترتيب الشاشة («رتّب حسب»)
+    final rows = sortList(_rows, _rowSort, _rowFields, _rowValue);
     unawaited(export(
       how,
       title: 'el.test_usage_title'.tr(),
@@ -375,6 +410,7 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
       ],
       details: [
         if (_q.trim().isNotEmpty) 'البحث: «${_q.trim()}»',
+        if (_rowSort != rpDateDesc) orderLine(_rowFields, _rowSort) ?? '',
         'عدد المشتركين: ${rows.length}',
       ],
     ));
@@ -400,7 +436,8 @@ class _ElTestUsageV2State extends State<ElTestUsageV2Screen> with _ElLoad<ElTest
     parts.add(RpRowsCard(
       query: _q,
       total: rows.length,
-      days: _days(rows),
+      days: _days(sortList(rows, _rowSort, _rowFields, _rowValue)),
+      sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _pageSize),
       onSearch: (q) => setState(() {

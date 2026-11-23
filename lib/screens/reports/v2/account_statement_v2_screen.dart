@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../services/merged_mode.dart';
 import '../../../theme/colors.dart';
@@ -60,13 +61,49 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
   String _q = '';
   int _visible = _page;
 
+  /// «رتّب حسب» فوق الحركات (المالك ٢٣ نوفمبر) — القواعد كالموقع حرفاً (core/util/order_rules.dart)، والمفتاح نفسه.
+  static const _rowFields = [
+    rpDateField,
+    OrderField('amount', 'المبلغ', OrderKind.number),
+    OrderField('type', 'النوع', OrderKind.text),
+  ];
+  OrderValue _rowSort = rpDateDesc;
+
   DateTime get _now => AccountStatementV2Screen.clock();
   String get _name => widget.displayName ?? widget.username;
 
   @override
   void initState() {
     super.initState();
+    unawaited(OrderPrefs.load(OrderPrefs.rowsKey(_id), _rowFields, rpDateDesc).then((v) {
+      if (mounted && v != _rowSort) setState(() => _rowSort = v);
+    }));
     unawaited(_start());
+  }
+
+  /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
+  void _pickSort(String key) {
+    for (final f in _rowFields) {
+      if (f.key != key) continue;
+      final next = nextOrder(_rowSort, f);
+      setState(() {
+        _rowSort = next;
+        _visible = _page;
+      });
+      unawaited(OrderPrefs.save(OrderPrefs.rowsKey(_id), next));
+      return;
+    }
+  }
+
+  static Object? _rowValue(StatementRow r, String k) => switch (k) {
+        'amount' => r.amount == 0 ? null : r.amount.abs(),
+        'type' => arabicActionLabel(r.actionType ?? '', r.description ?? ''),
+        _ => null,
+      };
+
+  static String? _dateOf(StatementRow r) {
+    final t = _time(r);
+    return t == null ? null : iqDateOf(t);
   }
 
   Future<void> _start() async {
@@ -213,7 +250,8 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('انتظر حتى يكتمل الكشف ثمّ صدّر')));
       return;
     }
-    final rows = _search(d.rows);
+    // الملفّ بترتيب الشاشة («رتّب حسب»)
+    final rows = sortList(_search(d.rows), _rowSort, _rowFields, _rowValue);
     // ترتيب الأعمدة (2026-07-12): الاسم ثمّ اليوزر ثمّ المبلغ/التاريخ/الوصف/النوع/المنفّذ — ومعها «الدين بعدها»
     final data = [
       for (final r in rows)
@@ -244,6 +282,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       if (company != null) 'الشركة: $company',
       for (final c in _chips()) c.label,
       if (_q.trim().isNotEmpty) 'بحث: «${_q.trim()}»',
+      if (_rowSort != rpDateDesc) orderLine(_rowFields, _rowSort) ?? '',
       'عدد الحركات: ${data.length}',
     ];
     final title = 'reports.account_statement'.tr();
@@ -355,11 +394,13 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       RpKpi(label: 'reports.activations_count'.tr(), value: s.totalActivations, icon: LucideIcons.zap, tone: RpTone.brand, isCount: true),
       RpKpi(label: 'reports.movements_count'.tr(), value: s.totalTransactions, icon: LucideIcons.history, tone: RpTone.info, isCount: true),
     ]));
-    final rows = _search(d.rows);
+    final rows = sortList(_search(d.rows), _rowSort, _rowFields, _rowValue);
     parts.add(RpRowsCard(
       query: _q,
       total: rows.length,
-      days: _days(rows, limit: _visible),
+      // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
+      days: _rowSort.key == 'date' ? _days(rows, limit: _visible) : rpFlat(rows, _visible, _row, _dateOf),
+      sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
       onSearch: (q) => setState(() {

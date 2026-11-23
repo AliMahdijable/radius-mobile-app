@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/util/bidi.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -185,7 +188,28 @@ class RpRow {
     this.balanceAfter,
     this.trailing,
     this.detailLines = 2,
+    this.date,
   });
+
+  /// «2026/11/22» على السطر نفسه — حين لا تجميع بالأيّام (مرتّبةً بغير التاريخ — «الترتيب بالنقر»).
+  final String? date;
+
+  /// نسخةٌ بتاريخها على السطر.
+  RpRow withDate(String? d) => RpRow(
+        icon: icon,
+        tone: tone,
+        title: title,
+        detail: detail,
+        amount: amount,
+        time: time,
+        company: company,
+        negative: negative,
+        cost: cost,
+        balanceAfter: balanceAfter,
+        trailing: trailing,
+        detailLines: detailLines,
+        date: d,
+      );
 
   /// أسطر [detail] قبل «…» — ٢ افتراضاً؛ أكثر لسطرٍ يحمل اليوزر بسطره ثمّ ما بعده («الجلسات»: اليوزر ثمّ IP · MAC · المدير).
   final int detailLines;
@@ -219,7 +243,10 @@ class RpRow {
 }
 
 class RpDay {
-  const RpDay({required this.date, required this.count, required this.sum, required this.rows});
+  const RpDay({required this.date, required this.count, required this.sum, required this.rows, this.flat = false});
+
+  /// قائمةٌ واحدة بلا رأس يوم (مرتّبةً بغير التاريخ) — تاريخ كلّ سطرٍ عليه.
+  final bool flat;
 
   /// «2026/11/22».
   final String date;
@@ -448,7 +475,7 @@ class _Pill extends StatelessWidget {
 
 /// زرٌّ بلا شكلٍ إضافيّ (لمسة على شريحة أو بطاقة) — بلا [onTap] لا يتفاعل.
 class _Tap extends StatelessWidget {
-  const _Tap({required this.child, this.onTap, this.radius = R.pill});
+  const _Tap({super.key, required this.child, this.onTap, this.radius = R.pill});
   final Widget child;
   final VoidCallback? onTap;
   final double radius;
@@ -769,8 +796,16 @@ class RpCompanyTable extends StatelessWidget {
       this.onTap,
       this.onRetry,
       this.tones = const [RpTone.money, RpTone.debt, RpTone.brand],
-      this.fold});
+      this.fold,
+      this.order,
+      this.onHead});
   final List<RpCompanyLine> lines;
+
+  /// «الترتيب بالنقر»: العمود المرتَّب به (-1 = الشركة) — null بلا ترتيب. [RpSortedCompanyTable] يملؤه.
+  final ColOrder? order;
+
+  /// نقرة عنوان (-1 = «الشركة») — null = عناوين للعرض كما كانت.
+  final ValueChanged<int>? onHead;
   final ValueChanged<RpCompany>? onTap;
   final ValueChanged<RpCompany>? onRetry;
 
@@ -811,8 +846,8 @@ class RpCompanyTable extends StatelessWidget {
           if (fold?.open ?? true) ...[
           const SizedBox(height: Sp.md),
           _row(
-            name: const SizedBox.shrink(),
-            cells: [for (final h in heads) Text(h, style: AppType.microBold(color: AppColors.textLow), maxLines: 1)],
+            name: onHead == null ? const SizedBox.shrink() : Align(alignment: AlignmentDirectional.centerStart, child: _head('الشركة', -1)),
+            cells: [for (var i = 0; i < heads.length; i++) _head(heads[i], i)],
           ),
           const SizedBox(height: Sp.xs),
           for (final l in lines) ...[
@@ -853,6 +888,41 @@ class RpCompanyTable extends StatelessWidget {
           ],
           ],
         ],
+      ),
+    );
+  }
+
+  static Key headKey(int col) => ValueKey('rp-cosort-$col');
+
+  /// عنوان عمود: نصٌّ كما كان، وزرّ ترتيبٍ بسهمه حين [onHead].
+  Widget _head(String text, int col) {
+    final on = order?.col == col;
+    final label = Text(text, style: AppType.microBold(color: on ? AppColors.textHi : AppColors.textLow), maxLines: 1);
+    if (onHead == null) return label;
+    final kind = col == -1 ? OrderKind.text : OrderKind.number;
+    final tip = on ? '$text — ${orderDirText(kind, order!.dir)}' : 'رتّب حسب $text';
+    return Semantics(
+      button: true,
+      selected: on,
+      label: tip,
+      excludeSemantics: true,
+      child: _Tap(
+        key: headKey(col),
+        radius: R.sm,
+        onTap: () => onHead!(col),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: label),
+              if (on) ...[
+                const SizedBox(width: Sp.xxs),
+                Icon(order!.dir == OrderDir.asc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 12, color: AppColors.textHi),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -944,6 +1014,79 @@ class RpCompanyTable extends StatelessWidget {
           ],
         );
     }
+  }
+}
+
+/// «حسب الشركة» بعناوين تُنقر («الترتيب بالنقر» — المالك ٢٣ نوفمبر): أوّل نقرة الأكبر (والشركة أ ← ي)، الثانية تقلبه، الثالثة ترجع
+/// ترتيب الحساب؛ يُحفظ للتقرير ([sortKey]) على هذا الجهاز — المفتاح نفسه بالموقع. الشركة التي تُقرأ أو تعذّرت آخراً بالاتّجاهين.
+class RpSortedCompanyTable extends StatefulWidget {
+  const RpSortedCompanyTable(
+      {super.key,
+      required this.sortKey,
+      required this.lines,
+      required this.heads,
+      required this.total,
+      this.outside,
+      this.onTap,
+      this.onRetry,
+      this.tones = const [RpTone.money, RpTone.debt, RpTone.brand],
+      this.fold});
+  final String sortKey;
+  final List<RpCompanyLine> lines;
+  final List<String> heads;
+  final List<num?> total;
+  final String? outside;
+  final ValueChanged<RpCompany>? onTap;
+  final ValueChanged<RpCompany>? onRetry;
+  final List<RpTone> tones;
+  final RpFold? fold;
+
+  @override
+  State<RpSortedCompanyTable> createState() => _RpSortedCompanyTableState();
+}
+
+class _RpSortedCompanyTableState extends State<RpSortedCompanyTable> {
+  ColOrder? _order;
+
+  String get _key => OrderPrefs.companiesKey(widget.sortKey);
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(OrderPrefs.loadCol(_key, widget.heads.length).then((v) {
+      if (mounted && v != null && _order == null) setState(() => _order = v);
+    }));
+  }
+
+  void _pick(int col) {
+    final next = nextColOrder(_order, col, col == -1 ? OrderDir.asc : OrderDir.desc);
+    setState(() => _order = next);
+    unawaited(OrderPrefs.saveCol(_key, next));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final o = _order;
+    final lines = o == null
+        ? widget.lines
+        : sortList<RpCompanyLine>(
+            widget.lines,
+            OrderValue('c', o.dir),
+            [OrderField('c', '', o.col == -1 ? OrderKind.text : OrderKind.number)],
+            (l, _) => o.col == -1 ? l.company.name : (l.state == RpCompanyState.ok && o.col < 3 ? [l.a, l.b, l.c][o.col] : null),
+          );
+    return RpCompanyTable(
+      lines: lines,
+      heads: widget.heads,
+      total: widget.total,
+      outside: widget.outside,
+      onTap: widget.onTap,
+      onRetry: widget.onRetry,
+      tones: widget.tones,
+      fold: widget.fold,
+      order: o,
+      onHead: _pick,
+    );
   }
 }
 
@@ -1716,9 +1859,13 @@ class RpRowsCard extends StatelessWidget {
       this.title = 'الحركات',
       this.unit = 'حركة',
       this.query = '',
-      this.fold});
+      this.fold,
+      this.sort});
   final int total;
   final List<RpDay> days;
+
+  /// «رتّب حسب» (المالك ٢٣ نوفمبر) — الشاشة ترتّب قائمتها كاملةً قبل [days]؛ null = بلا سطر ترتيب.
+  final RpRowsSort? sort;
 
   /// عنوان البطاقة ووحدة العدّ («المشتركون» · «مشترك» في التجريبيّ).
   final String title;
@@ -1770,6 +1917,10 @@ class RpRowsCard extends StatelessWidget {
           if (!folded) ...[
           const SizedBox(height: Sp.md),
           RpSearchBox(query: query, hint: searchHint, onChanged: onSearch),
+          if (sort != null && sort!.fields.length > 1) ...[
+            const SizedBox(height: Sp.sm),
+            RpSortChips(fields: sort!.fields, value: sort!.value, onPick: sort!.onPick),
+          ],
           if (note != null) ...[
             const SizedBox(height: Sp.sm),
             Text(note!, style: AppType.micro(color: AppColors.warningOnSoft), maxLines: 3),
@@ -1781,7 +1932,7 @@ class RpRowsCard extends StatelessWidget {
           ],
           for (final d in days) ...[
             const SizedBox(height: Sp.md),
-            RpDayHead(day: d, unit: unit),
+            if (!d.flat) RpDayHead(day: d, unit: unit),
             for (final r in d.rows) _row(r),
           ],
           if (more != null) ...[
@@ -1849,11 +2000,122 @@ class RpRowsCard extends StatelessWidget {
                   // سطرٌ أو سطران («↓…\n↑…» في الجلسات) بطرف السطر
                   child: Text(r.trailing!, style: AppType.microBold(color: r.tone.fg), maxLines: 2, textAlign: TextAlign.right),
                 ),
+              if (r.date != null)
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text(r.date!, style: AppType.microBold(color: AppColors.textMid), maxLines: 1),
+                ),
               // «7:34 مساءً» بسطرٍ RTL: الرقم ثمّ الكلمة (LTR كان يقلبها «مساءً 7:34»)
               Text(r.time, style: AppType.micro(color: AppColors.textLow), maxLines: 1),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════ «الترتيب بالنقر» ═══════════════════════════════
+
+/// «رتّب حسب» فوق الحركات — حقولها وما اختير منها ونقرة حقل (القواعد: core/util/order_rules.dart، كالموقع حرفاً).
+class RpRowsSort {
+  const RpRowsSort({required this.fields, required this.value, required this.onPick});
+  final List<OrderField> fields;
+  final OrderValue value;
+  final ValueChanged<String> onPick;
+}
+
+/// حقل التاريخ لحركات التقارير — القائمة تصل الأحدث أوّلاً فتبقى كما هي، و«الأقدم أوّلاً» عكسها حرفاً.
+const rpDateField = OrderField('date', 'التاريخ', OrderKind.date, natural: OrderDir.desc);
+
+/// الترتيب الافتراضيّ لحركات التقارير.
+const rpDateDesc = OrderValue('date', OrderDir.desc);
+
+/// الحركات مرتّبةً بغير التاريخ: قائمةٌ واحدة بلا رؤوس أيّام، وتاريخ كلّ سطرٍ عليه ([dateOf] «2026/11/22»).
+List<RpDay> rpFlat<T>(List<T> list, int? limit, RpRow Function(T) rowOf, String? Function(T) dateOf) {
+  if (list.isEmpty) return const [];
+  final shown = limit == null ? list : list.take(limit).toList();
+  return [
+    RpDay(date: '', count: list.length, sum: null, flat: true, rows: [for (final x in shown) rowOf(x).withDate(dateOf(x))]),
+  ];
+}
+
+/// سطر «رتّب حسب»: رقائق الحقول كاملةً — تلتفّ لسطرٍ ثانٍ على الهاتف الضيّق (لا رقاقةٌ خلف الحافّة)؛ نقرةٌ ترتّب، والثانية على
+/// المرتَّب تقلبه. السهم على المرتَّب وحده، والاتّجاه كاملاً لقارئ الشاشة («المبلغ — الأكبر أوّلاً»).
+class RpSortChips extends StatelessWidget {
+  const RpSortChips({super.key, required this.fields, required this.value, required this.onPick, this.label = 'رتّب حسب'});
+  final List<OrderField> fields;
+  final OrderValue value;
+  final ValueChanged<String> onPick;
+  final String label;
+
+  static Key chipKey(String field) => ValueKey('rp-sort-$field');
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 32,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.arrowDownUp, size: 14, color: AppColors.textMid),
+              const SizedBox(width: Sp.xs),
+              Text(label, style: AppType.microBold(color: AppColors.textMid)),
+            ],
+          ),
+        ),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Wrap(
+            spacing: Sp.x6,
+            runSpacing: Sp.x6,
+            children: [
+              for (final f in fields) _chip(f),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _chip(OrderField f) {
+    final on = f.key == value.key;
+    final tip = on ? '${f.label} — ${orderDirText(f.kind, value.dir)}' : 'رتّب حسب ${f.label}';
+    return Semantics(
+      button: true,
+      selected: on,
+      label: tip,
+      excludeSemantics: true,
+      child: Material(
+        color: on ? AppColors.brandSoftBg : AppColors.surface,
+        borderRadius: BorderRadius.circular(R.pill),
+        child: InkWell(
+          key: chipKey(f.key),
+          onTap: () => onPick(f.key),
+          borderRadius: BorderRadius.circular(R.pill),
+          child: Ink(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.pill),
+              border: Border.all(color: on ? AppColors.brand : AppColors.border, width: on ? BW.selected : BW.normal),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(f.label, style: AppType.microBold(color: on ? AppColors.brand : AppColors.textMid), maxLines: 1),
+                if (on) ...[
+                  const SizedBox(width: Sp.xxs),
+                  Icon(value.dir == OrderDir.asc ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 14, color: AppColors.brand),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

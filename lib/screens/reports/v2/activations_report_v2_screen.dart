@@ -10,6 +10,7 @@ import '../../../api/merged_dashboard_api.dart';
 import '../../../api/report_people_api.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
@@ -87,6 +88,15 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
   String _q = '';
   int _visible = _page;
 
+  /// «رتّب حسب» فوق الحركات (المالك ٢٣ نوفمبر) — القواعد كالموقع حرفاً (core/util/order_rules.dart)، والمفتاح نفسه.
+  static const _rowFields = [
+    rpDateField,
+    OrderField('amount', 'المبلغ', OrderKind.number),
+    OrderField('name', 'الاسم', OrderKind.text),
+    OrderField('package', 'الباقة', OrderKind.text),
+  ];
+  OrderValue _rowSort = rpDateDesc;
+
   bool get _merged => MergedMode.active.value;
   DateTime get _now => ActivationsReportV2Screen.clock();
 
@@ -106,6 +116,9 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     super.initState();
     unawaited(_folds.load().then((_) {
       if (mounted) setState(() {});
+    }));
+    unawaited(OrderPrefs.load(OrderPrefs.rowsKey(_id), _rowFields, rpDateDesc).then((v) {
+      if (mounted && v != _rowSort) setState(() => _rowSort = v);
     }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
@@ -531,7 +544,45 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
           })(),
       ];
 
-  List<String> _exportDetails({required int count, String? drill, bool withSearch = true, required bool complete}) {
+
+  /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
+  void _pickSort(String key) {
+    for (final f in _rowFields) {
+      if (f.key != key) continue;
+      final next = nextOrder(_rowSort, f);
+      setState(() {
+        _rowSort = next;
+        _visible = _page;
+      });
+      unawaited(OrderPrefs.save(OrderPrefs.rowsKey(_id), next));
+      return;
+    }
+  }
+
+  /// المبلغ مال السطر كما يُعرض (نقداً أو بالدين؛ التمديد وما من الساس بلا مبلغ).
+  static Object? _rowValue(ActivityRow r, String k) {
+    switch (k) {
+      case 'amount':
+        final kd = ActivationsView.kindOf(r);
+        if (kd == ActKind.extend || kd == ActKind.sas) return null;
+        final m = ActivationsView.moneyOf(r);
+        final a = kd == ActKind.debt ? m.debt : m.cash;
+        return a == null || a == 0 ? null : a.abs();
+      case 'name':
+        return r.userFullName ?? r.targetName ?? r.userUsername;
+      case 'package':
+        return (r.packageName ?? '').isEmpty ? null : r.packageName;
+    }
+    return null;
+  }
+
+  static String? _dateOf(ActivityRow r) {
+    final t = ActivationsView.timeOf(r);
+    if (t != null) return iqDateOf(t);
+    return r.createdAt.length >= 10 ? r.createdAt.substring(0, 10).replaceAll('-', '/') : null;
+  }
+
+  List<String> _exportDetails({required int count, String? drill, bool withSearch = true, required bool complete, bool sorted = false}) {
     final q = _q.trim();
     final inc = [
       for (final co in _cos.values)
@@ -547,6 +598,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       for (final c in _chips()) c.label,
       if (drill != null) 'الحركات: $drill',
       if (withSearch && q.isNotEmpty) 'بحث: «$q»',
+      if (sorted) orderLine(_rowFields, _rowSort) ?? '',
       'عدد الحركات: $count',
       if (!complete) 'ناقص: الفترة أطول من أن تُجلب كلّها مرّةً واحدة — صدّرها على أجزاء',
     ];
@@ -565,9 +617,12 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     var rows = v.rows;
     if (pick != null) rows = rows.where(pick).toList();
     if (withSearch) rows = ActivationsView.search(rows, _q);
+    // الملفّ بترتيب الشاشة («رتّب حسب») — نافذة الرقم بترتيبها هي (الأحدث أوّلاً)
+    final main = pick == null && withSearch;
+    if (main) rows = sortList(rows, _rowSort, _rowFields, _rowValue);
     final t = title.isEmpty ? 'reports.activations'.tr() : title;
     final data = _exportRows(rows, v.co);
-    final details = _exportDetails(count: data.length, drill: drill, withSearch: withSearch, complete: v.complete);
+    final details = _exportDetails(count: data.length, drill: drill, withSearch: withSearch, complete: v.complete, sorted: main && _rowSort != rpDateDesc);
     final subtitle = '${_f!.range.name} · ${_f!.range.rangeText}';
     switch (how) {
       case 'pdf':
@@ -810,12 +865,16 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       more: shares.length > cap ? 'عرض الكلّ (${shares.length})' : null,
       onMore: () => setState(() => _tabAll = true),
     ));
-    final rows = ActivationsView.search(v.rows, _q);
+    final rows = sortList(ActivationsView.search(v.rows, _q), _rowSort, _rowFields, _rowValue);
     parts.add(RpRowsCard(
       fold: _fold('rows'),
       query: _q,
       total: rows.length,
-      days: ActivationsView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible),
+      // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
+      days: _rowSort.key == 'date'
+          ? ActivationsView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible)
+          : rpFlat(rows, _visible, (r) => ActivationsView.row(r, company: _merged ? _coOf(r, v.co) : null), _dateOf),
+      sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
       onSearch: (q) => setState(() {

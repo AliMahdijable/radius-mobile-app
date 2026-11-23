@@ -1127,6 +1127,62 @@ void main() {
       }
     });
 
+    // «الترتيب بالنقر» (المالك ٢٣ نوفمبر): الشاشة مقصوصة (آخر 1000) ⇒ ترتيبٌ غير الافتراض يجلب الفترة كلّها مرّةً (نافذة التقدّم نفسها)
+    // فـ«الأكبر» من خارج آخر 1000 يصعد أوّلاً؛ والتصدير بما جُلب بلا جلبٍ ثانٍ، ورأسه يسمّي الترتيب.
+    testWidgets('رتّب حسب المبلغ والشاشة مقصوصة: الفترة كلّها مرّةً، والأكبر القديم أوّلاً، والتصدير بلا جلبٍ ثانٍ', (t) async {
+      await up(prefs: {
+        'report.v2.finance': jsonEncode({'p': 'thisMonth'}),
+        'report.v2.finance.folds': jsonEncode({'rows': true}),
+      });
+      final month = busyMonth();
+      month[month.length - 5]['amount'] = 999000; // حركةٌ قديمة (١ نوفمبر) خارج آخر 1000
+      server.month = month;
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        RpRowsCard card() => t.widget<RpRowsCard>(find.byType(RpRowsCard));
+        expect(card().total, 1000);
+        expect(card().note, contains('تُعرض آخر 1000'));
+        expect(card().days.first.flat, isFalse);
+        final before = server.finance.length;
+        final chip = find.byKey(RpSortChips.chipKey('amount'));
+        await t.scrollUntilVisible(chip, 300, scrollable: find.byType(Scrollable).first);
+        await t.tap(chip);
+        for (var i = 0; i < 24; i++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        expect(server.finance.length, greaterThan(before), reason: 'جُلبت الفترة كلّها للترتيب');
+        expect(card().total, 1320);
+        expect(card().note, startsWith('مرتّبةٌ من كلّ حركات الفترة'));
+        final rows = card().days.single.rows;
+        expect(rows.first.amount, 999000, reason: 'الأكبر في الفترة كلّها — من خارج آخر 1000');
+        expect(rows.first.date, '2026/11/01');
+        expect(rows.take(40).skip(1).every((r) => r.amount == 35000), isTrue);
+        final fetched = server.finance.length;
+        await tapExport(t, 'Excel');
+        expect(server.finance.length, fetched, reason: 'التصدير بما جُلب للترتيب — لا جلبٌ ثانٍ');
+        final r = got.single;
+        expect(r.rows.length, 1320);
+        expect(r.rows.first.contains('999000'), isTrue, reason: 'الملفّ بترتيب الشاشة');
+        expect(r.details, contains('مرتّب حسب: المبلغ — الأكبر أوّلاً'));
+        // الرجوع للتاريخ ⇒ آخر 1000 كما كانت بلا طلب
+        final chipDate = find.byKey(RpSortChips.chipKey('date'));
+        await t.ensureVisible(chipDate);
+        await t.pump(const Duration(milliseconds: 100));
+        await t.tap(chipDate);
+        await t.pump(const Duration(milliseconds: 200));
+        expect(card().total, 1000);
+        expect(card().days.first.flat, isFalse);
+        expect(server.finance.length, fetched);
+        expect(t.takeException(), isNull);
+      } finally {
+        ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
     testWidgets('التصدير يتبع البحث كما على الشاشة، وتصدير بطاقةٍ ملموسة حركاتها وحدها', (t) async {
       await up();
       final got = <ReportExportRequest>[];

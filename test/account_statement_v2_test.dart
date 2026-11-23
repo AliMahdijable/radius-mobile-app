@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/core/util/order_rules.dart';
 import 'package:rad_mysvcs/screens/reports/v2/account_statement_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
@@ -138,6 +139,58 @@ void main() {
       expect(r.details.any((d) => d.startsWith('النوع: ')), isTrue);
       expect(r.details, contains('بحث: «تسديد»'));
       expect(r.details, contains('عدد الحركات: 1'));
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  // «الترتيب بالنقر» (المالك ٢٣ نوفمبر): «رتّب حسب» فوق الحركات — المبلغ الأكبر أوّلاً قائمةً واحدة والتاريخ على كلّ سطر، الصفر
+  // (بلا مال) آخراً، النقرة الثانية تقلب، يُحفظ للتقرير ويرجع عند الفتح، والتصدير بترتيب الشاشة وسطر «مرتّب حسب».
+  testWidgets('رتّب حسب المبلغ: قائمةٌ واحدة، تقلب، تُحفظ، والتصدير بترتيبها', (t) async {
+    await up();
+    final got = <ReportExportRequest>[];
+    ReportExportActions.debugSink = (r) async => got.add(r);
+    try {
+      await open(t);
+      RpRowsCard card() => t.widget<RpRowsCard>(find.byType(RpRowsCard));
+      expect(card().sort!.value, rpDateDesc, reason: 'الافتراض: التاريخ — الأحدث أوّلاً');
+      expect(card().days.length, 3, reason: 'يوماً بيوم كما كان');
+      expect(card().days.every((d) => !d.flat), isTrue);
+      final amount = find.byKey(RpSortChips.chipKey('amount'));
+      await t.scrollUntilVisible(amount, 300, scrollable: find.byType(Scrollable).first);
+      await t.tap(amount);
+      await t.pump(const Duration(milliseconds: 200));
+      expect(card().sort!.value, const OrderValue('amount', OrderDir.desc));
+      var days = card().days;
+      expect(days.length, 1);
+      expect(days.single.flat, isTrue);
+      expect([for (final r in days.single.rows) r.amount], [35000, 20000, null], reason: 'الأكبر أوّلاً والصفر (بلا مال) آخراً');
+      expect([for (final r in days.single.rows) r.date], ['2026/11/20', '2026/11/21', '2026/11/22'], reason: 'تاريخ كلّ سطرٍ عليه');
+      expect(find.text('2026/11/20'), findsOneWidget);
+      await t.tap(amount);
+      await t.pump(const Duration(milliseconds: 200));
+      days = card().days;
+      expect([for (final r in days.single.rows) r.amount], [20000, 35000, null], reason: 'الثانية تقلب — والفارغ آخراً بالاتّجاهين');
+      for (var i = 0; i < 3; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await t.pump(const Duration(milliseconds: 50));
+      }
+      final prefs = await SharedPreferences.getInstance();
+      expect(jsonDecode(prefs.getString('report.v2.account_statement.sort')!), {'k': 'amount', 'd': 'asc'});
+      await t.scrollUntilVisible(find.text('Excel'), 400, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.text('Excel'));
+      for (var i = 0; i < 4; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      final r = got.single;
+      expect([for (final row in r.rows) row[2]], ['20000', '35000', ''], reason: 'الملفّ بترتيب الشاشة');
+      expect(r.details, contains('مرتّب حسب: المبلغ — الأصغر أوّلاً'));
+      // الفتح من جديد على الترتيب المحفوظ
+      await t.pumpWidget(const SizedBox());
+      await open(t);
+      expect(card().sort!.value, const OrderValue('amount', OrderDir.asc));
       expect(t.takeException(), isNull);
     } finally {
       await down(t);

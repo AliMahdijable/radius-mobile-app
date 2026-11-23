@@ -11,6 +11,7 @@ import '../../../api/merged_finance_api.dart';
 import '../../../api/report_people_api.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
+import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
@@ -133,6 +134,21 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   String _q = '';
   int _visible = _page;
 
+  /// «رتّب حسب» فوق الحركات (المالك ٢٣ نوفمبر) — القواعد كالموقع حرفاً (core/util/order_rules.dart)، والمفتاح نفسه.
+  static const _rowFields = [
+    rpDateField,
+    OrderField('amount', 'المبلغ', OrderKind.number),
+    OrderField('name', 'الاسم', OrderKind.text),
+    OrderField('type', 'النوع', OrderKind.text),
+  ];
+  OrderValue _rowSort = rpDateDesc;
+
+  /// «رتّب حسب» والشاشة مقصوصة (آخر 500): ترتيبٌ غير الافتراض على جزء الفترة يكذب («الأكبر» ليس الأكبر) ⇒ كلّ حركاتها بطلبات
+  /// التصدير نفسها (نافذتها بـ«إلغاء»)، مرّةً لكلّ بياناتٍ على الشاشة ([_fullFor] = allLogs التي جُلبت لها) — كالموقع.
+  ({List<FinanceLog> logs, Map<FinanceLog, String?> companyOf, List<String> gaps})? _full;
+  Object? _fullFor;
+  bool _fullBusy = false;
+
   bool get _merged => MergedMode.active.value;
   DateTime get _now => FinanceReportV2Screen.clock();
 
@@ -145,6 +161,9 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     super.initState();
     unawaited(_folds.load().then((_) {
       if (mounted) setState(() {});
+    }));
+    unawaited(OrderPrefs.load(OrderPrefs.rowsKey(_id), _rowFields, rpDateDesc).then((v) {
+      if (mounted && v != _rowSort) setState(() => _rowSort = v);
     }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
@@ -726,7 +745,61 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   }
 
   /// رأس الملفّ: كلّ فلترٍ مختار سطراً (الشركات، المدير، الموظّف، النوع، البحث، الحركة الملموسة)، وعدد الحركات، وما لم يكتمل.
-  List<String> _exportDetails({required int count, String? drill, bool withSearch = true, List<String> gaps = const []}) {
+
+  /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
+  void _pickSort(String key) {
+    for (final f in _rowFields) {
+      if (f.key != key) continue;
+      final next = nextOrder(_rowSort, f);
+      setState(() {
+        _rowSort = next;
+        _visible = _page;
+      });
+      unawaited(OrderPrefs.save(OrderPrefs.rowsKey(_id), next));
+      return;
+    }
+  }
+
+  static Object? _rowValue(FinanceLog l, String k) {
+    switch (k) {
+      case 'amount':
+        return l.amount.abs();
+      case 'name':
+        final name = [l.userFullName, l.targetName, l.userUsername].firstWhere((s) => (s ?? '').trim().isNotEmpty, orElse: () => null);
+        return name ?? arabicActionLabel(l.actionType, (l.actionDescription ?? '').trim());
+      case 'type':
+        return arabicActionLabel(l.actionType, (l.actionDescription ?? '').trim());
+    }
+    return null;
+  }
+
+  static String? _dateOf(FinanceLog l) {
+    final t = FinanceView.timeOf(l);
+    return t == null ? null : iqDateOf(t);
+  }
+
+  /// يجلب الفترة كلّها للترتيب حين يلزم — بعد الرسم (نافذة التقدّم تحتاج سياقاً)، ومرّةً لكلّ بيانات.
+  void _wantFull(_View v) {
+    if (!v.truncated || _rowSort == rpDateDesc || !_fold('rows').open) return;
+    if (_fullBusy || identical(_fullFor, v.allLogs)) return;
+    _fullBusy = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final f = _f;
+      if (!mounted || f == null) {
+        _fullBusy = false;
+        return;
+      }
+      final r = await _loadFullLogs(f, _merged ? _combined : null);
+      if (!mounted) return;
+      setState(() {
+        _fullBusy = false;
+        _fullFor = v.allLogs;
+        _full = r;
+      });
+    });
+  }
+
+  List<String> _exportDetails({required int count, String? drill, bool withSearch = true, List<String> gaps = const [], bool sorted = false}) {
     final m = _merged ? _combined : null;
     final q = _q.trim();
     return [
@@ -737,6 +810,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       if (_elEmployeesNote != null) _elEmployeesNote!,
       if (drill != null) 'الحركات: $drill',
       if (withSearch && q.isNotEmpty) 'بحث: «$q»',
+      if (sorted) orderLine(_rowFields, _rowSort) ?? '',
       'عدد الحركات: $count',
       if (gaps.isNotEmpty) 'ناقص: ${gaps.join('؛ ')}',
     ];
@@ -760,7 +834,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     String? Function(FinanceLog) companyOf = (l) => m?.logCompany[l];
     final gaps = <String>[];
     if (v.truncated) {
-      final full = await _loadFullLogs(f, m);
+      // ما جُلب للترتيب لهذه البيانات نفسها يُستعمل — لا نافذة جلبٍ ثانية
+      final full = identical(_fullFor, v.allLogs) && _full != null ? _full : await _loadFullLogs(f, m);
       if (full == null || !mounted) return;
       all = full.logs;
       companyOf = (l) => full.companyOf[l];
@@ -770,9 +845,12 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     var logs = v.clientTyped ? FinanceLogs.filter(all, f.types) : (f.types.isEmpty ? FinanceLogs.filter(all, null) : _strictKeep(all, m, companyOf));
     if (pick != null) logs = logs.where(pick).toList();
     if (withSearch) logs = FinanceView.search(logs, _q);
+    // الملفّ بترتيب الشاشة («رتّب حسب») — نافذة الرقم بترتيبها هي (الأحدث أوّلاً)
+    final main = pick == null && withSearch;
+    if (main) logs = sortList(logs, _rowSort, _rowFields, _rowValue);
     final t = title.isEmpty ? 'reports.financial'.tr() : title;
     final rows = _exportRows(logs, v.showCost, companyOf);
-    final details = _exportDetails(count: rows.length, drill: drill, withSearch: withSearch, gaps: gaps);
+    final details = _exportDetails(count: rows.length, drill: drill, withSearch: withSearch, gaps: gaps, sorted: main && _rowSort != rpDateDesc);
     switch (how) {
       case 'pdf':
         return ReportExportActions.pdf(context,
@@ -1206,21 +1284,48 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       onMore: () => setState(() => _tabAll = true),
     ));
     final m = _merged ? _combined : null;
-    final rows = FinanceView.search(v.logs, _q);
+    _wantFull(v);
+    final full = identical(_fullFor, v.allLogs) && _rowSort != rpDateDesc ? _full : null;
+    // كلّ حركات الفترة (حين جُلبت للترتيب) بفلتر الشاشة نفسه، وشركة كلّ سطرٍ منها
+    var base = v.logs;
+    RpCompany? coFor(FinanceLog l) => m == null ? null : _coOf(l, m);
+    var coLine = coFor;
+    if (full != null) {
+      final f = _f!;
+      String? keyOf(FinanceLog l) => full.companyOf[l];
+      base = v.clientTyped
+          ? FinanceLogs.filter(full.logs, f.types)
+          : (f.types.isEmpty ? FinanceLogs.filter(full.logs, null) : _strictKeep(full.logs, m, keyOf));
+      coLine = (l) {
+        if (m == null) return null;
+        final key = keyOf(l);
+        final co = key == null ? null : _cos[key];
+        return co == null ? null : _rp(co.c);
+      };
+    }
+    final rows = sortList(FinanceView.search(base, _q), _rowSort, _rowFields, _rowValue);
     parts.add(RpRowsCard(
       fold: _fold('rows'),
       query: _q,
       total: rows.length,
-      days: FinanceView.days(rows, companyOf: m == null ? null : (l) => _coOf(l, m), showCost: v.showCost, limit: _visible),
+      // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
+      days: _rowSort.key == 'date'
+          ? FinanceView.days(rows, companyOf: m == null ? null : (l) => _coOf(l, m), showCost: v.showCost, limit: _visible)
+          : rpFlat(rows, _visible, (l) => FinanceView.row(l, company: coLine(l), showCost: v.showCost), _dateOf),
+      sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
       onSearch: (q) => setState(() {
         _q = q;
         _visible = _page;
       }),
-      note: v.truncated
-          ? 'تُعرض آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة — الأرقام أعلاه للفترة كلّها، والتصدير يجلبها كلّها'
-          : null,
+      note: !v.truncated
+          ? null
+          : full != null
+              ? 'مرتّبةٌ من كلّ حركات الفترة${full.gaps.isEmpty ? '' : ' — ناقص: ${full.gaps.join('؛ ')}'}'
+              : _rowSort != rpDateDesc && identical(_fullFor, v.allLogs)
+                  ? 'الترتيب على آخر ${PackageCostKpis.recentLogsServerCap} حركة (أُلغي جلب الفترة كلّها) — والتصدير يجلبها كلّها'
+                  : 'تُعرض آخر ${PackageCostKpis.recentLogsServerCap} حركة بالفترة — الأرقام أعلاه للفترة كلّها، والتصدير يجلبها كلّها',
       empty: _q.trim().isEmpty ? 'لا حركات بهذه الفترة' : 'لا حركة تطابق «${_q.trim()}»',
     ));
     parts.add(RpExportBar(
