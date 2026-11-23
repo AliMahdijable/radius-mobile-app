@@ -68,6 +68,7 @@ import '../../core/widgets/print_feedback.dart';
 import '../network_devices/fiber/fiber_subscriber_card.dart';
 import '../national/national_subscriber_extras.dart';
 import 'widgets/foldable_section.dart';
+import '../../core/util/bytes_format.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -2182,13 +2183,10 @@ class _LiveSessionCard extends StatelessWidget {
   /// تتّسع لها («512 KB» ليست أطول من «0.0 MB»).
   static String _formatBytes(int bytes) {
     if (bytes <= 0) return '0';
-    const gb = 1024 * 1024 * 1024;
-    const mb = 1024 * 1024;
-    const kb = 1024;
-    if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(1)} GB';
-    if (bytes >= mb) return '${(bytes / mb).toStringAsFixed(1)} MB';
-    if (bytes >= kb) return '${(bytes / kb).toStringAsFixed(0)} KB';
-    return '$bytes B';
+    // الوحدة من الدالّة الموحّدة (حتى TB وPB)، والشكل كما كان
+    final s = scaleBytes(bytes);
+    if (s.index == 0) return '$bytes B';
+    return '${s.value.toStringAsFixed(s.index == 1 ? 0 : 1)} ${s.unit}';
   }
 }
 

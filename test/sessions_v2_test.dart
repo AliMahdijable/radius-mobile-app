@@ -16,9 +16,12 @@ import 'visual_perm/visual_perm_harness.dart';
 // والتصدير بالفلاتر حرفاً؛ و«سجلّ الجلسات» من نافذة مشتركٍ يفتح على السجلّ مبحوثاً باسمه.
 
 class _Server implements HttpClientAdapter {
-  _Server(this.inner, {this.online = 3});
+  _Server(this.inner, {this.online = 3, this.mul = 1});
   final VisualServer inner;
   final int online;
+
+  /// مضاعف الأحجام — مجاميع بالتيرا (المالك ٢٣ نوفمبر: «اجمالي السحوبات سوي بوحدات التيرا وفما فوق»).
+  final int mul;
   final asked = <(String, Map<String, dynamic>)>[];
 
   Map<String, Object?> _s(int i, {bool live = true}) => {
@@ -27,8 +30,8 @@ class _Server implements HttpClientAdapter {
         'user_manager': i.isEven ? 'ali.h' : 'admin@sup',
         'ip_address': '10.0.0.$i',
         'mac': 'AA:BB:CC:00:00:${i.toRadixString(16).padLeft(2, '0')}',
-        'bytes_in': 1024 * 1024 * (i + 1),
-        'bytes_out': 1024 * (i + 1),
+        'bytes_in': 1024 * 1024 * (i + 1) * mul,
+        'bytes_out': 1024 * (i + 1) * mul,
         'started_at': '2026-11-22 ${(8 + i % 10).toString().padLeft(2, '0')}:00:00',
         if (!live) 'ended_at': '2026-11-22 20:00:00',
       };
@@ -109,6 +112,38 @@ void main() {
       await down(t);
     }
   });
+
+  // المالك (٢٣ نوفمبر): «اجمالي السحوبات سوي بوحدات التيرا وفما فوق حسب العدد» — كانت «9022.83 GB»
+  for (final (width, scale) in [(320.0, 1.2), (480.0, 1.0)]) {
+    testWidgets('المجاميع بالتيرا: التحميل «6.00 TB» والرفع «6.00 GB» بالبطاقة والتصدير — بلا قصّ @$width ×$scale', (t) async {
+      final server = _Server(await visualSetUp(s1bSasOwner), mul: 1024 * 1024);
+      ApiClient.dio.httpClientAdapter = server;
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await pumpVisual(t, VisualDevice('', Size(width, 2400), 2),
+            home: (_) => const SessionsV2Screen(),
+            wrap: (child) => Builder(
+                  builder: (ctx) => MediaQuery(data: MediaQuery.of(ctx).copyWith(textScaler: TextScaler.linear(scale)), child: child),
+                ));
+        for (var i = 0; i < 10; i++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        final k = t.widget<RpKpiGrid>(find.byType(RpKpiGrid)).kpis;
+        expect(k[2].text, '6.00 TB', reason: '1+2+3 تيرا');
+        expect(k[3].text, '6.00 GB');
+        expect(find.textContaining('6.00 TB'), findsWidgets);
+        await t.scrollUntilVisible(find.text('Excel'), 500, scrollable: find.byType(Scrollable).first);
+        await t.tap(find.text('Excel'));
+        await t.pump(const Duration(milliseconds: 200));
+        expect(got.single.rows.any((r) => r.any((c) => c.toString().contains('TB'))), isTrue, reason: 'صفوف الملفّ بالوحدة نفسها');
+        expect(t.takeException(), isNull, reason: 'بلا فيضٍ ولا قصّ');
+      } finally {
+        await down(t);
+      }
+    });
+  }
 
   testWidgets('حدّ الساس (2000) ⇒ «ناقص» على الشاشة وفي رأس الملفّ — لا كأنّه الكلّ', (t) async {
     final server = _Server(await visualSetUp(s1bSasOwner), online: 2000);

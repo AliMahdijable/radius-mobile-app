@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/util/bytes_format.dart';
 
 /// أدوات الأقسام الباقية من بوّابة الوطنيّ (١ نوفمبر): القفل الهادئ بسببه (لا «تعذّر» أحمر)، والمدّة والبايتات بكلام التطبيق.
 
@@ -66,13 +67,10 @@ String _group(String n) {
 String nationalBytes(num? b) {
   if (b == null) return '—';
   if (b <= 0) return '0';
-  const gb = 1024 * 1024 * 1024;
-  const mb = 1024 * 1024;
-  const kb = 1024;
-  if (b >= gb) return '${_group((b / gb).toStringAsFixed(b >= 10 * gb ? 0 : 1))} GB';
-  if (b >= mb) return '${_group((b / mb).toStringAsFixed(0))} MB';
-  if (b >= kb) return '${_group((b / kb).toStringAsFixed(0))} KB';
-  return '${_group(b.toStringAsFixed(0))} B';
+  // الوحدة من الدالّة الموحّدة (حتى TB وPB)، والشكل كما كان
+  final s = scaleBytes(b);
+  if (s.index >= 3) return '${_group(s.value.toStringAsFixed(s.value >= 10 ? 0 : 1))} ${s.unit}';
+  return '${_group(s.value.toStringAsFixed(0))} ${s.unit}';
 }
 
 /// عددٌ بفواصل، و«—» للمجهول (لا صفرٌ كاذب).
