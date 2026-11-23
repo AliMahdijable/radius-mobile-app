@@ -2207,6 +2207,29 @@ bool saleQtyPriceSideBySide(BuildContext context, double width) {
   return avail * 3 / 5 >= price && avail * 2 / 5 >= qty;
 }
 
+/// «نقداً / على دين المشترك» جنباً إلى جنب حين تتّسع كلّ تسميةٍ بأيقونتها لحصّتها من السطر بخطّ الهاتف ومقياس تكبيره (المختارة أعرض: w700)
+/// — وإلّا الخياران تحت بعضهما بعرض السطر. المالك (٢٣ نوفمبر): «اي صلّحها هم» — على 320 ×1.2 كانت «على دين المشترك» تظهر «على دين المش…»
+/// ([SheetSegmented]: أيقونة 18 وفاصلها 6 وحدّ المختارة 1.5 بكلّ جهة، والتسمية سطرٌ واحد بنقاط).
+@visibleForTesting
+bool saleSegmentsFit(BuildContext context, double width, List<String> labels) {
+  if (labels.isEmpty) return true;
+  final scaler = MediaQuery.textScalerOf(context);
+  final style = DefaultTextStyle.of(context).style.merge(AppType.input().copyWith(fontWeight: FontWeight.w700));
+  final share = (width - Sp.sm * (labels.length - 1)) / labels.length;
+  for (final l in labels) {
+    final tp = TextPainter(
+      text: TextSpan(text: l, style: style),
+      textDirection: TextDirection.rtl,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final need = 18 + Sp.x6 + tp.width + 2 * BW.selected + 6; // +6 هامش أمان
+    tp.dispose();
+    if (need > share) return false;
+  }
+  return true;
+}
+
 class _Hit {
   const _Hit({required this.idx, required this.username, required this.name, this.phone});
   final String idx;
@@ -2524,19 +2547,45 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
                     : _debt
                         ? 'sales.debt_hint'.tr()
                         : null,
-            child: SheetSegmented(
-              labels: ['sales.pay_cash'.tr(), 'sales.pay_debt'.tr()],
-              icons: [LucideIcons.wallet, _canDebt ? LucideIcons.handCoins : LucideIcons.lock],
-              selectedIndex: _debt ? 1 : 0,
-              onSelect: (i) {
+            child: LayoutBuilder(builder: (context, c) {
+              final labels = ['sales.pay_cash'.tr(), 'sales.pay_debt'.tr()];
+              final icons = [LucideIcons.wallet, _canDebt ? LucideIcons.handCoins : LucideIcons.lock];
+              final sel = _debt ? 1 : 0;
+              void pick(int i) {
                 if (_locked) return;
                 if (i == 1 && (!_subscriber || !_canDebt)) return;
                 setState(() {
                   _debt = i == 1;
                   _confirmDebt = false;
                 });
-              },
-            ),
+              }
+
+              if (saleSegmentsFit(context, c.maxWidth, labels)) {
+                return SheetSegmented(
+                  key: const ValueKey('sale-pay-row'),
+                  labels: labels,
+                  icons: icons,
+                  selectedIndex: sel,
+                  onSelect: pick,
+                );
+              }
+              // ضيّق (320 بخطٍّ مكبَّر): الخياران تحت بعضهما بعرض السطر — التسمية كاملةً بأيقونتها، والقفل بمكانه
+              return Column(
+                key: const ValueKey('sale-pay-stacked'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < labels.length; i++) ...[
+                    if (i > 0) const SizedBox(height: Sp.sm),
+                    SheetSegmented(
+                      labels: [labels[i]],
+                      icons: [icons[i]],
+                      selectedIndex: sel == i ? 0 : -1,
+                      onSelect: (_) => pick(i),
+                    ),
+                  ],
+                ],
+              );
+            }),
           ),
           const SizedBox(height: Sp.lg),
           _SheetText(controller: _note, icon: LucideIcons.fileText, hint: 'sales.f_note_opt'.tr(), maxLength: 200, enabled: !_locked),

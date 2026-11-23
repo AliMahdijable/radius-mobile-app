@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/employees_api.dart';
@@ -780,6 +781,26 @@ void main() {
         } else {
           expect(rp.top, greaterThan(rq.bottom), reason: 'السعر تحت الكمّيّة');
         }
+        // الدفع (المالك: «اي صلّحها هم»): «على دين المشترك» كاملةً بلا نقاط بأيّ عرضٍ وتكبير، والاختيار يعمل في الشكلين
+        final payRow = find.byKey(const ValueKey('sale-pay-row'));
+        final payStack = find.byKey(const ValueKey('sale-pay-stacked'));
+        final pay = payRow.evaluate().isNotEmpty ? payRow : payStack;
+        expect(pay, findsOneWidget);
+        for (final e in find.descendant(of: pay, matching: find.byType(RichText)).evaluate()) {
+          final ro = e.renderObject;
+          if (ro is RenderParagraph) expect(ro.didExceedMaxLines, isFalse, reason: '«${ro.text.toPlainText()}» مقصوص @$w ×$s');
+        }
+        if (w == 320 && s == 1.2) expect(payStack, findsOneWidget, reason: 'على 320 ×1.2 الخياران تحت بعضهما');
+        if (w >= 430 && s == 1.0) expect(payRow, findsOneWidget, reason: 'يتّسعان جنباً إلى جنب @$w');
+        expect(find.text('sales.debt_hint'.tr()), findsOneWidget, reason: 'على دين المشترك افتراضاً');
+        final cash = find.descendant(of: pay, matching: find.text('sales.pay_cash'.tr()));
+        await t.ensureVisible(cash);
+        await t.tap(cash);
+        await settle(t, seconds: 1);
+        expect(find.text('sales.debt_hint'.tr()), findsNothing, reason: 'نقداً');
+        await t.tap(find.descendant(of: pay, matching: find.text('sales.pay_debt'.tr())));
+        await settle(t, seconds: 1);
+        expect(find.text('sales.debt_hint'.tr()), findsOneWidget, reason: 'رجع على الدين');
         if (const String.fromEnvironment('VISUAL_OUT').isNotEmpty) {
           FocusManager.instance.primaryFocus?.unfocus();
           await settle(t, seconds: 1);
