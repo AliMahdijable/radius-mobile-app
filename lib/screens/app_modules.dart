@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
+import '../api/field_team_api.dart';
 import '../api/jtpay_api.dart';
 import '../api/national_more_api.dart';
 import '../api/receipts_archive_api.dart';
@@ -26,6 +27,7 @@ import 'el/required_cards_screen.dart';
 import 'el/transfer_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
+import 'field_team/field_team_screen.dart';
 import 'managers/el_managers_screen.dart';
 import 'managers/managers_screen.dart';
 import 'national/national_money_screen.dart';
@@ -122,6 +124,8 @@ Listenable appModulesListenable() => Listenable.merge([
       // «التذاكر» — المفتاح العامّ portal_tickets وما يملكه المستخدم وأعدادها (الاستماع يطلبها)، وقائمة الجرس (رقم البطاقة منها أيضاً).
       TicketsState.gate,
       TicketsState.bell,
+      // «الصيانة والمبيعات» — المفتاح field_team بالخادم وما يملكه المستخدم وأعداد المهامّ (الاستماع يطلبها).
+      FieldTeamState.gate,
     ]);
 
 /// مفتاحا «المدراء» لموظّف ايرث لنك (٢٠ نوفمبر — الخادم server/earthlink/elManagers.js).
@@ -459,6 +463,24 @@ List<AppModule> buildAppModules() {
         },
         badge: TicketsState.bellBadge,
         page: TicketsScreen.mergedPage,
+      ),
+    // «الصيانة والمبيعات» (٢٣ نوفمبر — المالك: «كل مدير عنده قسم خاص به اللي هو قسم الصيانة»): الفريق الميدانيّ ومهامّه كالموقع —
+    // حين يقول الخادم إنّه مفتوحٌ للحساب (المفتاح field_team)، ومقفلٌ بمكانه للموظّف (المرحلة الأولى للمدير وحده)، والمقيَّد بمديرٍ
+    // فرعيّ لا يراه (الخادم: available=false). FTTH القديم بلا قسم (الموقع noFtth). الرقم: بانتظار إسنادك.
+    if (FieldTeamState.visible && !ProviderService.isFtth)
+      AppModule(
+        id: 'field_team',
+        group: AppModuleGroup.manage,
+        unavailable: FieldTeamState.canManage ? null : 'لمدير الصفحة وحده الآن',
+        icon: LucideIcons.hardHat,
+        tone: AppTone.warning,
+        title: kFieldTeamTitle,
+        subtitle: switch (FieldTeamState.gate.value?.waiting ?? 0) {
+          0 => 'مهامّ الصيانة والتركيب تصل فريقك على هواتفهم، وتتابعها هنا',
+          final n => '$n بانتظار إسنادك — مهامّ فريق الصيانة والمبيعات',
+        },
+        badge: FieldTeamState.canManage ? FieldTeamState.gate.value?.waiting : null,
+        page: FieldTeamScreen.mergedPage,
       ),
     // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه
     // لموظّفٍ بلا «طلبات التفعيل»، والمقيَّد بمديرٍ فرعيّ بسببه (القسم يشمل كلّ مشتركي الحساب). الرقم: بانتظارك.

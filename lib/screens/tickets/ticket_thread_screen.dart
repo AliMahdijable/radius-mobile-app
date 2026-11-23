@@ -18,6 +18,7 @@ import '../desktop/desk_widgets.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import 'ticket_image.dart';
 import 'ticket_widgets.dart';
+import '../field_team/field_ticket_task.dart';
 
 /// محادثة تذكرة (المالك ٩ نوفمبر): رسائل المشترك والوكيل وأحداث الحالة، والردّ، وأزرار الحالة (قيد المعالجة · تمّ الحلّ · إغلاق ·
 /// إعادة فتح). الموظّف يردّ ويغيّر الحالة بـ«التذاكر — الردّ» وحدها؛ «كل الشركات» لشركةٍ غير المفتوحة للعرض.
@@ -348,6 +349,8 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
               ),
           ]),
         ],
+        // «حوّلها مهمّة» (٢٣ نوفمبر — «الصيانة والمبيعات»): مهمّة التذكرة أو تحويلها — لصفحة المدير المفتوحة وحدها (كالموقع)
+        if (!widget.viewOnly && widget.companyKey == null && !t.moved) FieldTicketTaskRow(ticketId: t.id, category: t.category),
       ]),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/field_team_api.dart';
 import '../../api/tickets_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
@@ -88,9 +89,12 @@ class TicketStatusChip extends StatelessWidget {
 
 /// صفٌّ مختصر في القائمة: المشترك، الحالة، النوع ومعاينة آخر رسالة، والوقت. غير المقروءة بإطارٍ ونقطة.
 class TicketTile extends StatelessWidget {
-  const TicketTile({super.key, required this.ticket, required this.onTap, this.compact = false});
+  const TicketTile({super.key, required this.ticket, required this.onTap, this.compact = false, this.task});
   final Ticket ticket;
   final VoidCallback onTap;
+
+  /// «حوّلها مهمّة»: مهمّة التذكرة إن كانت (شارة «مهمّة · حالتها»).
+  final FieldTicketTask? task;
 
   /// الجرس: ثلاثة أسطر لا أربعة — المعاينة (أو النوع حين لا معاينة) ثمّ النوع مع الوقت في سطرٍ واحد.
   final bool compact;
@@ -117,6 +121,19 @@ class TicketTile extends StatelessWidget {
             if (preview.isNotEmpty)
               Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
             if (t.lastActivityAt != null) Text(when, style: AppType.micro(color: AppColors.textLow)),
+            if (task != null)
+              Padding(
+                key: ValueKey('ticket-task-${t.id}'),
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(children: [
+                  Icon(LucideIcons.hardHat, size: 12, color: AppColors.brand),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text('مهمّة · ${task!.statusLabel}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.microBold(color: AppColors.brand)),
+                  ),
+                ]),
+              ),
           ];
     return Material(
       color: AppColors.surface,

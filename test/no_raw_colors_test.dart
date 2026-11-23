@@ -29,6 +29,8 @@ void main() {
           'بطاقة QR — الأبيض والحبر شرط لقراءة الرمز بالكاميرا',
       'lib/screens/telegram/sheets/telegram_link_generator_sheet.dart':
           'بطاقة QR — نفس السبب',
+      'lib/screens/field_team/field_team_qr.dart':
+          'رمز QR لرابط تطبيق فريق الصيانة — يُمسح بكاميرا الفنّي في الوضعين',
       'lib/screens/subscribers/sheets/location_picker_screen.dart':
           'طبقات فوق خريطة خارجيّة — تُقرأ على صور القمر الصناعي لا على '
               'أسطح التطبيق، فلا تتبع اللوحة',
@@ -83,6 +85,8 @@ void main() {
           'بطاقة QR — الأبيض والحبر شرط قراءة الرمز بالكاميرا',
       'lib/screens/telegram/sheets/telegram_link_generator_sheet.dart':
           'بطاقة QR — نفس السبب',
+      'lib/screens/field_team/field_team_qr.dart':
+          'رمز QR لرابط تطبيق فريق الصيانة — نفس السبب (يُمسح بكاميرا الفنّي في الوضعين)',
       'lib/screens/telegram/widgets/tg_account_card.dart':
           'رمز QR لربط حساب تلغرام — نفس السبب (يُمسح بكاميرا تلغرام في الوضعين)',
       'lib/screens/network_devices/widgets/brand_badge.dart':

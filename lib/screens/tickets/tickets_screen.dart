@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/field_team_api.dart';
 import '../../api/tickets_api.dart';
 import '../../models/merged_company.dart';
 import '../../theme/colors.dart';
@@ -46,6 +47,9 @@ class _TicketsScreenState extends State<TicketsScreen> {
   bool _failed = false;
   int _seq = 0;
 
+  /// «حوّلها مهمّة»: مهمّة كلّ تذكرةٍ ظاهرة (أوّل ١٠٠) — للمدير والقسم مفعّلٌ لصفحته المفتوحة.
+  Map<int, FieldTicketTask> _tasks = const {};
+
   /// «كل الشركات»: شركةٌ غير المفتوحة في القسم ⇒ للعرض (القسم يُدخَل قبل بناء الشاشة؛ الإطار يُقرأ في build).
   bool _viewOnly = false;
 
@@ -76,6 +80,18 @@ class _TicketsScreenState extends State<TicketsScreen> {
     });
     // الشارة تتبع ما رأيته هنا — للمفتوحة وحدها (شركةٌ أخرى معروضة هنا لا تكتب عدّادها فوق شارة المفتوحة)
     if (p != null && !(MergedSection.of(context)?.routed ?? false)) unawaited(TicketsState.ensureFresh(force: true));
+    if (p != null) unawaited(_loadTasks());
+  }
+
+  /// شارة «مهمّة · حالتها» على التذاكر الظاهرة — للمدير وحده، والقسم مفعّلٌ لصفحته، ولا شركةٌ موجَّهة.
+  Future<void> _loadTasks() async {
+    if (MergedSection.of(context)?.routed ?? false) return;
+    await FieldTeamState.ensureFresh();
+    if (!mounted || !FieldTeamState.visible || !FieldTeamState.canManage) return;
+    final seq = _seq;
+    final r = await FieldTeamApi.ticketTasks(_items.map((t) => t.id));
+    if (!mounted || seq != _seq || r == null) return;
+    setState(() => _tasks = r);
   }
 
   Future<void> _loadMore() async {
@@ -192,7 +208,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
         _center(LucideIcons.ticket, _emptyTitle(), 'حين يكتب مشتركٌ تذكرةً من تطبيقه تظهر هنا ويصلك إشعار')
       else ...[
         for (final t in _items) ...[
-          TicketTile(ticket: t, onTap: () => _open(t)),
+          TicketTile(ticket: t, task: _tasks[t.id], onTap: () => _open(t)),
           const SizedBox(height: Sp.sm),
         ],
         if (_hasMore)
