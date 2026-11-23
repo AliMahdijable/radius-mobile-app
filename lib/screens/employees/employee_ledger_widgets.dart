@@ -286,6 +286,7 @@ class EmployeeLedgerPanel extends StatelessWidget {
               details: [
                 if (m.date != null) iqDateLabel(m.date),
                 if (m.fromHand) 'من النقد الذي بيده',
+                if (m.fromOwn) 'من مال المدير الخاص',
                 if (m.byEmployee != null) 'سجّلها ${m.byEmployee}',
               ],
               note: m.voided ? (m.voidReason == null ? null : 'سبب الإلغاء: ${m.voidReason}') : m.note,
@@ -831,7 +832,15 @@ class _EmployeeMoveSheetState extends State<EmployeeMoveSheet> {
   final _instCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   bool _fromHand = false;
+
+  /// «من مالي الخاص» للسلفة والقرض (٢٣ نوفمبر) — يُعرض للمدير حين يقول الخادم own_allowed.
+  bool _fromOwn = false;
   bool _busy = false;
+
+  bool get _ownAllowed => EmployeeLedgerState.gate.value?.ownAllowed ?? false;
+
+  /// المصدر المرسَل: «من مالي الخاص» يُرسَل حين يُعرض وحده (لا يبقى مختاراً إن اختفى).
+  String get _source => _fromOwn && _ownAllowed ? 'own' : (_fromHand ? 'hand' : 'box');
 
   /// مفتاحٌ واحد لهذه الورقة: إعادة الضغط أو انقطاع الشبكة لا يسجّلان الحركة مرّتين.
   final String _ref = EmployeeLedgerApi.newRef('m');
@@ -864,11 +873,12 @@ class _EmployeeMoveSheetState extends State<EmployeeMoveSheet> {
     final amount = _amount;
     final kind = _kind;
     setState(() => _busy = true);
+    final source = _source;
     final r = await EmployeeLedgerApi.addMovement(
       widget.employeeId,
       kind: kind,
       amount: amount,
-      fromHand: _fromHand,
+      source: source,
       installment: kind == LedgerKind.loan ? _installment : null,
       note: _noteCtrl.text,
       clientRef: _ref,
@@ -877,9 +887,77 @@ class _EmployeeMoveSheetState extends State<EmployeeMoveSheet> {
     setState(() => _busy = false);
     if (!r.ok) {
       showSheetSnack(context, r.message ?? 'تعذّر تسجيل الحركة', isError: true);
+      // «من مالي الخاص» لم يعد متاحاً ⇒ يُسأل الخادم من جديد، والاختيار للصندوق
+      if ((r.code ?? '').startsWith('OWN_')) {
+        setState(() => _fromOwn = false);
+        EmployeeLedgerState.ensureFresh(force: true);
+      }
       return;
     }
-    Navigator.of(context).pop('سُجّلت: ${kind.label} ${_iqd(amount)}');
+    Navigator.of(context).pop('سُجّلت: ${kind.label} ${_iqd(amount)}${kind.needsSource && source == 'own' ? ' من مالك الخاص' : ''}');
+  }
+
+  /// ما يحدث للنقد بهذا المصدر (المالك: «تنبه للحركه كيف تسجل بالنظام بدقة») — كالموقع حرفاً (moveSourceNote).
+  String _sourceNote(int amount) {
+    final amt = amount > 0 ? ' ${_iqd(amount)}' : '';
+    final tail = _kind == LedgerKind.loan ? 'ويُستقطع قسطه مع كلّ راتب' : 'وتُستقطع من راتبه القادم';
+    switch (_source) {
+      case 'own':
+        return 'من مالك$amt — الصندوق و«تسوية مع الموظف» لا يتغيّران، $tail';
+      case 'hand':
+        return 'يأخذها من النقد الذي جمعه$amt — يسلّمك أقلّ في «تسوية مع الموظف»، $tail';
+      default:
+        return '${_kind == LedgerKind.loan ? 'يخرج' : 'تخرج'} من الصندوق$amt — ينقص متوقَّع «تسوية الحساب»، $tail';
+    }
+  }
+
+  /// خيارٌ من ثلاثة («من مالي الخاص» ظاهر): زرٌّ بعرض الورقة — لا تسع الثلاثة شريحةٌ واحدة على أضيق هاتف.
+  Widget _moveSourceOption(String key, String label) {
+    final on = _source == key;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.x6),
+      child: Semantics(
+        inMutuallyExclusiveGroup: true,
+        checked: on,
+        button: true,
+        child: Material(
+          color: on ? AppColors.brandSoftBg : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.icon),
+          child: InkWell(
+            key: ValueKey('emp-move-src-$key'),
+            borderRadius: BorderRadius.circular(R.icon),
+            onTap: _busy
+                ? null
+                : () => setState(() {
+                      _fromOwn = key == 'own';
+                      _fromHand = key == 'hand';
+                    }),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(R.icon),
+                border: Border.all(color: on ? AppColors.brand : AppColors.border, width: on ? BW.selected : BW.normal),
+              ),
+              child: Row(
+                children: [
+                  Icon(on ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                      size: 20, color: on ? AppColors.brand : AppColors.textLow),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: Text(label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.input(color: on ? AppColors.brand : AppColors.textBody)
+                            .copyWith(fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _kindButton(LedgerKind k) {
@@ -978,13 +1056,32 @@ class _EmployeeMoveSheetState extends State<EmployeeMoveSheet> {
             const SizedBox(height: Sp.lg),
             SheetSection(
               label: 'من أين يُدفع؟',
-              child: SheetSegmented(
-                key: const ValueKey('emp-move-source'),
-                labels: const ['من الصندوق', 'من النقد الذي بيده'],
-                selectedIndex: _fromHand ? 1 : 0,
-                onSelect: (i) {
-                  if (!_busy) setState(() => _fromHand = i == 1);
-                },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_ownAllowed)
+                    Column(
+                      key: const ValueKey('emp-move-sources'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _moveSourceOption('box', 'من الصندوق'),
+                        _moveSourceOption('hand', 'من النقد الذي بيده'),
+                        _moveSourceOption('own', 'من مالي الخاص'),
+                      ],
+                    )
+                  else
+                    SheetSegmented(
+                      key: const ValueKey('emp-move-source'),
+                      labels: const ['من الصندوق', 'من النقد الذي بيده'],
+                      selectedIndex: _fromHand ? 1 : 0,
+                      onSelect: (i) {
+                        if (!_busy) setState(() => _fromHand = i == 1);
+                      },
+                    ),
+                  const SizedBox(height: Sp.x6),
+                  // كيف تُسجَّل (المالك: «تنبه للحركه كيف تسجل بالنظام بدقة»)
+                  Text(_sourceNote(a), key: const ValueKey('emp-move-source-note'), style: AppType.muted(color: AppColors.textMid)),
+                ],
               ),
             ),
           ],

@@ -79,6 +79,7 @@ class LedgerMove {
     required this.label,
     required this.amount,
     this.fromHand = false,
+    this.fromOwn = false,
     this.note,
     this.date,
     this.voided = false,
@@ -92,6 +93,9 @@ class LedgerMove {
 
   /// دُفعت من النقد الذي بيد الموظف (لا من الصندوق).
   final bool fromHand;
+
+  /// سلفةٌ أو قرضٌ «من مالي الخاص» (٢٣ نوفمبر) — عليه كأيّ سلفة، ولا نقد خرج من الصندوق ولا ممّا بيده.
+  final bool fromOwn;
   final String? note;
 
   /// YYYY-MM-DD كما سجّلها الخادم (بتوقيت بغداد).
@@ -117,6 +121,7 @@ class LedgerMove {
       label: _s(raw['label']) ?? LedgerKind.of(kind)?.label ?? kind,
       amount: _n(raw['amount']),
       fromHand: raw['source'] == 'hand',
+      fromOwn: raw['source'] == 'own',
       note: _s(raw['note']),
       date: _s(raw['date']),
       voided: raw['status'] == 'voided',
@@ -606,7 +611,7 @@ class PayslipPreview {
 
 /// من أنا في هذه الميزة.
 class LedgerMe {
-  const LedgerMe({required this.isEmployee, required this.featureEnabled, required this.canManage, this.account});
+  const LedgerMe({required this.isEmployee, required this.featureEnabled, required this.canManage, this.account, this.ownAllowed = false});
   final bool isEmployee;
 
   /// الميزة مفتوحة لهذه الصفحة.
@@ -617,6 +622,9 @@ class LedgerMe {
 
   /// الموظّف: حسابه هو (قراءةً فقط) — null للمدير أو حين الميزة مطفأة.
   final LedgerAccount? account;
+
+  /// «من مالي الخاص» في ورقة السلفة والقرض (٢٣ نوفمبر) — للمدير والمفتاح مفتوح (من الخادم: own_allowed؛ غيابه = لا).
+  final bool ownAllowed;
 
   /// مفتوحة ويدير بها.
   bool get manages => featureEnabled && canManage;
@@ -675,6 +683,7 @@ class EmployeeLedgerApi {
         featureEnabled: on,
         canManage: data['can_manage'] == true,
         account: isEmp && on ? LedgerAccount.fromJson(data) : null,
+        ownAllowed: !isEmp && on && data['own_allowed'] == true,
       );
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 employee-ledger me: $e');
@@ -737,6 +746,7 @@ class EmployeeLedgerApi {
     required LedgerKind kind,
     required int amount,
     bool fromHand = false,
+    String? source,
     int? installment,
     String? note,
     required String clientRef,
@@ -745,7 +755,8 @@ class EmployeeLedgerApi {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/$id/movements', options: _open, data: {
         'kind': kind.wire,
         'amount': amount,
-        if (kind.needsSource) 'source': fromHand ? 'hand' : 'box',
+        // [source] box | hand | own (غائب ⇒ [fromHand])
+        if (kind.needsSource) 'source': source ?? (fromHand ? 'hand' : 'box'),
         if (kind == LedgerKind.loan) 'installment': installment,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         'client_ref': clientRef,

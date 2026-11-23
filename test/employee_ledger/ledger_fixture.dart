@@ -384,6 +384,9 @@ class LedgerServer implements HttpClientAdapter {
   Map<String, dynamic> settlePreviewExtra = const {};
   (int, Map<String, dynamic>)? salaryReply;
   final List<(int, Map<String, dynamic>)> moveReplies = [];
+
+  /// «من مالي الخاص» للسلفة والقرض (٢٣ نوفمبر): /me يرسل own_allowed للمدير.
+  bool meOwnAllowed = false;
   final List<(int, Map<String, dynamic>)> payReplies = [];
 
   /// قيمة `periods` في كلّ طلب معاينة (null = لم تُرسل).
@@ -405,7 +408,7 @@ class LedgerServer implements HttpClientAdapter {
     final m = o.method;
     if (p == '$base/me') {
       reply = meAsEmployee == null
-          ? (200, {'success': true, 'data': {'is_employee': false, 'feature_enabled': ledgerFeature, 'can_manage': true}})
+          ? (200, {'success': true, 'data': {'is_employee': false, 'feature_enabled': ledgerFeature, 'can_manage': true, if (meOwnAllowed) 'own_allowed': true}})
           : (200, {
               'success': true,
               'data': {

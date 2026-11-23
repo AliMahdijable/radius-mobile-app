@@ -1066,6 +1066,109 @@ void main() {
       expect([merged.empSalariesSum, merged.empSalariesOwnSum], [1000000, 625000]);
     });
 
+    // السلفة والقرض «من مالي الخاص» (المالك: «اي سوي للسلفة والقرض من مالي الخاص هم»)
+    testWidgets('السلفة: ثلاثة مصادر حين يقول الخادم own_allowed، وسطرٌ يقول ما يحدث للنقد، و«من مالي الخاص» يُرسَل', (t) async {
+      await phone(t);
+      EmployeeLedgerState.debugSet(const LedgerMe(isEmployee: false, featureEnabled: true, canManage: true, ownAllowed: true));
+      Object? result;
+      await opener(t, (c) => showEmployeeMoveSheet(c, employeeId: 7, name: 'أحمد'), (r) => result = r);
+      expect(key('emp-move-sources'), findsOneWidget);
+      expect(key('emp-move-source'), findsNothing, reason: 'الشريحة القديمة لا تسع ثلاثة');
+      for (final k in ['box', 'hand', 'own']) {
+        expect(key('emp-move-src-$k'), findsOneWidget);
+      }
+      expect(t.widget<Text>(key('emp-move-source-note')).data, 'تخرج من الصندوق — ينقص متوقَّع «تسوية الحساب»، وتُستقطع من راتبه القادم');
+      await t.enterText(find.descendant(of: key('emp-move-amount'), matching: find.byType(TextField)), '50');
+      await t.pump();
+      await t.tap(key('emp-move-src-own'));
+      await t.pump();
+      expect(t.widget<Text>(key('emp-move-source-note')).data, 'من مالك 50,000 د.ع — الصندوق و«تسوية مع الموظف» لا يتغيّران، وتُستقطع من راتبه القادم');
+      await t.tap(key('emp-move-src-hand'));
+      await t.pump();
+      expect(t.widget<Text>(key('emp-move-source-note')).data, 'يأخذها من النقد الذي جمعه 50,000 د.ع — يسلّمك أقلّ في «تسوية مع الموظف»، وتُستقطع من راتبه القادم');
+      await t.tap(key('emp-move-src-own'));
+      await t.pump();
+      await t.tap(find.text('تسجيل سلفة — 50,000 د.ع'));
+      await settle(t);
+      final b = server.bodiesOf('POST', '/api/v2/employee-ledger/7/movements').single;
+      expect([b['kind'], b['amount'], b['source']], ['advance', 50000, 'own']);
+      expect(result, 'سُجّلت: سلفة 50,000 د.ع من مالك الخاص');
+    });
+
+    testWidgets('القرض «من مالي الخاص»: السطر يقول القسط، ويُرسَل own بقسطه', (t) async {
+      await phone(t);
+      EmployeeLedgerState.debugSet(const LedgerMe(isEmployee: false, featureEnabled: true, canManage: true, ownAllowed: true));
+      await opener(t, (c) => showEmployeeMoveSheet(c, employeeId: 7, name: 'أحمد', initialKind: LedgerKind.loan), (_) {});
+      await t.enterText(find.descendant(of: key('emp-move-amount'), matching: find.byType(TextField)), '300');
+      await t.enterText(find.descendant(of: key('emp-move-installment'), matching: find.byType(TextField)), '50');
+      await t.pump();
+      await t.tap(key('emp-move-src-own'));
+      await t.pump();
+      expect(t.widget<Text>(key('emp-move-source-note')).data, 'من مالك 300,000 د.ع — الصندوق و«تسوية مع الموظف» لا يتغيّران، ويُستقطع قسطه مع كلّ راتب');
+      await t.tap(find.text('تسجيل قرض — 300,000 د.ع'));
+      await settle(t);
+      final b = server.bodiesOf('POST', '/api/v2/employee-ledger/7/movements').single;
+      expect([b['kind'], b['amount'], b['installment'], b['source']], ['loan', 300000, 50000, 'own']);
+    });
+
+    testWidgets('بلا own_allowed (موظّف الصلاحيّة أو خادمٌ أقدم): الشريحة القديمة، والسطر يقول ما يحدث، والحفظ بالصندوق', (t) async {
+      await phone(t);
+      EmployeeLedgerState.debugSet(const LedgerMe(isEmployee: false, featureEnabled: true, canManage: true));
+      await opener(t, (c) => showEmployeeMoveSheet(c, employeeId: 7, name: 'أحمد'), (_) {});
+      expect(key('emp-move-sources'), findsNothing);
+      expect(key('emp-move-source'), findsOneWidget);
+      expect(key('emp-move-src-own'), findsNothing);
+      await t.enterText(find.descendant(of: key('emp-move-amount'), matching: find.byType(TextField)), '20');
+      await t.pump();
+      expect(t.widget<Text>(key('emp-move-source-note')).data, 'تخرج من الصندوق 20,000 د.ع — ينقص متوقَّع «تسوية الحساب»، وتُستقطع من راتبه القادم');
+      await t.tap(find.text('تسجيل سلفة — 20,000 د.ع'));
+      await settle(t);
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/movements').single['source'], 'box');
+    });
+
+    testWidgets('OWN_OFF عند الحفظ: رسالة الخادم، والاختيار يعود للصندوق — والورقة باقية', (t) async {
+      await phone(t);
+      EmployeeLedgerState.debugSet(const LedgerMe(isEmployee: false, featureEnabled: true, canManage: true, ownAllowed: true));
+      Object? result = 'x';
+      server.moveReplies.add((409, {'success': false, 'code': 'OWN_OFF', 'message': '«من مالي الخاص» غير مفعّل لحسابك — اختر «من الصندوق» أو «من النقد الذي بيده»'}));
+      await opener(t, (c) => showEmployeeMoveSheet(c, employeeId: 7, name: 'أحمد'), (r) => result = r);
+      await t.enterText(find.descendant(of: key('emp-move-amount'), matching: find.byType(TextField)), '10');
+      await t.pump();
+      await t.tap(key('emp-move-src-own'));
+      await t.pump();
+      await t.tap(find.text('تسجيل سلفة — 10,000 د.ع'));
+      await settle(t, frames: 6);
+      expect(find.textContaining('غير مفعّل لحسابك'), findsWidgets, reason: 'رسالة الخادم');
+      expect(t.widget<Text>(key('emp-move-source-note')).data, startsWith('تخرج من الصندوق 10,000 د.ع'), reason: 'الاختيار عاد للصندوق');
+      await settle(t, frames: 30);
+      expect(result, 'x', reason: 'الورقة باقية');
+      expect(server.bodiesOf('POST', '/api/v2/employee-ledger/7/movements').single['source'], 'own');
+    });
+
+    test('/me: own_allowed للمدير يُقرأ، وغيابه = لا', () async {
+      server.meOwnAllowed = true;
+      expect((await EmployeeLedgerApi.me())!.ownAllowed, isTrue);
+      server.meOwnAllowed = false;
+      expect((await EmployeeLedgerApi.me())!.ownAllowed, isFalse);
+    });
+
+    testWidgets('سطر الحركة: سلفةٌ «من مالي الخاص» تقول «من مال المدير الخاص»', (t) async {
+      await phone(t);
+      final json = ledgerAccountJson();
+      final moves = (json['movements'] as List).cast<Map<String, dynamic>>();
+      final adv = moves.firstWhere((m) => m['kind'] == 'advance');
+      adv['source'] = 'own';
+      await t.pumpWidget(app(Scaffold(
+        body: SingleChildScrollView(
+          child: EmployeeLedgerPanel(account: LedgerAccount.fromJson(json)!, onMove: () {}, onPayslip: () {}, onVoidMove: (_) {}, onVoidPayslip: (_) {}),
+        ),
+      )));
+      await t.pump();
+      expect(find.descendant(of: key('emp-ledger-move-${adv['id']}'), matching: find.textContaining('من مال المدير الخاص')), findsOneWidget);
+      expect(LedgerMove.fromJson(adv)!.fromOwn, isTrue);
+      expect(LedgerMove.fromJson({...adv, 'source': 'hand'})!.fromOwn, isFalse);
+    });
+
     test('النماذج: مصادر الخادم تُقرأ (ومصدرٌ مجهول يُسقط)، والكشف والصرفيّة والتقرير يعرفون «من مالي الخاص»', () {
       final p = PayslipPreview.fromJson(pv('manager')..['sources'] = [...(contract['manager'] as List), {'key': 'card', 'label': 'بطاقة'}])!;
       expect(p.sources.map((s) => s.key).toList(), ['box', 'own', 'hand']);
