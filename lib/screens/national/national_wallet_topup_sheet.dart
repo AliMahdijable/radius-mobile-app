@@ -241,6 +241,7 @@ class _NationalWalletTopupSheetState extends State<NationalWalletTopupSheet> {
         label: 'طريقة دفع المشترك',
         gap: Sp.sm,
         child: SheetChoiceTiles(
+          compact: true,
           labels: const ['نقداً', 'دين', 'جزئيّ'],
           icons: const [LucideIcons.banknote, LucideIcons.creditCard, LucideIcons.chartPie],
           selectedIndex: _pay,

@@ -1462,6 +1462,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         children: [
           if (_methods.canChoose)
             SheetChoiceTiles(
+              compact: true,
               labels: [
                 'cards.method_credit'.tr(),
                 // شركات الكارتات: «كارت (0)» يوحي بالمنع والرقم يُكتب ⇒ «كارت» وحده حين لا مخزون
@@ -1739,6 +1740,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetChoiceTiles(
+            compact: true,
             labels: [for (final k in keys) switch (k) { 'card' => 'بطاقة', 'cust' => 'محفظة المشترك', _ => 'محفظتي' }],
             icons: [
               for (final k in keys)
@@ -2337,6 +2339,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetChoiceTiles(
+            compact: true,
             labels: const ['رصيد أونلاين', 'كارت'],
             icons: const [LucideIcons.wallet, LucideIcons.creditCard],
             selectedIndex: isDeposit ? 0 : 1,

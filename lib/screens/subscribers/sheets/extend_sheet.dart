@@ -468,6 +468,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
             label: 'sheets.payment_method'.tr(),
             gap: Sp.sm,
             child: SheetChoiceTiles(
+              compact: true,
               labels: [
                 'الرصيد',
                 _selectedPoints > 0

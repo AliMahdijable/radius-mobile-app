@@ -943,10 +943,13 @@ class SheetChoiceTiles extends StatelessWidget {
                   compact ? const SizedBox(width: Sp.x6) : const SizedBox(height: Sp.x6),
                   Flexible(
                     fit: FlexFit.loose,
+                    // الصغيرة: تسميةٌ لا تتّسع بجانب أيقونتها تنزل سطراً ثانياً لا تُقصّ («محفظة المشترك» بثلاث بلاطاتٍ على ٣٦٠، و«رصيد
+                    // أونلاين» على ٣٢٠ × ١٫٢ — قاعدة المالك: لا نصّ يُقصّ)؛ والقصيرة سطرٌ واحد كما كانت
                     child: Text(
                     labels[i],
-                    maxLines: 1,
+                    maxLines: compact ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: AppType.body(
                       color: on ? AppColors.onBrand : AppColors.textBody,
                     ).copyWith(

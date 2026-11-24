@@ -740,6 +740,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetChoiceTiles(
+            compact: true,
             labels: [
               for (final m in methods)
                 switch (m) {
@@ -903,6 +904,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetChoiceTiles(
+            compact: true,
             labels: [
               'sheets.pay_cash'.tr(),
               'sheets.pay_debt'.tr(),

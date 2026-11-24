@@ -1558,6 +1558,7 @@ class _RenewRowCard extends StatelessWidget {
           // تُلوّن الحدّ بلون الطريقة فيبدو الصفّ ثلاثة تنبيهات متجاورة.
           // الطقم يُبرز المختار وحده ويُبقي الباقي محايداً.
           SheetChoiceTiles(
+            compact: true,
             labels: [
               for (final m in _PayMethod.values) m.label,
             ],
