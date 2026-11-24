@@ -14,6 +14,8 @@ import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
+import '../../../services/pay_kinds.dart';
+import '../../../services/transfer_pay.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/provider_limits.dart';
 import '../../../theme/colors.dart';
@@ -122,6 +124,9 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
+    // «طريقة الدفع» (٢٤ نوفمبر): الورقة تعرضها حين تُفتح «الحوالات» للصفحة
+    TransferPay.available.addListener(_onTp);
+    unawaited(TransferPay.refresh());
     unawaited(_start());
   }
 
@@ -129,6 +134,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
   void dispose() {
     PermissionsService.changes.removeListener(_onPerms);
     MergedMode.active.removeListener(_onMerged);
+    TransferPay.available.removeListener(_onTp);
     super.dispose();
   }
 
@@ -141,6 +147,11 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     if (!mounted) return;
     setState(() => _f = _lock(f));
     _loadIfAllowed();
+  }
+
+  /// «طريقة الدفع» (٢٤ نوفمبر): الحوالات تُفتح للصفحة بعد التحميل ⇒ الورقة تُظهرها والفلتر المحفوظ يعمل (محلّيّ — بلا طلب).
+  void _onTp() {
+    if (mounted) setState(() {});
   }
 
   void _onPerms() {
@@ -398,6 +409,19 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     return company == null ? name : '$name · $company';
   }
 
+  /// «طريقة الدفع» (٢٤ نوفمبر): لصفحةٍ فُتحت لها «الحوالات»، وفي «كل الشركات» حين بها ساس فور — وغيرها كما كان.
+  List<(String, String)> get _payKinds =>
+      (_merged ? _countable.any((c) => c.provider == MergedProvider.sas4) : TransferPay.available.value) ? PayKinds.options() : const [];
+
+  /// المختارة منها مرتّبةً — null بلا فلتر (أو صفحةٌ لا تعرضه).
+  List<String>? get _pays {
+    if (_payKinds.isEmpty) return null;
+    final p = PayKinds.sorted(_f?.pays ?? const <String>{});
+    return p.isEmpty ? null : p;
+  }
+
+  Set<String> get _paysSet => {...?_pays};
+
   /// سطور الشاشة بعد النوع، وشركة كلّ سطر، والسابقة (null: لا مقارنة)، وهل اكتملت.
   ({List<ActivityRow> rows, Map<ActivityRow, String?> co, List<ActivityRow>? prev, bool complete})? _view() {
     final kinds = _f!.types;
@@ -405,9 +429,9 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       final r = _rows;
       if (r == null) return null;
       return (
-        rows: _byPackage(ActivationsView.filter(r, kinds), null),
+        rows: _byPackage(ActivationsView.filter(r, kinds, pays: _paysSet), null),
         co: LinkedHashMap<ActivityRow, String?>.identity(),
-        prev: _prev == null ? null : _byPackage(ActivationsView.filter(_prev!, kinds), null),
+        prev: _prev == null ? null : _byPackage(ActivationsView.filter(_prev!, kinds, pays: _paysSet), null),
         complete: _complete,
       );
     }
@@ -430,9 +454,9 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     }
     final prevReady = inc.every((co) => co.prevDone && co.prev != null);
     return (
-      rows: ActivationsView.filter([for (final t in tagged) t.r], kinds),
+      rows: ActivationsView.filter([for (final t in tagged) t.r], kinds, pays: _paysSet),
       co: map,
-      prev: prevReady ? ActivationsView.filter([for (final co in inc) ..._byPackage(co.prev!, co.c.key)], kinds) : null,
+      prev: prevReady ? ActivationsView.filter([for (final co in inc) ..._byPackage(co.prev!, co.c.key)], kinds, pays: _paysSet) : null,
       complete: inc.every((co) => co.complete),
     );
   }
@@ -479,6 +503,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
               ),
           ],
           types: [for (final e in ActivationsView.kindKeys.entries) (e.key, ActivationsView.kindLabel(e.value))],
+          payKinds: _payKinds,
           packages: _packagesInPeriod,
         );
       }),
@@ -724,6 +749,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       out.add(RpChip('الباقة: ${[for (final k in f.packages) _packageLabel(k)].join('، ')}',
           onRemove: () => _apply(f.copyWith(packages: const {}))));
     }
+    final pays = _pays;
+    if (pays != null) out.add(RpChip(PayKinds.chip(pays), onRemove: () => _apply(f.copyWith(pays: const {}))));
     return out;
   }
 
@@ -907,7 +934,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
         lines.add(RpCompanyLine(company: _rp(co.c, note: co.reason), state: RpCompanyState.failed));
         outside.add('${co.c.name} (${co.reason ?? 'تعذّرت'})');
       } else {
-        final t = ActivationsView.totals(ActivationsView.filter(_byPackage(co.rows!, co.c.key), _f!.types));
+        final t = ActivationsView.totals(ActivationsView.filter(_byPackage(co.rows!, co.c.key), _f!.types, pays: _paysSet));
         lines.add(RpCompanyLine(
           company: _rp(co.c),
           a: t.known ? t.cash : null,

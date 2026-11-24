@@ -24,7 +24,10 @@ class MergedFinancePart {
 
 /// فلاتر شركةٍ واحدة في التقرير الموحّد — null في كلٍّ منها = بلا ذلك الفلتر.
 class FinanceCompanyFilter {
-  const FinanceCompanyFilter({this.userIds, this.userManager, this.employeeId, this.employeeIds, this.strictTypes, this.strictPackages});
+  const FinanceCompanyFilter({this.userIds, this.userManager, this.employeeId, this.employeeIds, this.strictTypes, this.strictPackages, this.pay});
+
+  /// «طريقة الدفع» (٢٤ نوفمبر) — شركةٌ لم يطبّقه خادمها تُسمّى خارج الأرقام ([PayKinds.unsupported]).
+  final List<String>? pay;
 
   /// فلتر النوع بالوضع الصارم — كلّ شركةٍ بعلامة ردّها ([FinanceReport.typeFilter]).
   final List<String>? strictTypes;
@@ -118,6 +121,7 @@ class MergedFinanceApi {
           withPackageCost: isCostBearingAdminId(c.adminId),
           strictTypes: filter?.strictTypes,
           strictPackages: filter?.strictPackages,
+          pay: filter?.pay,
         ),
       );
 

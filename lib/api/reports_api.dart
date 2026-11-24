@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/util/bidi.dart';
 import '../core/util/edit_summary.dart';
+import '../services/pay_kinds.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
 import 'transfer_pay_api.dart' show CashByViaData;
@@ -608,9 +609,12 @@ class FinanceTypeRow {
 /// kpis/perAdmin/timeseries/stacked/recentLogs كلّها مقيّدةٌ به، فتُعرض كما هي (لا حسابٌ من السطور ولا «من آخر 1000»). غيابها (خادمٌ قبل
 /// النشر، FTTH القديم) ⇒ الحساب من السطور كما كان.
 class FinanceTypeFilter {
-  const FinanceTypeFilter({required this.types, this.packages, this.expenses = false});
+  const FinanceTypeFilter({required this.types, this.packages, this.expenses = false, this.pay});
   final List<String> types;
   final List<String>? packages;
+
+  /// «طريقة الدفع» كما طبّقها الخادم (type_filter.pay، ٢٤ نوفمبر) — null بلا فلترها.
+  final List<String>? pay;
 
   /// الصرفيّات داخلةٌ في الأرقام (ADMIN_EXPENSE بين الأنواع ولا باقة).
   final bool expenses;
@@ -619,10 +623,12 @@ class FinanceTypeFilter {
     if (j is! Map || j['strict'] != true) return null;
     final t = j['types'];
     final p = j['packages'];
+    final pv = j['pay'];
     return FinanceTypeFilter(
       types: t is List ? [for (final x in t) '$x'] : const [],
       packages: p is List ? [for (final x in p) '$x'] : null,
       expenses: j['expenses'] == true,
+      pay: pv is List ? [for (final x in pv) '$x'] : null,
     );
   }
 }
@@ -695,6 +701,7 @@ class ActivityRow {
     this.packageName,
     this.partialUnpaid = 0,
     this.editSummary,
+    this.payKind,
   });
 
   /// مبلغ الحركة بقاعدة التقرير الماليّ نفسها (الخادم `money_amount` = moneySql.amount — ٢٢ نوفمبر، da6fec4): المُزامَن من الساس
@@ -709,6 +716,9 @@ class ActivityRow {
 
   /// سطر تعديلٍ بما تغيّر «من … إلى …» (action_data — edit_summary.dart)؛ null = لا تفاصيل.
   final String? editSummary;
+
+  /// «طريقة الدفع» (٢٤ نوفمبر — الخادم pay_kind): cash · zaincash · master · other · debt، أو null.
+  final String? payKind;
 
   /// غير المدفوع من «نقدي جزئي» = (user_price أو price) − partial_cash_amount، لا أقلّ من صفر — partialUnpaidExpr الخادم حرفاً؛
   /// يدخل «بالدين» كما يضمّه التقرير الماليّ إلى «تفعيل بالدين».
@@ -767,6 +777,7 @@ class ActivityRow {
       packageName: _str(_data(j)['package_name']),
       partialUnpaid: partialUnpaidOf(_data(j), j['action_description']?.toString() ?? ''),
       editSummary: editSummaryOf(_data(j)),
+      payKind: PayKinds.of(j['pay_kind']),
     );
   }
 
@@ -922,6 +933,7 @@ class StatementRow {
     this.adminName,
     this.notes,
     this.balanceAfter,
+    this.payKind,
   });
   final int id;
   final String createdAt;
@@ -935,6 +947,9 @@ class StatementRow {
   /// ⚠️ `null` ليس صفراً: حركةٌ لا تمسّ الرصيد، أو سجلٌّ قديم بلا القيمة.
   /// الواجهة تُخفي السطر حينها بدل أن تعرض «الدين: 0» — وهو رقمٌ يكذب.
   final num? balanceAfter;
+
+  /// «طريقة الدفع» (٢٤ نوفمبر — الخادم pay_kind): cash · zaincash · master · other · debt، أو null.
+  final String? payKind;
 
   static StatementRow? fromJson(Map<String, dynamic> j) {
     final rawId = j['id']?.toString() ?? '';
@@ -951,6 +966,7 @@ class StatementRow {
       notes: j['notes']?.toString(),
       balanceAfter:
           j['balance_after'] == null ? null : FinanceKPIs._n(j['balance_after']),
+      payKind: PayKinds.of(j['pay_kind']),
     );
   }
 }
@@ -1056,8 +1072,12 @@ class ReportsApi {
     bool withPackageCost = false,
     List<String>? strictTypes,
     List<String>? strictPackages,
+
+    /// «طريقة الدفع» (٢٤ نوفمبر): يُرسل مع strict_types ويُشترط صداه type_filter.pay ([PayKinds.honored]).
+    List<String>? pay,
   }) async {
-    final strict = (strictTypes?.isNotEmpty ?? false) || (strictPackages?.isNotEmpty ?? false);
+    final payOn = pay != null && pay.isNotEmpty;
+    final strict = (strictTypes?.isNotEmpty ?? false) || (strictPackages?.isNotEmpty ?? false) || payOn;
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
@@ -1066,6 +1086,7 @@ class ReportsApi {
         if (strict) 'strict_types': '1',
         if (strictTypes != null && strictTypes.isNotEmpty) 'action_types': strictTypes.join(','),
         if (strictPackages != null && strictPackages.isNotEmpty) 'packages': jsonEncode(strictPackages),
+        if (payOn) 'pay': PayKinds.sorted(pay).join(','),
         // ما غطّته تسويةٌ فعّالة مخفيٌّ افتراضيّاً من الخادم: الأرقام
         // والسلسلة وآخر الحركات والصرفيات معاً (§٤).
         if (includeArchived) 'include_archived': '1',
@@ -1097,6 +1118,10 @@ class ReportsApi {
       // اثنان فأكثر بلا علامة الخادم ⇒ لا أرقام غير مفلترة كأنّها مفلترة
       if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], data)) {
         return (ok: false, data: null, error: kEmployeesUnsupported);
+      }
+      // «طريقة الدفع» بلا صدى الخادم ⇒ لا أرقام غير مفلترة كأنّها مفلترة
+      if (payOn && !PayKinds.honored(pay, data['type_filter'] is Map ? (data['type_filter'] as Map)['pay'] : null)) {
+        return (ok: false, data: null, error: PayKinds.unsupported);
       }
       final kpisRaw = data['kpis'];
       final logsRaw = data['recentLogs'];
@@ -1237,6 +1262,9 @@ class ReportsApi {
 
     /// اثنان فأكثر ⇒ employee_ids ويُشترط employee_filter في الردّ ([employeeFilterHonored]).
     List<int>? employeeIds,
+
+    /// «طريقة الدفع» (٢٤ نوفمبر): الخادم يفلتر بها ويُعيد pay_filter — بلا صداه لا سطور غير مفلترة.
+    List<String>? pay,
     int pageSize = 2000,
     int maxPages = 25,
   }) async {
@@ -1259,6 +1287,7 @@ class ReportsApi {
             'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
           if (userManager != null && userManager.isNotEmpty) 'user_manager': userManager,
           ...employeeQuery([if (employeeId != null) employeeId, ...?employeeIds]),
+          if (pay != null && pay.isNotEmpty) 'pay': PayKinds.sorted(pay).join(','),
         };
         final r = await _activitiesPage(qp);
         final body = r.data ?? const {};
@@ -1267,6 +1296,9 @@ class ReportsApi {
         }
         if (!employeeFilterHonored([if (employeeId != null) employeeId, ...?employeeIds], body)) {
           return (ok: false, rows: const <ActivityRow>[], error: kEmployeesUnsupported, complete: false);
+        }
+        if (pay != null && pay.isNotEmpty && !PayKinds.honored(pay, body['pay_filter'])) {
+          return (ok: false, rows: const <ActivityRow>[], error: PayKinds.unsupported, complete: false);
         }
         final list = body['data'] is List ? body['data'] as List : const [];
         var got = 0;

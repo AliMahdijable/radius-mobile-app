@@ -10,6 +10,8 @@ import '../../../core/util/format.dart';
 import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../services/merged_mode.dart';
+import '../../../services/pay_kinds.dart';
+import '../../../services/transfer_pay.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -78,8 +80,25 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
     unawaited(OrderPrefs.load(OrderPrefs.rowsKey(_id), _rowFields, rpDateDesc).then((v) {
       if (mounted && v != _rowSort) setState(() => _rowSort = v);
     }));
+    // «طريقة الدفع» (٢٤ نوفمبر): الورقة تعرضها حين تُفتح «الحوالات» للصفحة (الفلتر محلّيّ — بلا طلب)
+    TransferPay.available.addListener(_onTp);
+    unawaited(TransferPay.refresh());
     unawaited(_start());
   }
+
+  @override
+  void dispose() {
+    TransferPay.available.removeListener(_onTp);
+    super.dispose();
+  }
+
+  void _onTp() {
+    if (mounted) setState(() {});
+  }
+
+  /// لكشف الشركة المفتوحة حين فُتحت لها «الحوالات».
+  List<(String, String)> get _payKinds => widget.companyKey == null && TransferPay.available.value ? PayKinds.options() : const [];
+  Set<String> get _paysSet => _payKinds.isEmpty ? const {} : (_f?.pays ?? const {});
 
   /// «رتّب حسب»: نقرة حقل — يرتّب أو يقلب، ويرجع لأوّل الصفحة، ويُحفظ للتقرير.
   void _pickSort(String key) {
@@ -162,6 +181,7 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
         showPeople: false,
         showCompare: false,
         types: [for (final t in kAccountStatementActionTypes) (t.key, t.displayLabel)],
+        payKinds: _payKinds,
       ),
     );
     if (v != null && mounted) _apply(v);
@@ -169,12 +189,15 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
 
   List<RpChip> _chips() {
     final f = _f!;
-    if (f.types.isEmpty) return const [];
     final labels = [
       for (final t in kAccountStatementActionTypes)
         if (f.types.contains(t.key)) t.displayLabel,
     ];
-    return [RpChip('النوع: ${labels.join('، ')}', onRemove: () => _apply(f.copyWith(types: const [])))];
+    final pays = _paysSet;
+    return [
+      if (f.types.isNotEmpty) RpChip('النوع: ${labels.join('، ')}', onRemove: () => _apply(f.copyWith(types: const []))),
+      if (pays.isNotEmpty) RpChip(PayKinds.chip(pays), onRemove: () => _apply(f.copyWith(pays: const {}))),
+    ];
   }
 
   // ═══════════════ السطور ═══════════════
@@ -205,6 +228,9 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
   }
 
   List<StatementRow> _search(List<StatementRow> rows) {
+    // «طريقة الدفع» قبل البحث — سطوره بطريقتها (pay_kind)
+    final pays = _paysSet;
+    if (pays.isNotEmpty) rows = rows.where((r) => pays.contains(r.payKind)).toList();
     final needle = (normalizeDigits(_q) ?? '').trim().toLowerCase();
     if (needle.isEmpty) return rows;
     bool hit(String? s) => (normalizeDigits(s) ?? '').toLowerCase().contains(needle);

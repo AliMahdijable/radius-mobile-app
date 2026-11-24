@@ -358,7 +358,7 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
             child: Row(
               children: [
                 // «المدراء» تظهر حين في الفترة حركاتٌ لهم داخلة بالحساب وحده
-                for (final f in BalanceFilter.values.where((f) => f != BalanceFilter.managers || (_counts?[f] ?? 0) > 0)) ...[
+                for (final f in BalanceFilter.values.where((f) => (f != BalanceFilter.managers && !f.isVia) || (_counts?[f] ?? 0) > 0)) ...[
                   if (f != BalanceFilter.values.first) const SizedBox(width: Sp.x6),
                   SheetQuickChip(
                     key: ValueKey('bal-filter-${f.wire}'),
@@ -515,7 +515,12 @@ class BalanceMoveRow extends StatelessWidget {
         tone = switch (m.pay) { BalancePay.cash => AppTone.success, BalancePay.credit => AppTone.warning, BalancePay.partial => AppTone.brand };
         icon = switch (m.pay) { BalancePay.cash => LucideIcons.banknote, BalancePay.credit => LucideIcons.clock, BalancePay.partial => LucideIcons.chartPie };
         title = m.username;
-        tags = [(text: m.pay.label, tone: tone), if (m.afterClose) (text: 'بعد الإغلاق — ربح', tone: AppTone.brand)];
+        final via = balanceViaText(m.via, m.viaName);
+        tags = [
+          (text: m.pay.label, tone: tone),
+          if (via != null) (text: via, tone: AppTone.brand),
+          if (m.afterClose) (text: 'بعد الإغلاق — ربح', tone: AppTone.brand),
+        ];
         amount = balanceIqd(m.price);
         details = [
           m.package,
@@ -529,7 +534,8 @@ class BalanceMoveRow extends StatelessWidget {
         tone = AppTone.success;
         icon = LucideIcons.handCoins;
         title = m.username;
-        tags = [(text: 'تسديد دين', tone: AppTone.success)];
+        final via = balanceViaText(m.via, m.viaName);
+        tags = [(text: 'تسديد دين', tone: AppTone.success), if (via != null) (text: via, tone: AppTone.brand)];
         amount = balanceSigned(m.amount, sign: '+');
         amountColor = AppTone.success.onSoft;
         details = [if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];

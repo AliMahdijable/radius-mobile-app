@@ -16,6 +16,8 @@ import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
+import '../../../services/pay_kinds.dart';
+import '../../../services/transfer_pay.dart';
 import '../../../services/provider_service.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
@@ -145,6 +147,9 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
+    // «طريقة الدفع» (٢٤ نوفمبر): الورقة تعرضها حين تُفتح «الحوالات» للصفحة
+    TransferPay.available.addListener(_onTp);
+    unawaited(TransferPay.refresh());
     unawaited(_start());
   }
 
@@ -152,6 +157,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
   void dispose() {
     PermissionsService.changes.removeListener(_onPerms);
     MergedMode.active.removeListener(_onMerged);
+    TransferPay.available.removeListener(_onTp);
     super.dispose();
   }
 
@@ -170,6 +176,13 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     if (!mounted) return;
     setState(() => _f = f.copyWith(compare: false));
     _loadIfAllowed();
+  }
+
+  /// «طريقة الدفع» (٢٤ نوفمبر): الحوالات تُفتح للصفحة بعد التحميل ⇒ الورقة تُظهرها، والفلتر المحفوظ يُطبَّق بإعادة الطلب.
+  void _onTp() {
+    if (!mounted) return;
+    setState(() {});
+    if (_f?.pays.isNotEmpty ?? false) unawaited(_load());
   }
 
   void _onPerms() {
@@ -265,6 +278,17 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     });
   }
 
+  /// «طريقة الدفع» (٢٤ نوفمبر): لصفحةٍ فُتحت لها «الحوالات»، وفي «كل الشركات» حين بها ساس فور — وغيرها كما كان.
+  List<(String, String)> get _payKinds =>
+      (_merged ? _countable.any((c) => c.provider == MergedProvider.sas4) : TransferPay.available.value) ? PayKinds.options() : const [];
+
+  /// المختارة منها مرتّبةً — null بلا فلتر (أو صفحةٌ لا تعرضه).
+  List<String>? get _pays {
+    if (_payKinds.isEmpty) return null;
+    final p = PayKinds.sorted(_f?.pays ?? const <String>{});
+    return p.isEmpty ? null : p;
+  }
+
   /// أنواع السجلّ المطلوبة من الخادم (بلا الصرفيّات — من قائمتها) — null: كلّ الأنواع عدا الإشعارات.
   List<String>? get _logTypes {
     final t = _f!.types.where((x) => !ActivityLogView.expenseTypes.contains(x)).toList();
@@ -275,6 +299,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
   /// المشترك أو بمديرٍ غير صاحبها (كانت تظهر تحت فلتر مديرٍ فرعيّ وليست له)؛ وبفلتر الموظّف صرفيّاته وحده.
   bool get _wantExpenses {
     final f = _f!;
+    // «طريقة الدفع»: لا طريقة لصرفية ⇒ لا تُدمج تحت فلترها (والخادم يُسقطها كذلك)
+    if (_pays != null) return false;
     // ايرث لنك: صرفيّاتها لا تُفرز بالموظّف (خادمها، بالواحد وبالأكثر — d9 ٢٣ نوفمبر) ⇒ لا تُدمج تحت فلتر موظّف، ويُقال ([_elNote])
     if (_elEmployeeFilter) return false;
     if (f.types.isNotEmpty && !f.types.any(ActivityLogView.expenseTypes.contains)) return false;
@@ -294,6 +320,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       userIds: ids,
       userManager: _ownerUsername(group),
       employeeIds: _employeeIds(group),
+      pay: _pays,
       maxPages: _maxPages,
     );
   }
@@ -469,6 +496,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
               ),
           ],
           types: ActivityLogView.typeOptions,
+          payKinds: _payKinds,
           showCompare: false,
         );
       }),
@@ -688,6 +716,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       out.add(RpChip('النوع: ${[for (final t in f.types) ActivityLogView.typeLabel(t)].join('، ')}',
           onRemove: () => _apply(f.copyWith(types: const []))));
     }
+    final pays = _pays;
+    if (pays != null) out.add(RpChip(PayKinds.chip(pays), onRemove: () => _apply(f.copyWith(pays: const {}))));
     return out;
   }
 

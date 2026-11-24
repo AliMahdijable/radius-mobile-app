@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../services/pay_kinds.dart';
 import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_sheets.dart';
@@ -63,6 +64,11 @@ class RpPrefs {
           for (final x in (j['pk'] is List ? j['pk'] as List : const []))
             if (sameOpen || !'$x'.startsWith('|')) '$x',
         },
+        // «طريقة الدفع» (٢٤ نوفمبر) — المحفوظ غير المعروف يُسقط
+        pays: {
+          for (final x in (j['pv'] is List ? j['pv'] as List : const []))
+            if (PayKinds.keys.contains('$x')) '$x',
+        },
       );
     } catch (_) {
       return RpFilterValue(range: RpRange.of(fallback, now: now));
@@ -84,6 +90,7 @@ class RpPrefs {
           'e': {for (final e in v.employees.entries) e.key: e.value.toList()},
           't': v.types,
           'pk': v.packages.toList(),
+          'pv': v.pays.toList(),
           'ot': openTag ?? '',
         }),
       );

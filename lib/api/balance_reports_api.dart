@@ -83,6 +83,14 @@ enum BalancePay {
   static BalancePay of(Object? v) => switch ('$v') { 'credit' => credit, 'partial' => partial, _ => cash };
 }
 
+/// «حوالة ماستر» / «حوالة زين كاش» / «حوالة <اسمها>» — null للكاش (٢٤ نوفمبر).
+String? balanceViaText(String? via, String? name) => switch (via) {
+      'zaincash' => 'حوالة زين كاش',
+      'master' => 'حوالة ماستر',
+      'other' => 'حوالة ${(name ?? '').trim().isEmpty ? 'أخرى' : name!.trim()}',
+      _ => null,
+    };
+
 /// فلاتر حركات الفترة — بترتيب عرضها.
 enum BalanceFilter {
   all('all', 'الكل'),
@@ -93,12 +101,20 @@ enum BalanceFilter {
   paid('paid', 'كان دين وتسدّد'),
   payments('payments', 'التسديدات'),
 
+  /// «الحوالات» (٢٤ نوفمبر — الخادم paykind1): التفعيلات التي دُفع منها بها وتسديداتها — يأتي عددها حين تُستعمل، فتُعرض حينها.
+  zaincash('zaincash', 'زين كاش'),
+  master('master', 'ماستر'),
+  other('other', 'حوالة أخرى'),
+
   /// حركات المدراء الفرعيّين — يأتي عدده حين تدخل الحساب وحده (مفتاحٌ عند الخادم)، فيُعرض حين فيه حركات.
   managers('managers', 'المدراء');
 
   const BalanceFilter(this.wire, this.label);
   final String wire;
   final String label;
+
+  /// فلتر طريقة حوالة — يظهر حين لها حركاتٌ بالفترة.
+  bool get isVia => this == zaincash || this == master || this == other;
 }
 
 /// عمليّة الرصيد مع مديرٍ فرعيّ: شحنٌ نقديّ («طبّلك»)، شحنٌ آجل (دينٌ من ديون الفترة)، تسديدٌ من دينه، أو سحب رصيدٍ منه (ينقص «طبّلك»)،
@@ -525,6 +541,8 @@ sealed class BalanceMove {
           lastPaidAtMs: _ms(j['last_paid_at_ms']),
           afterClose: j['after_close'] == true,
           by: _s(j['by']),
+          via: _s(j['via']),
+          viaName: _s(j['via_name']),
         );
       case 'payment':
         return BalancePayMove(
@@ -535,6 +553,8 @@ sealed class BalanceMove {
           afterClose: j['after_close'] == true,
           advance: j['advance'] == true,
           by: _s(j['by']),
+          via: _s(j['via']),
+          viaName: _s(j['via_name']),
         );
       case 'adjust':
         return BalanceAdjustMove(key: key, atMs: at, amount: _n(j['amount']), source: BalanceSource.of(j['source']), note: _s(j['note']));
@@ -583,7 +603,13 @@ class BalanceActMove extends BalanceMove {
     this.lastPaidAtMs,
     required this.afterClose,
     this.by,
+    this.via,
+    this.viaName,
   });
+
+  /// «الحوالات» (٢٤ نوفمبر): طريقة ما استُلم منها — zaincash · master · other (+ اسمها)، والكاش null.
+  final String? via;
+  final String? viaName;
   final String username;
   final String? package;
   final double price;
@@ -605,7 +631,11 @@ class BalanceActMove extends BalanceMove {
 }
 
 class BalancePayMove extends BalanceMove {
-  const BalancePayMove({required super.key, required super.atMs, required this.username, required this.amount, required this.afterClose, required this.advance, this.by});
+  const BalancePayMove({required super.key, required super.atMs, required this.username, required this.amount, required this.afterClose, required this.advance, this.by, this.via, this.viaName});
+
+  /// «الحوالات» (٢٤ نوفمبر): طريقة التسديد — zaincash · master · other (+ اسمها)، والكاش null.
+  final String? via;
+  final String? viaName;
   final String username;
   final double amount;
   final bool afterClose;

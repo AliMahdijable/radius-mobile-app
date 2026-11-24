@@ -4,6 +4,7 @@ import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../core/util/server_time.dart';
+import '../../../services/pay_kinds.dart';
 import 'report_kit.dart';
 import 'report_period.dart';
 
@@ -59,11 +60,29 @@ class ActivationsView {
   /// أنواع ورقة الفلاتر (مفتاحٌ ثابت للحفظ).
   static const kindKeys = {'cash': ActKind.cash, 'debt': ActKind.debt, 'sas': ActKind.sas, 'extend': ActKind.extend};
 
-  static List<ActivityRow> filter(List<ActivityRow> rows, List<String> kinds) {
-    final base = rows.where(relevant);
+  static List<ActivityRow> filter(List<ActivityRow> rows, List<String> kinds, {Set<String> pays = const {}}) {
+    var base = rows.where(relevant);
+    // «طريقة الدفع» (٢٤ نوفمبر): بطريقة السطر — يتقاطع مع النوع
+    if (pays.isNotEmpty) base = base.where((r) => pays.contains(payOf(r)));
     if (kinds.isEmpty) return base.toList();
     final want = {for (final k in kinds) kindKeys[k]}..remove(null);
     return base.where((r) => want.contains(kindOf(r))).toList();
+  }
+
+  /// «طريقة الدفع» للسطر: ما كتبه الخادم (pay_kind)، وإلّا من نوعه — النقديّ كاش وغير النقديّ بالدين، وغيرهما بلا طريقة.
+  static String? payOf(ActivityRow r) {
+    if (r.payKind != null) return r.payKind;
+    return switch (kindOf(r)) {
+      ActKind.cash => 'cash',
+      ActKind.debt => 'debt',
+      _ => null,
+    };
+  }
+
+  /// «تفعيل نقدي · ماستر» حين دُفع حوالةً — السطر والملفّ المصدَّر.
+  static String kindWithVia(ActivityRow r, ActKind k) {
+    final p = r.payKind;
+    return (p == 'zaincash' || p == 'master' || p == 'other') ? '${kindLabel(k)} · ${PayKinds.labels[p]}' : kindLabel(k);
   }
 
   /// مال السطر: «نقداً» للنقديّ، و«بالدين» لغير النقديّ ولغير المدفوع من الجزئيّ. null = مجهول (خادمٌ بلا money_amount).
@@ -183,7 +202,7 @@ class ActivationsView {
     // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد النوع حين العنوان الاسم — كالتقرير الماليّ
     final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName);
     final detail = [
-      kindLabel(k),
+      kindWithVia(r, k),
       if (user != null) user,
       if ((r.packageName ?? '').isNotEmpty) r.packageName!,
       if (actorOf(r).isNotEmpty) actorOf(r),

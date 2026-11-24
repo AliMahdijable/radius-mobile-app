@@ -15,6 +15,8 @@ import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
 import '../../../models/merged_company.dart';
 import '../../../services/merged_mode.dart';
+import '../../../services/pay_kinds.dart';
+import '../../../services/transfer_pay.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/provider_service.dart';
 import '../../../theme/colors.dart';
@@ -169,6 +171,9 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     }));
     PermissionsService.changes.addListener(_onPerms);
     MergedMode.active.addListener(_onMerged);
+    // «طريقة الدفع» (٢٤ نوفمبر): الورقة تعرضها حين تُفتح «الحوالات» للصفحة
+    TransferPay.available.addListener(_onTp);
+    unawaited(TransferPay.refresh());
     unawaited(_start());
   }
 
@@ -176,6 +181,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   void dispose() {
     PermissionsService.changes.removeListener(_onPerms);
     MergedMode.active.removeListener(_onMerged);
+    TransferPay.available.removeListener(_onTp);
     super.dispose();
   }
 
@@ -185,6 +191,13 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     if (!mounted) return;
     setState(() => _f = f);
     _loadIfAllowed();
+  }
+
+  /// «طريقة الدفع» (٢٤ نوفمبر): الحوالات تُفتح للصفحة بعد التحميل ⇒ الورقة تُظهرها، والفلتر المحفوظ يُطبَّق بإعادة الطلب.
+  void _onTp() {
+    if (!mounted) return;
+    setState(() {});
+    if (_f?.pays.isNotEmpty ?? false) unawaited(_load());
   }
 
   void _onPerms() {
@@ -279,8 +292,19 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   /// يعلّم ردّه بـtype_filter حين طبّقه — وإلّا فالحساب من السطور كما كان. null: بلا فلتر نوع.
   List<String>? get _strictTypes => (_f?.types.isEmpty ?? true) ? null : _f!.types;
 
+  /// «طريقة الدفع» (٢٤ نوفمبر): لصفحةٍ فُتحت لها «الحوالات»، وفي «كل الشركات» حين بها ساس فور — وغيرها كما كان.
+  List<(String, String)> get _payKinds =>
+      (_merged ? _countable.any((c) => c.provider == MergedProvider.sas4) : TransferPay.available.value) ? PayKinds.options() : const [];
+
+  /// المختارة منها مرتّبةً — null بلا فلتر (أو صفحةٌ لا تعرضه).
+  List<String>? get _pays {
+    if (_payKinds.isEmpty) return null;
+    final p = PayKinds.sorted(_f?.pays ?? const <String>{});
+    return p.isEmpty ? null : p;
+  }
+
   /// فلترٌ يطبّقه الخادم بالوضع الصارم (نوعٌ أو باقة) — المقارنة حينها حين يعلّم ردّه بـtype_filter.
-  bool get _hasStrict => (_f?.types.isNotEmpty ?? false) || (_f?.packages.isNotEmpty ?? false);
+  bool get _hasStrict => (_f?.types.isNotEmpty ?? false) || (_f?.packages.isNotEmpty ?? false) || _pays != null;
 
   /// فلتر الباقة (بند المقترح ١٢، الخادم fintyped1122): باقات النطاق ([group] null = المفتوحة) بأسمائها كما يطلبها الخادم — null بلا باقة.
   List<String>? _strictPackagesFor(String? group) {
@@ -431,6 +455,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
         withPackageCost: !Perms.isEmployee && isCostBearingAdminId((_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
         strictTypes: _strictTypes,
         strictPackages: _strictPackagesFor(null),
+        pay: _pays,
       );
 
   /// فلاتر شركةٍ في «كل الشركات» — طلبها وطلب مقارنتها وأجزاء تصديرها.
@@ -440,7 +465,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
           userManager: _ownerUsername(key),
           employeeIds: _employeeIds(key),
           strictTypes: _strictTypes,
-          strictPackages: _strictPackagesFor(key));
+          strictPackages: _strictPackagesFor(key),
+          pay: _pays);
 
   List<MergedCompany> get _countable => MergedDashboardApi.countable();
 
@@ -682,6 +708,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
             // بند ١٨ (قرار المالك ٢٢ نوفمبر): الطريقة الثالثة عند الوطنيّ — لشركاته وحدها
             if (_walletShown) const RpPayShortcut('من محفظة المشترك', [_walletType]),
           ],
+          payKinds: _payKinds,
           // فلتر الباقة (بند المقترح ١٢): باقات الفترة تصل والورقة مفتوحة
           packages: _packagesInPeriod,
         );
@@ -1064,6 +1091,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       out.add(RpChip('الباقة: ${[for (final k in f.packages) _packageLabel(k)].join('، ')}',
           onRemove: () => _apply(f.copyWith(packages: const {}))));
     }
+    final pays = _pays;
+    if (pays != null) out.add(RpChip(PayKinds.chip(pays), onRemove: () => _apply(f.copyWith(pays: const {}))));
     return out;
   }
 

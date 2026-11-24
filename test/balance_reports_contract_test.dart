@@ -169,7 +169,8 @@ void main() {
         final items = ((dj['movements'] as Map)['items'] as List).cast<Map<String, dynamic>>();
         expect(page.items.length, items.length, reason: 'لا حركة تسقط عند القراءة');
         expect([page.total, page.offset], [(dj['movements'] as Map)['total'], (dj['movements'] as Map)['offset']]);
-        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.where((f) => f != BalanceFilter.managers).map((f) => f.wire).toSet(),
+        // طرق الحوالة (٢٤ نوفمبر) تأتي حين تُستعمل وحدها — لا حوالة بهذا العقد
+        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.where((f) => f != BalanceFilter.managers && !f.isVia).map((f) => f.wire).toSet(),
             reason: 'فلاتر الخادم = فلاتر التطبيق (و«المدراء» لا يأتي ومفتاحهم مطفأ)');
         for (final f in BalanceFilter.values) {
           expect(page.counts[f], (dj['counts'] as Map)[f.wire] ?? 0, reason: 'عدد ${f.wire}');
@@ -311,9 +312,9 @@ void main() {
         final page = BalancePeriodPage.fromJson(dj)!;
         final items = ((dj['movements'] as Map)['items'] as List).cast<Map<String, dynamic>>();
         expect(page.items.length, items.length, reason: 'لا حركة تسقط عند القراءة');
-        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.map((f) => f.wire).toSet(), reason: 'فلاتر الخادم = فلاتر التطبيق');
+        expect((dj['counts'] as Map).keys.toSet(), BalanceFilter.values.where((f) => !f.isVia).map((f) => f.wire).toSet(), reason: 'فلاتر الخادم = فلاتر التطبيق');
         for (final f in BalanceFilter.values) {
-          expect(page.counts[f], (dj['counts'] as Map)[f.wire], reason: 'عدد ${f.wire}');
+          expect(page.counts[f], (dj['counts'] as Map)[f.wire] ?? 0, reason: 'عدد ${f.wire}');
         }
         expect(page.counts[BalanceFilter.managers], items.where((x) => x['kind'] == 'manager').length);
         for (var i = 0; i < items.length; i++) {

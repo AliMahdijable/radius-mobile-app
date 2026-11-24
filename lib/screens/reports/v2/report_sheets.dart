@@ -53,6 +53,7 @@ class RpFilterValue {
     this.employees = const {},
     this.types = const [],
     this.packages = const {},
+    this.pays = const {},
   });
 
   final RpRange range;
@@ -75,6 +76,9 @@ class RpFilterValue {
   /// الباقات المختارة (بند المقترح ١٢: «الباقات تظهر باسم كلّ باقة وشركتها») — «مفتاح الشركة|اسم الباقة» (المفتوحة: «|اسمها»).
   final Set<String> packages;
 
+  /// «طريقة الدفع» (٢٤ نوفمبر): cash · zaincash · master · other · debt — بعدٌ مستقلّ يتقاطع مع النوع والباقة والموظّف (lib/services/pay_kinds.dart).
+  final Set<String> pays;
+
   static String packageKey(String? company, String name) => '${company ?? ''}|$name';
 
   RpFilterValue copyWith({
@@ -87,6 +91,7 @@ class RpFilterValue {
     Map<String, Set<String>>? employees,
     List<String>? types,
     Set<String>? packages,
+    Set<String>? pays,
   }) =>
       RpFilterValue(
         range: range ?? this.range,
@@ -98,10 +103,11 @@ class RpFilterValue {
         employees: employees ?? this.employees,
         types: types ?? this.types,
         packages: packages ?? this.packages,
+        pays: pays ?? this.pays,
       );
 
   /// بلا مدير ولا موظّف ولا نوع ولا باقة (الفترة والشركات والمقارنة ليست «فلاتر»).
-  RpFilterValue cleared() => copyWith(managers: const {}, employees: const {}, types: const [], packages: const {});
+  RpFilterValue cleared() => copyWith(managers: const {}, employees: const {}, types: const [], packages: const {}, pays: const {});
 
   bool get hasPeople => managers.values.any((s) => s.isNotEmpty) || employees.values.any((s) => s.isNotEmpty);
 }
@@ -121,6 +127,7 @@ class RpFilterSheet extends StatefulWidget {
     required this.people,
     required this.types,
     this.payments = const [],
+    this.payKinds = const [],
     this.companies,
     required this.now,
     this.loadingPeople = false,
@@ -153,6 +160,9 @@ class RpFilterSheet extends StatefulWidget {
   final List<RpPeopleGroup> people;
   final List<(String key, String label)> types;
   final List<RpPayShortcut> payments;
+
+  /// «طريقة الدفع» بعدٌ مستقلّ (٢٤ نوفمبر): (المفتاح، الاسم) ⇒ [RpFilterValue.pays] — يحلّ محلّ اختصارات [payments].
+  final List<(String, String)> payKinds;
 
   /// «كل الشركات» وحده: الشركات القابلة للاختيار (بلا [RpCompany.selected] — الاختيار من [initial]).
   final List<RpCompany>? companies;
@@ -236,6 +246,12 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
   }
 
   bool _payOn(RpPayShortcut s) => s.types.every(_v.types.contains);
+
+  void _togglePayKind(String k) {
+    final s = {..._v.pays};
+    if (!s.remove(k)) s.add(k);
+    _set(_v.copyWith(pays: s));
+  }
 
   void _togglePay(RpPayShortcut s) {
     final t = [..._v.types];
@@ -382,7 +398,23 @@ class _RpFilterSheetState extends State<RpFilterSheet> {
               ),
             ),
           ],
-          if (widget.payments.isNotEmpty) ...[
+          if (widget.payKinds.isNotEmpty) ...[
+            const SizedBox(height: Sp.xl),
+            SheetSection(
+              label: 'طريقة الدفع',
+              hint: 'كاش أو حوالة أو بالدين',
+              child: Wrap(
+                key: const ValueKey('rp-pay-kinds'),
+                spacing: Sp.sm,
+                runSpacing: Sp.sm,
+                children: [
+                  for (final p in widget.payKinds)
+                    SheetQuickChip(label: p.$2, selected: _v.pays.contains(p.$1), onTap: () => _togglePayKind(p.$1)),
+                ],
+              ),
+            ),
+          ],
+          if (widget.payKinds.isEmpty && widget.payments.isNotEmpty) ...[
             const SizedBox(height: Sp.xl),
             SheetSection(
               label: 'طريقة الدفع',
