@@ -12,8 +12,8 @@ import '../../theme/typography.dart';
 
 /// «طلب رصيد من مديرك» — قطعٌ مشتركة بين شاشة الفرعيّ («طلباتك») وشاشة الأعلى («طلبات الرصيد»).
 
-/// «2026/11/24 · 9:40 مساءً».
-String balanceReqWhen(DateTime? d) => d == null ? '—' : '${iqDateOf(d)} · ${clock12Ar(d)}';
+/// «2026/11/24 · 9:40 مساءً» — الساعة و«مساءً» بمسافةٍ لا تنكسر (لا تنزل «مساءً» وحدها لسطر بصفوف التفاصيل الضيّقة).
+String balanceReqWhen(DateTime? d) => d == null ? '—' : '${iqDateOf(d)} · ${clock12Ar(d).replaceFirst(' ', '\u00a0')}';
 
 String balanceReqIqd(num v) => '${formatIQD(v)} د.ع';
 

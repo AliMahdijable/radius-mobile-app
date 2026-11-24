@@ -8,6 +8,7 @@ import 'package:rad_mysvcs/api/balance_requests_api.dart';
 import 'package:rad_mysvcs/api/whatsapp_api.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
+import 'package:rad_mysvcs/screens/balance_requests/balance_request_widgets.dart';
 import 'package:rad_mysvcs/screens/balance_requests/incoming_balance_requests_screen.dart';
 import 'package:rad_mysvcs/screens/balance_requests/sub_balance_request_screen.dart';
 import 'package:rad_mysvcs/services/manager_money.dart';
@@ -188,6 +189,84 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('«طلباتك»: آخر ١٠ وحدها — والنقر على المشحون ⇒ «تاريخ الحركة» و«ملخّص الحركة»، وعلى المرفوض ⇒ تاريخ الرفض وسببه', (t) async {
+      Map<String, Object?> req(int id, String status, [Map<String, Object?> extra = const {}]) => {
+            'id': id, 'status': status, 'created_at': '2026-11-21T09:00:00.000Z', 'amount': 100000 + id, 'pay_method': 'cash',
+            'method_label': 'كاش باليد', 'decided_at': '2026-11-21T10:00:00.000Z', ...extra,
+          };
+      final reqs = [
+        req(60, 'done', {
+          'amount': 250000, 'created_at': '2026-11-23T18:10:00.000Z', 'decided_at': '2026-11-23T18:31:00.000Z', 'note': 'سلّمته لأبو علي',
+          'done': {'amount': 250000, 'is_loan': false, 'paid_via': 'cash', 'balance_before': 85000, 'balance_after': 335000},
+        }),
+        req(59, 'rejected', {
+          'pay_method': 'master', 'method_label': 'حوالة ماستر', 'has_image': true, 'image_live': false,
+          'reject_reason': 'المبلغ بالصورة غير المطلوب', 'decided_at': '2026-11-22T09:45:00.000Z',
+        }),
+        for (var id = 58; id >= 46; id--) req(id, 'cancelled'),
+      ];
+      await server(me: {...meJson, 'requests': reqs});
+      await open(t);
+      final list = find.byKey(const ValueKey('balreq-sub-list'));
+      await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-mine-51')), 300);
+      await t.drag(list, const Offset(0, -4000));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('balreq-mine-51')), findsOneWidget, reason: 'العاشر آخر ما يُرسم');
+      expect(find.byKey(const ValueKey('balreq-mine-50')), findsNothing, reason: 'الحادي عشر لا يُرسم');
+      await t.drag(list, const Offset(0, 8000));
+      await t.pumpAndSettle();
+
+      // المشحون ⇒ ملخّص الحركة بتاريخها
+      await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-mine-60')), 200);
+      await t.ensureVisible(find.byKey(const ValueKey('balreq-mine-60')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('balreq-mine-60')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('balreq-details-done')), findsOneWidget);
+      expect(find.text('ملخّص الحركة'), findsOneWidget);
+      expect(find.text('تاريخ الحركة'), findsOneWidget);
+      expect(find.text(balanceReqWhen(BalanceRequest.fromJson(reqs[0])!.decidedAt)), findsOneWidget);
+      expect(find.text('استلمه كاش'), findsOneWidget);
+      expect(find.text('85,000 د.ع'), findsWidgets);
+      expect(find.text('335,000 د.ع'), findsOneWidget);
+      expect(find.text('#60'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const ValueKey('balreq-details-request')), matching: find.text(balanceReqWhen(BalanceRequest.fromJson(reqs[0])!.createdAt))),
+        findsOneWidget,
+        reason: 'تاريخ الطلب بقسم «طلبك»',
+      );
+      Navigator.of(t.element(find.byKey(const ValueKey('balreq-details-request')))).pop();
+      await t.pumpAndSettle();
+
+      // المرفوض ⇒ تاريخ الرفض وسببه، ووصلٌ حُذف يقول ذلك
+      await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-mine-59')), 200);
+      await t.ensureVisible(find.byKey(const ValueKey('balreq-mine-59')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('balreq-mine-59')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('balreq-details-rejected')), findsOneWidget);
+      expect(find.text('تاريخ الرفض'), findsOneWidget);
+      expect(find.text(balanceReqWhen(BalanceRequest.fromJson(reqs[1])!.decidedAt)), findsOneWidget);
+      expect(find.text('المبلغ بالصورة غير المطلوب'), findsOneWidget);
+      expect(find.text('مرفق — حُذفت صورته بعد ٧ أيّام'), findsOneWidget);
+      expect(clipped(), isEmpty);
+      await simDrain(t);
+    });
+
+    testWidgets('«إلغاء الطلب» داخل البطاقة يسأل ولا يفتح التفاصيل', (t) async {
+      final withOpen = {...meJson, 'pending': 1, 'requests': [{'id': 9, 'status': 'pending', 'amount': 1000, 'pay_method': 'cash', 'method_label': 'كاش باليد'}]};
+      await server(me: withOpen);
+      await open(t);
+      await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-cancel-9')), 200);
+      await t.ensureVisible(find.byKey(const ValueKey('balreq-cancel-9')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('balreq-cancel-9')));
+      await t.pumpAndSettle();
+      expect(find.text('إلغاء الطلب؟'), findsOneWidget);
+      expect(find.byKey(const ValueKey('balreq-details-request')), findsNothing);
+      await simDrain(t);
+    });
+
     testWidgets('طلبٌ مفتوح ⇒ زرّ الطلب مطفأ بسببه؛ والموظّف يراه مقفلاً', (t) async {
       final withOpen = {...meJson, 'pending': 1, 'requests': [{'id': 9, 'status': 'pending', 'amount': 1000, 'pay_method': 'cash', 'method_label': 'كاش باليد'}]};
       await server(me: withOpen);
@@ -198,7 +277,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('بأضيق هاتف وخطٍّ ×1.2 (فاتح وداكن): القسم والنافذة بلا نصٍّ مقصوص', (t) async {
+    testWidgets('بأضيق هاتف وخطٍّ ×1.2 (فاتح وداكن): القسم والنافذة والتفاصيل بلا نصٍّ مقصوص', (t) async {
       for (final dark in [false, true]) {
         await server();
         t.platformDispatcher.textScaleFactorTestValue = 1.2;
@@ -210,6 +289,20 @@ void main() {
         await t.tap(find.byKey(const ValueKey('balreq-method-other')));
         await t.pumpAndSettle();
         expect(clipped(), isEmpty, reason: 'النافذة dark=$dark');
+        Navigator.of(t.element(find.byKey(const ValueKey('balreq-amount')))).pop();
+        await t.pumpAndSettle();
+        // تفاصيل المشحون (أطول صفوفها: الرصيد قبل/بعد وسطر الطريقة) والمرفوض (سببه)
+        for (final id in [6, 7]) {
+          await t.scrollUntilVisible(find.byKey(ValueKey('balreq-mine-$id')), 200);
+          await t.ensureVisible(find.byKey(ValueKey('balreq-mine-$id')));
+          await t.pumpAndSettle();
+          await t.tap(find.byKey(ValueKey('balreq-mine-$id')));
+          await t.pumpAndSettle();
+          expect(find.byKey(const ValueKey('balreq-details-request')), findsOneWidget);
+          expect(clipped(), isEmpty, reason: 'تفاصيل #$id dark=$dark');
+          Navigator.of(t.element(find.byKey(const ValueKey('balreq-details-request')))).pop();
+          await t.pumpAndSettle();
+        }
         expect(t.takeException(), isNull);
         await simDrain(t);
         await t.pumpWidget(const SizedBox.shrink());

@@ -22,6 +22,9 @@ import '../desktop/desk_widgets.dart';
 import '../tickets/ticket_image.dart';
 import 'balance_request_widgets.dart';
 
+/// «طلباتك»: آخر عشرة (المالك ٢٤ نوفمبر: «الطلبات اخر ١٠ قرات») — الخادم يعيد عشرين.
+const kBalanceReqSubList = 10;
+
 /// «طلب رصيد من مديرك» — قسم المدير الفرعيّ (المالك ٢٣ نوفمبر: «النظام يكشف المدراء الفرعيين، اللي فوقهم مدير عندنا مسجل… يسوي
 /// طلب رصيد من المدير الاعلى… يدز له صورة حوالة… نحط بيها الماستر كارد مالته والتواصل مالته»). رصيده، ومديره (واتساب/اتصال)،
 /// و«ادفع لمديرك» (بيانات بوّابة المشترك عنده)، وطلباته بحالها — والطلب: المبلغ + «كيف دفعت؟» + صورة الحوالة.
@@ -159,8 +162,14 @@ class _SubBalanceRequestScreenState extends State<SubBalanceRequestScreen> {
                     child: Text('لا طلبات بعد', textAlign: TextAlign.center, style: AppType.body(color: AppColors.textLow)),
                   )
                 else
-                  for (final r in me.requests) ...[
-                    _MyRequestCard(request: r, parent: parent, onCancel: r.isPending ? () => _cancel(r) : null),
+                  // آخر عشرة وحدها — والنقر يفتح تفاصيله (المالك: «من ينقر عليه يظهر تاريخ الحركة وملخّص الحركة»)
+                  for (final r in me.requests.take(kBalanceReqSubList)) ...[
+                    _MyRequestCard(
+                      request: r,
+                      parent: parent,
+                      onCancel: r.isPending ? () => _cancel(r) : null,
+                      onTap: () => showMyBalanceRequestDetails(context, r, parent),
+                    ),
                     const SizedBox(height: Sp.sm),
                   ],
               ],
@@ -386,10 +395,11 @@ class _PayRow extends StatelessWidget {
 }
 
 class _MyRequestCard extends StatelessWidget {
-  const _MyRequestCard({required this.request, required this.parent, this.onCancel});
+  const _MyRequestCard({required this.request, required this.parent, this.onCancel, this.onTap});
   final BalanceRequest request;
   final BalanceReqParent parent;
   final VoidCallback? onCancel;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +407,7 @@ class _MyRequestCard extends StatelessWidget {
     final d = r.done;
     return BalanceReqCard(
       key: ValueKey('balreq-mine-${r.id}'),
+      onTap: onTap,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
@@ -416,6 +427,13 @@ class _MyRequestCard extends StatelessWidget {
           ),
           const SizedBox(width: Sp.sm),
           BalanceReqStatusChip(r),
+          if (onTap != null) ...[
+            const SizedBox(width: Sp.xs),
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+            ),
+          ],
         ]),
         if (d != null) ...[
           const SizedBox(height: Sp.md),
@@ -461,6 +479,139 @@ class _MyRequestCard extends StatelessWidget {
               icon: Icon(LucideIcons.x, size: 16, color: AppColors.textMid),
               label: Text('إلغاء الطلب', style: AppType.label(color: AppColors.textMid)),
             ),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+// ─────────────── تفاصيل طلبه ───────────────
+
+/// تفاصيل طلبه حين ينقر بطاقته (المالك ٢٤ نوفمبر: «الطلب المرفوض والناجح من ينقر عليه يظهر تاريخ الحركة وملخّص الحركة»): ما جرى
+/// أوّلاً بتاريخه — «ملخّص الحركة» للمشحون (المبلغ، كيف سُجّل، رصيده قبل/بعد بإشارته)، الرفض وسببه، الإلغاء، الانتهاء، أو حاله — ثمّ
+/// طلبه نفسه. كالموقع (lib/balance-requests.ts requestDetails).
+Future<void> showMyBalanceRequestDetails(BuildContext context, BalanceRequest r, BalanceReqParent parent) => showAppSheet<void>(
+      context: context,
+      barrierColor: AppColors.scrim,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _MyDetailsSheet(request: r, parent: parent),
+    );
+
+class _MyDetailsSheet extends StatelessWidget {
+  const _MyDetailsSheet({required this.request, required this.parent});
+  final BalanceRequest request;
+  final BalanceReqParent parent;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = request;
+    final d = r.done;
+    final s = balanceReqStatus(r);
+    final (String, List<SheetRowData>)? what = switch (r.status) {
+      'done' when d != null => (
+          'ملخّص الحركة',
+          [
+            SheetRowData(label: 'تاريخ الحركة', value: balanceReqWhen(r.decidedAt)),
+            SheetRowData(label: 'شُحن لك', value: balanceReqIqd(d.amount ?? r.amount), strong: true),
+            SheetRowData(label: 'كيف سُجّل', value: d.isLoan ? 'آجل — دين عليك' : (d.viaLabel.isEmpty ? '—' : 'استلمه ${d.viaLabel}')),
+            if (d.balanceBefore != null) SheetRowData(label: 'رصيدك قبل', value: balanceReqIqdSigned(d.balanceBefore!)),
+            if (d.balanceAfter != null) SheetRowData(label: 'رصيدك بعد', value: balanceReqIqdSigned(d.balanceAfter!), strong: true),
+            SheetRowData(label: 'شحنه', value: parent.title),
+          ],
+        ),
+      'rejected' => (
+          'الرفض',
+          [
+            SheetRowData(label: 'تاريخ الرفض', value: balanceReqWhen(r.decidedAt)),
+            SheetRowData(label: 'السبب', value: r.rejectReason ?? 'لم يذكر سبباً'),
+            SheetRowData(label: 'رفضه', value: parent.title),
+          ],
+        ),
+      'cancelled' => (
+          'الإلغاء',
+          [SheetRowData(label: 'تاريخ الإلغاء', value: balanceReqWhen(r.decidedAt)), const SheetRowData(label: 'ألغاه', value: 'أنت')],
+        ),
+      'expired' => (
+          'انتهى بلا ردّ',
+          [
+            SheetRowData(label: 'تاريخ الانتهاء', value: balanceReqWhen(r.decidedAt)),
+            const SheetRowData(label: 'السبب', value: 'مرّت ٧ أيّام بلا ردٍّ من مديرك'),
+          ],
+        ),
+      'pending' => ('الحال', [const SheetRowData(label: 'الحال', value: 'بانتظار مديرك — يوصلك إشعار بردّه')]),
+      'processing' => ('الحال', [const SheetRowData(label: 'الحال', value: 'قيد الشحن — مديرك يشحنه الآن')]),
+      _ => null,
+    };
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.handCoins,
+        title: 'طلب ${balanceReqIqd(r.amount)}',
+        subtitle: '${r.methodLabel.isEmpty ? r.payMethod : r.methodLabel} · ${s.label}',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (what != null) ...[
+          SheetSection(
+            key: ValueKey('balreq-details-${r.status}'),
+            label: what.$1,
+            child: _DetailRows(what.$2),
+          ),
+          const SizedBox(height: Sp.lg),
+        ],
+        SheetSection(
+          key: const ValueKey('balreq-details-request'),
+          label: 'طلبك',
+          child: _DetailRows([
+            SheetRowData(label: 'رقم الطلب', value: '#${r.id}'),
+            SheetRowData(label: 'تاريخ الطلب', value: balanceReqWhen(r.createdAt)),
+            SheetRowData(label: 'المبلغ المطلوب', value: balanceReqIqd(r.amount)),
+            SheetRowData(label: 'كيف دفعت', value: r.methodLabel.isEmpty ? r.payMethod : r.methodLabel),
+            if (r.hasImage) SheetRowData(label: 'الوصل', value: r.imageLive ? 'مرفق' : 'مرفق — حُذفت صورته بعد ٧ أيّام'),
+            if (r.note != null) SheetRowData(label: 'ملاحظتك', value: r.note!),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// صفوف التفاصيل: التسمية بعرضها كاملةً والقيمة تلتفّ بما بقي (تاريخ، سبب الرفض، ملاحظة) — SheetRowsGroup للأرقام القصيرة يقصّ
+/// التسمية بجانب قيمةٍ طويلة (٣٢٠ × ١٫٢: «تاريخ الطلب…»). القيمة باتّجاه السطر العربيّ (الأرقام والتواريخ تبقى بترتيبها).
+class _DetailRows extends StatelessWidget {
+  const _DetailRows(this.rows);
+  final List<SheetRowData> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Column(children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: AppColors.divider),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(rows[i].label, style: AppType.body(color: AppColors.textLabel)),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Text(
+                  rows[i].value,
+                  textAlign: TextAlign.end,
+                  maxLines: 8,
+                  style: AppType.body(color: rows[i].valueColor ?? AppColors.textHi)
+                      .copyWith(fontWeight: rows[i].strong ? FontWeight.w700 : FontWeight.w600),
+                ),
+              ),
+            ]),
           ),
         ],
       ]),
