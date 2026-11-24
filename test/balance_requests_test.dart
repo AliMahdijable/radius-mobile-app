@@ -114,6 +114,29 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('رصيدٌ سالب (مديرٌ بالآجل): بإشارته والناقص يسار الرقم — بالرأس وبسطر «شُحن»', (t) async {
+      final s = await server(me: {
+        ...meJson,
+        'requests': [
+          {
+            'id': 6, 'status': 'done', 'created_at': '2026-11-20T09:00:00.000Z', 'amount': 250000, 'pay_method': 'cash', 'method_label': 'كاش باليد',
+            'done': {'amount': 250000, 'is_loan': false, 'paid_via': 'cash', 'balance_before': -110378803, 'balance_after': -110128803},
+          },
+        ],
+      });
+      s.reply('GET', '/api/v2/admin-widgets', 200, {'success': true, 'balance': -110378803, 'points': 0});
+      await open(t);
+      const neg = '\u2066−110,378,803\u2069 د.ع';
+      expect(find.text(neg), findsOneWidget, reason: 'كان «110,378,803 د.ع» بلا ناقص كأنّه رصيدٌ موجود');
+      final p = t.renderObject<RenderParagraph>(find.text(neg));
+      final plain = p.text.toPlainText();
+      Rect box(int i) => p.getBoxesForSelection(TextSelection(baseOffset: i, extentOffset: i + 1)).first.toRect();
+      expect(box(plain.indexOf('−')).left, lessThan(box(plain.indexOf('1')).left), reason: 'الناقص يسار أوّل رقم كما يُرسم');
+      await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-mine-6')), 200);
+      expect(find.textContaining('رصيدك \u2066−110,378,803\u2069 د.ع ← \u2066−110,128,803\u2069 د.ع'), findsOneWidget);
+      await simDrain(t);
+    });
+
     testWidgets('الطلب بحوالة: الصورة شرط، ثمّ يُرسل بالمرجع والمبلغ والطريقة والصورة JPEG', (t) async {
       final s = await server();
       await open(t);

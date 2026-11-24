@@ -209,7 +209,7 @@ class _Hero extends StatelessWidget {
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: AlignmentDirectional.centerStart,
-          child: Text(balance == null ? '—' : balanceReqIqd(balance!),
+          child: Text(balance == null ? '—' : balanceReqIqdSigned(balance!),
               style: AppType.amount(color: AppColors.onBrand).copyWith(fontSize: 30)),
         ),
         const SizedBox(height: Sp.md),
@@ -426,7 +426,7 @@ class _MyRequestCard extends StatelessWidget {
               '${parent.title} شحن ${balanceReqIqd(d.amount ?? r.amount)}',
               if (d.viaLabel.isNotEmpty) d.isLoan ? 'آجل — دين عليك' : 'استلمه ${d.viaLabel}',
               if (d.balanceBefore != null && d.balanceAfter != null)
-                'رصيدك ${balanceReqIqd(d.balanceBefore!)} ← ${balanceReqIqd(d.balanceAfter!)}',
+                'رصيدك ${balanceReqIqdSigned(d.balanceBefore!)} ← ${balanceReqIqdSigned(d.balanceAfter!)}',
             ].join(' · '),
           ),
         ],

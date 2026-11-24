@@ -17,6 +17,10 @@ String balanceReqWhen(DateTime? d) => d == null ? '—' : '${iqDateOf(d)} · ${c
 
 String balanceReqIqd(num v) => '${formatIQD(v)} د.ع';
 
+/// رصيدٌ قد يكون سالباً (مديرٌ يعمل بالآجل) — بإشارته، والسالب معزولٌ LTR فيبقى الناقص يسار الرقم داخل السطر العربيّ (كالموقع
+/// formatIQDSigned). [balanceReqIqd] يُسقط الإشارة: كان رصيدٌ سالب يظهر كأنّه موجود (٢٤ نوفمبر).
+String balanceReqIqdSigned(num v) => v.round() < 0 ? '\u2066${formatIQDSigned(v.round())}\u2069 د.ع' : balanceReqIqd(v);
+
 /// حال الطلب: [forParent] = كما يراه الأعلى («بانتظارك»)، وإلّا كما يراه صاحبه («بانتظار مديرك»).
 ({String label, AppTone tone, IconData icon}) balanceReqStatus(BalanceRequest r, {bool forParent = false}) => switch (r.status) {
       'pending' => (label: forParent ? 'بانتظارك' : 'بانتظار مديرك', tone: AppTone.warning, icon: LucideIcons.hourglass),
