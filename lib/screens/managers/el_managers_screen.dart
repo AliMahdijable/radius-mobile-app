@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/el_managers_api.dart';
 import '../../api/managers_api.dart';
 import '../../core/util/format.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
@@ -43,10 +47,16 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
   bool get _canDebts => !Perms.isEmployee || Perms.has('reports.manager_debts');
   String _query = '';
 
+  /// «الترتيب بالنقر» لكلّ الشركات (٢٤ نوفمبر): «رتّب حسب» فوق الحسابات — الأنفع ثمّ يقلب ثمّ ترتيب ايرث لنك (كالموقع).
+  OrderValue? _sort;
+
   @override
   void initState() {
     super.initState();
     _load();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('el-managers'), elMgrSort).then((v) {
+      if (mounted && v != null) setState(() => _sort = v);
+    }));
   }
 
   Future<void> _load() async {
@@ -103,7 +113,8 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final rows = _filtered;
+    final rows = sortOrKeep<ElManagerRow>(_filtered, _sort, elMgrSort,
+        (m, k) => elMgrSortValue(k, name: m.name, otherDebt: m.otherDebt, lastTopupAt: m.lastTopupAt));
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -155,6 +166,15 @@ class _ElManagersScreenState extends State<ElManagersScreen> {
                         hint: 'ابحث باسم المدير',
                         onChanged: (v) => setState(() => _query = v.trim()),
                       ),
+                      if (!_loading && rows.length > 1) ...[
+                        const SizedBox(height: Sp.sm),
+                        RpSortChips(
+                          key: const ValueKey('elmgr-sort'),
+                          fields: elMgrSort,
+                          value: _sort,
+                          onPick: (k) => setState(() => _sort = pickTri('el-managers', _sort, elMgrSort, k)),
+                        ),
+                      ],
                       if (_loading) ...[
                         const SizedBox(height: Sp.xl),
                         const Center(child: CircularProgressIndicator()),

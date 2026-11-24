@@ -201,6 +201,24 @@
   "cards-series": "list.v2.cards-series.sort",
   "receipts": "list.v2.receipts.sort",
   "tickets": "list.v2.tickets.sort",
-  "renew": "list.v2.renew.sort"
- }
+  "renew": "list.v2.renew.sort",
+  "el-managers": "list.v2.el-managers.sort"
+ },
+ "EL_MGR_SORT": [
+  {
+   "key": "name",
+   "label": "المدير",
+   "kind": "text"
+  },
+  {
+   "key": "debt",
+   "label": "ديون أخرى",
+   "kind": "number"
+  },
+  {
+   "key": "topup",
+   "label": "آخر شحن",
+   "kind": "date"
+  }
+ ]
 }

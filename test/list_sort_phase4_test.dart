@@ -12,6 +12,7 @@ import 'package:rad_mysvcs/core/util/list_orders.dart';
 import 'package:rad_mysvcs/core/util/order_rules.dart';
 import 'package:rad_mysvcs/screens/cards/cards_screen.dart';
 import 'package:rad_mysvcs/screens/employees/employees_screen.dart';
+import 'package:rad_mysvcs/screens/managers/el_managers_screen.dart';
 import 'package:rad_mysvcs/screens/receipts/receipts_archive_screen.dart';
 import 'package:rad_mysvcs/screens/renew/renew_requests_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
@@ -139,6 +140,17 @@ class _P4 implements HttpClientAdapter {
     final get = o.method.toUpperCase() == 'GET';
     log.add(o);
     if (get && p == '/api/v2/employees') return _json(200, {'success': true, 'data': _emps});
+    if (get && p == '/api/v2/el/managers') {
+      return _json(200, {
+        'success': true, 'enabled': true,
+        'data': {'balance': 250000, 'deposit_saved': false, 'managers': [
+          {'index': 11, 'name': 'زيد كريم', 'other_debt': 0, 'last_topup': {'amount': 25000, 'at': '2026-11-20T07:00:00Z', 'as_debt': false}},
+          {'index': 12, 'name': 'إبراهيم علي', 'other_debt': 40000, 'last_topup': null},
+          {'index': 13, 'name': 'agent10', 'other_debt': 15000, 'last_topup': {'amount': 50000, 'at': '2026-11-23T07:00:00Z', 'as_debt': true}},
+          {'index': 14, 'name': 'آمنة حسن', 'other_debt': 0, 'last_topup': {'amount': 10000, 'at': '2026-11-22T07:00:00Z', 'as_debt': false}},
+        ]},
+      });
+    }
     if (get && p == '/api/v2/employees/permissions-catalog') {
       return _json(200, {
         'success': true,
@@ -269,6 +281,7 @@ void main() {
       'RECEIPT_SORT': receiptSort,
       'TICKET_SORT': ticketSort,
       'RENEW_SORT': renewSort,
+      'EL_MGR_SORT': elMgrSort,
     };
     for (final e in sets.entries) {
       test('${e.key}: المفاتيح والأسماء والنوع واتّجاه أوّل نقرة', () => expect(_shape(e.value), web[e.key]));
@@ -421,6 +434,22 @@ void main() {
     await close(t);
   });
 
+  testWidgets('مدراء ايرث لنك: «رتّب حسب» المدير وديون أخرى وآخر شحن — كالموقع', (t) async {
+    await open(t, () => const ElManagersScreen());
+    final names = ['زيد كريم', 'إبراهيم علي', 'agent10', 'آمنة حسن'];
+    expect(_orderOf(t, names), names, reason: 'كما وصلت');
+    await _chip(t, 'name');
+    expect(_orderOf(t, names), ['agent10', 'إبراهيم علي', 'آمنة حسن', 'زيد كريم'], reason: 'اللاتينيّ أوّلاً، إ وآ ألف');
+    await _chip(t, 'debt');
+    expect(_orderOf(t, names), ['إبراهيم علي', 'agent10', 'زيد كريم', 'آمنة حسن'], reason: 'الأكثر ديناً، و«لا شيء» آخراً بترتيبها');
+    await _chip(t, 'topup');
+    expect(_orderOf(t, names), ['agent10', 'آمنة حسن', 'زيد كريم', 'إبراهيم علي'], reason: 'الأحدث شحناً، ومن لم يُشحن آخراً');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('list.v2.el-managers.sort'), '{"k":"topup","d":"desc"}');
+    expect(t.takeException(), isNull);
+    await close(t);
+  });
+
   testWidgets('المبيعات: «التاريخ» مجمّعٌ كما كان؛ المبلغ يجلب الفترة كلّها (1000) وقائمةٌ واحدة بتاريخ كلّ سطر', (t) async {
     final srv = await open(t, () => const SalesScreen());
     expect(_keysOrder(t, 'sale-row-'), ['6', '5', '4', '3']);
@@ -524,6 +553,7 @@ void main() {
     'receipts': () => const ReceiptsArchiveScreen(),
     'tickets': () => const TicketsScreen(),
     'renew': () => const RenewRequestsScreen(),
+    'el-managers': () => const ElManagersScreen(),
   };
   for (final s in screens.entries) {
     for (final width in [320.0, 480.0]) {

@@ -228,6 +228,22 @@ Object? renewSortValue(String key, {DateTime? createdAt, String? name, String? u
   return null;
 }
 
+// ─── مدراء ايرث لنك (حساباتك التابعة) — لكلّ الشركات (٢٤ نوفمبر: «كملو كلشي اريد نسخه كامل لكل الشركات»)، والموقع EL_MGR_SORT ───
+
+const elMgrSort = <OrderField>[
+  OrderField('name', 'المدير', OrderKind.text),
+  OrderField('debt', 'ديون أخرى', OrderKind.number),
+  OrderField('topup', 'آخر شحن', OrderKind.date),
+];
+
+/// كما يعرضه السطر: «ديون أخرى» صفراً «لا شيء» ومن لم يُشحن بعد «—» آخراً.
+Object? elMgrSortValue(String key, {required String name, required num otherDebt, DateTime? lastTopupAt}) => switch (key) {
+      'name' => name,
+      'debt' => otherDebt > 0 ? otherDebt : null,
+      'topup' => lastTopupAt,
+      _ => null,
+    };
+
 /// نقرة حقلٍ بثلاث حالات بقائمة [fields] كاملةً (المخفيّ منها يُهمل) ⇒ الترتيب الجديد، ويُحفظ بمفتاح القائمة.
 OrderValue? pickTri(String list, OrderValue? cur, List<OrderField> fields, String key) {
   OrderField? f;
