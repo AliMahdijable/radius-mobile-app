@@ -10,6 +10,9 @@ import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/permissions_service.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -56,6 +59,11 @@ class _CardsScreenState extends State<CardsScreen> {
   String _seriesQuery = '';
   int _seriesPage = 0;
 
+  /// «الترتيب بالنقر» (المرحلة ٤ — كالموقع): الباقات ([cardStockSort]) والسلاسل ([cardSeriesSort]) بثلاث نقرات؛ ايرث لنك سلاسلها
+  /// هي الباقات ⇒ حقول الباقات ومفتاحها.
+  OrderValue? _stockSort;
+  OrderValue? _seriesSort;
+
   /// تطابق السلسلة البحثَ: رقمها أو اسم باقتها (بلا حساسيّة حالة).
   List<CardSeries> get _filteredSeries {
     final q = _seriesQuery.toLowerCase();
@@ -79,6 +87,12 @@ class _CardsScreenState extends State<CardsScreen> {
     if (MergedSection.routeKeyOf(context) == null) _setSummary(CardsState.lastSummary);
     _load();
     _loadPurchase();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('cards-stock'), cardStockSort).then((v) {
+      if (mounted && v != null) setState(() => _stockSort = v);
+    }));
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('cards-series'), cardSeriesSort).then((v) {
+      if (mounted && v != null) setState(() => _seriesSort = v);
+    }));
   }
 
   /// «كل الشركات»: كارتات شركةٍ غير المفتوحة للعرض — لا شراء ولا نقل (من صفحتها).
@@ -265,7 +279,21 @@ class _CardsScreenState extends State<CardsScreen> {
     final filtered = _filteredSeries;
     final pageCount = ((filtered.length + _perPage - 1) ~/ _perPage).clamp(1, 1 << 30);
     final page = _seriesPage.clamp(0, pageCount - 1);
-    final paged = filtered.skip(page * _perPage).take(_perPage).toList();
+    // «رتّب حسب» (المرحلة ٤): الباقات، والسلاسل تُرتَّب قبل تقسيمها لصفحات (ايرث لنك: السلاسل هي الباقات ⇒ حقول الباقات)
+    final profiles = sortOrKeep<CardProfileStock>(s.profiles, _stockSort, cardStockSort,
+        (p, k) => cardStockSortValue(k, name: p.profileName, remaining: p.remaining, used: p.used, value: p.value));
+    final seriesFields = byPackage
+        ? cardStockSort
+        : cardSeriesShown(
+            created: _series.any((x) => (x.createdAt ?? '').isNotEmpty),
+            expiry: _series.any((x) => (x.expiration ?? '').isNotEmpty),
+          );
+    final sortedSeries = byPackage
+        ? sortOrKeep<CardSeries>(filtered, _stockSort, cardStockSort,
+            (x, k) => cardStockSortValue(k, name: x.profileName, remaining: x.remaining, used: x.used, value: x.value))
+        : sortOrKeep<CardSeries>(filtered, _seriesSort, seriesFields,
+            (x, k) => cardSeriesSortValue(k, series: x.series, name: x.profileName, remaining: x.remaining, createdAt: x.createdAt, expiration: x.expiration));
+    final paged = sortedSeries.skip(page * _perPage).take(_perPage).toList();
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
@@ -294,9 +322,18 @@ class _CardsScreenState extends State<CardsScreen> {
                   text: 'cards.by_package'.tr(),
                   trailing: '${s.profiles.length}',
                 ),
-                for (var i = 0; i < s.profiles.length; i++) ...[
+                if (profiles.length > 1) ...[
+                  RpSortChips(
+                    key: const ValueKey('cards-stock-sort'),
+                    fields: cardStockSort,
+                    value: _stockSort,
+                    onPick: (k) => setState(() => _stockSort = pickTri('cards-stock', _stockSort, cardStockSort, k)),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                ],
+                for (var i = 0; i < profiles.length; i++) ...[
                   if (i > 0) const SizedBox(height: Sp.sm),
-                  _ProfileCard(p: s.profiles[i]),
+                  _ProfileCard(p: profiles[i]),
                 ],
               ],
               if (_series.isNotEmpty) ...[
@@ -314,6 +351,22 @@ class _CardsScreenState extends State<CardsScreen> {
                     byPackage: byPackage,
                     onChanged: (v) => setState(() {
                       _seriesQuery = v.trim();
+                      _seriesPage = 0;
+                    }),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                ],
+                if (filtered.length > 1) ...[
+                  RpSortChips(
+                    key: const ValueKey('cards-series-sort'),
+                    fields: seriesFields,
+                    value: byPackage ? _stockSort : _seriesSort,
+                    onPick: (k) => setState(() {
+                      if (byPackage) {
+                        _stockSort = pickTri('cards-stock', _stockSort, cardStockSort, k);
+                      } else {
+                        _seriesSort = pickTri('cards-series', _seriesSort, cardSeriesSort, k);
+                      }
                       _seriesPage = 0;
                     }),
                   ),

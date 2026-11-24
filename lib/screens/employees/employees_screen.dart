@@ -11,6 +11,8 @@ import '../../api/employee_presence_api.dart';
 import '../../api/employees_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/clipboard_helper.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
 import '../../core/widgets/explain_action.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/active_company.dart';
@@ -25,6 +27,7 @@ import 'employee_ledger_widgets.dart';
 import 'employee_presence_widgets.dart';
 import 'sheets/employee_editor_sheet.dart';
 import 'sheets/link_employee_sheet.dart';
+import '../reports/v2/report_kit.dart';
 import '../../services/auth_storage.dart';
 import '../../services/linked_companies.dart';
 import '../desktop/desk_widgets.dart';
@@ -47,6 +50,9 @@ class EmployeesScreen extends StatefulWidget {
 
 class _EmployeesScreenState extends State<EmployeesScreen> {
   List<Employee> _rows = const [];
+
+  /// «الترتيب بالنقر» (المرحلة ٤ — كالموقع): «رتّب حسب» فوق البطاقات — الأنفع ثمّ يقلب ثمّ ترتيب القائمة كما وصلت.
+  OrderValue? _sort;
   PermissionsCatalog? _catalog;
   bool _loading = true;
   String? _error;
@@ -184,6 +190,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     ActiveCompany.listenable.addListener(_onContextChanged);
     _load();
     _loadLimitsFeature();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('employees'), empSort).then((v) {
+      if (mounted && v != null) setState(() => _sort = v);
+    }));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadLedger();
@@ -368,6 +377,17 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final limitsOn = _limitsFeature && !viewOnly && !PermissionsService.isEmployee;
     // «الموظف المتّصل الآن»: للشركة المفتوحة وحدها
     final presence = viewOnly ? null : _presence;
+    final sortFields = empSortShown(presence: presence != null, ledger: ledgerOn);
+    final shown = sortOrKeep<Employee>(_rows, _sort, sortFields, (e, k) {
+      final p = presence?.of(e.id);
+      return empSortValue(k,
+          username: e.username,
+          fullName: e.fullName,
+          lastLoginAt: e.lastLoginAt,
+          createdAt: e.createdAt,
+          presence: p == null ? null : (online: p.online, lastSeenAt: p.lastSeenAt, opsToday: p.opsToday),
+          owes: ledgerOn ? _ledgerRows[e.id]?.owesTotal : null);
+    });
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -449,8 +469,20 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                             DeskSection(children: [_compactHero(accent, isEl: isEl && !routed)]),
                             // الهاتف: فسحةٌ بين الرأس وأوّل بطاقة (الحاسبة يفصلها DeskSection نفسه).
                             if (!DesktopScope.of(context)) const SizedBox(height: Sp.md),
+                            if (_rows.length > 1)
+                              DeskSection(children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.sm),
+                                  child: RpSortChips(
+                                    key: const ValueKey('employees-sort'),
+                                    fields: sortFields,
+                                    value: _sort,
+                                    onPick: (k) => setState(() => _sort = pickTri('employees', _sort, empSort, k)),
+                                  ),
+                                ),
+                              ]),
                             DeskSection(children: [
-                              for (final e in _rows)
+                              for (final e in shown)
                                 _EmployeeTile(
                                   emp: e,
                                   // ايرث لنك: ما يملكه الموظف فعلاً — مفاتيح

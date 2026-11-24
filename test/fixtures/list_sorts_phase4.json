@@ -1,0 +1,206 @@
+{
+ "EMP_SORT": [
+  {
+   "key": "name",
+   "label": "الاسم",
+   "kind": "text"
+  },
+  {
+   "key": "seen",
+   "label": "آخر دخول",
+   "kind": "date"
+  },
+  {
+   "key": "ops",
+   "label": "عمليّات اليوم",
+   "kind": "number"
+  },
+  {
+   "key": "owes",
+   "label": "عليه",
+   "kind": "number"
+  },
+  {
+   "key": "created",
+   "label": "تاريخ الإضافة",
+   "kind": "date"
+  }
+ ],
+ "SALE_SORT": [
+  {
+   "key": "date",
+   "label": "التاريخ",
+   "kind": "date",
+   "natural": "desc"
+  },
+  {
+   "key": "total",
+   "label": "المبلغ",
+   "kind": "number"
+  },
+  {
+   "key": "profit",
+   "label": "الربح",
+   "kind": "number"
+  },
+  {
+   "key": "customer",
+   "label": "الزبون",
+   "kind": "text"
+  }
+ ],
+ "ITEM_SORT": [
+  {
+   "key": "name",
+   "label": "الاسم",
+   "kind": "text"
+  },
+  {
+   "key": "qty",
+   "label": "الكمّيّة",
+   "kind": "number",
+   "first": "asc"
+  },
+  {
+   "key": "price",
+   "label": "سعر البيع",
+   "kind": "number"
+  },
+  {
+   "key": "value",
+   "label": "قيمة المخزون",
+   "kind": "number"
+  }
+ ],
+ "CARD_STOCK_SORT": [
+  {
+   "key": "name",
+   "label": "الباقة",
+   "kind": "text"
+  },
+  {
+   "key": "remaining",
+   "label": "المتبقّي",
+   "kind": "number"
+  },
+  {
+   "key": "used",
+   "label": "المستعمل",
+   "kind": "number"
+  },
+  {
+   "key": "value",
+   "label": "القيمة",
+   "kind": "number"
+  }
+ ],
+ "CARD_SERIES_SORT": [
+  {
+   "key": "series",
+   "label": "السلسلة",
+   "kind": "text"
+  },
+  {
+   "key": "name",
+   "label": "الباقة",
+   "kind": "text"
+  },
+  {
+   "key": "remaining",
+   "label": "المتبقّي",
+   "kind": "number"
+  },
+  {
+   "key": "created",
+   "label": "تاريخ الإنشاء",
+   "kind": "date"
+  },
+  {
+   "key": "expiry",
+   "label": "الانتهاء",
+   "kind": "date",
+   "first": "asc"
+  }
+ ],
+ "RECEIPT_SORT": [
+  {
+   "key": "date",
+   "label": "التاريخ",
+   "kind": "date",
+   "natural": "desc"
+  },
+  {
+   "key": "amount",
+   "label": "المبلغ",
+   "kind": "number"
+  },
+  {
+   "key": "name",
+   "label": "المشترك",
+   "kind": "text"
+  },
+  {
+   "key": "no",
+   "label": "رقم الوصل",
+   "kind": "number"
+  }
+ ],
+ "TICKET_SORT": [
+  {
+   "key": "activity",
+   "label": "آخر نشاط",
+   "kind": "date"
+  },
+  {
+   "key": "opened",
+   "label": "تاريخ الفتح",
+   "kind": "date"
+  },
+  {
+   "key": "name",
+   "label": "المشترك",
+   "kind": "text"
+  }
+ ],
+ "RENEW_SORT": [
+  {
+   "key": "date",
+   "label": "تاريخ الطلب",
+   "kind": "date"
+  },
+  {
+   "key": "name",
+   "label": "المشترك",
+   "kind": "text"
+  },
+  {
+   "key": "amount",
+   "label": "المبلغ",
+   "kind": "number"
+  }
+ ],
+ "EMP_SEEN_LIVE": {
+  "key": "seen",
+  "label": "آخر ظهور",
+  "kind": "date"
+ },
+ "SORT_ALL_CAP": 1000,
+ "SALE_SORT_DEFAULT": [
+  "date",
+  "desc"
+ ],
+ "RECEIPT_SORT_DEFAULT": [
+  "date",
+  "desc"
+ ],
+ "STORAGE_KEYS": {
+  "employees": "list.v2.employees.sort",
+  "sales": "list.v2.sales.sort",
+  "sales-items": "list.v2.sales-items.sort",
+  "cards-stock": "list.v2.cards-stock.sort",
+  "cards-series": "list.v2.cards-series.sort",
+  "receipts": "list.v2.receipts.sort",
+  "tickets": "list.v2.tickets.sort",
+  "renew": "list.v2.renew.sort"
+ }
+}
