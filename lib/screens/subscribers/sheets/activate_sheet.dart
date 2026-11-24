@@ -162,8 +162,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// صفّ الشركة المفتوحة (أو بلا مفتاح): «الحوالات» إعداد الشركة المفتوحة وحدها — صفُّ شركةٍ أخرى في «كل الشركات» بلا اختيار.
   late bool _onOpenCompany = widget.sub.companyKey == null;
 
-  /// «استلمته» ظاهرة ومُرسَلة: الخادم فتحها للصفحة، ساس فور (لا ايرث لنك ولا فايبر اكس/الشركات المُضافة)، نقديٌّ أو جزئيّ.
-  bool get _viaOn => TransferPay.available.value && _onOpenCompany && !_isEarthlink && !_fxMode && _pay != _PayType.debt;
+  /// «استلمته» ظاهرة ومُرسَلة: الخادم فتحها للصفحة، ساس فور أو ايرث لنك (٢٤ نوفمبر — الطريقة على حركة دفترها؛ لا فايبر اكس ولا
+  /// الشركات المُضافة)، نقديٌّ أو جزئيّ.
+  bool get _viaOn => TransferPay.available.value && _onOpenCompany && !_fxMode && _pay != _PayType.debt;
   bool _printReceiptChecked = false;
   final _partialCtrl = TextEditingController();
   int _partialAmount = 0;
@@ -800,6 +801,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         return false;
       }
       if (_pay == _PayType.partial && _partialAmount <= 0) return false;
+      // «الحوالات»: «أخرى» بلا اسم لا تُرسل (الخادم يرفضها PAID_VIA_NAME_REQUIRED)
+      if (_viaOn && !_paidVia.valid) return false;
       return true;
     }
     if (_cardBlocked || _railStop != null) return false; // SAS4 فقط
@@ -842,6 +845,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       elData['base_price'] = _elRawPrice;
       elData['user_price'] = _elRawPrice;
 
+      // «الحوالات»: لقطةٌ قبل الانتظار — الكاش (أو الميزة مطفأة) لا يُرسل شيئاً
+      final elPaidVia = _viaOn ? _paidVia : PaidVia.cash;
       setState(() => _submitting = true);
       // لحظة الضغط — منها يُسأل الخادم لاحقاً «هل أُرسلت رسالة التفعيل؟» (OpWaNotice).
       final pressedAt = DateTime.now();
@@ -863,6 +868,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         pin: _elMethod == _ElMethod.card ? _pinCtrl.text.trim() : null,
         profileId: profileId,
         confirmRepeat: _confirmRepeat,
+        paidVia: elPaidVia,
       ));
       if (!mounted) return;
       setState(() {
@@ -1412,7 +1418,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               ),
             ],
             // «استلمته»: النقديّ والجزئيّ (بعد مبلغه) — كاش (الافتراضيّ) أو حوالة بطريقتها؛ الخادم الذي يعرفها وحده يُظهرها
-            if (_pay != _PayType.debt && _onOpenCompany && !_isEarthlink && !_fxMode)
+            // (ساس فور وايرث لنك — ٢٤ نوفمبر)
+            if (_pay != _PayType.debt && _onOpenCompany && !_fxMode)
               ValueListenableBuilder<bool>(
                 valueListenable: TransferPay.available,
                 builder: (context, on, _) => !on
