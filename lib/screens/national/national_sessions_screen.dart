@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_more_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../api/national_portal_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/widgets/app_sheet.dart';
@@ -37,10 +42,19 @@ class _NationalSessionsScreenState extends State<NationalSessionsScreen> {
   NationalMoreResult<Object?>? _locked;
   final _p = NationalPaged<NationalSession>();
 
+  /// «رتّب حسب» (٢٤ نوفمبر): اليوزر أو الزون — البوّابة ترتّب، ويُحفظ كالموقع.
+  OrderValue _sort = portalSortInitial['sessions']!;
+
   @override
   void initState() {
     super.initState();
     _reload();
+    unawaited(OrderPrefs.load(OrderPrefs.listKey('ftth-sessions'), ftthSessionSort, portalSortInitial['sessions']!).then((v) {
+      if (mounted && v != _sort) {
+        _sort = v;
+        _reload();
+      }
+    }));
     // الزونات لورقة الفلاتر من الآن (كاش ستّ ساعات بالخادم) — لا «جارٍ تحميل الخيارات» عند فتحها
     _loadLookups();
   }
@@ -66,9 +80,10 @@ class _NationalSessionsScreenState extends State<NationalSessionsScreen> {
 
   void _next() {
     final online = _online;
+    final so = portalSortArgs(_sort, portalSortInitial['sessions']!);
     _p.next(
       (page) async {
-        final r = await NationalMoreApi.sessions(online: online, page: page, q: _q, zone: _zone);
+        final r = await NationalMoreApi.sessions(online: online, page: page, q: _q, zone: _zone, sort: so.sort, sortDir: so.dir);
         if (r.locked && mounted && online == _online) _locked = r;
         return r.toResult();
       },
@@ -158,6 +173,18 @@ class _NationalSessionsScreenState extends State<NationalSessionsScreen> {
                 ),
               ],
               const SizedBox(height: Sp.md),
+              if (_locked == null) ...[
+                RpSortChips(
+                  key: const ValueKey('nat-sessions-sort'),
+                  fields: ftthSessionSort,
+                  value: _sort,
+                  onPick: (k) {
+                    setState(() => _sort = pickOrder('ftth-sessions', _sort, ftthSessionSort, k));
+                    _reload();
+                  },
+                ),
+                const SizedBox(height: Sp.sm),
+              ],
               ..._body(),
             ],
           ),

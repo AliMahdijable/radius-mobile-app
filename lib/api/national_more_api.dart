@@ -604,16 +604,20 @@ class NationalMoreApi {
     int page = 1,
     String? q,
     String? zone,
+    String? sort,
+    String? sortDir,
   }) async =>
-      _paged(await _get('/api/v2/ftth/sessions', sessionsQuery(online: online, page: page, q: q, zone: zone)), NationalSession.fromJson);
+      _paged(await _get('/api/v2/ftth/sessions', sessionsQuery(online: online, page: page, q: q, zone: zone, sort: sort, sortDir: sortDir)), NationalSession.fromJson);
 
   @visibleForTesting
-  static Map<String, Object?> sessionsQuery({required bool online, int page = 1, String? q, String? zone}) => {
+  static Map<String, Object?> sessionsQuery({required bool online, int page = 1, String? q, String? zone, String? sort, String? sortDir}) => {
         'status': online ? 'online' : 'offline',
         'page': page,
         'size': 25,
         'q': q?.trim(),
         'zone': zone,
+        'sort': sort,
+        'sort_dir': sortDir,
       };
 
   /// «فريقي»: أعضاء فريق الحساب في البوّابة ([q] الاسم أو اليوزر).

@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_more_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../api/national_sheet_api.dart';
 import '../../api/national_team_api.dart';
 import '../../core/util/bidi.dart';
@@ -41,6 +46,9 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
   void initState() {
     super.initState();
     _reload();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('ftth-team'), ftthTeamSort).then((v) {
+      if (mounted && v != null) setState(() => _sort = v);
+    }));
     if (!Perms.isEmployee) {
       NationalSheetApi.beta().then((b) {
         if (!mounted || b == null) return;
@@ -95,6 +103,47 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
     _locked = null;
     setState(() {});
     _next();
+  }
+
+  /// «رتّب حسب» (٢٤ نوفمبر): البوّابة لا ترتّب «فريقي» ⇒ عندنا على القائمة كاملة (تُجلب بقيّتها أوّلاً حتى ٥٠٠)، والثالثة ترجعها.
+  OrderValue? _sort;
+  bool _loadingAll = false;
+
+  List<NationalTeamMember> get _shown => sortOrKeep<NationalTeamMember>(
+        _p.rows,
+        _sort,
+        ftthTeamSort,
+        (m, k) => ftthTeamSortValue(k,
+            name: m.name, login: m.login, role: m.role, isMain: m.main, limited: m.limited, walletLimit: m.walletLimit, lastLogin: m.lastLogin),
+      );
+
+  void _pickSort(String k) {
+    setState(() => _sort = pickTri('ftth-team', _sort, ftthTeamSort, k));
+    unawaited(_loadAllForSort());
+  }
+
+  Future<void> _loadAllForSort() async {
+    if (_loadingAll) return;
+    _loadingAll = true;
+    try {
+      while (mounted && _sort != null && _p.hasMore && _p.error == null && !_p.pending && _p.rows.length < 500) {
+        final before = _p.rows.length;
+        await _p.next(
+          (page) async {
+            final r = await NationalMoreApi.team(page: page, q: _q);
+            if (r.locked && mounted) _locked = r;
+            return r.toResult();
+          },
+          onChange: () {
+            if (mounted) setState(() {});
+          },
+          alive: () => mounted,
+        );
+        if (_p.rows.length == before) break;
+      }
+    } finally {
+      _loadingAll = false;
+    }
   }
 
   void _next() {
@@ -158,6 +207,10 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
                 ],
                 const SizedBox(height: Sp.md),
               ],
+              if (_locked == null && (_p.rows.length > 1 || _p.hasMore)) ...[
+                RpSortChips(key: const ValueKey('nat-team-sort'), fields: ftthTeamSort, value: _sort, onPick: _pickSort),
+                const SizedBox(height: Sp.sm),
+              ],
               ..._body(),
             ],
           ),
@@ -180,8 +233,13 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
         ),
       ];
     }
+    // بعد الترتيب تُجلب البقيّة أوّلاً: ترتيب جزءٍ كأنّه الكلّ لا يُعرض
+    if (_sort != null && _p.hasMore) {
+      if (!_loadingAll && !_p.loading && _p.error == null) unawaited(_loadAllForSort());
+      return const [NationalStateBox.loading()];
+    }
     return [
-      for (final m in _p.rows) ...[
+      for (final m in _shown) ...[
         _MemberCard(
           m: m,
           onEdit: _canManage && m.canManage && m.id != null ? () => _editMember(m) : null,

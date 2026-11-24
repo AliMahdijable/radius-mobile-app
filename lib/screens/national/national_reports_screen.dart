@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_more_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../core/util/bidi.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
@@ -39,10 +42,24 @@ class _NationalReportsScreenState extends State<NationalReportsScreen> {
   final _zones = _Part();
   final _sessions = _Part();
 
+  /// «رتّب حسب» (٢٤ نوفمبر): القائمة كاملة عندنا — الثالثة ترجعها كما وصلت (الأكبر عدداً أوّلاً)؛ ويُحفظ كالموقع.
+  OrderValue? _zSort;
+  OrderValue? _sSort;
+
   @override
   void initState() {
     super.initState();
     _loadAll();
+    unawaited(Future.wait([
+      OrderPrefs.loadTri(OrderPrefs.listKey('ftth-zones'), zoneSubsSort),
+      OrderPrefs.loadTri(OrderPrefs.listKey('ftth-zone-sessions'), zoneSessSort),
+    ]).then((v) {
+      if (!mounted) return;
+      setState(() {
+        _zSort = v[0];
+        _sSort = v[1];
+      });
+    }));
   }
 
   @override
@@ -123,6 +140,9 @@ class _NationalReportsScreenState extends State<NationalReportsScreen> {
                 row: (z) => (a: z.active, b: z.expired, extra: (z.suspended ?? 0) > 0 ? 'موقوف ${nationalCount(z.suspended)}' : null),
                 aLabel: 'فعّال',
                 bLabel: 'منتهي',
+                sortFields: zoneSubsSort,
+                sortValue: _zSort,
+                onSortPick: (k) => setState(() => _zSort = pickTri('ftth-zones', _zSort, zoneSubsSort, k)),
                 note: (r) => [
                   if ((r.total('suspended') ?? 0) > 0) 'منهم موقوف: ${nationalCount(r.total('suspended'))}',
                   if (r.partial) 'من جزءٍ من القائمة (حسابٌ كبير)',
@@ -143,6 +163,9 @@ class _NationalReportsScreenState extends State<NationalReportsScreen> {
                 row: (z) => (a: z.online, b: z.offline, extra: null),
                 aLabel: 'متّصل',
                 bLabel: 'غير متّصل',
+                sortFields: zoneSessSort,
+                sortValue: _sSort,
+                onSortPick: (k) => setState(() => _sSort = pickTri('ftth-zone-sessions', _sSort, zoneSessSort, k)),
               ),
             ],
           ),
@@ -167,6 +190,9 @@ class _ReportCard extends StatelessWidget {
     required this.row,
     required this.aLabel,
     required this.bLabel,
+    required this.sortFields,
+    required this.sortValue,
+    required this.onSortPick,
     this.note,
   });
 
@@ -182,6 +208,11 @@ class _ReportCard extends StatelessWidget {
   final String aLabel;
   final String bLabel;
   final String Function(NationalReport)? note;
+
+  /// «رتّب حسب» (٢٤ نوفمبر) — null = كما وصلت.
+  final List<OrderField> sortFields;
+  final OrderValue? sortValue;
+  final ValueChanged<String> onSortPick;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +263,13 @@ class _ReportCard extends StatelessWidget {
           ],
           if (d.zones.isNotEmpty) ...[
             const SizedBox(height: Sp.sm),
-            for (final z in d.zones) _ZoneRow(z: z, v: row(z), aLabel: aLabel, bLabel: bLabel),
+            if (d.zones.length > 1) ...[
+              RpSortChips(fields: sortFields, value: sortValue, onPick: onSortPick),
+              const SizedBox(height: Sp.sm),
+            ],
+            for (final z in sortOrKeep<NationalZoneCount>(d.zones, sortValue, sortFields,
+                (z, k) => zoneSortValue(k, zone: z.zone, total: z.total, active: z.active, expired: z.expired, online: z.online, offline: z.offline)))
+              _ZoneRow(z: z, v: row(z), aLabel: aLabel, bLabel: bLabel),
           ] else ...[
             const SizedBox(height: Sp.sm),
             Text('لا زونات في التقرير', style: AppType.muted()),

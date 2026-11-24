@@ -267,3 +267,77 @@ OrderValue pickOrder(String list, OrderValue cur, List<OrderField> fields, Strin
   unawaited(OrderPrefs.save(OrderPrefs.listKey(list), next));
   return next;
 }
+
+// ═══ «رتّب حسب» لقوائم البوّابات (٢٤ نوفمبر — المالك: «اي طبعا كلها رتبها») — كالموقع (lib/list-sorts.ts) حرفاً ═══
+// تُرتَّب عند البوّابة (الخادم يمرّر ?sort&sort_dir): الحقول ما تقبله البوّابة لكلّ قائمة وحده، والأوّل ترتيب القائمة كما تصل؛
+// «الأقدم أوّلاً» لحركات الوطنيّ يقلبه الخادم (البوّابة ترتّبها الأحدث وحده).
+const ftthTicketSort = <OrderField>[OrderField('date', 'التاريخ', OrderKind.date, natural: OrderDir.desc)];
+const ftthRequestSort = <OrderField>[
+  OrderField('date', 'التاريخ', OrderKind.date, natural: OrderDir.desc),
+  OrderField('status', 'الحالة', OrderKind.text),
+];
+const ftthTaskSort = <OrderField>[
+  OrderField('due', 'الموعد', OrderKind.date, natural: OrderDir.desc),
+  OrderField('created', 'تاريخ الإنشاء', OrderKind.date),
+];
+const ftthSessionSort = <OrderField>[
+  OrderField('username', 'اليوزر', OrderKind.text, natural: OrderDir.asc),
+  OrderField('zone', 'الزون', OrderKind.text),
+];
+
+/// حركات الوطنيّ وإيراداته: التاريخ وحده.
+const portalDateSort = <OrderField>[OrderField('date', 'التاريخ', OrderKind.date, natural: OrderDir.desc)];
+
+/// ترتيب كلّ قائمةٍ كما تصل من البوّابة — لا معاملات.
+const portalSortInitial = <String, OrderValue>{
+  'tickets': OrderValue('date', OrderDir.desc),
+  'requests': OrderValue('date', OrderDir.desc),
+  'tasks': OrderValue('due', OrderDir.desc),
+  'sessions': OrderValue('username', OrderDir.asc),
+  'date': OrderValue('date', OrderDir.desc),
+};
+
+/// ?sort&sort_dir للبوّابة — الافتراضيّ [initial] لا يرسل شيئاً (الطلب كما كان حرفاً).
+({String? sort, String? dir}) portalSortArgs(OrderValue v, OrderValue initial) =>
+    v == initial ? (sort: null, dir: null) : (sort: v.key, dir: v.dir == OrderDir.asc ? 'asc' : 'desc');
+
+/// «فريقي»: البوّابة لا ترتّبه ⇒ عندنا على القائمة كاملة، بلا ترتيبٍ افتراضيّ (الثالثة ترجعها كما وصلت — كالمدراء).
+const ftthTeamSort = <OrderField>[
+  OrderField('name', 'الاسم', OrderKind.text),
+  OrderField('role', 'الدور', OrderKind.text),
+  OrderField('limit', 'حد المحفظة', OrderKind.number),
+  OrderField('login', 'آخر دخول', OrderKind.date),
+];
+
+/// «غير محدود» أكبر حدٍّ ممكن؛ الوكيل الرئيسيّ (بلا حدٍّ معروض) آخراً بالاتّجاهين.
+Object? ftthTeamSortValue(String key,
+        {required String name, String? login, required String role, required bool isMain, bool? limited, num? walletLimit, String? lastLogin}) =>
+    switch (key) {
+      'name' => name.isNotEmpty ? name : login,
+      'role' => role.isNotEmpty ? role : (isMain ? 'الوكيل الرئيسيّ' : null),
+      'limit' => limited == null ? null : (limited ? walletLimit : _onlineNow),
+      'login' => lastLogin,
+      _ => null,
+    };
+
+/// «تقارير الزونات»: القائمة كاملة عندنا وتصل الأكبر عدداً أوّلاً — الثالثة ترجعها كما وصلت.
+const zoneSubsSort = <OrderField>[
+  OrderField('zone', 'الزون', OrderKind.text),
+  OrderField('total', 'الكلّ', OrderKind.number),
+  OrderField('active', 'فعّال', OrderKind.number),
+  OrderField('expired', 'منتهي', OrderKind.number),
+];
+const zoneSessSort = <OrderField>[
+  OrderField('zone', 'الزون', OrderKind.text),
+  OrderField('online', 'نشطة', OrderKind.number),
+  OrderField('offline', 'غير نشطة', OrderKind.number),
+];
+Object? zoneSortValue(String key, {required String zone, int? total, int? active, int? expired, int? online, int? offline}) => switch (key) {
+      'zone' => zone,
+      'total' => total,
+      'active' => active,
+      'expired' => expired,
+      'online' => online,
+      'offline' => offline,
+      _ => null,
+    };

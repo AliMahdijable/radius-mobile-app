@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -71,9 +76,34 @@ class _NationalWalletScreenState extends State<NationalWalletScreen> {
         for (final k in ['type', 'wallet', 'change', 'sales', 'by', 'tx', 'sub', if (_transfers) ...['owner', 'method']]) _f[k],
       ].where((v) => v != null && v.isNotEmpty).length;
 
+  /// «رتّب حسب» (٢٤ نوفمبر): التاريخ — «الأقدم أوّلاً» يقلبه الخادم؛ لكلّ تبويبٍ حفظه كالموقع.
+  OrderValue _walletSort = portalSortInitial['date']!;
+  OrderValue _transfersSort = portalSortInitial['date']!;
+  OrderValue get _sort => _transfers ? _transfersSort : _walletSort;
+
   @override
   void initState() {
     super.initState();
+    _reload();
+    unawaited(Future.wait([
+      OrderPrefs.load(OrderPrefs.listKey('ftth-wallet'), portalDateSort, portalSortInitial['date']!),
+      OrderPrefs.load(OrderPrefs.listKey('ftth-transfers'), portalDateSort, portalSortInitial['date']!),
+    ]).then((v) {
+      if (!mounted || (v[0] == _walletSort && v[1] == _transfersSort)) return;
+      _walletSort = v[0];
+      _transfersSort = v[1];
+      _reload();
+    }));
+  }
+
+  void _pickSort(String k) {
+    setState(() {
+      if (_transfers) {
+        _transfersSort = pickOrder('ftth-transfers', _transfersSort, portalDateSort, k);
+      } else {
+        _walletSort = pickOrder('ftth-wallet', _walletSort, portalDateSort, k);
+      }
+    });
     _reload();
   }
 
@@ -94,6 +124,8 @@ class _NationalWalletScreenState extends State<NationalWalletScreen> {
     _p.next(
       (page) => NationalPortalApi.wallet(
         transfers: _transfers,
+        sort: portalSortArgs(_sort, portalSortInitial['date']!).sort,
+        sortDir: portalSortArgs(_sort, portalSortInitial['date']!).dir,
         from: _day(r.from),
         to: _day(r.to),
         page: page,
@@ -293,6 +325,8 @@ class _NationalWalletScreenState extends State<NationalWalletScreen> {
                 ),
               ],
               const SizedBox(height: Sp.md),
+              RpSortChips(key: const ValueKey('nat-wallet-sort'), fields: portalDateSort, value: _sort, onPick: _pickSort),
+              const SizedBox(height: Sp.sm),
               ..._body(),
             ],
           ),

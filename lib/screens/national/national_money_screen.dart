@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -43,10 +48,19 @@ class _NationalMoneyScreenState extends State<NationalMoneyScreen> {
 
   int get _active => [_f['amount']].where((v) => v != null && v.isNotEmpty).length;
 
+  /// «رتّب حسب» (٢٤ نوفمبر): التاريخ — «الأقدم أوّلاً» يقلبه الخادم، ويُحفظ كالموقع.
+  OrderValue _sort = portalSortInitial['date']!;
+
   @override
   void initState() {
     super.initState();
     _reload();
+    unawaited(OrderPrefs.load(OrderPrefs.listKey('ftth-revenue'), portalDateSort, portalSortInitial['date']!).then((v) {
+      if (mounted && v != _sort) {
+        _sort = v;
+        _reload();
+      }
+    }));
   }
 
   @override
@@ -63,6 +77,7 @@ class _NationalMoneyScreenState extends State<NationalMoneyScreen> {
 
   void _next() {
     final amt = (_f['amount'] ?? '').split('-');
+    final so = portalSortArgs(_sort, portalSortInitial['date']!);
     _p.next(
       (page) => NationalPortalApi.money(
         revenue: true,
@@ -72,6 +87,8 @@ class _NationalMoneyScreenState extends State<NationalMoneyScreen> {
         q: _q,
         min: amt.isNotEmpty ? amt[0] : null,
         max: amt.length > 1 ? amt[1] : null,
+        sort: so.sort,
+        sortDir: so.dir,
       ),
       onChange: () {
         if (mounted) setState(() {});
@@ -137,6 +154,16 @@ class _NationalMoneyScreenState extends State<NationalMoneyScreen> {
               const SizedBox(height: Sp.md),
               _kpis(),
               const SizedBox(height: Sp.md),
+              RpSortChips(
+                key: const ValueKey('nat-revenue-sort'),
+                fields: portalDateSort,
+                value: _sort,
+                onPick: (k) {
+                  setState(() => _sort = pickOrder('ftth-revenue', _sort, portalDateSort, k));
+                  _reload();
+                },
+              ),
+              const SizedBox(height: Sp.sm),
               ..._body(),
             ],
           ),

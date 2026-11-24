@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
@@ -48,10 +51,19 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
 
   int get _active => _f.values.where((v) => v.isNotEmpty).length;
 
+  /// «رتّب حسب» (٢٤ نوفمبر): البوّابة ترتّب — الافتراضيّ لا يرسل شيئاً، ويُحفظ لهذه الشاشة كالموقع.
+  OrderValue _sort = portalSortInitial['tickets']!;
+
   @override
   void initState() {
     super.initState();
     _reload();
+    unawaited(OrderPrefs.load(OrderPrefs.listKey('ftth-tickets'), ftthTicketSort, portalSortInitial['tickets']!).then((v) {
+      if (mounted && v != _sort) {
+        _sort = v;
+        _reload();
+      }
+    }));
     NationalPortalApi.lookups().then((v) {
       if (mounted && v != null) setState(() => _lk = v);
     });
@@ -97,6 +109,7 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
     final page = _page + 1;
     setState(() => _loading = true);
     final period = nationalPeriodRange(_f['period'] ?? '');
+    final so = portalSortArgs(_sort, portalSortInitial['tickets']!);
     final r = await NationalPortalApi.tickets(
       page: page,
       q: _q,
@@ -104,6 +117,8 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
       zone: _f['zone'],
       from: period.from,
       to: period.to,
+      sort: so.sort,
+      sortDir: so.dir,
     );
     if (!mounted || gen != _gen) return;
     final d = r.data;
@@ -201,6 +216,16 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
                 ],
               ),
               const SizedBox(height: Sp.md),
+              RpSortChips(
+                key: const ValueKey('nat-tickets-sort'),
+                fields: ftthTicketSort,
+                value: _sort,
+                onPick: (k) {
+                  setState(() => _sort = pickOrder('ftth-tickets', _sort, ftthTicketSort, k));
+                  _reload();
+                },
+              ),
+              const SizedBox(height: Sp.sm),
               ..._body(),
             ],
           ),

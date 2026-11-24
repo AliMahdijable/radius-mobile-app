@@ -1,0 +1,172 @@
+{
+ "FTTH_TICKET_SORT": [
+  {
+   "key": "date",
+   "label": "التاريخ",
+   "kind": "date",
+   "natural": "desc"
+  }
+ ],
+ "FTTH_REQUEST_SORT": [
+  {
+   "key": "date",
+   "label": "التاريخ",
+   "kind": "date",
+   "natural": "desc"
+  },
+  {
+   "key": "status",
+   "label": "الحالة",
+   "kind": "text"
+  }
+ ],
+ "FTTH_TASK_SORT": [
+  {
+   "key": "due",
+   "label": "الموعد",
+   "kind": "date",
+   "natural": "desc"
+  },
+  {
+   "key": "created",
+   "label": "تاريخ الإنشاء",
+   "kind": "date"
+  }
+ ],
+ "FTTH_SESSION_SORT": [
+  {
+   "key": "username",
+   "label": "اليوزر",
+   "kind": "text",
+   "natural": "asc"
+  },
+  {
+   "key": "zone",
+   "label": "الزون",
+   "kind": "text"
+  }
+ ],
+ "PORTAL_DATE_SORT": [
+  {
+   "key": "date",
+   "label": "التاريخ",
+   "kind": "date",
+   "natural": "desc"
+  }
+ ],
+ "FTTH_TEAM_SORT": [
+  {
+   "key": "name",
+   "label": "الاسم",
+   "kind": "text"
+  },
+  {
+   "key": "role",
+   "label": "الدور",
+   "kind": "text"
+  },
+  {
+   "key": "limit",
+   "label": "حد المحفظة",
+   "kind": "number"
+  },
+  {
+   "key": "login",
+   "label": "آخر دخول",
+   "kind": "date"
+  }
+ ],
+ "ZONE_SUBS_SORT": [
+  {
+   "key": "zone",
+   "label": "الزون",
+   "kind": "text"
+  },
+  {
+   "key": "total",
+   "label": "الكلّ",
+   "kind": "number"
+  },
+  {
+   "key": "active",
+   "label": "فعّال",
+   "kind": "number"
+  },
+  {
+   "key": "expired",
+   "label": "منتهي",
+   "kind": "number"
+  }
+ ],
+ "ZONE_SESS_SORT": [
+  {
+   "key": "zone",
+   "label": "الزون",
+   "kind": "text"
+  },
+  {
+   "key": "online",
+   "label": "نشطة",
+   "kind": "number"
+  },
+  {
+   "key": "offline",
+   "label": "غير نشطة",
+   "kind": "number"
+  }
+ ],
+ "PORTAL_SORT_INITIAL": {
+  "tickets": [
+   "date",
+   "desc"
+  ],
+  "requests": [
+   "date",
+   "desc"
+  ],
+  "tasks": [
+   "due",
+   "desc"
+  ],
+  "sessions": [
+   "username",
+   "asc"
+  ],
+  "date": [
+   "date",
+   "desc"
+  ]
+ },
+ "STORAGE_KEYS": {
+  "ftth-tickets": "list.v2.ftth-tickets.sort",
+  "ftth-requests": "list.v2.ftth-requests.sort",
+  "ftth-tasks": "list.v2.ftth-tasks.sort",
+  "ftth-sessions": "list.v2.ftth-sessions.sort",
+  "ftth-wallet": "list.v2.ftth-wallet.sort",
+  "ftth-transfers": "list.v2.ftth-transfers.sort",
+  "ftth-revenue": "list.v2.ftth-revenue.sort",
+  "ftth-team": "list.v2.ftth-team.sort",
+  "ftth-zones": "list.v2.ftth-zones.sort",
+  "ftth-zone-sessions": "list.v2.ftth-zone-sessions.sort"
+ },
+ "TEAM_VALUES": [
+  [
+   "زيد كريم",
+   "وكيل",
+   50000,
+   "2026-11-20 09:00:00"
+  ],
+  [
+   "•••4567",
+   "الوكيل الرئيسيّ",
+   null,
+   null
+  ],
+  [
+   "إبراهيم علي",
+   "مدير",
+   9007199254740991,
+   null
+  ]
+ ]
+}

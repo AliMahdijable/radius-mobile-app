@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
+import '../reports/v2/report_kit.dart';
 import '../../api/national_sheet_api.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -49,6 +52,10 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
   final _req = NationalPaged<NationalRequest>();
   final _tasks = NationalPaged<NationalTask>();
 
+  /// «رتّب حسب» (٢٤ نوفمبر): الطلبات (التاريخ/الحالة) والمهامّ (الموعد/الإنشاء) — البوّابة ترتّب، ولكلٍّ حفظه كالموقع.
+  OrderValue _reqSort = portalSortInitial['requests']!;
+  OrderValue _taskSort = portalSortInitial['tasks']!;
+
   bool get _alive => mounted;
   void _changed() {
     if (mounted) setState(() {});
@@ -64,6 +71,15 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
   void initState() {
     super.initState();
     _reload();
+    unawaited(Future.wait([
+      OrderPrefs.load(OrderPrefs.listKey('ftth-requests'), ftthRequestSort, portalSortInitial['requests']!),
+      OrderPrefs.load(OrderPrefs.listKey('ftth-tasks'), ftthTaskSort, portalSortInitial['tasks']!),
+    ]).then((v) {
+      if (!mounted || (v[0] == _reqSort && v[1] == _taskSort)) return;
+      _reqSort = v[0];
+      _taskSort = v[1];
+      _reload();
+    }));
     NationalPortalApi.lookups().then((v) {
       if (mounted && v != null) setState(() => _lk = v);
     });
@@ -95,6 +111,8 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
 
   void _next() {
     final period = nationalPeriodRange(_f['period'] ?? '');
+    final rs = portalSortArgs(_reqSort, portalSortInitial['requests']!);
+    final ts = portalSortArgs(_taskSort, portalSortInitial['tasks']!);
     if (_tab == 0) {
       _req.next(
         (page) => NationalPortalApi.requests(
@@ -106,13 +124,15 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
           zone: _f['zone'],
           from: period.from,
           to: period.to,
+          sort: rs.sort,
+          sortDir: rs.dir,
         ),
         onChange: _changed,
         alive: () => _alive,
       );
     } else {
       _tasks.next(
-        (page) => NationalPortalApi.tasks(page: page, q: _q, zone: _f['zone'], from: period.from, to: period.to),
+        (page) => NationalPortalApi.tasks(page: page, q: _q, zone: _f['zone'], from: period.from, to: period.to, sort: ts.sort, sortDir: ts.dir),
         onChange: _changed,
         alive: () => _alive,
       );
@@ -247,6 +267,27 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
               ],
               if (_tab == 1) ..._taskSummary(),
               const SizedBox(height: Sp.md),
+              if (_tab == 0)
+                RpSortChips(
+                  key: const ValueKey('nat-requests-sort'),
+                  fields: ftthRequestSort,
+                  value: _reqSort,
+                  onPick: (k) {
+                    setState(() => _reqSort = pickOrder('ftth-requests', _reqSort, ftthRequestSort, k));
+                    _reload();
+                  },
+                )
+              else
+                RpSortChips(
+                  key: const ValueKey('nat-tasks-sort'),
+                  fields: ftthTaskSort,
+                  value: _taskSort,
+                  onPick: (k) {
+                    setState(() => _taskSort = pickOrder('ftth-tasks', _taskSort, ftthTaskSort, k));
+                    _reload();
+                  },
+                ),
+              const SizedBox(height: Sp.sm),
               ..._body(p),
             ],
           ),

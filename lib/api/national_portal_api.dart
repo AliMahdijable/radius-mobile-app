@@ -647,8 +647,10 @@ class NationalPortalApi {
     String? zone,
     String? from,
     String? to,
+    String? sort,
+    String? sortDir,
   }) async {
-    final r = await _get('/api/v2/ftth/tickets', {'page': page, 'q': q, 'status': status, 'zone': zone, 'from': from, 'to': to});
+    final r = await _get('/api/v2/ftth/tickets', {'page': page, 'q': q, 'status': status, 'zone': zone, 'from': from, 'to': to, 'sort': sort, 'sort_dir': sortDir});
     return r.ok ? NationalResult.ok(_page(r.data!, NationalTicket.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
   }
 
@@ -669,6 +671,8 @@ class NationalPortalApi {
     String? zone,
     String? from,
     String? to,
+    String? sort,
+    String? sortDir,
   }) async {
     final r = await _get('/api/v2/ftth/requests', {
       'page': page,
@@ -679,6 +683,8 @@ class NationalPortalApi {
       'zone': zone,
       'from': from,
       'to': to,
+      'sort': sort,
+      'sort_dir': sortDir,
     });
     return r.ok ? NationalResult.ok(_page(r.data!, NationalRequest.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
   }
@@ -697,8 +703,10 @@ class NationalPortalApi {
     String? zone,
     String? from,
     String? to,
+    String? sort,
+    String? sortDir,
   }) async {
-    final r = await _get('/api/v2/ftth/tasks', {'page': page, 'q': q, 'zone': zone, 'from': from, 'to': to});
+    final r = await _get('/api/v2/ftth/tasks', {'page': page, 'q': q, 'zone': zone, 'from': from, 'to': to, 'sort': sort, 'sort_dir': sortDir});
     return r.ok ? NationalResult.ok(_page(r.data!, NationalTask.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
   }
 
@@ -713,6 +721,8 @@ class NationalPortalApi {
     String? method,
     String? min,
     String? max,
+    String? sort,
+    String? sortDir,
   }) async {
     final r = await _get(revenue ? '/api/v2/ftth/transactions' : '/api/v2/ftth/wallet', {
       'from': from,
@@ -723,6 +733,8 @@ class NationalPortalApi {
       'method': revenue ? null : method,
       'min': min,
       'max': max,
+      'sort': sort,
+      'sort_dir': sortDir,
     });
     return r.ok ? NationalResult.ok(_page(r.data!, NationalMoneyRow.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
   }
@@ -749,6 +761,8 @@ class NationalPortalApi {
     String? sub,
     String? q,
     bool mine = false,
+    String? sort,
+    String? sortDir,
   }) async {
     final r = await _get(transfers ? '/api/v2/ftth/transfers' : '/api/v2/ftth/wallet', walletQuery(
       transfers: transfers,
@@ -767,6 +781,8 @@ class NationalPortalApi {
       sub: sub,
       q: q,
       mine: mine,
+      sort: sort,
+      sortDir: sortDir,
     ));
     return r.ok ? NationalResult.ok(_page(r.data!, NationalMoneyRow.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
   }
@@ -790,6 +806,8 @@ class NationalPortalApi {
     String? sub,
     String? q,
     bool mine = false,
+    String? sort,
+    String? sortDir,
   }) {
     String? opt(String? v) => v == null || v.isEmpty || v == 'all' ? null : v;
     return {
@@ -810,6 +828,9 @@ class NationalPortalApi {
       'sub': opt(sub?.trim()),
       'q': opt(q?.trim()),
       'by': mine ? 'me' : null,
+      // «رتّب حسب» (٢٤ نوفمبر): sort_dir لا dir — dir اتّجاه المبلغ
+      'sort': sort,
+      'sort_dir': sortDir,
     };
   }
 
