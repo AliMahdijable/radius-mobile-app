@@ -110,7 +110,8 @@ void main() {
       expect(find.byKey(const ValueKey('balreq-pay-zaincash')), findsOneWidget);
       expect(find.byKey(const ValueKey('balreq-pay-master')), findsOneWidget);
       await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-mine-6')), 200);
-      expect(find.textContaining('سبب الرفض من مديرك: «المبلغ بالصورة 200,000 لا 250,000»'), findsOneWidget);
+      expect(find.text('السبب: المبلغ بالصورة 200,000 لا 250,000'), findsOneWidget, reason: 'السبب سطرٌ هادئ');
+      expect(find.text('رفضه مديرك'), findsNothing, reason: 'لا صندوق يكرّر «مرفوض»');
       expect(find.textContaining('رصيدك 85,000 د.ع ← 385,000 د.ع'), findsOneWidget);
       await simDrain(t);
     });
@@ -250,6 +251,22 @@ void main() {
       expect(find.text('المبلغ بالصورة غير المطلوب'), findsOneWidget);
       expect(find.text('مرفق — حُذفت صورته بعد ٧ أيّام'), findsOneWidget);
       expect(clipped(), isEmpty);
+      await simDrain(t);
+    });
+
+    testWidgets('المرفوض بلا سبب: الحال «مرفوض» فوق وحدها — لا صندوق ولا سطرٌ يكرّرها', (t) async {
+      await server(me: {
+        ...meJson,
+        'requests': [
+          {'id': 8, 'status': 'rejected', 'created_at': '2026-11-23T08:00:00.000Z', 'amount': 300000, 'pay_method': 'cash', 'method_label': 'كاش باليد'},
+        ],
+      });
+      await open(t);
+      await t.scrollUntilVisible(find.byKey(const ValueKey('balreq-mine-8')), 200);
+      final card = find.byKey(const ValueKey('balreq-mine-8'));
+      expect(find.descendant(of: card, matching: find.text('مرفوض')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.textContaining('رفضه')), findsNothing, reason: 'لا «رفضه مديرك» يكرّر الحال');
+      expect(find.byKey(const ValueKey('balreq-reason-8')), findsNothing);
       await simDrain(t);
     });
 

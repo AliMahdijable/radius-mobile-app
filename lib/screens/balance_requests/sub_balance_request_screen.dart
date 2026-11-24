@@ -448,22 +448,11 @@ class _MyRequestCard extends StatelessWidget {
             ].join(' · '),
           ),
         ],
-        if (r.status == 'rejected') ...[
-          const SizedBox(height: Sp.md),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(Sp.md),
-            decoration: BoxDecoration(
-              color: AppTone.danger.softBg,
-              borderRadius: BorderRadius.circular(R.card / 2),
-              border: Border.all(color: AppTone.danger.softBorder),
-            ),
-            child: BalanceReqHint(
-              icon: LucideIcons.messageSquareText,
-              tone: AppTone.danger,
-              text: r.rejectReason == null ? 'رفضه مديرك' : 'سبب الرفض من مديرك: «${r.rejectReason}»',
-            ),
-          ),
+        // المرفوض: الحال «مرفوض» فوق تكفي — لا صندوق يكرّرها (المالك ٢٤ نوفمبر: «ميحتاج تظهر جوه مرفوضة وفوك مرفوضة»)؛ السبب
+        // سطرٌ هادئ إن كتبه، وكاملاً بالتفاصيل
+        if (r.status == 'rejected' && r.rejectReason != null) ...[
+          const SizedBox(height: Sp.sm),
+          BalanceReqHint(key: ValueKey('balreq-reason-${r.id}'), icon: LucideIcons.messageSquareText, text: 'السبب: ${r.rejectReason}'),
         ],
         if (r.note != null) ...[
           const SizedBox(height: Sp.sm),
