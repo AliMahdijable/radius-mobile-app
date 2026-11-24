@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/renew_requests_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import '../portal_settings/portal_settings_screen.dart';
+import '../reports/v2/report_kit.dart';
 import 'renew_widgets.dart';
 import '../../widgets/merged_section.dart';
 
@@ -40,10 +45,16 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
   bool _loading = true;
   bool _failed = false;
 
+  /// «الترتيب بالنقر» (المرحلة ٤ — كالموقع): الأنفع ثمّ يقلب ثمّ ترتيب الصفحة («بانتظارك» أوّلاً ثمّ المقبولة، الأحدث في كلٍّ).
+  OrderValue? _sort;
+
   @override
   void initState() {
     super.initState();
     _load();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('renew'), renewSort).then((v) {
+      if (mounted && v != null) setState(() => _sort = v);
+    }));
   }
 
   Future<void> _load() async {
@@ -158,8 +169,18 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
       else if (_items.isEmpty)
         _center(LucideIcons.inbox, _all ? 'لا طلبات خلال ٣٠ يوماً' : 'لا طلبات مفتوحة الآن',
             'حين يطلب مشترك تجديد اشتراكه من تطبيقه يظهر هنا مع صورة التحويل')
-      else
-        for (final r in _items) ...[
+      else ...[
+        if (_items.length > 1) ...[
+          RpSortChips(
+            key: const ValueKey('renew-sort'),
+            fields: renewSort,
+            value: _sort,
+            onPick: (k) => setState(() => _sort = pickTri('renew', _sort, renewSort, k)),
+          ),
+          const SizedBox(height: Sp.sm),
+        ],
+        for (final r in sortOrKeep<RenewRequest>(_items, _sort, renewSort,
+            (r, k) => renewSortValue(k, createdAt: r.createdAt, name: r.name, username: r.username, amount: r.amount))) ...[
           RenewRequestTile(
             request: r,
             onTap: () async {
@@ -170,6 +191,7 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
           ),
           const SizedBox(height: Sp.sm),
         ],
+      ],
     ];
   }
 

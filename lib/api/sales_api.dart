@@ -616,12 +616,15 @@ class SalesApi {
     required String to,
     int? employeeId,
     required String? companyKey,
+    // «الترتيب بالنقر» (المرحلة ٤): الفترة كلّها للترتيب حين القائمة مقصوصة (الخادم: أحدث ٣٠٠ افتراضاً، حتى ١٠٠٠)
+    int? limit,
   }) async {
     try {
       final r = await ApiClient.dio.get<Object?>(_base, queryParameters: {
         'from': from,
         'to': to,
         if (employeeId != null) 'employee_id': employeeId,
+        if (limit != null) 'limit': limit,
       }, options: _routed(companyKey));
       final body = _map(r.data);
       if (body['success'] != true) {

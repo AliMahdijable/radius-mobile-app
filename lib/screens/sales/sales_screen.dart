@@ -13,6 +13,8 @@ import '../../core/util/ar_date.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
 import '../../core/util/server_time.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -77,6 +79,13 @@ class _SalesScreenState extends State<SalesScreen> {
   SaleItemsPage? _items;
   SalesPage? _sales;
 
+  /// «الترتيب بالنقر» (المرحلة ٤ — كالموقع): البيوع بـ«التاريخ» الأحدث كما كانت (مجمّعةً يوماً بيوم)، وغيره قائمةٌ واحدة على الفترة
+  /// كلّها — المقصوصة (أحدث ٣٠٠) تُجلب كاملةً حتى ١٠٠٠ ([_salesFull]) — والتاريخ على كلّ سطر؛ والموادّ بثلاث نقرات.
+  OrderValue _saleSort = saleSortDefault;
+  OrderValue? _itemSort;
+  SalesPage? _salesFull;
+  bool _fullLoading = false;
+
   /// حالة تسديد المبيعات على الدين الظاهرة (بعد القائمة) — بلاها «على الدين» كما كان.
   Map<int, SaleDebtStatus> _debts = const {};
 
@@ -129,6 +138,14 @@ class _SalesScreenState extends State<SalesScreen> {
       if (!mounted || f.range.key == _range.key) return;
       setState(() => _range = f.range);
       if (Perms.has('sales.view')) unawaited(_refresh());
+    }));
+    unawaited(OrderPrefs.load(OrderPrefs.listKey('sales'), saleSort, saleSortDefault).then((v) {
+      if (!mounted || v == _saleSort) return;
+      setState(() => _saleSort = v);
+      unawaited(_loadFullSales());
+    }));
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('sales-items'), itemSort).then((v) {
+      if (mounted && v != null) setState(() => _itemSort = v);
     }));
     if (Perms.has('sales.view')) {
       if (MergedMode.active.value) {
@@ -427,6 +444,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _loadingSales = false;
       if (r.page != null) {
         _sales = r.page;
+        _salesFull = null;
         _salesError = null;
       } else if (_sales == null) {
         _salesError = r.error;
@@ -436,6 +454,51 @@ class _SalesScreenState extends State<SalesScreen> {
       showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
     }
     if (r.page != null) unawaited(_loadDebts(r.page!, key));
+    if (r.page != null) unawaited(_loadFullSales());
+  }
+
+  /// مبيعات الفترة كلّها للترتيب بغير «التاريخ» حين القائمة مقصوصة — للفترة والشركة نفسها (ردٌّ بعد تبديلها يُهمل).
+  Future<void> _loadFullSales() async {
+    final page = _sales;
+    if (page == null || !page.truncated || _saleSort == saleSortDefault || _salesFull != null || _fullLoading) return;
+    final gen = _gen;
+    final seq = _salesSeq;
+    final key = _co;
+    setState(() => _fullLoading = true);
+    final r = await SalesApi.list(from: _day(_range.from), to: _day(_range.to), companyKey: key, limit: 1000);
+    if (!mounted) return;
+    final current = gen == _gen && seq == _salesSeq;
+    setState(() {
+      _fullLoading = false;
+      if (current && r.page != null) _salesFull = r.page;
+    });
+    final full = r.page;
+    if (current && full != null) unawaited(_loadFullDebts(full, key));
+  }
+
+  /// حال تسديد ما لم تشمله قائمة أحدث ٣٠٠ — يُضاف لما عُرف.
+  Future<void> _loadFullDebts(SalesPage full, String? key) async {
+    final ids = [
+      for (final s in full.sales)
+        if (s.isDebt && s.isDone && (s.idx ?? '').isNotEmpty && !_debts.containsKey(s.id)) s.id,
+    ];
+    if (ids.isEmpty) return;
+    final r = await SalesApi.debtStatus(ids, companyKey: key);
+    if (!mounted || !identical(_salesFull, full)) return;
+    setState(() => _debts = {..._debts, ...r.map});
+  }
+
+  void _pickSaleSort(String k) {
+    setState(() => _saleSort = pickOrder('sales', _saleSort, saleSort, k));
+    unawaited(_loadFullSales());
+  }
+
+  /// سطر تحت القائمة: «أحدث ٣٠٠» كما كان، أو جلب الفترة كلّها للترتيب، أو «أحدث ١٠٠٠» حين الفترة أكبر من حدّ الخادم.
+  String? _salesNote(SalesPage page, SalesPage? full) {
+    if (!page.truncated) return null;
+    if (_saleSort == saleSortDefault) return 'sales.truncated'.tr();
+    if (full == null) return _fullLoading ? 'جارٍ جلب مبيعات الفترة كلّها للترتيب…' : 'sales.truncated'.tr();
+    return full.truncated ? 'تُعرض أحدث ١٬٠٠٠ — المجاميع أعلاه للفترة كاملة' : null;
   }
 
   /// «مسدّد» للبيع على الدين (المالك ٢٣ أكتوبر: «اسدد دين كيبل بيعت … يبقى معروض اجل») — رصيد المشترك الآن، طلبٌ واحد.
@@ -828,6 +891,8 @@ class _SalesScreenState extends State<SalesScreen> {
   // ─────────────────────────── المبيعات ───────────────────────────
   List<Widget> _salesTab() {
     final page = _sales;
+    final full = page != null && page.truncated && _saleSort != saleSortDefault ? _salesFull : null;
+    final note = page == null ? null : _salesNote(page, full);
     final t = page?.totals ?? const SalesTotals();
     final ro = _readOnlyCompany;
     final canVoid = Perms.has('sales.void') && _enabled && ro == null;
@@ -886,11 +951,12 @@ class _SalesScreenState extends State<SalesScreen> {
             child: Center(child: CircularProgressIndicator()),
           )
         else
-          _salesList(page.sales, canVoid: canVoid, canResolve: canResolve, lockMessage: ro == null ? null : _lockText(ro)),
-        if (page.truncated) ...[
+          _salesList((full ?? page).sales, canVoid: canVoid, canResolve: canResolve, lockMessage: ro == null ? null : _lockText(ro)),
+        if (note != null) ...[
           const SizedBox(height: Sp.md),
           Text(
-            'sales.truncated'.tr(),
+            note,
+            key: const ValueKey('sales-note'),
             textAlign: TextAlign.center,
             style: AppType.muted().copyWith(fontSize: 11.5),
           ),
@@ -910,11 +976,15 @@ class _SalesScreenState extends State<SalesScreen> {
   /// تحت كلّ يومٍ بيوعه سطوراً — بدل بطاقةٍ كبيرة لكلّ بيع.
   Widget _salesList(List<Sale> sales, {required bool canVoid, required bool canResolve, String? lockMessage}) {
     final q = _saleQ.trim();
-    final shown = q.isEmpty ? sales : [for (final s in sales) if (_saleMatches(s, q)) s];
+    final matched = q.isEmpty ? sales : [for (final s in sales) if (_saleMatches(s, q)) s];
+    // «رتّب حسب» (المرحلة ٤): «التاريخ» مجمّعٌ يوماً بيوم كما كان (والأقدم عكسه حرفاً)، وغيره قائمةٌ واحدة والتاريخ على كلّ سطر
+    final shown = sortList<Sale>(matched, _saleSort, saleSort,
+        (s, k) => saleSortValue(k, status: s.status, total: s.total, profit: s.profit, customerName: s.customerName, username: s.username));
+    final byDay = _saleSort.key == 'date';
     final groups = <({String day, List<Sale> rows})>[];
     for (final s in shown) {
       final at = s.createdAt;
-      final day = at == null ? '' : iqDateOf(at);
+      final day = !byDay || at == null ? '' : iqDateOf(at);
       if (groups.isEmpty || groups.last.day != day) {
         groups.add((day: day, rows: [s]));
       } else {
@@ -947,6 +1017,10 @@ class _SalesScreenState extends State<SalesScreen> {
               hint: 'ابحث بالزبون أو المادّة أو رقم البيع',
               onChanged: (v) => setState(() => _saleQ = v),
             ),
+            if (sales.length > 1) ...[
+              const SizedBox(height: Sp.sm),
+              RpSortChips(key: const ValueKey('sales-sort'), fields: saleSort, value: _saleSort, onPick: _pickSaleSort),
+            ],
             if (shown.isEmpty) ...[
               const SizedBox(height: Sp.lg),
               Center(child: Text('لا بيع يطابق «$q»', style: AppType.muted(color: AppColors.textMid))),
@@ -959,6 +1033,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
                 _SaleTile(
                   sale: sale,
+                  showDate: !byDay,
                   debt: _debts[sale.id],
                   canVoid: canVoid,
                   canResolve: canResolve,
@@ -984,11 +1059,14 @@ class _SalesScreenState extends State<SalesScreen> {
     final ro = _readOnlyCompany;
     final canItems = Perms.has('sales.items') && _enabled && ro == null;
     final s = _search.text.trim().toLowerCase();
-    final shown = s.isEmpty
+    final matched = s.isEmpty
         ? page.items
         : page.items
             .where((i) => i.name.toLowerCase().contains(s) || (i.code ?? '').toLowerCase().contains(s))
             .toList();
+    // «رتّب حسب» (المرحلة ٤): الأنفع ثمّ يقلب ثمّ ترتيب الخادم (الفعّالة أوّلاً بالاسم)
+    final shown = sortOrKeep<SaleItem>(matched, _itemSort, itemSort,
+        (i, k) => itemSortValue(k, name: i.name, qty: i.qty, salePrice: i.salePrice, stockValue: i.stockValue));
     return [
       Row(
         children: [
@@ -1056,7 +1134,16 @@ class _SalesScreenState extends State<SalesScreen> {
         _Notice(icon: LucideIcons.boxes, text: 'sales.items_empty'.tr())
       else if (shown.isEmpty)
         _Notice(icon: LucideIcons.search, text: 'sales.no_results'.tr())
-      else
+      else ...[
+        if (shown.length > 1) ...[
+          RpSortChips(
+            key: const ValueKey('items-sort'),
+            fields: itemSort,
+            value: _itemSort,
+            onPick: (k) => setState(() => _itemSort = pickTri('sales-items', _itemSort, itemSort, k)),
+          ),
+          const SizedBox(height: Sp.sm),
+        ],
         ..._cards([
           for (final item in shown)
             _ItemTile(
@@ -1070,6 +1157,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   _showSheet(context, _MovesSheet(item: item, canItems: canItems, onChanged: _refresh, companyKey: _co)),
             ),
         ]),
+      ],
     ];
   }
 }
@@ -1545,7 +1633,11 @@ class _SaleTile extends StatelessWidget {
     this.debt,
     this.lockMessage,
     this.printCompany,
+    this.showDate = false,
   });
+
+  /// مرتّبةٌ بغير التاريخ (قائمةٌ واحدة بلا رؤوس أيّام) ⇒ «2026/11/22» على السطر فوق ساعته — كحركات التقارير.
+  final bool showDate;
 
   /// سبب قفل الإلغاء والحسم إن لم يكن الصلاحيّة.
   final String? lockMessage;
@@ -1674,6 +1766,12 @@ class _SaleTile extends StatelessWidget {
                       style: AppType.bodyStrong(color: dim ? AppColors.textLow : AppColors.textHi).copyWith(decoration: strike),
                     ),
                   ),
+                  if (at != null && showDate)
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(DateFormat('yyyy/MM/dd').format(at),
+                          key: ValueKey('sale-date-${sale.id}'), maxLines: 1, style: AppType.microBold(color: AppColors.textMid)),
+                    ),
                   if (at != null) Text(clock12Ar(at), maxLines: 1, style: AppType.micro(color: AppColors.textLow)),
                 ],
               ),

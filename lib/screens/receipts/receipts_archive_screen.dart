@@ -9,12 +9,15 @@ import '../../api/receipts_archive_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/receipt_service.dart';
+import '../reports/v2/report_kit.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -97,6 +100,11 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
   String? _error;
   String? _busyKey;
 
+  /// «الترتيب بالنقر» (المرحلة ٤ — كالموقع): «التاريخ» الأحدث كما يصل؛ وغيره يحتاج وصولات المدّة كلّها ⇒ تُجلب صفحاتها تباعاً
+  /// (حتى [sortAllCap]) ثمّ تُرتَّب — وحتى تكتمل تبقى كما وصلت (لا قفز بين الصفحات).
+  OrderValue _sort = receiptSortDefault;
+  bool _loadingAll = false;
+
   /// رقم الطلب الجاري — ردٌّ أقدم (بحثٌ سبقه آخر) يُهمَل.
   int _seq = 0;
 
@@ -115,6 +123,11 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
     _companyKey = MergedSection.routeKeyOf(context);
     _loadNames();
     _reload();
+    unawaited(OrderPrefs.load(OrderPrefs.listKey('receipts'), receiptSort, receiptSortDefault).then((v) {
+      if (!mounted || v == _sort) return;
+      setState(() => _sort = v);
+      unawaited(_loadAllForSort());
+    }));
   }
 
   @override
@@ -187,6 +200,27 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
       _items = p.items;
       _next = p.next;
     });
+    unawaited(_loadAllForSort());
+  }
+
+  /// صفحات المدّة الباقية تباعاً حين الترتيب بغير «التاريخ» الأحدث — حتى آخرها أو [sortAllCap]؛ يقف عند خطأٍ أو بحثٍ جديد.
+  Future<void> _loadAllForSort() async {
+    if (_loadingAll || _sort == receiptSortDefault || _next == null || _items.length >= sortAllCap) return;
+    setState(() => _loadingAll = true);
+    try {
+      while (mounted && _sort != receiptSortDefault && _next != null && _items.length < sortAllCap) {
+        final before = _next;
+        await _loadMore();
+        if (!mounted || _next == before) break;
+      }
+    } finally {
+      if (mounted) setState(() => _loadingAll = false);
+    }
+  }
+
+  void _pickSort(String k) {
+    setState(() => _sort = pickOrder('receipts', _sort, receiptSort, k));
+    unawaited(_loadAllForSort());
   }
 
   Future<void> _loadMore() async {
@@ -373,7 +407,24 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
                 hint: 'كلّ تفعيلٍ أو تمديدٍ أو تسديد يظهر هنا — طُبع وصله أم لا'),
       ];
     }
+    final shown = _loadingAll
+        ? _items
+        : sortList<ArchiveItem>(_items, _sort, receiptSort,
+            (it, k) => receiptSortValue(k, amount: it.amount, username: it.username, receiptNo: it.receiptNo, name: _nameOf(it)));
     return [
+      if (_items.length > 1) ...[
+        RpSortChips(key: const ValueKey('receipts-sort'), fields: receiptSort, value: _sort, onPick: _pickSort),
+        const SizedBox(height: Sp.sm),
+      ],
+      if (_loadingAll) ...[
+        Text('جارٍ جلب كلّ وصولات المدّة للترتيب… (${formatIQD(_items.length)})',
+            key: const ValueKey('receipts-sort-loading'), style: AppType.micro(color: AppColors.textMid)),
+        const SizedBox(height: Sp.sm),
+      ] else if (_sort != receiptSortDefault && _next != null && _items.length >= sortAllCap) ...[
+        Text('رُتّب أوّل ${formatIQD(sortAllCap)} وصل من المدّة — ضيّق المدّة أو ابحث لترتيب الباقي',
+            key: const ValueKey('receipts-sort-capped'), style: AppType.micro(color: AppColors.textMid)),
+        const SizedBox(height: Sp.sm),
+      ],
       Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -383,20 +434,20 @@ class _ReceiptsArchiveScreenState extends State<ReceiptsArchiveScreen> {
         ),
         child: Column(
           children: [
-            for (var i = 0; i < _items.length; i++) ...[
+            for (var i = 0; i < shown.length; i++) ...[
               if (i > 0) Divider(height: 1, thickness: 1, color: AppColors.divider),
               ArchiveRowTile(
-                item: _items[i],
-                name: _nameOf(_items[i]),
-                busy: _busyKey == _items[i].key,
-                onTap: () => _open(_items[i]),
-                onPrint: _busyKey == null ? () => _print(_items[i]) : null,
+                item: shown[i],
+                name: _nameOf(shown[i]),
+                busy: _busyKey == shown[i].key,
+                onTap: () => _open(shown[i]),
+                onPrint: _busyKey == null ? () => _print(shown[i]) : null,
               ),
             ],
           ],
         ),
       ),
-      if (_next != null) ...[
+      if (_next != null && !_loadingAll) ...[
         const SizedBox(height: Sp.md),
         Center(
           child: OutlinedButton(

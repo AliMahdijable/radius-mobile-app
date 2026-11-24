@@ -18,6 +18,8 @@ class Employee {
     this.scopeAdminUsername,
     this.deleted = false,
     this.linked,
+    this.lastLoginAt,
+    this.createdAt,
   });
   final int id;
   final String username;
@@ -42,6 +44,10 @@ class Employee {
   /// ٢٣ أكتوبر: موظّفٌ محذوف له حركات — يأتي مع `list(withDeleted: true)` وحده
   /// (فلاتر التقارير): حذفه يمسح صفّه وحركاته تبقى باسمه.
   final bool deleted;
+
+  /// آخر دخولٍ وتاريخ الإضافة كما يرسلهما الخادم — «رتّب حسب» (المرحلة ٤) بحقول الموقع نفسها.
+  final String? lastLoginAt;
+  final String? createdAt;
 
   bool get isScoped => scopeAdminId != null && scopeAdminId!.isNotEmpty;
 
@@ -70,6 +76,8 @@ class Employee {
       scopeAdminUsername: j['scope_admin_username']?.toString(),
       deleted: j['deleted'] == true,
       linked: j['linked'] is Map ? EmployeeLink.fromJson(Map<String, dynamic>.from(j['linked'] as Map)) : null,
+      lastLoginAt: j['last_login_at']?.toString(),
+      createdAt: j['created_at']?.toString(),
     );
   }
 }

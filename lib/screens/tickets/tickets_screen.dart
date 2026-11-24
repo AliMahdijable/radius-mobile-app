@@ -5,12 +5,15 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/field_team_api.dart';
 import '../../api/tickets_api.dart';
+import '../../core/util/list_orders.dart';
+import '../../core/util/order_rules.dart';
 import '../../models/merged_company.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_section.dart';
 import '../desktop/desk_widgets.dart';
+import '../reports/v2/report_kit.dart';
 import 'ticket_thread_screen.dart';
 import 'ticket_widgets.dart';
 
@@ -53,12 +56,22 @@ class _TicketsScreenState extends State<TicketsScreen> {
   /// «كل الشركات»: شركةٌ غير المفتوحة في القسم ⇒ للعرض (القسم يُدخَل قبل بناء الشاشة؛ الإطار يُقرأ في build).
   bool _viewOnly = false;
 
+  /// «الترتيب بالنقر» (المرحلة ٤ — كالموقع): الافتراض كما يصل (غير المقروءة أوّلاً ثمّ الأحدث)؛ والترتيب بحقلٍ يحتاج تذاكر الفلتر
+  /// كلّها ⇒ تُجلب صفحاتها تباعاً ثمّ تُرتَّب (وحتى تكتمل تبقى كما وصلت).
+  OrderValue? _sort;
+  bool _loadingAll = false;
+
   @override
   void initState() {
     super.initState();
     // من شجرة القسم لا من الوجهة الحاضرة (مراجعة 179): تبقى للعرض وهي مخفيّةٌ أو مغطّاة
     _viewOnly = MergedSection.viewOnlyNow(context);
     _load();
+    unawaited(OrderPrefs.loadTri(OrderPrefs.listKey('tickets'), ticketSort).then((v) {
+      if (!mounted || v == null) return;
+      setState(() => _sort = v);
+      unawaited(_loadAllForSort());
+    }));
   }
 
   Future<void> _load() async {
@@ -81,6 +94,28 @@ class _TicketsScreenState extends State<TicketsScreen> {
     // الشارة تتبع ما رأيته هنا — للمفتوحة وحدها (شركةٌ أخرى معروضة هنا لا تكتب عدّادها فوق شارة المفتوحة)
     if (p != null && !(MergedSection.of(context)?.routed ?? false)) unawaited(TicketsState.ensureFresh(force: true));
     if (p != null) unawaited(_loadTasks());
+    if (p != null) unawaited(_loadAllForSort());
+  }
+
+  /// صفحات الفلتر الباقية تباعاً حين الترتيب بحقل — حتى آخرها أو [sortAllCap]؛ يقف عند خطأٍ أو فلترٍ جديد.
+  Future<void> _loadAllForSort() async {
+    if (_loadingAll || _sort == null || !_hasMore || _items.length >= sortAllCap) return;
+    setState(() => _loadingAll = true);
+    try {
+      while (mounted && _sort != null && _hasMore && _items.length < sortAllCap) {
+        final before = _nextOffset;
+        await _loadMore();
+        if (!mounted || _nextOffset == before) break;
+      }
+    } finally {
+      if (mounted) setState(() => _loadingAll = false);
+    }
+    if (mounted) unawaited(_loadTasks());
+  }
+
+  void _pickSort(String k) {
+    setState(() => _sort = pickTri('tickets', _sort, ticketSort, k));
+    unawaited(_loadAllForSort());
   }
 
   /// شارة «مهمّة · حالتها» على التذاكر الظاهرة — للمدير وحده، والقسم مفعّلٌ لصفحته، ولا شركةٌ موجَّهة.
@@ -207,11 +242,26 @@ class _TicketsScreenState extends State<TicketsScreen> {
       else if (_items.isEmpty)
         _center(LucideIcons.ticket, _emptyTitle(), 'حين يكتب مشتركٌ تذكرةً من تطبيقه تظهر هنا ويصلك إشعار')
       else ...[
-        for (final t in _items) ...[
+        if (_items.length > 1) ...[
+          RpSortChips(key: const ValueKey('tickets-sort'), fields: ticketSort, value: _sort, onPick: _pickSort),
+          const SizedBox(height: Sp.sm),
+        ],
+        if (_loadingAll) ...[
+          Text('جارٍ جلب كلّ التذاكر للترتيب… (${_items.length})',
+              key: const ValueKey('tickets-sort-loading'), style: AppType.micro(color: AppColors.textMid)),
+          const SizedBox(height: Sp.sm),
+        ] else if (_sort != null && _hasMore && _items.length >= sortAllCap) ...[
+          Text('رُتّبت أوّل $sortAllCap تذكرة', style: AppType.micro(color: AppColors.textMid)),
+          const SizedBox(height: Sp.sm),
+        ],
+        for (final t in _loadingAll
+            ? _items
+            : sortOrKeep<Ticket>(_items, _sort, ticketSort,
+                (t, k) => ticketSortValue(k, lastActivityAt: t.lastActivityAt, createdAt: t.createdAt, name: t.subscriber.name, username: t.subscriber.username))) ...[
           TicketTile(ticket: t, task: _tasks[t.id], onTap: () => _open(t)),
           const SizedBox(height: Sp.sm),
         ],
-        if (_hasMore)
+        if (_hasMore && !_loadingAll)
           Center(
             child: TextButton(
               key: const ValueKey('tickets-more'),
