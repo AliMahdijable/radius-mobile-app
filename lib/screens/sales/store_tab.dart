@@ -6,6 +6,7 @@ part of 'sales_screen.dart';
 // ويكدر المشترك يطلب شراء ايضا»). فوق: طلبات المشتركين (الجديدة والمقبولة، و«الكلّ» لما مضى) — «بيع» يفتح نافذة البيع المعتادة
 // معبّأةً ([_SalesScreenState._sellStoreOrder]) و«قبول» و«رفض» بسببٍ يصل المشترك و«تمّ التسليم». تحت: موادّ المخزون — مفتاح «اعرضها
 // بالمتجر» و«تعديل» (الوصف والصور حتى ٣ وسعر العرض) بمعاينةٍ كما يراها المشترك. ما لا يملكه الموظّف بمكانه مقفلاً. لا مال هنا.
+// «المتجر: الدفع» (٢٥ نوفمبر): الطلب يقول طريقة دفع المشترك (كاش عند الاستلام / حوالة زين كاش / حوالة ماستر) و«صورة الحوالة» تفتحها.
 
 /// للاختبار: بدل معرض الهاتف في «إضافة صورة».
 @visibleForTesting
@@ -356,6 +357,18 @@ class _StoreOrderTile extends StatelessWidget {
   final VoidCallback onDone;
   final VoidCallback onReject;
 
+  Future<void> _openReceipt(BuildContext context, StoreOrder o) async {
+    final r = await PortalStoreApi.receipt(o.id);
+    if (!context.mounted) return;
+    final b = r.bytes;
+    if (b == null) {
+      showSheetSnack(context, r.gone ? 'لا صورة حوالة لهذا الطلب (تُحفظ ٦٠ يوماً)' : 'تعذّر جلب صورة الحوالة — حاول مرّة ثانية',
+          isError: !r.gone);
+      return;
+    }
+    openTransferImageViewer(context, b, 'صورة الحوالة — ${o.who}');
+  }
+
   Future<void> _call(BuildContext context, String phone) async {
     try {
       final ok = await launchUrl(Uri(scheme: 'tel', path: phone.trim()));
@@ -457,6 +470,45 @@ class _StoreOrderTile extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: Sp.x6),
                     decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.md)),
                     child: Text('«${o.note}»', style: AppType.body(color: AppColors.textBody).copyWith(fontSize: 12.5, height: 1.5)),
+                  ),
+                ],
+                if (o.payLabel != null) ...[
+                  const SizedBox(height: Sp.x6),
+                  Wrap(
+                    spacing: Sp.md,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(o.isTransfer ? LucideIcons.creditCard : LucideIcons.banknote, size: 13, color: AppColors.textMid),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text('الدفع: ${o.payLabel}',
+                                key: ValueKey('store-order-pay-${o.id}'),
+                                style: meta.copyWith(color: AppColors.textBody, fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                      if (o.hasReceipt)
+                        InkWell(
+                          key: ValueKey('store-receipt-${o.id}'),
+                          borderRadius: BorderRadius.circular(R.sm),
+                          onTap: () => unawaited(_openReceipt(context, o)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(LucideIcons.image, size: 13, color: AppColors.brand),
+                                const SizedBox(width: 4),
+                                Text('صورة الحوالة', style: meta.copyWith(color: AppColors.brand, fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
                 if (o.status == 'rejected' && (o.reason ?? '').isNotEmpty) ...[

@@ -40,6 +40,7 @@ import '../reports/widgets/report_permission_gate.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../../services/merged_text.dart';
 import '../portal_settings/widgets/package_image.dart';
+import '../renew/renew_widgets.dart' show openTransferImageViewer;
 
 part 'store_tab.dart';
 

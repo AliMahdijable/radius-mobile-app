@@ -41,9 +41,13 @@ class _StoreServer implements HttpClientAdapter {
 
   late List<Map<String, dynamic>> orders = [
     order(7, 'pending', item: 1, name: 'راوتر TP-Link C6', qty: 2, price: 45000,
-        sub: {'idx': '501', 'username': 'ali.k@sn', 'name': 'علي كريم', 'phone': '07701234567'}, note: 'بعد العصر لو سمحت'),
-    order(8, 'accepted', item: 2, name: 'كيبل Cat6', qty: 30, price: 500, sub: {'idx': '502', 'username': 'huda@sn', 'name': null, 'phone': null}),
+        sub: {'idx': '501', 'username': 'ali.k@sn', 'name': 'علي كريم', 'phone': '07701234567'}, note: 'بعد العصر لو سمحت', pay: 'cash'),
+    order(8, 'accepted', item: 2, name: 'كيبل Cat6', qty: 30, price: 500, sub: {'idx': '502', 'username': 'huda@sn', 'name': null, 'phone': null},
+        pay: 'zaincash', receipt: true),
   ];
+
+  /// «المتجر: الدفع»: صورة حوالة الطلب 8 (PNG 1×1 صالح) — وغيره 404.
+  static final receiptBytes = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
   late List<Map<String, dynamic>> past = [
     order(6, 'done', item: 1, name: 'راوتر TP-Link C6', qty: 1, price: 45000,
         sub: {'idx': '503', 'username': 'zaid@sn', 'name': 'زيد', 'phone': null}, saleId: 77, by: 'المدير'),
@@ -64,12 +68,15 @@ class _StoreServer implements HttpClientAdapter {
           String? note,
           String? reason,
           int? saleId,
-          String? by}) =>
+          String? by,
+          String? pay,
+          bool receipt = false}) =>
       {
         'id': id, 'item_id': 30 + item, 'sales_item_id': item, 'name': name, 'qty': qty, 'unit_price': price,
         'total': qty * price, 'note': note, 'status': status, 'reason': reason, 'created_at': '2026-11-23T05:10:00Z',
         'decided_at': null, 'done_at': null,
         'subscriber': {...sub, 'company_code': 'supernet'}, 'via': 'web', 'sale_id': saleId, 'decided_by': by,
+        'pay_method': pay, 'has_receipt': receipt,
       };
 
   Map<String, dynamic> item1() => {
@@ -168,6 +175,11 @@ class _StoreServer implements HttpClientAdapter {
         'orders': all ? [...orders, ...past] : open,
         'counts': view()['counts'],
       });
+    }
+    final rc = RegExp(r'^/api/v2/portal/store/orders/(\d+)/receipt$').firstMatch(p);
+    if (rc != null && m == 'GET') {
+      if (rc.group(1) == '8') return ResponseBody.fromBytes(receiptBytes, 200, headers: {Headers.contentTypeHeader: ['image/jpeg']});
+      return _json(404, {'success': false, 'code': 'RECEIPT_NOT_FOUND', 'message': 'لا صورة حوالة لهذا الطلب'});
     }
     final act = RegExp(r'^/api/v2/portal/store/orders/(\d+)/(accept|reject|done)$').firstMatch(p);
     if (act != null && m == 'POST') {
@@ -288,6 +300,17 @@ void main() {
       expect(StoreOrder.fromJson({...s.orders.first, 'subscriber': null}), isNull);
     });
 
+    test('«المتجر: الدفع»: الطريقة وصورة الحوالة؛ والطريقة الغريبة أو غيابها ⇒ null', () {
+      final s = _StoreServer(_NoNet());
+      final cash = StoreOrder.fromJson(s.orders.first)!;
+      final zc = StoreOrder.fromJson(s.orders[1])!;
+      expect((cash.payMethod, cash.payLabel, cash.isTransfer, cash.hasReceipt), ('cash', 'كاش عند الاستلام', false, false));
+      expect((zc.payMethod, zc.payLabel, zc.isTransfer, zc.hasReceipt), ('zaincash', 'حوالة زين كاش', true, true));
+      expect(StoreOrder.fromJson({...s.orders.first, 'pay_method': 'master'})!.payLabel, 'حوالة ماستر');
+      expect(StoreOrder.fromJson({...s.orders.first, 'pay_method': 'visa'})!.payMethod, isNull);
+      expect(StoreOrder.fromJson({...s.orders.first}..remove('pay_method'))!.payLabel, isNull, reason: 'طلبٌ من نسخةٍ قبلها');
+    });
+
     test('إشعار store_order عاجل (صوتٌ ونافذة منبثقة) كطلب التجديد', () {
       expect(FcmService.urgentTypes, containsAll(['portal_ticket', 'renew_request', 'store_order']));
     });
@@ -327,6 +350,26 @@ void main() {
         expect(find.text('غير معروضة'), findsOneWidget);
         _noEllipsis(t, find.byKey(const ValueKey('store-tab')), 'المتجر');
         expect(t.takeException(), isNull);
+      });
+    }
+
+    for (final width in [320.0, 480.0]) {
+      testWidgets('«المتجر: الدفع» @$width ×1.2: «الدفع: …» على كلّ طلب، و«صورة الحوالة» للحوالة وحدها تفتحها', (t) async {
+        final server = await _open(t, width: width, scale: 1.2);
+        await _toStore(t);
+        expect(find.byKey(const ValueKey('store-order-pay-7')), findsOneWidget);
+        expect(find.text('الدفع: كاش عند الاستلام'), findsOneWidget);
+        expect(find.text('الدفع: حوالة زين كاش'), findsOneWidget);
+        expect(find.byKey(const ValueKey('store-receipt-7')), findsNothing, reason: 'الكاش بلا صورة');
+        expect(find.byKey(const ValueKey('store-receipt-8')), findsOneWidget);
+        _noEllipsis(t, find.byKey(const ValueKey('store-tab')), 'الدفع');
+        expect(t.takeException(), isNull);
+        await t.ensureVisible(find.byKey(const ValueKey('store-receipt-8')));
+        await t.tap(find.byKey(const ValueKey('store-receipt-8')));
+        await settle(t, seconds: 2);
+        // ذاكرة الجلسة: تُجلب مرّةً على الأكثر (الاختبار الثاني يجدها محفوظة)
+        expect(server.calls.where((c) => c.$1 == 'GET' && c.$2 == '/api/v2/portal/store/orders/8/receipt').length, lessThanOrEqualTo(1));
+        expect(find.text('صورة الحوالة — huda@sn'), findsOneWidget);
       });
     }
 

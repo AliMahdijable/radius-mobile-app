@@ -282,6 +282,15 @@ class _RenewReceiptImageState extends State<RenewReceiptImage> {
   }
 }
 
+/// عارض صورة حوالةٍ بملء الشاشة لغير طلبات التجديد أيضاً («المتجر: الدفع»، ٢٥ نوفمبر) — [title] كما يُعرض.
+void openTransferImageViewer(BuildContext context, Uint8List bytes, String title) {
+  Navigator.of(context, rootNavigator: true).push(PageRouteBuilder<void>(
+    opaque: false,
+    barrierColor: AppColors.scrim,
+    pageBuilder: (ctx, _, __) => _ReceiptViewer(bytes: bytes, title: title),
+  ));
+}
+
 void _openViewer(BuildContext context, Uint8List bytes, String name) {
   Navigator.of(context, rootNavigator: true).push(PageRouteBuilder<void>(
     opaque: false,

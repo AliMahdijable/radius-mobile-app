@@ -199,6 +199,8 @@ class StoreOrder {
     this.saleId,
     this.decidedBy,
     this.via,
+    this.payMethod,
+    this.hasReceipt = false,
   });
   final int id;
   final int salesItemId;
@@ -217,6 +219,22 @@ class StoreOrder {
   final int? saleId;
   final String? decidedBy;
   final String? via;
+
+  /// «المتجر: الدفع» (٢٥ نوفمبر): cash | zaincash | master — null لطلبٍ من نسخة مشتركٍ قبلها.
+  final String? payMethod;
+
+  /// أرفق المشترك صورة الحوالة ([PortalStoreApi.receipt]).
+  final bool hasReceipt;
+
+  bool get isTransfer => payMethod == 'zaincash' || payMethod == 'master';
+
+  /// «كاش عند الاستلام» / «حوالة زين كاش» / «حوالة ماستر» — null بلا طريقة.
+  String? get payLabel => switch (payMethod) {
+        'cash' => 'كاش عند الاستلام',
+        'zaincash' => 'حوالة زين كاش',
+        'master' => 'حوالة ماستر',
+        _ => null,
+      };
 
   bool get isOpen => status == 'pending' || status == 'accepted';
   bool get isPending => status == 'pending';
@@ -257,6 +275,8 @@ class StoreOrder {
       saleId: _int(raw['sale_id']),
       decidedBy: _str(raw['decided_by']),
       via: _str(raw['via']),
+      payMethod: switch (raw['pay_method']) { final String m when const {'cash', 'zaincash', 'master'}.contains(m) => m, _ => null },
+      hasReceipt: raw['has_receipt'] == true,
     );
   }
 }
@@ -302,6 +322,29 @@ class PortalStoreApi {
       _log('orders', e);
       return (orders: null, counts: null, error: _msg(e, 'تعذّر جلب الطلبات'));
     }
+  }
+
+  static final Map<int, Uint8List> _receipts = {};
+
+  /// «المتجر: الدفع» (٢٥ نوفمبر): صورة حوالة الطلب (ذاكرة الجلسة — لا قرص). gone = لا صورة أو حُذفت بعد ٦٠ يوماً (٤٠٤).
+  static Future<({Uint8List? bytes, bool gone})> receipt(int orderId) async {
+    final hit = _receipts[orderId];
+    if (hit != null) return (bytes: hit, gone: false);
+    try {
+      final r = await ApiClient.dio.get<List<int>>('$_base/orders/$orderId/receipt',
+          options: _open.copyWith(responseType: ResponseType.bytes, validateStatus: (s) => s != null && s < 500));
+      final d = r.data;
+      if (r.statusCode == 200 && d != null && d.isNotEmpty) {
+        final b = Uint8List.fromList(d);
+        if (_receipts.length >= 12) _receipts.remove(_receipts.keys.first);
+        _receipts[orderId] = b;
+        return (bytes: b, gone: false);
+      }
+      if (r.statusCode == 404 || r.statusCode == 410) return (bytes: null, gone: true);
+    } catch (e) {
+      _log('receipt', e);
+    }
+    return (bytes: null, gone: false);
   }
 
   /// عرض المادّة/إخفاؤها ووصفها وسعر عرضها ([price] null = سعر البيع). الحقل الغائب لا يتغيّر.
