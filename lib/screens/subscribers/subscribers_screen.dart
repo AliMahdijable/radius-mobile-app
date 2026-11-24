@@ -75,6 +75,7 @@ import '../whatsapp/conn_vpn_screen.dart';
 import '../whatsapp/connection_alerts_screen.dart';
 import '../../services/agent_net_presence.dart';
 import 'subscribers_check_screen.dart';
+import 'subscriber_order.dart';
 import '../../services/merged_text.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
@@ -1509,84 +1510,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       });
       return;
     }
-    // مطلب 2026-06-11: device-metric sort له الأولوية فوق sort field
-    // العادي. مشتركون بلا snapshot (الـwave لم يصلهم بعد، أو الفحص
-    // فشل) يسقطون لأسفل القائمة بأي اتجاه — admin ما يريد سطور
-    // غامضة فوق السطور المفحوصة.
-    // 2026-08-26: ترتيب أبجدي حقيقي — case-insensitive + trim + normalize
-    // بديل قوي لـString.compareTo. للعربي: Unicode order = أبجدي طبيعي
-    // (ألف→ياء). للاتيني: نتجاهل حالة الأحرف (Ali و ali نفس الشيء).
-    // whitespace متعدّد يُقلَّص لحرف واحد قبل المقارنة.
-    int alphaCmp(String? a, String? b) {
-      // ⚠️ `_wsRun` ثابتة الصنف لا محلّيّة: كانت `RegExp(r'\s+')` تُترجَم
-      // مرّتين في كلّ **مقارنة**، وفرز 384 عنصراً ≈ 3400 مقارنة — أي
-      // نحو 6800 ترجمة تعبير نمطيّ لكلّ فرزة.
-      final na = (a ?? '').trim().replaceAll(_wsRun, ' ').toLowerCase();
-      final nb = (b ?? '').trim().replaceAll(_wsRun, ' ').toLowerCase();
-      // فارغ يسقط لأسفل بغض النظر عن الاتجاه.
-      if (na.isEmpty && nb.isEmpty) return 0;
-      if (na.isEmpty) return 1;
-      if (nb.isEmpty) return -1;
-      return na.compareTo(nb);
-    }
-
-    int cmp(Subscriber a, Subscriber b) {
-      switch (_sortField) {
-        case SortField.username:
-          return alphaCmp(a.username, b.username);
-        case SortField.firstname:
-          return alphaCmp(a.fullName, b.fullName);
-        case SortField.profileName:
-          return alphaCmp(a.profileName, b.profileName);
-        case SortField.phone:
-          return a.displayPhone.compareTo(b.displayPhone);
-        case SortField.expiration:
-          return (a.expiration ?? '').compareTo(b.expiration ?? '');
-        case SortField.remainingDays:
-          // مطلب 2026-06-11: SAS4 يدوّر remainingDays لصفر للمنتهي
-          // ولمن باقي عنده ساعات. الـcompareTo القديم يطلع المشترك
-          // اللي عنده ساعه قبل المنتهي (tie أو ترتيب عشوائي).
-          // الإصلاح: استعمل parsedExpiration timestamp كمصدر دقيق،
-          // فالمنتهيون فعلاً يقعدون أولاً عند ascending.
-          final aExp = a.parsedExpiration;
-          final bExp = b.parsedExpiration;
-          if (aExp != null && bExp != null) {
-            return aExp.compareTo(bExp);
-          }
-          // Fallback لـremainingDays فقط لو date فاضي (نادر).
-          return (a.remainingDays ?? 99999).compareTo(b.remainingDays ?? 99999);
-        case SortField.notes:
-          return a.balanceAmount.compareTo(b.balanceAmount);
-        // استهلاك اليوم — الرقم في الصفّ أصلاً، فالفرز بلا كلفة.
-        // ومن لم يستهلك يُعدّ صفراً لا مجهولاً: صفرٌ حقيقة لا نقص بيانات.
-        case SortField.dailyTraffic:
-        case SortField.monthlyTraffic:
-          // مسارهما المستقلّ أعلى الدالّة يعود قبل هذا المقارن (_usageSortKey).
-          return 0;
-        case SortField.parentUsername:
-          return alphaCmp(a.parentUsername, b.parentUsername);
-        case SortField.sessionTime:
-          // Null sessionTime sinks to the bottom regardless of asc/desc
-          // so offline rows don't clutter the head of the online list.
-          final aHas = a.sessionTime != null;
-          final bHas = b.sessionTime != null;
-          if (!aHas && !bHas) return 0;
-          if (!aHas) return _sortDir == SortDirection.asc ? 1 : -1;
-          if (!bHas) return _sortDir == SortDirection.asc ? -1 : 1;
-          return a.sessionTime!.compareTo(b.sessionTime!);
-        // حقول الأجهزة و«أيّام الدين» لا تصل هنا — تُعالَج في المسارين المستقلّين أعلى
-        // الدالّة وتعود قبل بناء هذا المقارن. الفرع للاكتمال النحويّ.
-        case SortField.debtAge:
-        case SortField.deviceRx:
-        case SortField.deviceTemp:
-        case SortField.deviceSignal:
-        case SortField.deviceCcq:
-        case SortField.deviceLan:
-          return 0;
-      }
-    }
-
-    list.sort(_sortDir == SortDirection.asc ? cmp : (a, b) => -cmp(a, b));
+    // «الترتيب بالنقر» — المرحلة ٥: بقيّة الحقول بقواعد كلّ القوائم ([orderSubscribers]) — مستقرٌّ، النصّ مطبَّعاً وأرقامه بقيمتها،
+    // والفارغ آخراً بالاتّجاهين.
+    final ordered = orderSubscribers(list, _sortField, _sortDir);
+    list
+      ..clear()
+      ..addAll(ordered);
   }
 
   /// صفٌّ يحمل استهلاك اليوم من قائمته (الساس: daily_traffic_details) — غيابه فيه صفرٌ حقيقيّ (كما كان) لا مجهول؛ وايرث لنك
@@ -1690,8 +1619,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     SortField.deviceLan,
   };
 
-  /// تسلسل مسافات — تُترجَم مرّة واحدة لعمر الصنف لا مرّة لكلّ مقارنة.
-  static final RegExp _wsRun = RegExp(r'\s+');
 
   Map<SubscriberFilter, int> _counts() {
     // Manager-scoped so chip counters reflect the current sub-manager
