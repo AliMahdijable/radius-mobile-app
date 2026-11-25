@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' show sha1;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/api_client.dart';
 
@@ -122,6 +123,38 @@ class VpnPipe {
   }
 
   static void _wsUnavailable(Duration d) => _wsOffUntil = now().add(d);
+
+  // ——— تذكّر «الخطّ المفتوح» (٢٥ نوفمبر — تجربة المالك: أوّل ١٤ اتّصالاً مشت بالطلبات العاديّة قبل أن يعود «الطريق» بـws) ———
+  static const _wsPrefKey = 'vpn_pipe_ws_v1';
+  static bool _wsKnown = false;
+  static bool _restored = false;
+
+  /// آخر ws محفوظاً ⇒ الممرّات من أوّل ثانية على الخطّ المفتوح (والخادم يقول الحقيقة: 409 PIPE_WS_OFF ⇒ العاديّ ويُنسى). لا يغلب
+  /// ما قاله «الطريق» بهذه الجلسة.
+  static Future<void> restoreWs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!_wsKnown && p.getBool(_wsPrefKey) == true) wsAllowed = true;
+    } catch (_) {}
+  }
+
+  /// مرّةً لكلّ تشغيل — يُحفظ «تمّ» لا الوعد نفسه (وعدٌ من منطقةٍ انتهت لا يكتمل في غيرها: اختبارات الواجهة).
+  static Future<void> _restoreOnce() async {
+    if (_restored) return;
+    _restored = true;
+    await restoreWs();
+  }
+
+  static void _rememberWs(bool v) {
+    _wsKnown = true;
+    unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_wsPrefKey, v)).then((_) {}, onError: (Object _) {}));
+  }
+
+  @visibleForTesting
+  static void debugResetWsMemory() {
+    _restored = false;
+    _wsKnown = false;
+  }
 
   // ——— التباعد بعد الفشل (٢٥ نوفمبر — النقطة ٣؛ المالك: «رح يتاثر الفحص؟ تقل جودته ويتاخر؟») ———
   // كان التطبيق يعيد فوراً بإيقاع قرّائه: ٢١ نوفمبر صفحةٌ ملفّها خربان ⇒ ٣٠٨٤ طلباً فاشلاً وأعلى دقيقة ٢٢٣. الآن:
@@ -291,6 +324,7 @@ class VpnPipe {
   /// [Socket] متّصلٌ بالجهاز [host]:[port] عبر الممرّ — أو [SocketException] كالمباشر.
   static Future<Socket> connect(String host, int port, {Duration? timeout}) async {
     used = true;
+    if (!_restored) await _restoreOnce();
     _gate(host, port);
     await _acquire(port);
     var held = true; // الدور بيدنا حتى يحمله الرابط (يُعاد عند إغلاقه)
@@ -335,6 +369,7 @@ class VpnPipe {
   /// رسالة UDP بردّها عبر الممرّ (SNMP).
   static Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
     used = true;
+    if (!_restored) await _restoreOnce();
     _gate(host, port);
     final ({Uint8List data, int? ms}) r;
     try {
@@ -354,6 +389,7 @@ class VpnPipe {
   /// بنك ICMP عبر الممرّ (ينفّذه الخادم من داخل النفق — وعلى الآيفون أيضاً).
   static Future<List<int>> ping(String host, {int count = 1, Duration timeout = const Duration(seconds: 2)}) async {
     used = true;
+    if (!_restored) await _restoreOnce();
     // البنك سؤالٌ رخيص يكشف عودة الجهاز ⇒ تباعد النفق وحده
     _gate(host, null);
     try {
@@ -372,6 +408,7 @@ class VpnPipe {
       if (r.ok) {
         _tunnel = null;
         wsAllowed = r.ws;
+        _rememberWs(r.ws);
       }
       return r;
     } catch (_) {
@@ -799,13 +836,7 @@ class WsPipeTransport implements VpnPipeTransport {
     }
     final ws = hs.ws;
     if (ws == null) {
-      if (hs.status == 409 && hs.code == 'PIPE_WS_OFF') {
-        VpnPipe.wsAllowed = false;
-      } else if (hs.status == 426) {
-        VpnPipe._wsUnavailable(const Duration(minutes: 30));
-      } else if (hs.status != 401 && hs.status != 403) {
-        VpnPipe._wsUnavailable(const Duration(minutes: 5));
-      }
+      _rejected(hs);
       return http.open(host, port, timeout);
     }
     // الطريق قد يحتاج أن يتّصل النفق أوّلاً (ملفّ الوكيل أو قالب شركته) ⇒ مهلةٌ أطول من مهلة الجهاز (كالطلب العاديّ)
@@ -850,12 +881,104 @@ class WsPipeTransport implements VpnPipeTransport {
     c.dispose();
   }
 
-  @override
-  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) =>
-      http.udp(host, port, data, timeout);
+  /// مصافحةٌ رُفضت قبل الترقية: 409 PIPE_WS_OFF ⇒ حتى «طريقٍ» يقول ws (ويُنسى المحفوظ) · 426 ⇒ ٣٠ د · 401/403 ⇒ لا شيء · غيرها ⇒ ٥ د.
+  void _rejected(_Handshake hs) {
+    if (hs.status == 409 && hs.code == 'PIPE_WS_OFF') {
+      VpnPipe.wsAllowed = false;
+      VpnPipe._rememberWs(false);
+    } else if (hs.status == 426) {
+      VpnPipe._wsUnavailable(const Duration(minutes: 30));
+    } else if (hs.status != 401 && hs.status != 403) {
+      VpnPipe._wsUnavailable(const Duration(minutes: 5));
+    }
+  }
+
+  // ——— المرحلة ٢ (٢٥ نوفمبر — المالك: «طبيعية وأسرع، ابدي بالمرحلة الثانية»): UDP (SNMP) والبنك على خطٍّ واحد للتطبيق (?mux=1) ———
+  // كلّ رسالةٍ طلبٌ برقمه وردٌّ برقمه على المقبس نفسه بدل طلب HTTP لكلٍّ؛ سقط الخطّ قبل الردّ ⇒ الطلب العاديّ (قراءةٌ تُعاد بأمان).
+  _MuxConn? _mux;
+  Future<_MuxConn?>? _muxOpening;
+
+  /// خطٌّ واحد مفتوح الآن؟
+  @visibleForTesting
+  bool get muxOpen => _mux != null && !_mux!.closed;
+
+  Future<_MuxConn?> _muxConn() {
+    final m = _mux;
+    if (m != null && !m.closed) return Future.value(m);
+    return _muxOpening ??= _openMux().whenComplete(() => _muxOpening = null);
+  }
+
+  Future<_MuxConn?> _openMux() async {
+    final h = await _headers(path);
+    if (h == null) return null;
+    final b = _base();
+    final uri = b.replace(scheme: b.scheme == 'https' ? 'wss' : 'ws', path: path, queryParameters: {'mux': '1'});
+    final _Handshake hs;
+    try {
+      hs = await _wsHandshake(uri, h, const Duration(seconds: 20));
+    } catch (_) {
+      VpnPipe._wsUnavailable(const Duration(minutes: 5));
+      return null;
+    }
+    final ws = hs.ws;
+    if (ws == null) {
+      _rejected(hs);
+      return null;
+    }
+    final m = _MuxConn(ws);
+    if (!await m.hello.timeout(const Duration(seconds: 20), onTimeout: () => false)) {
+      m.dispose();
+      VpnPipe._wsUnavailable(const Duration(minutes: 5));
+      return null;
+    }
+    _mux = m;
+    return m;
+  }
 
   @override
-  Future<List<int>> ping(String host, int count, Duration timeout) => http.ping(host, count, timeout);
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) async {
+    if (!VpnPipe.wsUsable) return http.udp(host, port, data, timeout);
+    final m = await _muxConn();
+    if (m == null) return http.udp(host, port, data, timeout);
+    final ms = timeout.inMilliseconds.clamp(300, 15000);
+    final Map<String, dynamic> r;
+    try {
+      r = await m.request({'op': 'udp', 'ip': host, 'port': port, 'd': base64Encode(data), 'timeout_ms': ms},
+          Duration(milliseconds: ms + 45000));
+    } on _MuxLost {
+      return http.udp(host, port, data, timeout);
+    }
+    if (r['ok'] == true && r['data'] is Map) {
+      final d = r['data'] as Map;
+      final t = d['ms'];
+      return (data: base64Decode('${d['d'] ?? ''}'), ms: t is num && t > 0 ? t.round() : null);
+    }
+    if (r['status'] == 504) throw TimeoutException('SNMP عبر الـVPN: الجهاز ما ردّ', Duration(milliseconds: ms));
+    throw VpnPipe.failure(r['body'], port: port);
+  }
+
+  @override
+  Future<List<int>> ping(String host, int count, Duration timeout) async {
+    if (!VpnPipe.wsUsable) return http.ping(host, count, timeout);
+    final m = await _muxConn();
+    if (m == null) return http.ping(host, count, timeout);
+    final ms = timeout.inMilliseconds.clamp(500, 5000);
+    final Map<String, dynamic> r;
+    try {
+      r = await m.request({'op': 'ping', 'ip': host, 'count': count, 'timeout_ms': ms}, Duration(milliseconds: count * (ms + 1000) + 45000));
+    } on _MuxLost {
+      return http.ping(host, count, timeout);
+    }
+    if (r['ok'] == true && r['data'] is Map) {
+      final t = (r['data'] as Map)['times'];
+      return [
+        if (t is List)
+          for (final x in t)
+            if (x is num && x > 0) x.round(),
+      ];
+    }
+    throw VpnPipe.failure(r['body']);
+  }
 
   @override
   Future<PipeRoute> route() => http.route();
@@ -866,6 +989,8 @@ class WsPipeTransport implements VpnPipeTransport {
       c.dispose();
     }
     _conns.clear();
+    _mux?.dispose();
+    _mux = null;
     await http.release();
   }
 }
@@ -1016,5 +1141,82 @@ Future<_Handshake> _wsHandshake(Uri uri, Map<String, String> headers, Duration t
   } catch (_) {
     client.close(force: true);
     rethrow;
+  }
+}
+
+/// سقط الخطّ الواحد قبل ردّ الطلب ⇒ يُعاد بالطلب العاديّ.
+class _MuxLost implements Exception {
+  const _MuxLost();
+}
+
+/// الخطّ الواحد للتطبيق (المرحلة ٢): تحيّةٌ أوّلاً، ثمّ طلباتٌ برقمها وردودٌ برقمها (متوازية، بأيّ ترتيب).
+class _MuxConn {
+  _MuxConn(this.ws) {
+    _sub = ws.listen(_onData, onDone: _onDone, onError: (Object _) => _onDone(), cancelOnError: true);
+  }
+
+  final WebSocket ws;
+  late final StreamSubscription<dynamic> _sub;
+  final _hello = Completer<bool>();
+  final _pending = <int, Completer<Map<String, dynamic>>>{};
+  int _rid = 0;
+  bool closed = false;
+
+  Future<bool> get hello => _hello.future;
+
+  void _onData(dynamic d) {
+    if (d is! String) return;
+    Object? m;
+    try {
+      m = jsonDecode(d);
+    } catch (_) {
+      return;
+    }
+    if (m is! Map<String, dynamic>) return;
+    if (!_hello.isCompleted) {
+      _hello.complete(m['success'] == true);
+      return;
+    }
+    final rid = m['rid'];
+    if (rid is int) {
+      final c = _pending.remove(rid);
+      if (c != null && !c.isCompleted) c.complete(m);
+    }
+  }
+
+  void _onDone() {
+    closed = true;
+    if (!_hello.isCompleted) _hello.complete(false);
+    for (final c in _pending.values) {
+      if (!c.isCompleted) c.completeError(const _MuxLost());
+    }
+    _pending.clear();
+  }
+
+  Future<Map<String, dynamic>> request(Map<String, Object?> body, Duration timeout) async {
+    if (closed) throw const _MuxLost();
+    final rid = ++_rid;
+    final c = Completer<Map<String, dynamic>>();
+    _pending[rid] = c;
+    try {
+      ws.add(jsonEncode({...body, 'rid': rid}));
+    } catch (_) {
+      _pending.remove(rid);
+      throw const _MuxLost();
+    }
+    try {
+      return await c.future.timeout(timeout);
+    } on TimeoutException {
+      _pending.remove(rid);
+      throw const SocketException('تعذّر الوصول للخادم (مهلة)');
+    }
+  }
+
+  void dispose() {
+    try {
+      unawaited(ws.close(1000).catchError((Object _) {}));
+    } catch (_) {}
+    unawaited(_sub.cancel().catchError((Object _) {}));
+    _onDone();
   }
 }
