@@ -1,6 +1,7 @@
-# تشخيصٌ مؤقّت (٢٥ نوفمبر): الكتابة في محرّر القوالب على ويندوز حقيقيّ — المالك: «من يسوي تعديل قالب بمجرد ما يكتب اي شي
-# يصير كراش». يشغّل integration_test/windows_typing_test.dart داخل التطبيق (المحرّك والخطوط الحقيقيّة) ويكتب بـSendInput،
-# ثمّ ينشر السجلّ كاملاً في فرع ci/wintype-diag (آخر تشغيلٍ وحده). يُحذف الفرعان بعد معرفة السبب.
+# تشخيصٌ مؤقّت (٢٥ نوفمبر): كراش الكتابة في محرّر القوالب على ويندوز — المالك: «من يسوي تعديل قالب بمجرد ما يكتب اي شي
+# يصير كراش». الجولتان ١ و٢ (debug وprofile، تكبير ١٠٠٪ و٨٥٪، عميل UIA) لم تكرّراه.
+# الجولة ٣: (أ) قارئ «Application Error» الجديد على ويندوز حقيقيّ بعد كراشٍ مقصود لـrundll32، (ب) مثبّت نسخة فحصٍ فيها
+# التشخيص (موضع الخطأ داخل فلاتر + الكراش الأصليّ يبلّغ نفسه) ⇒ ci/wintype-exe. يُحذف الفرعان بعد معرفة السبب.
 name: windows-typing-diag
 
 on:
@@ -34,56 +35,23 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      - name: UIA client (debug run)
+      - name: Native crash for the event log (rundll32 DebugBreak)
         shell: pwsh
+        continue-on-error: true
         run: |
-          $p = Start-Process pwsh -ArgumentList '-NoProfile','-File','ci/uia_poll.ps1','-Out','uia_debug.log','-Seconds','1500' -PassThru -WindowStyle Hidden
-          $p.Id | Out-File -Encoding ascii uia_pid.txt
+          $p = Start-Process rundll32.exe -ArgumentList 'kernel32.dll,DebugBreak' -PassThru
+          $p | Wait-Process -Timeout 40 -ErrorAction SilentlyContinue
+          if (!$p.HasExited) { $p.Kill() }
+          Start-Sleep -Seconds 8
+          Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'} -MaxEvents 3 -ErrorAction SilentlyContinue |
+            Format-List TimeCreated, Id, Message | Out-File -Encoding utf8 app_error_events.log
+          if (!(Test-Path app_error_events.log)) { 'none' | Out-File app_error_events.log }
 
-      - name: Typing (debug + UIA)
+      - name: Typing + crash reader (debug)
         continue-on-error: true
         run: |
           set -o pipefail
           flutter test integration_test/windows_typing_test.dart -d windows -r expanded 2>&1 | tee typing_debug.log
-
-      - name: Stop UIA client
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path uia_pid.txt) { Stop-Process -Id (Get-Content uia_pid.txt) -ErrorAction SilentlyContinue }
-
-      - name: UIA client (profile run)
-        shell: pwsh
-        run: |
-          $p = Start-Process pwsh -ArgumentList '-NoProfile','-File','ci/uia_poll.ps1','-Out','uia_profile.log','-Seconds','1500' -PassThru -WindowStyle Hidden
-          $p.Id | Out-File -Encoding ascii uia_pid.txt
-
-      - name: Typing (profile + UIA)
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          flutter drive --profile -d windows --driver=test_driver/integration_test.dart --target=integration_test/windows_typing_test.dart 2>&1 | tee typing_profile.log
-
-      - name: Stop UIA client 2
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path uia_pid.txt) { Stop-Process -Id (Get-Content uia_pid.txt) -ErrorAction SilentlyContinue }
-
-      - name: Typing (profile, no UIA)
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          flutter drive --profile -d windows --driver=test_driver/integration_test.dart --target=integration_test/windows_typing_test.dart 2>&1 | tee typing_profile_nouia.log
-
-      - name: Crash records
-        if: always()
-        shell: pwsh
-        run: |
-          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddHours(-2)} -ErrorAction SilentlyContinue |
-            Where-Object { $_.ProviderName -in @('Application Error','Windows Error Reporting','.NET Runtime') } |
-            Select-Object -First 20 | Format-List TimeCreated, ProviderName, Id, Message | Out-File -Encoding utf8 crash_events.log
-          if (!(Test-Path crash_events.log)) { 'none' | Out-File crash_events.log }
 
       - name: Publish to ci/wintype-diag
         if: always()
@@ -92,7 +60,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           mkdir -p ci_out
-          cp typing_*.log uia_*.log crash_events.log ci_out/ 2>/dev/null || true
+          cp typing_*.log app_error_events.log ci_out/ 2>/dev/null || true
           {
             echo "sha=${GITHUB_SHA}"
             echo "status=${JOB_STATUS}"
@@ -106,3 +74,71 @@ jobs:
           git add -A
           git commit -qm "typing diag ${GITHUB_SHA::8} — ${JOB_STATUS}"
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/wintype-diag
+
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build (release, x64)
+        run: |
+          set -o pipefail
+          flutter build windows --release 2>&1 | tee build.log
+
+      - name: Package
+        run: |
+          set -e
+          rel=build/windows/x64/runner/Release
+          for dll in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$dll" "$rel/"
+          done
+          rm -f "$rel"/*.lib "$rel"/*.exp
+
+      - name: Installer
+        env:
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          set -e
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$iscc" ]; then choco install innosetup -y --no-progress > /dev/null; fi
+          full=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
+          ver=${full%%+*}
+          build=${full##*+}
+          "$iscc" /Q "/DMyAppVersion=$ver" "/DMyAppBuild=$build" 'windows\installer\MyServicesPro.iss'
+          ls -la dist/
+
+      - name: Publish to ci/wintype-exe
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p ci_out
+          cp build.log ci_out/ 2>/dev/null || true
+          cp dist/MyServicesPro_Setup_*.exe ci_out/ 2>/dev/null || true
+          {
+            echo "sha=${GITHUB_SHA}"
+            echo "status=${JOB_STATUS}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > ci_out/RESULT.txt
+          cd ci_out
+          git init -q
+          git config user.name "windows-ci"
+          git config user.email "windows-ci@users.noreply.github.com"
+          git checkout -q -b ci/wintype-exe
+          git add -A
+          git commit -qm "diag installer ${GITHUB_SHA::8} — ${JOB_STATUS}"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/wintype-exe

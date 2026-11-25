@@ -14,6 +14,7 @@ import 'package:rad_mysvcs/core/platform/desk_nav_guard.dart';
 import 'package:rad_mysvcs/core/platform/desk_ui_scale.dart';
 import 'package:rad_mysvcs/screens/whatsapp/connection_alerts_screen.dart';
 import 'package:rad_mysvcs/screens/whatsapp/whatsapp_templates_screen.dart';
+import 'package:rad_mysvcs/services/windows_crash_report.dart';
 import 'package:win32/win32.dart';
 
 import '../test/support/ai_status_overlay.dart';
@@ -176,6 +177,16 @@ void main() {
       DeskUiScale.choice.value = null;
     });
   }
+
+  testWidgets('قارئ «Application Error» على ويندوز حقيقيّ', (t) async {
+    final events = WindowsCrashReport.readApplicationErrors();
+    say('crash-reader: events=${events.length}');
+    for (final e in events.take(5)) {
+      say('crash-reader: #${e.recordId} app=${e.appName} code=${e.exceptionCode} ${e.summary}');
+    }
+    final pick = WindowsCrashReport.pickNew(events, exe: 'rundll32.exe');
+    say('crash-reader: pick(rundll32)=${pick.toSend.map((e) => e.recordId).toList()} newest=${pick.newest}');
+  });
 
   testWidgets('حقل بسيط (مرجع) — كتابة حقيقيّة', (t) async {
     final c = TextEditingController(text: 'مرحباً {name} ✅ 📶\nسطر ثانٍ');
