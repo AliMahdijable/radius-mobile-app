@@ -76,6 +76,7 @@ jobs:
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/wintype-diag
 
   installer:
+    if: ${{ !contains(github.event.head_commit.message, '[no-installer]') }}
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:

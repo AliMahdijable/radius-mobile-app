@@ -21,6 +21,7 @@ import '../test/support/ai_status_overlay.dart';
 import '../test/visual_perm/visual_perm_harness.dart';
 
 const desk = VisualDevice('_desk', Size(1280, 800), 1);
+const deskHi = VisualDevice('_deskhi', Size(1280, 800), 1.5);
 
 void say(String s) {
   // ignore: avoid_print
@@ -100,6 +101,10 @@ Future<void> typeRound(WidgetTester t, Finder field, String label) async {
   await t.tap(field);
   await settle(t, 600);
   foreground();
+  // المؤشّر لآخر النصّ (Ctrl+End) كمن يكمل القالب
+  final ctl = MapVirtualKey(VK_CONTROL, 0), end = MapVirtualKey(VK_END, 0);
+  _send([(VK_CONTROL, ctl, 0), (VK_END, end, KEYEVENTF_EXTENDEDKEY), (VK_END, end, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP), (VK_CONTROL, ctl, KEYEVENTF_KEYUP)]);
+  await settle(t, 500);
   final before = fieldText(t, field);
   say('$label: focused, length=${before.length}');
 
@@ -121,6 +126,13 @@ Future<void> typeRound(WidgetTester t, Finder field, String label) async {
   final afterUn = fieldText(t, field);
   say('$label: unicode sent=$un, length ${afterAr.length} -> ${afterUn.length}, exception=${t.takeException()}');
 
+  // أسطرٌ كثيرة تتجاوز الحدّ (maxLines) فيتمرّر الحقل داخله، ثمّ كتابةٌ في آخره
+  for (var i = 0; i < 18; i++) {
+    _send([(VK_RETURN, MapVirtualKey(VK_RETURN, 0), 0), (VK_RETURN, MapVirtualKey(VK_RETURN, 0), KEYEVENTF_KEYUP)]);
+  }
+  typeKeys('xyz');
+  await settle(t);
+  say('$label: 18 newlines+xyz length=${fieldText(t, field).length}, exception=${t.takeException()}');
   // Enter + Backspace داخل الحقل متعدّد الأسطر
   _send([(VK_RETURN, MapVirtualKey(VK_RETURN, 0), 0), (VK_RETURN, MapVirtualKey(VK_RETURN, 0), KEYEVENTF_KEYUP)]);
   _send([(VK_BACK, MapVirtualKey(VK_BACK, 0), 0), (VK_BACK, MapVirtualKey(VK_BACK, 0), KEYEVENTF_KEYUP)]);
@@ -135,14 +147,19 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(visualSetUpAll);
 
-  for (final scale in <double?>[null, 0.85]) {
-    final tag = scale == null ? '100%' : '${(scale * 100).round()}%';
+  for (final v in <(double?, VisualDevice, double)>[(null, desk, 1.0), (0.85, desk, 1.0), (null, deskHi, 1.25), (0.85, deskHi, 1.25)]) {
+    final scale = v.$1;
+    final device = v.$2;
+    final textScale = v.$3;
+    final tag = '${scale == null ? 'auto' : '${(scale * 100).round()}%'} dpr${device.dpr} text${textScale}';
 
     testWidgets('قوالب الواتساب — كتابة حقيقيّة على ويندوز ($tag)', (t) async {
       DeskUiScale.choice.value = scale;
       final inner = await visualSetUp(s1bSasOwner);
       ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff);
-      await pumpVisual(t, desk, home: (_) => const WhatsAppTemplatesScreen(), wrap: _deskWrap);
+      t.platformDispatcher.textScaleFactorTestValue = textScale;
+      addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpVisual(t, device, home: (_) => const WhatsAppTemplatesScreen(), wrap: _deskWrap);
       await settle(t, 2500);
       final tiles = find.byType(InkWell);
       say('templates[$tag]: tiles=${tiles.evaluate().length} deskScale=${DeskUiScale.current}');
@@ -164,7 +181,9 @@ void main() {
           'data': {'enabled': true, 'signal_dbm': -60, 'ccq_pct': 50, 'fiber_rx_dbm': -27, 'fiber_temp_c': 70, 'name_mode': 'name', 'is_default': false},
         },
       });
-      await pumpVisual(t, desk, home: (_) => const ConnectionAlertsScreen(), wrap: _deskWrap);
+      t.platformDispatcher.textScaleFactorTestValue = textScale;
+      addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpVisual(t, device, home: (_) => const ConnectionAlertsScreen(), wrap: _deskWrap);
       await settle(t, 2500);
       if (find.byType(TextField).evaluate().isEmpty) {
         await t.drag(find.byType(Scrollable).first, const Offset(0, -600));
