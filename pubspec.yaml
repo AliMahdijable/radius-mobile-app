@@ -228,6 +228,8 @@ flutter:
     - assets/devices-images/cdata/
     - assets/images/
     - assets/translations/
+    # «أصوات الإشعارات» (٢٥ نوفمبر): نغمات الآيفون (caf) — تُنسخ إلى Library/Sounds حتى يرنّ بها الإشعار؛ أندرويد من res/raw.
+    - assets/sounds/
 
   # Perf 2026-08-05: Cairo مُضمَّن محلياً بدل runtime fetch من
   # google_fonts CDN. توفير 200-500ms على cold start + منع "text flash"

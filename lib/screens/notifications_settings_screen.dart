@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api/agent_alerts_api.dart';
 import '../api/agent_notifs_api.dart';
 import '../api/notifications_api.dart';
+import '../core/platform/app_platform.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/active_company.dart';
 import '../services/provider_service.dart';
@@ -16,6 +17,7 @@ import '../theme/typography.dart';
 import 'desktop/desk_widgets.dart';
 import 'my_alerts/employee_ops_pick_sheet.dart';
 import 'my_alerts/money_alerts_section.dart';
+import 'my_alerts/notif_sounds_screen.dart';
 import 'network_devices/agent_alerts_screen.dart';
 import 'network_devices/device_alerts_screen.dart';
 
@@ -136,6 +138,11 @@ class _NotificationsSettingsScreenState
   }
 
   /// «تنبيهات الأجهزة»: تنبيهات الخادم إن كانت مفتوحةً لهذه الشركة، وإلّا تنبيهات الهاتف — كزرّ التنبيهات بقسم الأجهزة.
+  /// «أصوات الإشعارات» (٢٥ نوفمبر): نغمةٌ لكلّ نوع، والطلبات تنطق نوعها.
+  Future<void> _openSounds() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotifSoundsScreen()));
+  }
+
   Future<void> _openDeviceAlerts() async {
     final st = AgentAlertsApi.cached ?? await AgentAlertsApi.status();
     if (!mounted) return;
@@ -247,6 +254,18 @@ class _NotificationsSettingsScreenState
           : ListView(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
+                // «أصوات الإشعارات»: للهاتف وحده — الحاسبة بلا قنوات إشعار ولا FCM
+                if (!AppPlatform.isDesktop) ...[
+                  const _SectionLabel('الأصوات'),
+                  _LinkRow(
+                    key: const ValueKey('my-alerts-sounds'),
+                    icon: LucideIcons.volume2,
+                    label: 'أصوات الإشعارات',
+                    sub: 'نغمة لكل نوع، والطلبات تنطق نوعها بالصوت',
+                    onTap: _openSounds,
+                  ),
+                  const SizedBox(height: Sp.md),
+                ],
                 if (_money != null) ...[
                   const _SectionLabel('تنبيهات المال'),
                   MoneyAlertsSection(data: _money!, onPatch: _patchMoney, busy: _moneyBusy),

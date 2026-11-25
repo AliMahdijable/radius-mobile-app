@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «أصوات الإشعارات» (٢٥ نوفمبر): النغمات تُطلب بأسمائها (قنوات الإشعار + المعاينة getIdentifier) — المقلِّص المحسَّن (R8، AGP 9)
+     يحذف ما لا يُشار إليه من الكود، فتُحفظ كلّها هنا. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/*" />

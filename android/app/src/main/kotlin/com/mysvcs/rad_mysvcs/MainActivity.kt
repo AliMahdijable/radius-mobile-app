@@ -2,6 +2,7 @@ package com.mysvcs.rad_mysvcs
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -39,6 +40,16 @@ class MainActivity : FlutterFragmentActivity() {
 
     // «طابعة الوصولات» (٩ نوفمبر): بلوتوث SPP + طابعة الجهاز (SUNMI) — lib/services/receipt_printer/.
     private var receiptPrinter: ReceiptPrinterChannel? = null
+
+    // «أصوات الإشعارات» (٢٥ نوفمبر): معاينة النغمات، منتقي نغمات الهاتف، حالة القناة — lib/services/notif_sound_engine.dart.
+    private var notifSounds: NotifSoundsChannel? = null
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (notifSounds?.onActivityResult(requestCode, resultCode, data) == true) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+    }
 
     // «صفّارة وضع الفنّي» (شبكة الألياف، ١٠ نوفمبر): نغمةٌ بصوت الوسائط — «صوت اللمس» (SystemSound.click) مطفأٌ بأغلب الهواتف
     // فكانت الصفّارة بلا صوت. lib/services/tech_beep.dart.
@@ -88,6 +99,9 @@ class MainActivity : FlutterFragmentActivity() {
 
         receiptPrinter?.dispose()
         receiptPrinter = ReceiptPrinterChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+
+        notifSounds?.dispose()
+        notifSounds = NotifSoundsChannel(this, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

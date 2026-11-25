@@ -15,6 +15,8 @@ import 'auth_storage.dart';
 import 'desktop_push_service.dart';
 import 'device_alerts_service.dart';
 import 'inbox_service.dart';
+import 'notif_sound_engine.dart';
+import 'notif_sounds.dart';
 import 'owner_broadcast_push.dart';
 import 'app_version.dart';
 
@@ -143,22 +145,37 @@ class FcmService {
     };
   }
 
-  /// إشعار نظامٍ (صوت + نافذة منبثقة) لنوعٍ عاجل وصل والتطبيق مفتوح — أندرويد وحده (آيفون يعرضه بنفسه: خيارات العرض أعلاه).
+  /// إشعار نظامٍ (صوت + نافذة منبثقة) والتطبيق مفتوح — أندرويد وحده (آيفون يعرضه بنفسه: خيارات العرض أعلاه).
+  /// «أصوات الإشعارات» (٢٥ نوفمبر — الوكيل: «اشعارات صامتة بس بالجرس»): كلّ فئةٍ صوتها شغّال (إلّا الانتهاءات والنظام) ترنّ
+  /// بقناتها ونغمتها، والإشعار التجريبيّ دائماً؛ والأنواع العاجلة القديمة كما كانت.
+  static bool ringsInForeground(Map<String, dynamic> data, NotifSoundPrefs sounds) {
+    final type = data['type'];
+    if (type == kSoundTestType) return true;
+    final cat = categoryOfData(data);
+    if (cat == null) return urgentTypes.contains(type);
+    if (!sounds.isOn(cat)) return urgentTypes.contains(type);
+    return urgentTypes.contains(type) || cat.family != SoundFamily.reminders;
+  }
+
   static Future<void> _showSystem(AppNotification n) async {
-    if (!urgentTypes.contains(n.data['type'])) return;
+    final sounds = NotifSoundEngine.instance.current;
+    if (!ringsInForeground(n.data, sounds)) return;
     final f = debugShowSystem;
     if (f != null) return f(n);
     if (!isAndroid()) return;
     try {
       _hookTap();
+      final cat = categoryOfData(n.data);
+      // القناة تُنشأ بنغمتها قبل أوّل استعمال — وإلّا أنشأها show() بصوت النظام وبقيت كذلك
+      if (cat != null) await NotifSoundEngine.instance.ensureSynced();
       await FlutterLocalNotificationsPlugin().show(
         n.id.hashCode & 0x7FFFFFFF,
         n.title,
         n.body,
-        const NotificationDetails(
+        NotificationDetails(
           android: AndroidNotificationDetails(
-            channelId,
-            _channelName,
+            cat == null ? channelId : NotifSoundEngine.channelIdOf(cat, sounds),
+            cat == null ? _channelName : cat.title,
             importance: Importance.high,
             priority: Priority.high,
             visibility: NotificationVisibility.public,
@@ -359,6 +376,8 @@ class FcmService {
         _lastRegisteredToken = token;
         _lastRegisteredKey = key;
         if (kDebugMode) debugPrint('FCM token registered ok');
+        // «أصوات الإشعارات»: نغمة كلّ فئةٍ لهذا الجهاز (قنوات أندرويد / ملفّات الآيفون + الخريطة للخادم)
+        unawaited(NotifSoundEngine.instance.onTokenRegistered(token, adminId));
       } else {
         if (kDebugMode) {
           debugPrint(
@@ -389,6 +408,11 @@ class FcmService {
 
   static Future<void> _handleForeground(RemoteMessage m) async {
     final n = _fromRemote(m);
+    // «إشعار تجريبي على هاتفي»: إشعار نظامٍ بقناة فئته وحده — لا يدخل الجرس ولا شريط التطبيق
+    if (m.data['type'] == kSoundTestType) {
+      await _showSystem(n);
+      return;
+    }
     await InboxService.add(n);
     // «الإشعارات العامّة» (٢٥ نوفمبر): إشعار المالك وصل والتطبيق مفتوح ⇒ «شاهده» (النقر يُعالج بالموجّه)
     unawaited(OwnerBroadcastPush.reportSeen(m.data));
@@ -397,6 +421,7 @@ class FcmService {
   }
 
   static Future<void> _handleOpenedApp(RemoteMessage m) async {
+    if (m.data['type'] == kSoundTestType) return; // التجريبيّ لا يفتح شيئاً
     final n = _fromRemote(m);
     await InboxService.add(n);
     // نُعلّمها كمقروءة تلقائياً — المستخدم رآها.

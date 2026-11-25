@@ -1,8 +1,46 @@
 import AVFoundation
+import AudioToolbox
 import Flutter
 import Photos
 import UIKit
 import UserNotifications
+
+/// «أصوات الإشعارات» (٢٥ نوفمبر — lib/services/notif_sound_engine.dart): معاينة نغمةٍ من Library/Sounds (ينسخها التطبيق من أصوله؛
+/// الآيفون يبحث هناك عن صوت الإشعار)، و«صوت الهاتف» صوت النظام. الملفّ في هذا الملفّ عمداً: لا تعديل على المشروع (pbxproj).
+final class NotifSoundPreview {
+  static let shared = NotifSoundPreview()
+  private var player: AVAudioPlayer?
+
+  func play(name: String?) -> Bool {
+    stop()
+    guard let name = name, !name.isEmpty, !name.contains("/") else {
+      AudioServicesPlaySystemSound(1007)
+      return true
+    }
+    guard let lib = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first else { return false }
+    let url = lib.appendingPathComponent("Sounds").appendingPathComponent(name)
+    guard FileManager.default.fileExists(atPath: url.path) else { return false }
+    do {
+      let session = AVAudioSession.sharedInstance()
+      if session.category != .playback && session.category != .playAndRecord && session.category != .record {
+        try session.setCategory(.playback, options: [.mixWithOthers])
+        try session.setActive(true)
+      }
+      let p = try AVAudioPlayer(contentsOf: url)
+      p.prepareToPlay()
+      p.play()
+      player = p
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  func stop() {
+    player?.stop()
+    player = nil
+  }
+}
 
 /// «صفّارة وضع الفنّي» (شبكة الألياف، ١٠ نوفمبر): نغمةٌ قصيرة بمشغّل الوسائط — تُسمع والهاتف على «صامت». كانت «صوت اللمس»
 /// للنظام (SystemSound.click) ولا يُسمع بآيفون إلّا مع نقرات لوحة المفاتيح. lib/services/tech_beep.dart.
@@ -106,6 +144,30 @@ final class TechBeep {
           // الصفّارة شغّالة ⇒ الشاشة لا تنطفئ (القفل يعلّق التطبيق فتقف القراءة والصفّارة)؛ تُرفع بإطفائها أو الخروج
           UIApplication.shared.isIdleTimerDisabled = (args?["on"] as? Bool) ?? false
           result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
+    // «أصوات الإشعارات» (٢٥ نوفمبر): القناة نفسها التي يكلّمها أندرويد — معاينة، حالة الإذن والصوت، فتح الإعدادات.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NotifSounds") {
+      let sounds = FlutterMethodChannel(name: "com.mysvcs.rad_mysvcs/notif_sounds", binaryMessenger: registrar.messenger())
+      sounds.setMethodCallHandler { call, result in
+        let args = call.arguments as? [String: Any]
+        switch call.method {
+        case "play":
+          result(NotifSoundPreview.shared.play(name: args?["ios"] as? String))
+        case "stop":
+          NotifSoundPreview.shared.stop()
+          result(nil)
+        case "status":
+          UNUserNotificationCenter.current().getNotificationSettings { s in
+            let ok = s.authorizationStatus == .authorized || s.authorizationStatus == .provisional || s.authorizationStatus == .ephemeral
+            DispatchQueue.main.async { result(["enabled": ok, "sound": s.soundSetting == .enabled]) }
+          }
+        case "openSettings":
+          if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+          result(true)
         default:
           result(FlutterMethodNotImplemented)
         }
