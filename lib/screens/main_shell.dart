@@ -46,6 +46,7 @@ import '../core/widgets/app_sheet.dart';
 import '../core/widgets/sheet_scaffold.dart';
 import '../widgets/merged_company_pick.dart';
 import 'expenses/expenses_screen.dart';
+import '../widgets/update_glow.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
@@ -566,6 +567,13 @@ class _MainShellState extends State<MainShell> {
               bottom: 64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 4,
               child: _SearchPill(onTap: () => showQuickSearch(context)),
             ),
+          // «تحديث جديد» (٢٥ نوفمبر — المالك: «الزر يطفو بشكل حركي حتى يلفت الانتباه… وماتاخذ مساحه»): دائرةٌ تطفو فوق كلّ
+          // التبويبات على الجهة المقابلة لحبّة البحث — تظهر حين تتوفّر نسخةٌ أحدث وحده ([UpdateGate.available]).
+          Positioned(
+            left: Sp.lg,
+            bottom: 64 + Sp.sm + MediaQuery.paddingOf(context).bottom,
+            child: const UpdateFloatingBubble(),
+          ),
         ],
       ),
       // 2026-08-29 (S6): الشريط صار مسطّحاً من الحافة للحافة بحدّ علوي

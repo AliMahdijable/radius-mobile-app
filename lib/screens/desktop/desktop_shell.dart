@@ -29,6 +29,7 @@ import '../settings_screen.dart';
 import '../top_actions.dart';
 import 'desk_widgets.dart';
 import 'desk_zoom.dart';
+import '../../widgets/update_glow.dart';
 
 /// غلاف الحاسبة بلغة الموقع (/v2): قائمةٌ جانبيّة بمجموعاتها، وشريطٌ علويّ فيه عنوان الصفحة وشريحة
 /// الشركة والبحث (Ctrl/⌘K) وأزرار الأعلى المشتركة، والمحتوى تحته.
@@ -251,7 +252,13 @@ class _DesktopShellState extends State<DesktopShell> {
                       onSearch: () => showQuickSearch(context),
                       openPage: _openPage,
                     ),
-                    Expanded(child: _content()),
+                    // «تحديث جديد» يطفو بركن المحتوى (٢٥ نوفمبر) — يظهر حين تتوفّر نسخةٌ أحدث وحده
+                    Expanded(
+                      child: Stack(children: [
+                        Positioned.fill(child: _content()),
+                        const PositionedDirectional(end: 24, bottom: 24, child: UpdateFloatingBubble()),
+                      ]),
+                    ),
                   ],
                 ),
               ),

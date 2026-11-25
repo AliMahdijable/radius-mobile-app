@@ -20,10 +20,32 @@ class UpdateRequired {
   final int? minBuild;
 }
 
+/// «تحديث جديد» (٢٥ نوفمبر — المالك: «زر يمثل وجود تحديث للتطبيق… من اكو تحديث جديد الزر يظهر بشكل لامع»): نسخةٌ أحدث متاحة بمتجر
+/// هذا النظام وليست مطلوبة — الخادم يقولها بـ`latest` في `/api/app-gate` (يُكتب بعد نشر الإصدار بالمتجر: scripts/app_gate.js latest).
+class UpdateAvailable {
+  const UpdateAvailable({required this.storeUrl, required this.latestBuild});
+  final String storeUrl;
+  final int latestBuild;
+
+  @override
+  bool operator ==(Object other) => other is UpdateAvailable && other.storeUrl == storeUrl && other.latestBuild == latestBuild;
+
+  @override
+  int get hashCode => Object.hash(storeUrl, latestBuild);
+}
+
 class UpdateGate {
   UpdateGate._();
 
   static final ValueNotifier<UpdateRequired?> required = ValueNotifier(null);
+
+  /// «تحديث جديد» — null = هذه آخر نسخة (أو لا يُعرف). الدائرة الطافية تتبعه ([UpdateFloatingBubble]).
+  static final ValueNotifier<UpdateAvailable?> available = ValueNotifier(null);
+  static DateTime? _checkedAt;
+  static Future<void>? _inflight;
+
+  /// مهلة إعادة السؤال عند العودة للتطبيق — النسخة الجديدة تُنشر مرّةً بالأسبوعين، فلا داعي لأكثر.
+  static const freshFor = Duration(hours: 6);
 
   static const _fallbackMessage = 'نسخةٌ جديدة من التطبيق متاحة ومطلوبة — حدّث التطبيق من المتجر لتكمل.';
   static const _fallbackStore = <String, String>{
@@ -36,14 +58,51 @@ class UpdateGate {
   static int get build => int.tryParse(AppVersion.buildNumber) ?? 0;
 
   @visibleForTesting
-  static void debugReset() => required.value = null;
+  static void debugReset() {
+    required.value = null;
+    available.value = null;
+    _checkedAt = null;
+    _inflight = null;
+  }
+
+  /// للصور والاختبار: الحال مباشرةً (بلا سؤال الخادم بعدها لمهلته).
+  @visibleForTesting
+  static void debugSetAvailable(UpdateAvailable? u) {
+    available.value = u;
+    _checkedAt = DateTime.now();
+  }
+
+  /// يُسأل الخادم إن مرّت [freshFor] منذ آخر سؤال (العودة للتطبيق) — طلبٌ واحدٌ جارٍ على الأكثر.
+  static Future<void> ensureFresh() {
+    final at = _checkedAt;
+    if (at != null && DateTime.now().difference(at) < freshFor) return Future<void>.value();
+    return _inflight ??= check().whenComplete(() => _inflight = null);
+  }
+
+  /// من ردّ `/api/app-gate`: `latest[النظام]` أحدث من هذه النسخة ⇒ [available]؛ وإلّا null. لا تعتمد على تفعيل الإجبار.
+  @visibleForTesting
+  static void readLatest(Map d) {
+    final p = AppPlatform.deviceLabel;
+    final latest = d['latest'] is Map ? (d['latest'] as Map)[p] : null;
+    final latestBuild = latest is num ? latest.toInt() : int.tryParse('${latest ?? ''}');
+    if (latestBuild == null || build <= 0 || build >= latestBuild) {
+      available.value = null;
+      return;
+    }
+    final store = d['store'] is Map ? (d['store'] as Map)[p]?.toString() : null;
+    available.value = UpdateAvailable(storeUrl: store ?? _fallbackStore[p] ?? _fallbackStore['android']!, latestBuild: latestBuild);
+  }
 
   /// عند الإقلاع: الخادم يقول أقلّ نسخة لهذا النظام. خطأٌ أو خادمٌ أقدم ⇒ لا شيء (لا حجب بالظنّ).
   static Future<void> check() async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/app-gate');
       final d = r.data?['data'];
-      if (r.data?['success'] != true || d is! Map || d['enabled'] != true) return;
+      if (r.data?['success'] != true || d is! Map) return;
+      _checkedAt = DateTime.now();
+      // «تحديث جديد» أوّلاً — يعمل والإجبار مطفأ
+      readLatest(d);
+      if (d['enabled'] != true) return;
       final p = AppPlatform.deviceLabel;
       final min = d['min'] is Map ? (d['min'] as Map)[p] : null;
       final minBuild = min is num ? min.toInt() : int.tryParse('$min');

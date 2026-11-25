@@ -157,6 +157,8 @@ void main() async {
   _installDebugErrorAggregator();
   // إجبار التحديث (٣ نوفمبر): الخادم يقول أقلّ نسخة — الجواب يصل بعد أوّل إطار فتظهر الشاشة فوقه إن لزم
   UpdateGate.check().ignore();
+  // «تحديث جديد» (٢٥ نوفمبر): العودة للتطبيق تسأل ثانيةً بمهلتها (٦ ساعات) — الدائرة الطافية تظهر بلا إعادة تشغيل
+  AppResumedSignal.tick.addListener(() => UpdateGate.ensureFresh().ignore());
 
   runApp(
     EasyLocalization(
