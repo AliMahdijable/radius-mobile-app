@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 
 /// الطلبات العاديّة (الاحتياط) — تسجّل ما طُلب منها.
@@ -62,6 +63,7 @@ class FakeHttp implements VpnPipeTransport {
 class WsServer {
   late HttpServer srv;
   int handshakes = 0;
+  int muxSessions = 0;
   bool busyOnce = true;
   final sessions = <WebSocket>[];
 
@@ -90,6 +92,28 @@ class WsServer {
       }
       final ws = await WebSocketTransformer.upgrade(req);
       sessions.add(ws);
+      if (req.uri.queryParameters['mux'] == '1') {
+        // المرحلة ٢: تحيّة ثمّ طلباتٌ برقمها — 10.0.0.99 مهلة · 10.0.0.98 النفق · 10.0.0.97 الخطّ يسقط بلا ردّ
+        muxSessions += 1;
+        ws.add(jsonEncode({'success': true, 'data': {'mux': true}}));
+        ws.listen((m) {
+          final q = jsonDecode(m as String) as Map<String, dynamic>;
+          final rid = q['rid'];
+          final ip = q['ip'];
+          if (ip == '10.0.0.97') {
+            unawaited(ws.close(4000, 'lost'));
+          } else if (ip == '10.0.0.99') {
+            ws.add(jsonEncode({'rid': rid, 'ok': false, 'status': 504, 'body': {'success': false, 'code': 'UDP_TIMEOUT', 'message': 'الجهاز ما ردّ'}}));
+          } else if (ip == '10.0.0.98') {
+            ws.add(jsonEncode({'rid': rid, 'ok': false, 'status': 503, 'body': {'success': false, 'code': 'TUNNEL_FAILED', 'message': 'الـVPN ما اتّصل الآن — حاول بعد قليل'}}));
+          } else if (q['op'] == 'udp') {
+            ws.add(jsonEncode({'rid': rid, 'ok': true, 'data': {'d': q['d'], 'ms': 7}}));
+          } else {
+            ws.add(jsonEncode({'rid': rid, 'ok': true, 'data': {'times': [11, 12], 'sent': 2}}));
+          }
+        }, onError: (Object _) {});
+        return;
+      }
       final port = int.parse(req.uri.queryParameters['port'] ?? '0');
       void fail(Map<String, Object> body) {
         ws.add(jsonEncode({'success': false, ...body}));
@@ -171,6 +195,8 @@ void main() {
     VpnPipe.wsAllowed = true;
     VpnPipe.now = DateTime.now;
     VpnPipe.resetBackoff();
+    SharedPreferences.setMockInitialValues({});
+    VpnPipe.debugResetWsMemory();
     VpnPipe.debugResetGate();
     VpnPipe.wait = const Duration(seconds: 2);
     VpnPipe.busyBackoffMs = const [20, 20];
@@ -310,6 +336,58 @@ void main() {
     expect(utf8.decode(got.toBytes()), 'HELLO\nLAST');
     expect(await ws.read(o.id, const Duration(milliseconds: 50)), isNull, reason: 'بعد النهاية');
     expect(ws.wsOpen, 0);
+  });
+
+  test('١٥ المرحلة ٢: SNMP والبنك على خطٍّ واحد — البايتات نفسها وزمنها، والخطّ نفسه يُعاد استعماله، بلا أيّ طلبٍ عاديّ', () async {
+    final out = await VpnPipe.udp('10.0.0.6', 161, Uint8List.fromList([1, 2, 3]), const Duration(seconds: 2));
+    expect(out, [1, 2, 3]);
+    expect(VpnPipe.udpMsOf('10.0.0.6'), 7);
+    expect(await VpnPipe.ping('10.0.0.6', count: 2), [11, 12]);
+    await VpnPipe.udp('10.0.0.7', 161, Uint8List.fromList([9]), const Duration(seconds: 2));
+    expect([http.udps, http.pings], [0, 0]);
+    expect(server.muxSessions, 1, reason: 'خطٌّ واحد للكلّ');
+    expect(ws.muxOpen, isTrue);
+  });
+
+  test('١٦ المرحلة ٢: الأخطاء كالطلب العاديّ — مهلة SNMP ⇒ TimeoutException · النفق ⇒ PipeTunnelDown (فيتباعد)', () async {
+    await expectLater(VpnPipe.udp('10.0.0.99', 161, Uint8List(1), const Duration(seconds: 1)), throwsA(isA<TimeoutException>()));
+    await expectLater(VpnPipe.udp('10.0.0.98', 161, Uint8List(1), const Duration(seconds: 1)), throwsA(isA<PipeTunnelDown>()));
+    expect(VpnPipe.tunnelBackedOff, isTrue);
+    expect(http.udps, 0);
+  });
+
+  test('١٧ المرحلة ٢: الخطّ يسقط قبل الردّ ⇒ الطلب العاديّ يُعيده، والتالي يفتح خطّاً جديداً', () async {
+    final out = await VpnPipe.udp('10.0.0.97', 161, Uint8List.fromList([5]), const Duration(seconds: 2));
+    expect(out, [1], reason: 'ردّ الطلب العاديّ');
+    expect(http.udps, 1);
+    expect(await until(() => !ws.muxOpen), isTrue);
+    await VpnPipe.udp('10.0.0.6', 161, Uint8List.fromList([4]), const Duration(seconds: 2));
+    expect(server.muxSessions, 2);
+  });
+
+  test('١٨ المرحلة ٢: المفتاح مطفأ (409 PIPE_WS_OFF) ⇒ SNMP بالطلب العاديّ ويُنسى الخطّ المفتوح', () async {
+    extra = {'x-test-reject': '409:PIPE_WS_OFF'};
+    expect(await VpnPipe.udp('10.0.0.6', 161, Uint8List.fromList([4]), const Duration(seconds: 2)), [1]);
+    expect(http.udps, 1);
+    expect(VpnPipe.wsAllowed, isFalse);
+    expect((await SharedPreferences.getInstance()).getBool('vpn_pipe_ws_v1'), isFalse);
+  });
+
+  test('١٩ يتذكّر الخطّ المفتوح من أوّل ثانية: المحفوظ ws ⇒ أوّل ممرٍّ عليه قبل أيّ «طريق»؛ و«الطريق» يحفظ ما يقوله', () async {
+    SharedPreferences.setMockInitialValues({'vpn_pipe_ws_v1': true});
+    VpnPipe.debugResetWsMemory();
+    VpnPipe.wsAllowed = false;
+    final s = await VpnPipe.connect('10.0.0.5', 22);
+    expect([server.handshakes, http.opens], [1, 0], reason: 'على الخطّ المفتوح بلا انتظار «الطريق»');
+    s.destroy();
+    http.routeResult = const PipeRoute.ok('own');
+    await VpnPipe.route();
+    expect(VpnPipe.wsAllowed, isFalse);
+    expect((await SharedPreferences.getInstance()).getBool('vpn_pipe_ws_v1'), isFalse);
+    // «الطريق» قال بهذه الجلسة ⇒ المحفوظ القديم لا يغلبه
+    SharedPreferences.setMockInitialValues({'vpn_pipe_ws_v1': true});
+    await VpnPipe.restoreWs();
+    expect(VpnPipe.wsAllowed, isFalse);
   });
 
   group('التباعد بعد الفشل (النقطة ٣)', () {
