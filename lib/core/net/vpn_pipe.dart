@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show sha1;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -33,19 +34,29 @@ class PipeDenied extends SocketException {
   const PipeDenied(super.message, {super.port});
 }
 
+/// النفق نفسه لم يقم أو لا طريق (TUNNEL_FAILED، NO_VPN، CONN_VPN_OFF، PIPE_OFF) — فشل اتّصالٍ كغيره، ويُعرف بنوعه فيتباعد التطبيق
+/// عن الخادم بدل الإعادة الفوريّة ([VpnPipe.backoffSteps]).
+class PipeTunnelDown extends SocketException {
+  const PipeTunnelDown(super.message, {super.port});
+}
+
 /// طريق الوكيل عبر الـVPN الآن: قائم ([ok] + [via]: company · own · template)، أو السبب بكلمة الخادم و[reason] (no_vpn، tunnel_failed…).
 class PipeRoute {
-  const PipeRoute.ok(this.via)
+  const PipeRoute.ok(this.via, {this.ws = false})
       : ok = true,
         message = null,
         reason = null;
   const PipeRoute.failed(this.message, {this.reason})
       : ok = false,
-        via = null;
+        via = null,
+        ws = false;
   final bool ok;
   final String? via;
   final String? message;
   final String? reason;
+
+  /// «الاتّصال الواحد» مفتوحٌ لحسابه بالخادم (pro_settings.pipe_ws) ⇒ ممرّاته على WebSocket ([WsPipeTransport]).
+  final bool ws;
 }
 
 /// نداءات ممرّ الخادم (server/connVpn/pipe.js) — تُستبدل في الاختبار.
@@ -83,8 +94,119 @@ abstract class VpnPipeTransport {
 class VpnPipe {
   VpnPipe._();
 
+  static VpnPipeTransport _transport = WsPipeTransport(_HttpPipeTransport());
+  static VpnPipeTransport get transport => _transport;
+
+  /// ناقلٌ جديد = عالمٌ جديد (الاختبار): لا يرث تباعد سابقه.
   @visibleForTesting
-  static VpnPipeTransport transport = _HttpPipeTransport();
+  static set transport(VpnPipeTransport t) {
+    _transport = t;
+    resetBackoff();
+  }
+
+  /// الساعة — تُستبدل في الاختبار (التباعد و«الاتّصال الواحد»).
+  @visibleForTesting
+  static DateTime Function() now = DateTime.now;
+
+  // ——— «الاتّصال الواحد» (٢٥ نوفمبر — server/connVpn/pipeWs.js؛ المالك: «اي ابدي بالاتصال الواحد») ———
+  // قراءة جهازٍ كانت ٦–١٤ طلب HTTP (١٩٢ ألفاً يوم ٢٣ نوفمبر)؛ الآن WebSocket واحد لكلّ ممرّ حين يقول «الطريق» ws:true.
+
+  /// الخادم قال ws:true بآخر «طريق» ([route]).
+  static bool wsAllowed = false;
+  static DateTime? _wsOffUntil;
+
+  /// الممرّات الجديدة على WebSocket؟ — مفتوحٌ بالخادم ولم تتعذّر مصافحته قريباً.
+  static bool get wsUsable {
+    final u = _wsOffUntil;
+    return wsAllowed && (u == null || now().isAfter(u));
+  }
+
+  static void _wsUnavailable(Duration d) => _wsOffUntil = now().add(d);
+
+  // ——— التباعد بعد الفشل (٢٥ نوفمبر — النقطة ٣؛ المالك: «رح يتاثر الفحص؟ تقل جودته ويتاخر؟») ———
+  // كان التطبيق يعيد فوراً بإيقاع قرّائه: ٢١ نوفمبر صفحةٌ ملفّها خربان ⇒ ٣٠٨٤ طلباً فاشلاً وأعلى دقيقة ٢٢٣. الآن:
+  //  · النفق لم يقم ([PipeTunnelDown]) ⇒ لا سؤال للخادم حتى ٥⇒١٠⇒٢٠⇒٣٠ث (±٢٠٪)، والقرّاء تأخذ الخطأ نفسه فوراً.
+  //  · منفذ جهازٍ لا يجيب (مهلة/لا طريق، أو UDP بلا ردّ) [hostFailsBeforeBackoff] مرّاتٍ متتالية ⇒ هو وحده بالفواصل نفسها — لكلّ
+  //    منفذ لا للجهاز كلّه: فحصٌ واحد يجرّب منافذ عدّة (الكرت: ٨٠ ثمّ ٤٤٣ ثمّ ٨٧٢٨…) فلا يُحسب الجهاز طافياً من فحصٍ واحد. الرفض
+  //    (ECONNREFUSED) جوابٌ من جهازٍ حيّ فيصفّر منافذه كلّها، والبقيّة طبيعيّة.
+  //  · أيّ نجاحٍ يصفّر؛ «طريقٌ» سليم يصفّر النفق؛ [resetBackoff] لدخول الوضع وتركه؛ [urgentKey] (الفحص الشامل) يتجاوز التباعد.
+  //  · والوضع سليمٌ ⇒ لا شيء يتغيّر (لا انتظار قبل أيّ محاولة).
+  static const backoffSteps = [Duration(seconds: 5), Duration(seconds: 10), Duration(seconds: 20), Duration(seconds: 30)];
+  static const hostFailsBeforeBackoff = 3;
+
+  /// منطقةٌ صريحة من الوكيل (الفحص الشامل — [DeviceNet.vpn]) ⇒ تحاول فوراً مهما كان التباعد.
+  static const urgentKey = #vpnPipeUrgent;
+  static _Back? _tunnel;
+  static final Map<String, _Back> _hosts = {};
+  static final _rnd = math.Random();
+
+  /// يصفّر التباعد كلّه (دخول «وضع VPN» وتركه، و«حاول هسه») — ومعه «تعذّرت المصافحة»: الضغطة الصريحة تجرّب الاتّصال المفتوح من جديد.
+  static void resetBackoff() {
+    _tunnel = null;
+    _hosts.clear();
+    _wsOffUntil = null;
+  }
+
+  @visibleForTesting
+  static bool get tunnelBackedOff {
+    final u = _tunnel?.until;
+    return u != null && now().isBefore(u);
+  }
+
+  @visibleForTesting
+  static bool hostBackedOff(String host, int port) {
+    final u = _hosts['$host:$port']?.until;
+    return u != null && now().isBefore(u);
+  }
+
+  static Duration _step(int n) {
+    final b = backoffSteps[math.min(n, backoffSteps.length - 1)];
+    return Duration(milliseconds: (b.inMilliseconds * (0.8 + _rnd.nextDouble() * 0.4)).round());
+  }
+
+  /// ما زال بالتباعد ⇒ الخطأ الأخير نفسه فوراً (بلا سؤال الخادم).
+  static void _gate(String host, int? port) {
+    if (Zone.current[urgentKey] == true) return;
+    final t = now();
+    final tu = _tunnel;
+    if (tu != null && tu.until != null && t.isBefore(tu.until!) && tu.err != null) throw tu.err!;
+    if (port == null) return;
+    final h = _hosts['$host:$port'];
+    if (h != null && h.until != null && t.isBefore(h.until!) && h.err != null) throw h.err!;
+  }
+
+  static const _noAnswer = {'Connection timed out', 'No route to host', 'Network is unreachable'};
+
+  static void _noteFail(String host, int? port, Object e) {
+    final t = now();
+    if (e is PipeTunnelDown) {
+      final b = _tunnel ??= _Back();
+      b.until = t.add(_step(b.n));
+      b.n += 1;
+      b.err = e;
+      return;
+    }
+    if (port == null) return;
+    final noAnswer = e is TimeoutException || (e is SocketException && e is! PipeDenied && _noAnswer.contains(e.osError?.message));
+    if (!noAnswer) {
+      // رفضٌ أو ردٌّ آخر من الجهاز نفسه ⇒ حيّ
+      if (e is SocketException && e.osError != null) _hosts.removeWhere((k, _) => k.startsWith('$host:'));
+      return;
+    }
+    final b = _hosts.putIfAbsent('$host:$port', _Back.new);
+    b.fails += 1;
+    b.err = e;
+    if (b.fails >= hostFailsBeforeBackoff) {
+      b.until = t.add(_step(b.n));
+      b.n += 1;
+    }
+    if (_hosts.length > 2000) _hosts.remove(_hosts.keys.first);
+  }
+
+  static void _noteOk(String host, int? port) {
+    _tunnel = null;
+    if (port != null) _hosts.remove('$host:$port');
+  }
 
   /// أقصى كتابةٍ بطلبٍ واحد (base64 يكبر ٤/٣ — تحت حدّ جسم الخادم ١٠٠ ك.ب.).
   static const chunk = 48 * 1024;
@@ -169,6 +291,7 @@ class VpnPipe {
   /// [Socket] متّصلٌ بالجهاز [host]:[port] عبر الممرّ — أو [SocketException] كالمباشر.
   static Future<Socket> connect(String host, int port, {Duration? timeout}) async {
     used = true;
+    _gate(host, port);
     await _acquire(port);
     var held = true; // الدور بيدنا حتى يحمله الرابط (يُعاد عند إغلاقه)
     void free() {
@@ -191,6 +314,7 @@ class VpnPipe {
           await Future<void>.delayed(Duration(milliseconds: busyBackoffMs[i]));
         }
       }
+      _noteOk(host, port);
       final id = o.id;
       try {
         final s = await _bridge(id, onClosed: free);
@@ -201,8 +325,9 @@ class VpnPipe {
         if (e is SocketException) rethrow;
         throw SocketException('تعذّر فتح الممرّ: $e', port: port);
       }
-    } catch (_) {
+    } catch (e) {
       free();
+      _noteFail(host, port, e);
       rethrow;
     }
   }
@@ -210,7 +335,15 @@ class VpnPipe {
   /// رسالة UDP بردّها عبر الممرّ (SNMP).
   static Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
     used = true;
-    final r = await transport.udp(host, port, data, timeout);
+    _gate(host, port);
+    final ({Uint8List data, int? ms}) r;
+    try {
+      r = await transport.udp(host, port, data, timeout);
+    } catch (e) {
+      _noteFail(host, port, e);
+      rethrow;
+    }
+    _noteOk(host, port);
     if (r.ms != null) {
       if (_udpMs.length > 500) _udpMs.remove(_udpMs.keys.first);
       _udpMs[host] = r.ms!;
@@ -219,16 +352,28 @@ class VpnPipe {
   }
 
   /// بنك ICMP عبر الممرّ (ينفّذه الخادم من داخل النفق — وعلى الآيفون أيضاً).
-  static Future<List<int>> ping(String host, {int count = 1, Duration timeout = const Duration(seconds: 2)}) {
+  static Future<List<int>> ping(String host, {int count = 1, Duration timeout = const Duration(seconds: 2)}) async {
     used = true;
-    return transport.ping(host, count, timeout);
+    // البنك سؤالٌ رخيص يكشف عودة الجهاز ⇒ تباعد النفق وحده
+    _gate(host, null);
+    try {
+      return await transport.ping(host, count, timeout);
+    } catch (e) {
+      _noteFail(host, null, e);
+      rethrow;
+    }
   }
 
   /// طريق الوكيل الآن («وضع VPN» شُغّل، وكلّ دقيقةٍ ما دام).
   static Future<PipeRoute> route() async {
     used = true;
     try {
-      return await transport.route();
+      final r = await transport.route();
+      if (r.ok) {
+        _tunnel = null;
+        wsAllowed = r.ws;
+      }
+      return r;
     } catch (_) {
       return const PipeRoute.failed('تعذّر الوصول للخادم — تأكّد من الإنترنت');
     }
@@ -237,6 +382,7 @@ class VpnPipe {
   /// ترك «وضع VPN» — بلا انتظار.
   static void release() {
     used = false;
+    resetBackoff();
     unawaited(transport.release().catchError((Object _) {}));
   }
 
@@ -254,7 +400,8 @@ class VpnPipe {
       } else {
         s.destroy();
       }
-    });
+      // قبولٌ قُطع قبل أن يكتمل (القارئ أغلق فوراً) ⇒ لا خطأ سائب في المنطقة
+    }, onError: (Object _) {});
     try {
       final client = await Socket.connect(InternetAddress.loopbackIPv4, server.port, timeout: const Duration(seconds: 5));
       want = client.port;
@@ -297,8 +444,11 @@ class VpnPipe {
     }
     final msg = '${m['message'] ?? ''}'.trim();
     if (code == 'NOT_YOURS') return PipeDenied(msg.isEmpty ? 'هذا العنوان ليس من أجهزتك ولا مشتركيك' : msg, port: port);
+    if (_tunnelCodes.contains(code)) return PipeTunnelDown(msg.isEmpty ? 'الـVPN ما اتّصل الآن — حاول بعد قليل' : msg, port: port);
     return SocketException(msg.isEmpty ? 'الجهاز ما ردّ عبر الـVPN' : msg, port: port);
   }
+
+  static const _tunnelCodes = {'TUNNEL_FAILED', 'NO_VPN', 'CONN_VPN_OFF', 'PIPE_OFF'};
 
   static const _errno = {
     // ماك/آيفون · ويندوز · أندرويد/لينكس
@@ -344,6 +494,8 @@ class _Link {
   bool _localDone = false;
 
   void start() {
+    // كتابةٌ على مقبسٍ أغلقه القارئ فجأةً (RST) تُبلَّغ بـdone — تُبتلع هنا (الإغلاق يجري بمساره) فلا خطأ سائب في المنطقة
+    unawaited(inner.done.catchError((Object _) {}));
     inner.listen(
       (d) {
         _out.add(d);
@@ -569,7 +721,8 @@ class _HttpPipeTransport implements VpnPipeTransport {
     }
     final body = r.data;
     if (r.statusCode == 200 && body is Map && body['success'] == true && body['data'] is Map) {
-      return PipeRoute.ok('${(body['data'] as Map)['via'] ?? ''}');
+      final dm = body['data'] as Map;
+      return PipeRoute.ok('${dm['via'] ?? ''}', ws: dm['ws'] == true);
     }
     final m = body is Map ? body : const {};
     final code = '${m['code'] ?? ''}';
@@ -593,5 +746,275 @@ class _HttpPipeTransport implements VpnPipeTransport {
   @override
   Future<void> release() async {
     await _d.post<dynamic>('/api/v2/conn-vpn/pipe/release', data: const <String, dynamic>{});
+  }
+}
+
+/// حال تباعدٍ واحد (النفق أو جهاز).
+class _Back {
+  int fails = 0;
+  int n = 0;
+  DateTime? until;
+  Object? err;
+}
+
+/// «الاتّصال الواحد» (٢٥ نوفمبر — server/connVpn/pipeWs.js): الممرّ على WebSocket واحد بدل طلبٍ لكلّ رزمة (كانت ٦–١٤ طلباً لكلّ قراءة
+/// جهاز). العقد نفسه ([VpnPipeTransport]) فـ[_Link] وكلّ قارئ كما هم؛ UDP والبنك والطريق والترك بالطلبات العاديّة ([http]).
+/// يُستعمل حين يقول «الطريق» ws:true ([VpnPipe.wsUsable])؛ تعذّرت المصافحة ⇒ الطلب العاديّ لهذا الممرّ، وإيقافٌ مؤقّت بحسب السبب:
+/// 401/403 لا شيء (الطلب العاديّ يجدّد الجلسة أو يقول السبب) · 409 PIPE_WS_OFF ⇒ حتى «طريقٍ» يقول ws · 426 (وسيطٌ حذف الترقية) ٣٠ د ·
+/// غيرها والشبكة ٥ د. الترويسات من معترضات [ApiClient.pipe] نفسها ([ApiClient.headersFor]).
+class WsPipeTransport implements VpnPipeTransport {
+  WsPipeTransport(this.http, {Uri Function()? base, Future<Map<String, String>?> Function(String path)? headers})
+      : _base = base ?? (() => Uri.parse(ApiClient.baseUrl)),
+        _headers = headers ?? ApiClient.headersFor;
+
+  final VpnPipeTransport http;
+  final Uri Function() _base;
+  final Future<Map<String, String>?> Function(String path) _headers;
+  final Map<String, _WsConn> _conns = {};
+
+  static const path = '/api/v2/conn-vpn/pipe/ws';
+
+  /// ممرّاتٌ مفتوحة على WebSocket الآن.
+  @visibleForTesting
+  int get wsOpen => _conns.length;
+
+  @override
+  Future<({String id, int? ms})> open(String host, int port, Duration timeout) async {
+    if (!VpnPipe.wsUsable) return http.open(host, port, timeout);
+    final ms = timeout.inMilliseconds.clamp(1000, 15000);
+    final h = await _headers(path);
+    if (h == null) return http.open(host, port, timeout);
+    final b = _base();
+    final uri = b.replace(
+      scheme: b.scheme == 'https' ? 'wss' : 'ws',
+      path: path,
+      queryParameters: {'ip': host, 'port': '$port', 'timeout_ms': '$ms'},
+    );
+    final _Handshake hs;
+    try {
+      hs = await _wsHandshake(uri, h, const Duration(seconds: 20));
+    } catch (_) {
+      VpnPipe._wsUnavailable(const Duration(minutes: 5));
+      return http.open(host, port, timeout);
+    }
+    final ws = hs.ws;
+    if (ws == null) {
+      if (hs.status == 409 && hs.code == 'PIPE_WS_OFF') {
+        VpnPipe.wsAllowed = false;
+      } else if (hs.status == 426) {
+        VpnPipe._wsUnavailable(const Duration(minutes: 30));
+      } else if (hs.status != 401 && hs.status != 403) {
+        VpnPipe._wsUnavailable(const Duration(minutes: 5));
+      }
+      return http.open(host, port, timeout);
+    }
+    // الطريق قد يحتاج أن يتّصل النفق أوّلاً (ملفّ الوكيل أو قالب شركته) ⇒ مهلةٌ أطول من مهلة الجهاز (كالطلب العاديّ)
+    final c = _WsConn(ws);
+    final first = await c.first.timeout(Duration(milliseconds: ms + 45000), onTimeout: () => null);
+    if (first == null || first['success'] != true || first['data'] is! Map) {
+      c.dispose();
+      if (first == null) throw SocketException('تعذّر فتح الممرّ — الخادم ما ردّ', port: port);
+      if (first['status'] == 429 || first['code'] == 'PIPE_BUSY') throw PipeBusy('${first['message'] ?? ''}'.trim());
+      throw VpnPipe.failure(first, port: port);
+    }
+    final data = first['data'] as Map;
+    final id = '${data['id'] ?? ''}';
+    if (id.isEmpty) {
+      c.dispose();
+      throw SocketException('تعذّر فتح الممرّ', port: port);
+    }
+    _conns[id] = c;
+    c.onGone = () => _conns.remove(id);
+    final cms = data['ms'];
+    return (id: id, ms: cms is num && cms > 0 ? cms.round() : null);
+  }
+
+  @override
+  Future<bool> write(String id, Uint8List data) async {
+    final c = _conns[id];
+    if (c == null) return http.write(id, data);
+    return c.write(data);
+  }
+
+  @override
+  Future<PipeRead?> read(String id, Duration wait) async {
+    final c = _conns[id];
+    if (c == null) return http.read(id, wait);
+    return c.read(wait);
+  }
+
+  @override
+  Future<void> close(String id) async {
+    final c = _conns.remove(id);
+    if (c == null) return http.close(id);
+    c.dispose();
+  }
+
+  @override
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) =>
+      http.udp(host, port, data, timeout);
+
+  @override
+  Future<List<int>> ping(String host, int count, Duration timeout) => http.ping(host, count, timeout);
+
+  @override
+  Future<PipeRoute> route() => http.route();
+
+  @override
+  Future<void> release() async {
+    for (final c in _conns.values.toList()) {
+      c.dispose();
+    }
+    _conns.clear();
+    await http.release();
+  }
+}
+
+/// ممرٌّ واحد على WebSocket: أوّل رسالةٍ نصّيّة ردّ open، ثمّ بايتات الجهاز تُخزَّن حتى يقرأها [_Link].
+class _WsConn {
+  _WsConn(this.ws) {
+    _sub = ws.listen(_onData, onDone: _onDone, onError: (Object _) => _onDone(), cancelOnError: true);
+  }
+
+  final WebSocket ws;
+  late final StreamSubscription<dynamic> _sub;
+  final _first = Completer<Map<String, dynamic>?>();
+  final _buf = BytesBuilder(copy: false);
+  Completer<void>? _wake;
+  bool _done = false;
+  bool _taken = false;
+  void Function()? onGone;
+
+  Future<Map<String, dynamic>?> get first => _first.future;
+
+  void _onData(dynamic d) {
+    if (d is String) {
+      if (!_first.isCompleted) {
+        Object? m;
+        try {
+          m = jsonDecode(d);
+        } catch (_) {
+          m = null;
+        }
+        _first.complete(m is Map<String, dynamic> ? m : null);
+      }
+      return;
+    }
+    if (d is List<int>) {
+      _buf.add(d);
+      _signal();
+    }
+  }
+
+  void _onDone() {
+    _done = true;
+    if (!_first.isCompleted) _first.complete(null);
+    _signal();
+  }
+
+  void _signal() {
+    final w = _wake;
+    _wake = null;
+    if (w != null && !w.isCompleted) w.complete();
+  }
+
+  Future<bool> write(Uint8List data) async {
+    if (_done) return false;
+    try {
+      ws.add(data);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// ما وصل (تنتظر ≤ [wait]) ⇒ بايتاته؛ أغلق الخادم بعد آخر بايت (1000: الجهاز أغلق) ⇒ end؛ انقطاعٌ شاذّ ⇒ ما بقي ثمّ null (القارئ
+  /// يُقطع كما حين يسقط الممرّ العاديّ).
+  Future<PipeRead?> read(Duration wait) async {
+    if (_taken) return null;
+    if (_buf.isEmpty && !_done) {
+      final w = _wake = Completer<void>();
+      await w.future.timeout(wait, onTimeout: () {});
+    }
+    final data = _buf.takeBytes();
+    if (_done && _buf.isEmpty) {
+      final clean = ws.closeCode == 1000;
+      if (clean) {
+        _taken = true;
+        onGone?.call();
+        return PipeRead(data, true);
+      }
+      if (data.isEmpty) {
+        _taken = true;
+        onGone?.call();
+        return null;
+      }
+    }
+    return PipeRead(data, false);
+  }
+
+  void dispose() {
+    _done = true;
+    _signal();
+    onGone?.call();
+    try {
+      unawaited(ws.close(1000).catchError((Object _) {}));
+    } catch (_) {}
+    unawaited(_sub.cancel().catchError((Object _) {}));
+  }
+}
+
+/// نتيجة المصافحة: 101 ⇒ [ws]، وإلّا الحالة ورمز الجسم (409 PIPE_WS_OFF، 401…).
+class _Handshake {
+  const _Handshake(this.status, this.ws, this.code);
+  final int status;
+  final WebSocket? ws;
+  final String? code;
+}
+
+const _wsGuid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+/// مصافحة WebSocket يدويّة (WebSocket.connect لا يقول حالة الرفض ولا جسمه): طلب GET بترقية، 101 ⇒ مقبسٌ مفصول ⇒ WebSocket،
+/// وغيرها ⇒ الحالة والرمز. Sec-WebSocket-Accept يُتحقَّق منه.
+Future<_Handshake> _wsHandshake(Uri uri, Map<String, String> headers, Duration timeout) async {
+  final key = base64.encode(List<int>.generate(16, (_) => VpnPipe._rnd.nextInt(256)));
+  final client = HttpClient()..connectionTimeout = timeout;
+  try {
+    final req = await client.openUrl('GET', uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http')).timeout(timeout);
+    req.followRedirects = false;
+    const skip = {'content-type', 'content-length', 'accept-encoding', 'host', 'connection', 'upgrade'};
+    headers.forEach((k, v) {
+      if (!skip.contains(k.toLowerCase())) req.headers.set(k, v);
+    });
+    req.headers
+      ..set(HttpHeaders.connectionHeader, 'Upgrade')
+      ..set(HttpHeaders.upgradeHeader, 'websocket')
+      ..set('Sec-WebSocket-Key', key)
+      ..set('Sec-WebSocket-Version', '13');
+    final res = await req.close().timeout(timeout);
+    if (res.statusCode != HttpStatus.switchingProtocols) {
+      String body = '';
+      try {
+        body = await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 5));
+      } catch (_) {}
+      String? code;
+      try {
+        final m = jsonDecode(body);
+        if (m is Map) code = m['code']?.toString();
+      } catch (_) {}
+      client.close(force: true);
+      return _Handshake(res.statusCode, null, code);
+    }
+    final want = base64.encode(sha1.convert(utf8.encode('$key$_wsGuid')).bytes);
+    if (res.headers.value('sec-websocket-accept') != want) {
+      client.close(force: true);
+      throw const SocketException('مصافحة الاتّصال المفتوح لا تطابق');
+    }
+    final socket = await res.detachSocket();
+    client.close();
+    return _Handshake(101, WebSocket.fromUpgradedSocket(socket, serverSide: false), null);
+  } catch (_) {
+    client.close(force: true);
+    rethrow;
   }
 }

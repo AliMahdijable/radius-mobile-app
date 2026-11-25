@@ -26,7 +26,7 @@ class DeviceNet {
   static Future<T> direct<T>(Future<T> Function() fn) => runZoned(fn, zoneValues: {_directKey: true});
 
   /// [fn] عبر الممرّ وإن لم يُشغَّل «وضع VPN» — «الفحص الشامل» عبر الـVPN وهو خارج شبكته (الحال من الخادم، والمعلومات بقرّائه هو).
-  static Future<T> vpn<T>(Future<T> Function() fn) => runZoned(fn, zoneValues: {_vpnKey: true});
+  static Future<T> vpn<T>(Future<T> Function() fn) => runZoned(fn, zoneValues: {_vpnKey: true, VpnPipe.urgentKey: true});
 
   static bool get _on => Zone.current[_directKey] != true && (Zone.current[_vpnKey] == true || vpnOn());
 

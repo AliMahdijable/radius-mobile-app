@@ -498,6 +498,7 @@ class VpnNow {
 
   /// يشغّل الوضع ويفحص [from] فوراً (والأقسام الظاهرة).
   static Future<void> enterMode({VpnNowKind? from}) async {
+    VpnPipe.resetBackoff(); // ضغطةٌ صريحة: كلّ ممرٍّ يحاول فوراً (التباعد بعد الفشل لما يأتي بعدها)
     // مشتركو الوطنيّ/فايبر اكس لا يُفحصون عبر الـVPN ⇒ الضغطة من قسمهم تشغّل الوضع بلا فحصٍ لهم (الأجهزة وحدها)
     // ...وأجهزة صفحةٍ بلا طريقٍ لها (مشتركوها عبر VPN مديرها) كذلك: الوضع يفحص المشتركين وحدهم
     final runFrom = from != null && (from != VpnNowKind.subscribers || subscribersOk) && (from != VpnNowKind.devices || devicesOk) ? from : null;

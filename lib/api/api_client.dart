@@ -1,4 +1,5 @@
 import 'etag_cache.dart';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -78,6 +79,25 @@ class ApiClient {
   /// عبر الـVPN يُبقي قراءةً معلّقة (≤ ١٥ث) تنتظر بايتاته، فلا تزاحم نداءات التطبيق الأخرى على اتّصالاتها الثمانية.
   static Dio get pipe => _pipe ??= _buildDio(baseUrl, maxConnections: 32);
   static Dio? _pipe;
+
+  /// ترويسات طلبٍ إلى [path] كما يرسلها [pipe] بمعترضاته كلّها (الجهاز، النسخة، الجلسة أو «كل الشركات») — لمصافحة «الاتّصال الواحد»
+  /// لممرّ الـVPN (٢٥ نوفمبر — WebSocket لا يمرّ بـDio). لا يُرسل شيئاً: محوّلٌ يعيد الترويسات النهائيّة بعد المعترضات (وصدى مفتاح
+  /// الشركة كي لا يرفضه حارس «كل الشركات»). null = المعترض ردّ محلّيّاً أو تعذّر ⇒ المستدعي يبقى على الطلبات العاديّة.
+  static Future<Map<String, String>?> headersFor(String path) async {
+    final d = _hdr ??= (_buildDio(baseUrl)..httpClientAdapter = _HeaderEchoAdapter());
+    try {
+      final r = await d.get<dynamic>(path);
+      final data = r.data;
+      if (r.statusCode != 200 || data is! Map || data['_echo'] != true || data['h'] is! Map) return null;
+      final h = <String, String>{};
+      (data['h'] as Map).forEach((k, v) => h['$k'] = '$v');
+      return h;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Dio? _hdr;
 
   /// رقم النسخة لكلّ عميلٍ — والعملاء المستقلّون عن [dio] (التجديد، الحساب، المساعد بوضع الحساب) يضمّونه بأنفسهم: بوّابة
   /// التحديث (server/appGate.js) تحكم به، و3.0.15 لم يرسله منها فرُدّت «نسخةً قديمة» (٥ نوفمبر: «انتهاء الجلسة» بالهواتف —
@@ -630,4 +650,27 @@ class _AuthInterceptor extends Interceptor {
       _refreshing = null;
     }
   }
+}
+
+/// محوّلٌ لا يتّصل: يعيد ترويسات الطلب النهائيّة (بعد المعترضات) جسماً — لـ[ApiClient.headersFor].
+class _HeaderEchoAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    final h = <String, String>{};
+    options.headers.forEach((k, v) {
+      if (v != null) h[k] = '$v';
+    });
+    final key = h['x-company-key'];
+    return ResponseBody.fromString(
+      jsonEncode({'_echo': true, 'h': h}),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+        if (key != null) 'x-company-key': [key],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
