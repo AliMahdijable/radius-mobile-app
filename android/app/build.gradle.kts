@@ -106,6 +106,8 @@ dependencies {
     // ٩ نوفمبر — «طابعة الجهاز» المدمجة في أجهزة الكاشير SUNMI: مكتبتها الرسميّة (ربط خدمة الطابعة بـAIDL، ٣٦ ك.ب).
     // تُربط حين يُطلب وحدها — ReceiptPrinterChannel.kt.
     implementation("com.sunmi:printerlibrary:1.0.24")
+    // ٢٥ نوفمبر: WindowCompat.enableEdgeToEdge (MainActivity) — النسخة نفسها التي تجلبها الإضافات أصلاً (لا ترقية)
+    implementation("androidx.core:core:1.18.0")
 }
 
 flutter {

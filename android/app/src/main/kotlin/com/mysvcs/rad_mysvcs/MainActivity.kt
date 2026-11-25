@@ -7,9 +7,11 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,6 +20,23 @@ import io.flutter.plugin.common.MethodChannel
 // plugin can attach its BiometricPrompt fragment. Without this, the prompt
 // throws/rejects on Android even when fingerprint/face is enrolled.
 class MainActivity : FlutterFragmentActivity() {
+    // ٢٥ نوفمبر (اقتراح Google Play «العرض حتى حافّة الشاشة قد لا يكون مفعّلاً لدى الجميع»): أندرويد 15+ يرسم التطبيق تحت شريطي
+    // النظام أصلاً (targetSdk 36) — وهنا أندرويد 14 فأقدم مثله.
+    // ⚠️ لا يُستدعى بأندرويد 15+: هناك يجعل شريط الأزرار الثلاثة شفّافاً تماماً فيسقط الظلّ خلفها (أزرارٌ لا تُرى — محاكي أندرويد
+    // 17، تطبيق المشترك ٢٥ نوفمبر). وبالأقدم نعيد «التباين» كما كان، ولون الشريط يضعه main.dart/MaterialApp بعده كما كان.
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            val navContrast = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced else null
+            val statusContrast = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isStatusBarContrastEnforced else null
+            WindowCompat.enableEdgeToEdge(window)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                navContrast?.let { window.isNavigationBarContrastEnforced = it }
+                statusContrast?.let { window.isStatusBarContrastEnforced = it }
+            }
+        }
+    }
+
     // «طابعة الوصولات» (٩ نوفمبر): بلوتوث SPP + طابعة الجهاز (SUNMI) — lib/services/receipt_printer/.
     private var receiptPrinter: ReceiptPrinterChannel? = null
 
