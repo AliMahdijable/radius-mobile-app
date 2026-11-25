@@ -35,6 +35,7 @@ import 'services/active_company.dart';
 import 'services/app_version.dart';
 import 'services/badge_service.dart';
 import 'services/client_diag.dart';
+import 'services/windows_crash_report.dart';
 import 'services/desktop_account_auth.dart';
 import 'services/desktop_file_secure_storage.dart';
 import 'services/permissions_service.dart';
@@ -151,6 +152,8 @@ void main() async {
   }
 
   if (AppPlatform.isDesktop) _installDesktopErrorReport();
+  // ويندوز: كراشٌ أصليّ يُغلق البرنامج بلا سطر — نقرأ ما سجّله ويندوز عنه («Application Error») بعد الإقلاع ونرسله.
+  WindowsCrashReport.schedule();
   _installDebugErrorAggregator();
   // إجبار التحديث (٣ نوفمبر): الخادم يقول أقلّ نسخة — الجواب يصل بعد أوّل إطار فتظهر الشاشة فوقه إن لزم
   UpdateGate.check().ignore();
