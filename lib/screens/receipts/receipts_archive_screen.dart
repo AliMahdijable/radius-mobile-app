@@ -24,6 +24,7 @@ import '../../theme/typography.dart';
 import '../../widgets/list_kit.dart';
 import '../../widgets/merged_section.dart';
 import '../desktop/desk_widgets.dart';
+import '../../services/employee_visibility.dart';
 
 /// «أرشيف الوصولات» (١١ نوفمبر ٢٠٢٦ — المالك: «مرّات المدراء ينسون طباعته أو يفقدونه، بحيث يبحث على رقم الوصل أو اسم المشترك
 /// ويقدر يعيد طباعته»).
@@ -553,7 +554,7 @@ class ArchiveRowTile extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final it = item;
-    final title = name.isNotEmpty ? name : (it.username ?? '—');
+    final title = name.isNotEmpty ? name : (Sees.usernames ? (it.username ?? '—') : kNoNameWord);
     final blocked = it.blockedReason != null;
     // المبلغ قبل اسم الباقة: السطر يُقصّ من آخره — فيُقصّ الاسم الطويل لا المبلغ
     final facts = isoJoin([
@@ -665,9 +666,9 @@ class _ArchiveSheet extends StatelessWidget {
         children: [
           SheetRowsGroup(rows: [
             // قيم الصفوف تُرسم LTR (للأرقام واليوزرات): النصّ العربيّ يُعزل فلا ينقلب ترتيبه
-            SheetRowData(label: 'المشترك', value: iso(name.isNotEmpty ? name : (it.username ?? '—')), strong: true),
-            if (name.isNotEmpty && (it.username ?? '').isNotEmpty) SheetRowData(label: 'اسم المستخدم', value: it.username!),
-            if ((it.phone ?? '').isNotEmpty) SheetRowData(label: 'الهاتف', value: it.phone!),
+            SheetRowData(label: 'المشترك', value: iso(name.isNotEmpty ? name : (Sees.usernames ? (it.username ?? '—') : kNoNameWord)), strong: true),
+            if (Sees.usernames && name.isNotEmpty && (it.username ?? '').isNotEmpty) SheetRowData(label: 'اسم المستخدم', value: it.username!),
+            if (Sees.phones && (it.phone ?? '').isNotEmpty) SheetRowData(label: 'الهاتف', value: it.phone!),
             SheetRowData(label: 'تاريخ العمليّة', value: archiveStamp(it.at)),
             if ((it.package ?? '').isNotEmpty) SheetRowData(label: 'الباقة', value: iso(it.package!)),
             if (it.amount != null)

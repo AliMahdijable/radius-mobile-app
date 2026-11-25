@@ -40,6 +40,8 @@ class PermissionsService {
   static const _kIsEmployee = 'perms.is_employee';
   /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفحات الموظّف (JSON) من `/api/v2/employees/me`.
   static const _kEmployeePages = 'perms.employee_pages';
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): الأصناف المخفيّة عن الموظّف (JSON) من `hidden` في `/api/v2/employees/me`.
+  static const _kEmployeeHidden = 'perms.employee_hidden';
   // Pro: قدرات المدير المعياريّة (subscribers.delete/show_password/…) من الساس.
   // المدير الفرعيّ فاعلٌ مقيَّد: الأزرار تُضبَط بهذه الخريطة، منفصلةً عن مسار
   // الموظّف. دلالةٌ مختلفة: مفتاحٌ **غير موجود** في الخريطة = مسموح (ميزةٌ
@@ -65,6 +67,7 @@ class PermissionsService {
   static Map<String, bool>? _cached;
   static bool _isEmployee = false;
   static List<EmployeePageRef> _pages = const [];
+  static Set<String> _hidden = const {};
   static Map<String, bool>? _managerCaps;
   static bool _managerRestricted = false;
   static bool _loaded = false;
@@ -79,6 +82,15 @@ class PermissionsService {
 
   /// ٨ نوفمبر — صفحات الموظّف (صفحتان فأكثر)، وإلّا [] — «صفحاتي» في سطر الشركة وورقتها ([HeaderSwitch]).
   static List<EmployeePageRef> get employeePages => _isEmployee ? _pages : const [];
+
+  /// «ما يراه الموظّف» (٢٣ نوفمبر — المالك: «المدير يقدر يخلي الموظف ما يشوف الديون او ما يشوف اليوزرية … ضيف الهاتف … عدد
+  /// المشتركين»): ما أخفاه المدير عن هذا الموظّف — debts · usernames · phones · counts · balance. يقرّره الخادم (`hidden` في
+  /// /employees/me: الميزة مفتوحةٌ لصفحته وصلاحيّته false) ويخفي هو الديون والهاتف والرصيد من ردوده؛ الشاشات تخفي اليوزر
+  /// والأعداد وتكتب «مخفي» بمكان ما أخفاه. صاحب الحساب والمدير يريان كلّ شيء.
+  static Set<String> get hidden => _isEmployee ? _hidden : const {};
+
+  /// يرى الموظّف هذا الصنف؟ ([hidden]) — صاحب الحساب والمدير: دائماً.
+  static bool sees(String category) => !_isEmployee || !_hidden.contains(category);
 
   /// يُستدعى مرّة واحدة عند بدء التشغيل (main / Splash). يقرأ
   /// المخزّن في الـsecure storage ويحمّله للذاكرة.
@@ -99,6 +111,8 @@ class PermissionsService {
       if (_isEmployee) {
         final praw = await _storage.read(key: _kEmployeePages);
         if (praw != null && praw.isNotEmpty) _pages = EmployeePageRef.listFrom(jsonDecode(praw));
+        final hraw = await _storage.read(key: _kEmployeeHidden);
+        if (hraw != null && hraw.isNotEmpty) _hidden = hiddenFrom(jsonDecode(hraw));
       }
       // Pro: استعادة تقييد المدير كي يبقى بعد إعادة التشغيل/الدخول التلقائيّ
       // (وإلّا رجع المدير الفرعيّ كامل الصلاحيّات عند كلّ إقلاع).
@@ -148,7 +162,7 @@ class PermissionsService {
       } catch (e) {
         if (kDebugMode) debugPrint('PermissionsService.pages: $e');
       }
-      await _saveEmployee(me.permissions!);
+      await _saveEmployee(me.permissions!, hidden: me.hidden);
     } else {
       // admin = full access
       await _clearEmployee();
@@ -156,12 +170,14 @@ class PermissionsService {
     return true;
   }
 
-  static Future<void> _saveEmployee(Map<String, bool> perms) async {
+  static Future<void> _saveEmployee(Map<String, bool> perms, {Set<String> hidden = const {}}) async {
     _isEmployee = true;
     _cached = Map<String, bool>.from(perms);
+    _hidden = Set<String>.unmodifiable(hidden);
     await Future.wait([
       _storage.write(key: _kIsEmployee, value: '1'),
       _storage.write(key: _kEmployeePerms, value: jsonEncode(perms)),
+      if (hidden.isEmpty) _storage.delete(key: _kEmployeeHidden) else _storage.write(key: _kEmployeeHidden, value: jsonEncode(hidden.toList()..sort())),
     ]);
     _version.value = _version.value + 1;
   }
@@ -170,10 +186,12 @@ class PermissionsService {
     _isEmployee = false;
     _cached = null;
     _pages = const [];
+    _hidden = const {};
     await Future.wait([
       _storage.delete(key: _kIsEmployee),
       _storage.delete(key: _kEmployeePerms),
       _storage.delete(key: _kEmployeePages),
+      _storage.delete(key: _kEmployeeHidden),
     ]);
     _version.value = _version.value + 1;
   }
@@ -189,6 +207,7 @@ class PermissionsService {
     _isEmployee = false;
     _cached = null;
     _pages = const [];
+    _hidden = const {};
     // [retiredManagerKeys] لا تُحفظ ولا تُقرأ — فخريطةٌ لم يبقَ فيها غيرها فارغة.
     final caps = _dropRetired(canonical);
     if (isSuperAdmin || caps.isEmpty) {
@@ -198,6 +217,7 @@ class PermissionsService {
         _storage.delete(key: _kIsEmployee),
         _storage.delete(key: _kEmployeePerms),
         _storage.delete(key: _kEmployeePages),
+        _storage.delete(key: _kEmployeeHidden),
         _storage.delete(key: _kManagerRestricted),
         _storage.delete(key: _kManagerCaps),
       ]);
@@ -208,6 +228,7 @@ class PermissionsService {
         _storage.delete(key: _kIsEmployee),
         _storage.delete(key: _kEmployeePerms),
         _storage.delete(key: _kEmployeePages),
+        _storage.delete(key: _kEmployeeHidden),
         _storage.write(key: _kManagerRestricted, value: '1'),
         _storage.write(key: _kManagerCaps, value: jsonEncode(caps)),
       ]);
@@ -221,12 +242,14 @@ class PermissionsService {
     _isEmployee = false;
     _cached = null;
     _pages = const [];
+    _hidden = const {};
     _managerRestricted = false;
     _managerCaps = null;
     await Future.wait([
       _storage.delete(key: _kIsEmployee),
       _storage.delete(key: _kEmployeePerms),
       _storage.delete(key: _kEmployeePages),
+      _storage.delete(key: _kEmployeeHidden),
       _storage.delete(key: _kManagerRestricted),
       _storage.delete(key: _kManagerCaps),
     ]);
@@ -252,11 +275,13 @@ class PermissionsService {
     bool managerRestricted = false,
     Map<String, bool> managerCaps = const {},
     List<EmployeePageRef> pages = const [],
+    Set<String> hidden = const {},
   }) {
     _loaded = true;
     _isEmployee = isEmployee;
     _cached = isEmployee ? Map<String, bool>.from(permissions) : null;
     _pages = isEmployee ? pages : const [];
+    _hidden = isEmployee ? Set<String>.unmodifiable(hidden) : const {};
     _managerRestricted = !isEmployee && managerRestricted;
     _managerCaps =
         _managerRestricted ? Map<String, bool>.from(managerCaps) : null;
@@ -270,6 +295,7 @@ class PermissionsService {
     _isEmployee = false;
     _cached = null;
     _pages = const [];
+    _hidden = const {};
     _managerRestricted = false;
     _managerCaps = null;
     _version.value = _version.value + 1;
@@ -361,6 +387,14 @@ class PermissionsService {
     return true;
   }
 }
+
+/// الأصناف المعروفة وحدها من قائمة الخادم (`hidden`) — غيرها يُتجاهل (خادمٌ أحدث لا يُخفي ما لا تعرف الشاشات إخفاءه).
+Set<String> hiddenFrom(Object? raw) => raw is List
+    ? {for (final e in raw) if (kSeeCategories.contains(e?.toString())) e.toString()}
+    : const {};
+
+/// «ما يراه الموظّف»: الأصناف الخمسة (debts · usernames · phones · counts · balance).
+const kSeeCategories = {'debts', 'usernames', 'phones', 'counts', 'balance'};
 
 /// Alias قصيرة لتقصير الاستعمال:
 ///   Perms.has('subscribers.view')

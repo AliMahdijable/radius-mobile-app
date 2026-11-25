@@ -18,6 +18,7 @@ import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import 'renew_requests_screen.dart';
 import '../../services/transfer_pay.dart';
+import '../../services/employee_visibility.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — المالك): بطاقة الطلب، صورة التحويل (تكبيرٌ بملء الشاشة)، النافذة السريعة (من الجرس والإشعار)،
 /// وقسمها في صندوق الإشعارات (حين يوجد طلبٌ وحده — المالك: «في حال اكو طلب يظهر بالجرس»).
@@ -461,7 +462,7 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(r.title, style: AppType.cardTitleBold(color: AppColors.textHi)),
-            if (r.username != null && r.username != r.title)
+            if (Sees.usernames && r.username != null && r.username != r.title)
               Text(r.username!, textDirection: TextDirection.ltr, style: AppType.muted(color: AppColors.textMid)),
           ]),
         ),

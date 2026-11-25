@@ -17,6 +17,7 @@ import 'location_picker_screen.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../services/employee_visibility.dart';
 
 /// 2026-08-26: chooser الصغير — نقرة على أيقونة الموقع تفتح قائمة
 /// خيارات فتح (Google Maps / Waze / نسخ). يتعامل مع فتح روابط
@@ -384,7 +385,7 @@ class _EditSheetState extends State<_EditSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.mapPin,
         title: widget.sub.hasLocation ? 'تعديل الموقع' : 'إضافة موقع',
-        subtitle: widget.sub.fullName,
+        subtitle: Sees.nameOf(widget.sub.fullName, widget.sub.username),
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(

@@ -22,6 +22,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../services/employee_visibility.dart';
 
 /// اسم تطبيق المشترك كما يراه على هاتفه في المتجرين: «MyServices» (كان «MySub»،
 /// وأبل طلبت ترك الاسم القديم) — كـ`SubscriberApp.name` في تبويب «رمز الوكيل».
@@ -322,9 +323,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.qrCode,
         title: 'qr_login.title'.tr(),
-        subtitle: widget.sub.fullName.trim().isEmpty
-            ? widget.sub.username
-            : widget.sub.fullName,
+        subtitle: Sees.nameOf(widget.sub.fullName, widget.sub.username),
         onClose: () => Navigator.of(context).pop(),
       ),
       body: _buildBody(),

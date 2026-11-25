@@ -21,6 +21,7 @@ import '../../../theme/typography.dart';
 import '../../network_devices/fiber/fiber_widgets.dart';
 import '../../national/national_device_sheet.dart';
 import '../../national/national_ticket_write.dart' show nationalWriteLocked;
+import '../../../services/employee_visibility.dart';
 
 /// قراءة «الليف والموقع» من الخادم (GET /api/v2/subscribers/:idx/fiber) — الحقول كما يرسلها محوّل الشركة.
 class KitFiberInfo {
@@ -224,7 +225,7 @@ class _KitFiberCardState extends State<KitFiberCard> {
     final changed = await showNationalDeviceSheet(
       context,
       sid: idx,
-      name: widget.sub.fullName.trim().isEmpty ? widget.sub.username : widget.sub.fullName.trim(),
+      name: Sees.nameOf(widget.sub.fullName, widget.sub.username),
       fatOn: b.fatEdit,
       devOn: b.deviceEdit,
     );

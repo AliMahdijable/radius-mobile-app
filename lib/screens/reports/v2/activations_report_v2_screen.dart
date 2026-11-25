@@ -30,6 +30,7 @@ import 'report_kit.dart';
 import 'report_period.dart';
 import 'report_prefs.dart';
 import 'report_sheets.dart';
+import '../../../services/employee_visibility.dart';
 
 /// «التفعيلات» على الشكل الموحّد (٢٢ نوفمبر — المالك: «ادمج التفعيلات واليوميّة وانطلق»): «التفعيلات» و«التفعيلات اليوميّة»
 /// تقريرٌ واحد، و«اليوم» فترةٌ فيه. من يملك «التفعيلات اليوميّة» وحدها يرى اليوم وحده كما كان.
@@ -557,8 +558,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
             final amount = k == ActKind.debt ? m.debt : (k == ActKind.cash ? m.cash : null);
             return [
               if (_merged) MergedMode.companyOf(co[r])?.name ?? '',
-              r.userFullName ?? r.targetName ?? r.userUsername ?? '',
-              r.userUsername ?? '',
+              rpSubjectTitle(fullName: r.userFullName, target: r.targetName, username: r.userUsername, fallback: ''),
+              Sees.usernames ? (r.userUsername ?? '') : kHiddenWord,
               ActivationsView.kindLabel(k),
               r.packageName ?? '',
               amount == null || amount == 0 ? '' : '$amount',

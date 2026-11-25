@@ -14,6 +14,7 @@ import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import '../tickets/ticket_image.dart';
 import 'field_team_widgets.dart';
+import '../../services/employee_visibility.dart';
 
 /// المهمّة كما في الموقع (TaskSheet): الحال والنوع والتذكرة، المراحل الأربع، الفنّي باتّصالٍ وواتساب والإسناد، المشترك باتّصالٍ
 /// وواتساب وخريطة، ملاحظةٌ تصل الفنّي، السجلّ الزمنيّ بصوره ومكان الفنّي، ثمّ إعادة الفتح أو الإلغاء بسببه. تُقرأ كلّ ٢٠ ثانية.
@@ -317,9 +318,9 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('المشترك', style: AppType.micro(color: AppColors.textMid).copyWith(fontWeight: FontWeight.w600)),
                     Text(iso(who), style: AppType.bodyBold(color: AppColors.textHi)),
-                    if ((sub?.name ?? '').isNotEmpty && (sub?.username ?? '').isNotEmpty)
+                    if (Sees.usernames && (sub?.name ?? '').isNotEmpty && (sub?.username ?? '').isNotEmpty)
                       Text(iso(sub!.username!), style: AppType.micro(color: AppColors.textMid)),
-                    if ((sub?.phone ?? '').isNotEmpty) Text(iso(sub!.phone!), style: AppType.body(color: AppColors.textHi)),
+                    if (Sees.phones && (sub?.phone ?? '').isNotEmpty) Text(iso(sub!.phone!), style: AppType.body(color: AppColors.textHi)),
                   ]),
                 ),
               ])

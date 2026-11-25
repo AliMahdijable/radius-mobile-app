@@ -38,6 +38,7 @@ import '../../../services/receipt_service.dart';
 import 'usage_on_demand.dart';
 import '../../../services/merged_mode.dart';
 import '../../network_devices/widgets/device_ip_link.dart';
+import '../../../services/employee_visibility.dart';
 
 /// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
 /// سحبه المدير). لا يسقط عمود حين يضيق الجدول: **الجدول كلّه** يتمرّر يميناً ويساراً قطعةً واحدة — لا جزءٌ ثابت ولا
@@ -362,7 +363,8 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
     Theme.of(context); // theme-dep (dark-mode)
     final s = widget.sub;
     final st = SubscriberCardV3.statusOf(s);
-    final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
+    // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وإلّا «بلا اسم»، ولا يوزر تحته
+    final name = Sees.nameOf(s.fullName, s.username);
     final cols = widget.columns;
     // اللون على الحافّة لمن يحتاج انتباهاً وحده (منتهٍ أو قارب) — الباقي بلا لون، لا لونٌ مختلف لكلّ صفّ.
     final attention = s.isExpired || s.isNearExpiry;
@@ -434,8 +436,10 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                     decoration: s.isDisabled ? TextDecoration.lineThrough : null,
                   ),
                   trailing: _nameTrailing(s),
-                  bottom: packageInline ? '${s.username} · ${s.profileName}' : s.username,
-                  bottomLtr: true,
+                  bottom: !Sees.usernames
+                      ? (packageInline ? s.profileName : null)
+                      : (packageInline ? '${s.username} · ${s.profileName}' : s.username),
+                  bottomLtr: Sees.usernames,
                 ),
               ),
               for (final c in cols.shown) _cellBox(cols, c, _cell(c, s)),
@@ -694,7 +698,8 @@ Future<void> showSubscriberRowMenu(
     _gate('subscribers.edit', LucideIcons.pencil, 'subscribers.op_edit'.tr(),
         () => showEditSubscriberSheet(context, s), company: s.companyKey),
     null,
-    if (s.hasDebt)
+    // «ما يراه الموظّف»: الدين مخفيّ (يصل فارغاً) والتسديد باقٍ (المالك: «اي يسدّد»)
+    if (s.hasDebt || !Sees.debts)
       _gate('subscribers.pay_debt', LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(),
           () => showPayDebtSheet(context, s), company: s.companyKey),
     _gate('subscribers.add_debt', LucideIcons.plus, 'subscribers.op_add_debt'.tr(),
@@ -711,7 +716,7 @@ Future<void> showSubscriberRowMenu(
           () => showSubscriberPriceSheet(
                 context,
                 idx: s.idx!,
-                name: s.fullName.trim().isNotEmpty ? s.fullName : s.username,
+                name: Sees.nameOf(s.fullName, s.username),
                 companyKey: s.companyKey,
               ), company: s.companyKey),
     null,
@@ -726,11 +731,12 @@ Future<void> showSubscriberRowMenu(
       await printSubscriberReceipt(context, s);
       return null;
     }),
-    _MenuEntry(LucideIcons.copy, 'desktop.copy_username'.tr(), () async {
-      await Clipboard.setData(ClipboardData(text: s.username));
-      if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
-      return null;
-    }),
+    if (Sees.usernames)
+      _MenuEntry(LucideIcons.copy, 'desktop.copy_username'.tr(), () async {
+        await Clipboard.setData(ClipboardData(text: s.username));
+        if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
+        return null;
+      }),
     null,
     _MenuEntry(LucideIcons.panelLeftOpen, 'desktop.all_actions'.tr(), () async => onOpenDetails()),
   ].where((e) => e != const _Hidden()).toList();

@@ -12,6 +12,7 @@ import '../../../services/provider_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/employee_visibility.dart';
 
 /// «سجلّ التعديلات» للمشترك (المالك ٢٠ نوفمبر، صورةٌ من نظامٍ آخر: «من يوزر يعدلون عليه معلومات… سويها»): كلّ تعديلٍ بما تغيّر
 /// «من … إلى …»، ومن عدّله (الموظّف باسمه، والمدير باسمه في السجلات إن وضعه) ومتى — كقسم الموقع في نافذة المشترك
@@ -101,7 +102,9 @@ class _SubscriberEditsSheetState extends State<SubscriberEditsSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final s = widget.sub;
-    final who = s.fullName.trim().isNotEmpty ? s.fullName.trim() : iso(s.username);
+    final who = Sees.usernames
+        ? (s.fullName.trim().isNotEmpty ? s.fullName.trim() : iso(s.username))
+        : Sees.nameOf(s.fullName, s.username);
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.fileDiff,

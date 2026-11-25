@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/widgets/message_exclusion_card.dart';
+import '../../services/employee_visibility.dart';
 
 /// صفٌّ في القائمة: المستثنى، وشركته في «كل الشركات» (مفتاحها؛ null = الصفحة المفتوحة)، وهل يُدار فيها.
 typedef _MxRow = ({MxEntry entry, String? companyKey, bool canManage});
@@ -90,7 +91,7 @@ class _MessageExclusionsScreenState extends State<MessageExclusionsScreen> {
     await showMessageExclusionSheet(
       context,
       subject: MxSubject(username: e.username, idx: e.idx),
-      title: e.name == null ? e.username : '${e.name} — ${e.username}',
+      title: !Sees.usernames ? Sees.nameOf(e.name, e.username) : (e.name == null ? e.username : '${e.name} — ${e.username}'),
       companyKey: row.companyKey,
     );
   }

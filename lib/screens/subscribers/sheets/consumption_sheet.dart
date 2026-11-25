@@ -12,6 +12,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/util/bytes_format.dart';
+import '../../../services/employee_visibility.dart';
 
 /// استهلاك المشترك — يوميّ عبر أيّام الشهر، أو شهريّ عبر شهور السنة.
 ///
@@ -203,9 +204,7 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.activity,
         title: 'الاستهلاك',
-        subtitle: widget.sub.fullName.isNotEmpty
-            ? widget.sub.fullName
-            : widget.sub.username,
+        subtitle: Sees.nameOf(widget.sub.fullName, widget.sub.username),
         onClose: () => Navigator.of(context).pop(),
       ),
       body: Column(

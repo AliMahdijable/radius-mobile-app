@@ -22,6 +22,7 @@ import '../../desktop/desk_widgets.dart';
 import 'fiber_home_screen.dart';
 import 'fiber_sheets.dart';
 import 'fiber_widgets.dart';
+import '../../../services/employee_visibility.dart';
 
 /// بيانات الربط من الساس: الجلسات الحيّة (يوزر ← ماك) ودليل الحساب العاديّ — مشتركةٌ بين شاشات الألياف (٤٥ث). عامّة ليقرأها المنفذ (الاسم العربيّ).
 class FiberLinkData {
@@ -340,8 +341,8 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
           Expanded(
             child: Text.rich(
               TextSpan(children: [
-                TextSpan(text: iso(name ?? s.username), style: AppType.rowValue(color: AppColors.textHi)),
-                if (name != null) ...[
+                TextSpan(text: iso(Sees.nameOf(name, s.username)), style: AppType.rowValue(color: AppColors.textHi)),
+                if (name != null && Sees.usernames) ...[
                   TextSpan(text: ' · ', style: AppType.body(color: AppColors.textMid)),
                   TextSpan(text: iso(s.username), style: AppType.body(color: AppColors.textMid)),
                 ],
@@ -678,8 +679,8 @@ class _LinkPickerState extends State<_LinkPicker> {
           Text('مقترح', style: AppType.label(color: AppColors.textMid)),
           const SizedBox(height: 4),
           _candidate(
-            title: FiberLinkData.nameOf(s.username) ?? s.username,
-            sub: [if (FiberLinkData.nameOf(s.username) != null) s.username, s.why].join(' · '),
+            title: Sees.nameOf(FiberLinkData.nameOf(s.username), s.username),
+            sub: [if (FiberLinkData.nameOf(s.username) != null && Sees.usernames) s.username, s.why].join(' · '),
             pill: FiberPill(s.sure ? 'مؤكَّد' : 'محتمل', tone: s.sure ? AppTone.success : AppTone.warning),
             onTap: () => _save(s.username, s.source),
           ),

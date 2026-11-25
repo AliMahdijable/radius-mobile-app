@@ -38,6 +38,7 @@ import '../../national/national_wallet_topup_sheet.dart';
 import '../../../widgets/merged_write_lock.dart';
 import '../../../services/transfer_pay.dart';
 import '../../../widgets/paid_via_picker.dart';
+import '../../../services/employee_visibility.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -1234,21 +1235,26 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                     value: '-${formatIQD(_discount.round())} $cur',
                     valueColor: AppColors.brandAccent,
                   ),
-                SheetRowData(
-                  label: _currentBalance < 0
-                      ? 'sheets.current_debt'.tr()
-                      : 'sheets.current_credit'.tr(),
-                  value: '${formatIQD(_currentBalance.abs().round())} $cur',
-                  valueColor: _currentBalance < 0
-                      ? AppColors.error
-                      : AppColors.brandAccent,
-                  strong: true,
-                ),
-                SheetRowData(
-                  label: _managerBalanceLabel,
-                  value: '${formatIQDSigned(_managerBalance.round())} $cur',
-                  valueColor: _managerBalance < 0 ? AppColors.error : null,
-                ),
+                // «ما يراه الموظّف»: الدين مخفيّ ⇒ «مخفي»؛ رصيد الصفحة ونقاطها مخفيّان ⇒ لا صفّ
+                if (Sees.debts)
+                  SheetRowData(
+                    label: _currentBalance < 0
+                        ? 'sheets.current_debt'.tr()
+                        : 'sheets.current_credit'.tr(),
+                    value: '${formatIQD(_currentBalance.abs().round())} $cur',
+                    valueColor: _currentBalance < 0
+                        ? AppColors.error
+                        : AppColors.brandAccent,
+                    strong: true,
+                  )
+                else
+                  SheetRowData(label: 'الدين والرصيد', value: kHiddenWord, valueColor: AppColors.textMid, strong: true),
+                if (Sees.balance)
+                  SheetRowData(
+                    label: _managerBalanceLabel,
+                    value: '${formatIQDSigned(_managerBalance.round())} $cur',
+                    valueColor: _managerBalance < 0 ? AppColors.error : null,
+                  ),
               ]
             : [
           // Pro: سعر الشراء (كلفة المدير من الشركة) كـهِنت — ليعرف المدير هامشه.
@@ -1276,22 +1282,27 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               value: '-${formatIQD(_discount.round())} $cur',
               valueColor: AppColors.brandAccent,
             ),
-          SheetRowData(
-            label: _currentBalance < 0
-                ? 'sheets.current_debt'.tr()
-                : 'sheets.current_credit'.tr(),
-            value: '${formatIQD(_currentBalance.abs().round())} $cur',
-            valueColor:
-                _currentBalance < 0 ? AppColors.error : AppColors.brandAccent,
-            strong: true,
-          ),
-          SheetRowData(
-            label: _managerBalanceLabel,
-            // بإشارته (١٦ نوفمبر): رصيدٌ سالب في الساس كان يُعرض رصيداً موجوداً — [formatIQD] يُسقط الناقص
-            value: '${formatIQDSigned(_managerBalance.round())} $cur',
-            valueColor: _managerBalance < 0 ? AppColors.error : null,
-          ),
-          if (_rewardPoints > 0)
+          // «ما يراه الموظّف»: الدين مخفيّ ⇒ «مخفي»؛ رصيد الصفحة ونقاطها مخفيّان ⇒ لا صفّ
+          if (Sees.debts)
+            SheetRowData(
+              label: _currentBalance < 0
+                  ? 'sheets.current_debt'.tr()
+                  : 'sheets.current_credit'.tr(),
+              value: '${formatIQD(_currentBalance.abs().round())} $cur',
+              valueColor:
+                  _currentBalance < 0 ? AppColors.error : AppColors.brandAccent,
+              strong: true,
+            )
+          else
+            SheetRowData(label: 'الدين والرصيد', value: kHiddenWord, valueColor: AppColors.textMid, strong: true),
+          if (Sees.balance)
+            SheetRowData(
+              label: _managerBalanceLabel,
+              // بإشارته (١٦ نوفمبر): رصيدٌ سالب في الساس كان يُعرض رصيداً موجوداً — [formatIQD] يُسقط الناقص
+              value: '${formatIQDSigned(_managerBalance.round())} $cur',
+              valueColor: _managerBalance < 0 ? AppColors.error : null,
+            ),
+          if (_rewardPoints > 0 && Sees.balance)
             SheetRowData(
               label: 'sheets.points'.tr(),
               value: formatIQD(_rewardPoints.round()),
@@ -1436,15 +1447,18 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ],
         ),
       ),
-      const SizedBox(height: 14),
-      SheetResultBanner(
-        icon: LucideIcons.arrowLeft,
-        label: after < 0
-            ? 'sheets.debt_after_activation'.tr()
-            : 'sheets.credit_after_activation'.tr(),
-        value: '${formatIQD(after.abs().round())} $cur',
-        tone: after < 0 ? AppTone.danger : AppTone.brand,
-      ),
+      // «ما يراه الموظّف»: الدين بعد التفعيل يكشف الدين قبله ⇒ يُخفى معه
+      if (Sees.debts) ...[
+        const SizedBox(height: 14),
+        SheetResultBanner(
+          icon: LucideIcons.arrowLeft,
+          label: after < 0
+              ? 'sheets.debt_after_activation'.tr()
+              : 'sheets.credit_after_activation'.tr(),
+          value: '${formatIQD(after.abs().round())} $cur',
+          tone: after < 0 ? AppTone.danger : AppTone.brand,
+        ),
+      ],
       ],
     ];
   }

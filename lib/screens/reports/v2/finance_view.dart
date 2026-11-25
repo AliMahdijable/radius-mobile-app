@@ -9,6 +9,7 @@ import '../widgets/action_labels.dart';
 import '../widgets/finance_logs.dart';
 import 'report_kit.dart';
 import 'report_period.dart';
+import '../../../services/employee_visibility.dart';
 
 // التقرير الماليّ على الشكل الموحّد (٢٢ نوفمبر): من أرقام الخادم ([FinanceKPIs] وسطوره) إلى بطاقات الشكل — حسابٌ صرف بلا شاشة.
 // القواعد نفسها حرفاً (الصافي، الربح بعد كلفة الباقات، تسديد الديون بلا المقدّم نقداً، الإضافة اليدويّة) — لا رقمٌ جديد هنا.
@@ -103,10 +104,13 @@ class FinanceView {
       m(FinanceKpiIds.activateCash, 'تفعيل نقدي', (x) => x.activateCashSum, LucideIcons.zap, RpTone.money),
       // المقدّم نقداً داخلٌ في «تسديد الديون» عند الخادم — يُفصل عنه بسطره (١٧ نوفمبر).
       m(FinanceKpiIds.debtPay, 'تسديد الديون', (x) => x.totalDebtPayments - x.creditCashSum, LucideIcons.banknote, RpTone.money),
-      m(FinanceKpiIds.activateNonCash, 'تفعيل بالدين', (x) => x.activateNonCashSum, LucideIcons.creditCard, RpTone.debt,
-          upIsGood: false),
-      // اليدويّة وحدها — البيع على الدين ثمن مادّة لا منحة ([FinanceKPIs.manualDebtAddSum]).
-      m(FinanceKpiIds.debtAdd, 'إضافة دين', (x) => x.manualDebtAddSum, LucideIcons.plus, RpTone.debt, upIsGood: false),
+      // «ما يراه الموظّف» (٢٣ نوفمبر): الديون الجديدة مخفيّةٌ عن الموظّف — «تسديد الديون» يبقى (نقدٌ مستلَم، بكلمة المالك)
+      if (Sees.debts) ...[
+        m(FinanceKpiIds.activateNonCash, 'تفعيل بالدين', (x) => x.activateNonCashSum, LucideIcons.creditCard, RpTone.debt,
+            upIsGood: false),
+        // اليدويّة وحدها — البيع على الدين ثمن مادّة لا منحة ([FinanceKPIs.manualDebtAddSum]).
+        m(FinanceKpiIds.debtAdd, 'إضافة دين', (x) => x.manualDebtAddSum, LucideIcons.plus, RpTone.debt, upIsGood: false),
+      ],
       m(FinanceKpiIds.expenses, 'المصاريف', (x) => x.expensesSum, LucideIcons.receipt, RpTone.loss, upIsGood: false),
       if (k.creditCashSum > 0) m(FinanceKpiIds.creditCash, 'رصيد مقدّم (نقداً)', (x) => x.creditCashSum, LucideIcons.coins, RpTone.money),
       if (k.creditCompSum > 0)
@@ -217,8 +221,11 @@ class FinanceView {
     }
     final label = arabicActionLabel(l.actionType, desc);
     final actor = (l.actingEmployeeFullName ?? '').trim().isNotEmpty ? l.actingEmployeeFullName!.trim() : (l.adminUsername ?? '').trim();
-    final name = [l.userFullName, l.targetName, l.userUsername].firstWhere((s) => (s ?? '').trim().isNotEmpty, orElse: () => null);
-    final head = desc.isNotEmpty ? desc : label;
+    // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وحده (والوصف بلا اليوزر)
+    final name = Sees.usernames
+        ? [l.userFullName, l.targetName, l.userUsername].firstWhere((s) => (s ?? '').trim().isNotEmpty, orElse: () => null)
+        : ((l.userFullName ?? '').trim().isEmpty ? null : l.userFullName!.trim());
+    final head = rpHideUser(desc.isNotEmpty ? desc : label, l.userUsername ?? l.targetName);
     // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد الاسم ما لم يحمله الوصف أصلاً
     final user = rpUserAfterName(title: name ?? label, username: l.userUsername ?? l.targetName, detail: head);
     final detail = [

@@ -30,6 +30,7 @@ import '../tickets/ticket_widgets.dart';
 import '../../api/renew_requests_api.dart';
 import '../../api/tickets_api.dart';
 import '../../core/util/bytes_format.dart';
+import '../../services/employee_visibility.dart';
 
 /// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
 ///   1. **إشعارات التطبيق** — FCM inbox items (المستلمة).
@@ -688,7 +689,7 @@ class _SubscriberAlertRow extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context);
     final fullName = '${sub.firstname} ${sub.lastname}'.trim();
-    final displayName = fullName.isEmpty ? sub.username : fullName;
+    final displayName = Sees.nameOf(fullName, sub.username);
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -739,8 +740,9 @@ class _SubscriberAlertRow extends StatelessWidget {
                         _OnlineDot(isOnline: sub.isOnline),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
+                    // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ لا سطر له
+                    if (Sees.usernames) const SizedBox(height: 2),
+                    if (Sees.usernames) Text(
                       sub.username,
                       style: AppType.muted(color: AppColors.textMid)
                           .copyWith(fontSize: 11.5),

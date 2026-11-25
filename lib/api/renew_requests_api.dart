@@ -7,6 +7,7 @@ import '../services/auth_storage.dart';
 import '../services/inbox_service.dart';
 import 'api_client.dart';
 import 'company_route.dart';
+import '../services/employee_visibility.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — الخادم server/portalRenew.js): المشترك يطلب تجديد اشتراكه من تطبيقه (أو /mysub) مع صورة التحويل
 /// (زين كاش/ماستر)، والمدير يقبل أو يرفض، وأوّل تفعيلٍ للمشترك بعد الطلب (أو «تمّ التفعيل») يبلّغه «تم تفعيل اشتراكك بنجاح».
@@ -102,7 +103,10 @@ class RenewRequest {
   bool get isOpen => status == 'pending' || status == 'accepted';
 
   /// اسمه وإلّا يوزره.
-  String get title => (name ?? '').trim().isNotEmpty ? name!.trim() : (username ?? '#$subscriberIdx');
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): اليوزر مخفيّ ⇒ الاسم وإلّا «بلا اسم».
+  String get title => !Sees.usernames && (username ?? '').isNotEmpty
+      ? Sees.nameOf(name, username!)
+      : ((name ?? '').trim().isNotEmpty ? name!.trim() : (username ?? '#$subscriberIdx'));
 
   static RenewRequest? fromJson(Object? j) {
     if (j is! Map) return null;

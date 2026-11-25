@@ -7,6 +7,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/platform/desktop_layout.dart';
+import '../../../services/employee_visibility.dart';
 
 /// Recent activity feed for home. Backend rows from
 /// /api/activities/daily-activations are raw maps; the row widget reads
@@ -111,9 +112,10 @@ class _Row extends StatelessWidget {
         .trim();
     final fullName =
         [firstname, lastname].where((s) => s.isNotEmpty).join(' ').trim();
+    // «ما يراه الموظّف»: اليوزر مخفيّ ⇒ الاسم وحده (والفتح بالضغط يبقى باليوزر — للعمليّة لا للعرض)
     final title = fullName.isNotEmpty
-        ? (username.isNotEmpty ? '$fullName ($username)' : fullName)
-        : (username.isNotEmpty ? username : action);
+        ? (username.isNotEmpty && Sees.usernames ? '$fullName ($username)' : fullName)
+        : (username.isNotEmpty && Sees.usernames ? username : action);
     // حركةٌ سحبتها مزامنة الساس (عُملت في صفحة الساس أو تطبيقٍ آخر): لا نقد ولا
     // دين عندنا — اللابل يقول مصدرها، والتفصيل طريقتها («بكارت»/«بالرصيد»).
     final fromSas = !isVoid && (_truthy(m['from_sas']) || descr.contains('من الساس'));
@@ -455,7 +457,8 @@ class _Row extends StatelessWidget {
                                 letterSpacing: -0.1,
                               ),
                             ),
-                            if (n.subscriberUsername != null &&
+                            if (Sees.usernames &&
+                                n.subscriberUsername != null &&
                                 n.subscriberUsername!.isNotEmpty)
                               TextSpan(
                                 text: '  (${n.subscriberUsername})',

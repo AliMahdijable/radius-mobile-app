@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../services/provider_service.dart';
+import '../../../services/employee_visibility.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -55,7 +56,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
   /// من الداشبورد)، الـchip موجود لكن مدفون خارج الشاشة يميناً — يشعر
   /// أن الفلتر ما اشتغل.
   void _scrollToActive() {
-    final idx = _defs.indexWhere((d) => d.key == widget.current);
+    final idx = _visibleDefs.indexWhere((d) => d.key == widget.current);
     if (idx < 0 || !_scroll.hasClients) return;
     // تقدير موقع الـchip: عرض تقريبي 90px + spacing 6px.
     const chipStride = 112.0;
@@ -122,6 +123,10 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         LucideIcons.ban, AppColors.textMid),
   ];
 
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): «مديون» يكشف من عليه دين ⇒ لا رقاقة لمن أُخفيت عنه الديون (والخادم يرفض الطلب أصلاً).
+  static List<_ChipDef> get _visibleDefs =>
+      [for (final d in _defs) if (d.key != SubscriberFilter.debtors || Sees.debts) d];
+
   /// «معطّل» ⇒ «موقوف» للمشروع الوطنيّ (معلّقٌ في بوّابته — ١ نوفمبر).
   static String _labelOf(_ChipDef d) =>
       d.key == SubscriberFilter.disabled && ProviderService.togglesAsSuspend ? 'subscribers.filter_suspended' : d.label;
@@ -134,7 +139,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         spacing: Sp.sm,
         runSpacing: Sp.sm,
         children: [
-          for (final d in _defs)
+          for (final d in _visibleDefs)
             _Chip(
               label: _labelOf(d).tr(),
               icon: d.icon,
@@ -152,10 +157,10 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         controller: _scroll,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-        itemCount: _defs.length,
+        itemCount: _visibleDefs.length,
         separatorBuilder: (_, __) => const SizedBox(width: Sp.sm),
         itemBuilder: (_, i) {
-          final d = _defs[i];
+          final d = _visibleDefs[i];
           final selected = widget.current == d.key;
           final count = widget.counts[d.key] ?? 0;
           return _Chip(
@@ -235,18 +240,21 @@ class _Chip extends StatelessWidget {
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
-              const SizedBox(width: 6),
-              Text(
-                // -1 = غير معروف (الحساب الكبير: «مديون») ⇒ «—» لا صفر.
-                // الحساب الكبير: -2 جارٍ عدّه في الخادم، و-1 غير معروف (لا صفر)
-                count == -2 ? '…' : count < 0 ? '—' : '$count',
-                textDirection: ui.TextDirection.ltr,
-                style: AppType.body(
-                  color: selected
-                      ? AppColors.onBrand.withValues(alpha: 0.65)
-                      : color,
-                ).copyWith(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
+              // «ما يراه الموظّف»: أعداد المشتركين مخفيّةٌ عنه ⇒ التسمية وحدها
+              if (Sees.counts) ...[
+                const SizedBox(width: 6),
+                Text(
+                  // -1 = غير معروف (الحساب الكبير: «مديون») ⇒ «—» لا صفر.
+                  // الحساب الكبير: -2 جارٍ عدّه في الخادم، و-1 غير معروف (لا صفر)
+                  count == -2 ? '…' : count < 0 ? '—' : '$count',
+                  textDirection: ui.TextDirection.ltr,
+                  style: AppType.body(
+                    color: selected
+                        ? AppColors.onBrand.withValues(alpha: 0.65)
+                        : color,
+                  ).copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ],
             ],
           ),
         ),

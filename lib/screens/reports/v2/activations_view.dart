@@ -198,7 +198,7 @@ class ActivationsView {
     final m = moneyOf(r);
     final t = timeOf(r);
     final amount = k == ActKind.debt ? m.debt : m.cash;
-    final title = r.userFullName ?? r.targetName ?? r.userUsername ?? kindLabel(k);
+    final title = rpSubjectTitle(fullName: r.userFullName, target: r.targetName, username: r.userUsername, fallback: kindLabel(k));
     // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد النوع حين العنوان الاسم — كالتقرير الماليّ
     final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName);
     final detail = [

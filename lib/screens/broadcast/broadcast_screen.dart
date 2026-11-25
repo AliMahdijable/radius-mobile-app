@@ -27,6 +27,7 @@ import '../../widgets/debt_filter_panel.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/employee_visibility.dart';
 
 /// شاشة "التبليغات" (Broadcast) — نقل حرفي من client-v2/Notifications.tsx.
 /// يسمح للمدير بإرسال رسائل واتساب جماعيّة للمشتركين حسب فلتر (كل/مدينون/
@@ -1730,8 +1731,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
                     final r = rows[i];
                     return ListSubscriberRow(
                       key: ValueKey('df-row-${r.username}'),
-                      title: r.name ?? r.username,
-                      subtitle: r.name == null ? '' : r.username,
+                      title: Sees.nameOf(r.name, r.username),
+                      subtitle: r.name == null || !Sees.usernames ? '' : r.username,
                       subtitleLtr: true,
                       selectable: true,
                       selected: _selected.contains(r.username),

@@ -39,6 +39,8 @@ class StatsGrid extends StatelessWidget {
     this.debtLocked = false,
     this.walletLines,
     this.debtSplit,
+    this.balanceHidden = false,
+    this.debtHidden = false,
   });
 
   final WalletResult? wallet;
@@ -65,6 +67,11 @@ class StatsGrid extends StatelessWidget {
   final bool balanceLocked;
   final bool debtLocked;
 
+  /// «ما يراه الموظّف» (٢٣ نوفمبر): نصفٌ أخفاه المدير عن الموظّف لا يُرسم ولا يُقفل (ليس قسماً ممنوعاً بل معلومةً مخفيّة)،
+  /// والآخر بعرض الصفّ.
+  final bool balanceHidden;
+  final bool debtHidden;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -90,6 +97,10 @@ class StatsGrid extends StatelessWidget {
         : split
             ? _MergedDebtCard(debts: debtSplit!, onTap: onOpenDebtors)
             : _DebtCard(debtors: debtors, onTap: onOpenDebtors);
+    if (balanceHidden || debtHidden) {
+      if (balanceHidden && debtHidden) return const SizedBox.shrink();
+      return balanceHidden ? debt : balance;
+    }
     final tiles = walletLines != null && !balanceLocked;
     // «كل الشركات» بلا شركةٍ مختارة (٨ نوفمبر — المالك: «الرصيد شوف شون صاير! يحتاج تفكر بطريقة اخرى»): بطاقة الرصيد بعرض الصفّ،
     // خانةٌ لكلّ شركة بعمودين (علامتها وحسابها ورصيدها كبيراً)، والمدينون تحتها بعرضه — لا أسطرٌ مقصوصة في نصف بطاقة.
