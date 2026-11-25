@@ -18,6 +18,7 @@ import '../screens/reports/v2/activity_log_v2_screen.dart';
 import '../screens/tickets/ticket_widgets.dart';
 import '../screens/subscribers/subscriber_detail_screen.dart';
 import 'company_push.dart';
+import 'owner_broadcast_push.dart';
 
 /// يقرّر إلى أين يأخذ الإشعارُ المستخدم — **مصدرٌ واحد** يستعمله
 /// النقرُ داخل صندوق الوارد والنقرُ من شاشة القفل معاً.
@@ -80,6 +81,9 @@ class NotificationRouter {
       _pending = n;
       return;
     }
+
+    // (−٢) «الإشعارات العامّة» (٢٥ نوفمبر): إشعار المالك ⇒ «شاهده» ورابط المتجر («حدّث الآن») إن كان — لا شركة ولا مشترك فيه
+    if (await OwnerBroadcastPush.handleTap(n.data)) return;
 
     // (−١) «إشعارات كلّ شركاتي» (٤ نوفمبر): إشعارٌ لشركةٍ أخرى من شركات الحساب ⇒ ورقة «تبديل الشركة» تفتحها، ويُوجَّه هو
     //      فيها حين تُبنى رئيسيّتها ([markReady]). ليست من شركات الحساب، أو بلا شركة ⇒ كما كان.

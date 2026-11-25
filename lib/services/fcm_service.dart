@@ -15,6 +15,7 @@ import 'auth_storage.dart';
 import 'desktop_push_service.dart';
 import 'device_alerts_service.dart';
 import 'inbox_service.dart';
+import 'owner_broadcast_push.dart';
 import 'app_version.dart';
 
 /// FCM lifecycle: تسجيل/إلغاء توكن + معالجة الرسائل.
@@ -389,6 +390,8 @@ class FcmService {
   static Future<void> _handleForeground(RemoteMessage m) async {
     final n = _fromRemote(m);
     await InboxService.add(n);
+    // «الإشعارات العامّة» (٢٥ نوفمبر): إشعار المالك وصل والتطبيق مفتوح ⇒ «شاهده» (النقر يُعالج بالموجّه)
+    unawaited(OwnerBroadcastPush.reportSeen(m.data));
     onForegroundNotification?.call(n);
     await _showSystem(n);
   }
