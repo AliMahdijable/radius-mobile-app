@@ -8,6 +8,7 @@ import '../services/inbox_service.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 import '../services/employee_visibility.dart';
+import '../services/pay_qr.dart' show payQrUrl;
 
 /// «طلبات التفعيل» (٤ نوفمبر — الخادم server/portalRenew.js): المشترك يطلب تجديد اشتراكه من تطبيقه (أو /mysub) مع صورة التحويل
 /// (زين كاش/ماستر)، والمدير يقبل أو يرفض، وأوّل تفعيلٍ للمشترك بعد الطلب (أو «تمّ التفعيل») يبلّغه «تم تفعيل اشتراكك بنجاح».
@@ -193,7 +194,21 @@ class RenewAccess {
     this.note,
     this.debtAvailable = false,
     this.debtEnabled = true,
+    this.qrAvailable = false,
+    this.zaincashQr,
+    this.masterQr,
+    this.zaincashQrOnly = false,
+    this.masterQrOnly = false,
   });
+
+  /// «باركود الدفع» (٢٥ نوفمبر — server/portalPayQr.js): مفتاح portal_pay_qr مفتوحٌ للحساب ⇒ رفع صور الباركود بالبطاقة.
+  final bool qrAvailable;
+
+  /// عنوان صورة الباركود المحفوظة (null بلا صورة)، و«الباركود وحده» (وإلّا مع الرقم).
+  final String? zaincashQr;
+  final String? masterQr;
+  final bool zaincashQrOnly;
+  final bool masterQrOnly;
 
   /// «تسديد ديونك» متاحٌ لهذا الحساب (مفتاح portal_debt_pay)، وخيار الوكيل (افتراضاً مفعّل مع «طلب التجديد»).
   final bool debtAvailable;
@@ -226,6 +241,11 @@ class RenewAccess {
         note: _str(j['note']),
         debtAvailable: j['debt_available'] == true,
         debtEnabled: j['debt_enabled'] != false,
+        qrAvailable: j['qr_available'] == true,
+        zaincashQr: payQrUrl(j['zaincash_qr']),
+        masterQr: payQrUrl(j['master_qr']),
+        zaincashQrOnly: j['zaincash_show'] == 'qr',
+        masterQrOnly: j['master_show'] == 'qr',
       );
 }
 
@@ -342,6 +362,7 @@ class RenewRequestsApi {
     String? master,
     String? note,
     bool? debtEnabled,
+    Map<String, Object?> qr = const {},
   }) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>('/api/v2/portal/renew-settings', data: {
@@ -350,6 +371,8 @@ class RenewRequestsApi {
         if (zaincash != null) 'zaincash': zaincash,
         if (master != null) 'master': master,
         if (note != null) 'note': note,
+        // «باركود الدفع» (٢٥ نوفمبر): zaincash_qr / master_qr (data URL أو null للإزالة) و_show — ما تغيّر وحده
+        ...qr,
       });
       final d = r.data;
       if (r.statusCode == 200 && d != null && d['success'] == true) {

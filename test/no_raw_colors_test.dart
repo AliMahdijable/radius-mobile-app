@@ -31,6 +31,10 @@ void main() {
           'بطاقة QR — نفس السبب',
       'lib/screens/field_team/field_team_qr.dart':
           'رمز QR لرابط تطبيق فريق الصيانة — يُمسح بكاميرا الفنّي في الوضعين',
+      'lib/widgets/pay_qr_tile.dart':
+          'باركود الدفع (زين كاش/الماستر) — الأبيض والحبر شرط لتقرأه كاميرا الصيرفة من الهاتف في الوضعين',
+      'lib/screens/renew/pay_qr_field.dart':
+          'معاينة صورة باركود الدفع على أبيض — كما يراها المشترك وتقرؤها الصيرفة',
       'lib/screens/subscribers/sheets/location_picker_screen.dart':
           'طبقات فوق خريطة خارجيّة — تُقرأ على صور القمر الصناعي لا على '
               'أسطح التطبيق، فلا تتبع اللوحة',
@@ -89,6 +93,10 @@ void main() {
           'رمز QR لرابط تطبيق فريق الصيانة — نفس السبب (يُمسح بكاميرا الفنّي في الوضعين)',
       'lib/screens/telegram/widgets/tg_account_card.dart':
           'رمز QR لربط حساب تلغرام — نفس السبب (يُمسح بكاميرا تلغرام في الوضعين)',
+      'lib/widgets/pay_qr_tile.dart':
+          'باركود الدفع (زين كاش/الماستر) — نفس السبب (تقرؤه كاميرا الصيرفة من هاتف المشترك/المدير الفرعيّ في الوضعين)',
+      'lib/screens/renew/pay_qr_field.dart':
+          'معاينة صورة باركود الدفع على أبيض — نفس السبب',
       'lib/screens/network_devices/widgets/brand_badge.dart':
           'شعارات المصنّعين — الأبيض جزء من هويّة الشعار',
       'lib/screens/account/apple_sign_in_button.dart':

@@ -8,6 +8,7 @@ import '../services/auth_storage.dart';
 import '../services/transfer_pay.dart';
 import 'api_client.dart';
 import 'company_route.dart';
+import '../services/pay_qr.dart' show PayQr;
 
 /// «طلب رصيد من مديرك» — المرحلة ٢ (المالك ٢٣ نوفمبر: «النظام يكشف المدراء الفرعيين، اللي فوقهم مدير عندنا مسجل… يسوي طلب رصيد
 /// من المدير الاعلى… يوصل اشعار… يدز له صورة حوالة»، و«قسم خاص به… اذا ماكو مدير فرعي ينختفي»). الخادم server/balanceRequests.js:
@@ -54,14 +55,24 @@ class BalanceReqParent {
 
 @immutable
 class BalanceReqPay {
-  const BalanceReqPay({this.zaincash, this.master, this.note});
+  const BalanceReqPay({this.zaincash, this.master, this.note, this.zaincashQr, this.masterQr});
   final String? zaincash;
   final String? master;
   final String? note;
-  bool get any => zaincash != null || master != null;
+
+  /// «باركود الدفع» (٢٥ نوفمبر — server/portalPayQr.js): باركود مديرك للطريقة وظهوره (مع الرقم أو وحده) — null بلا صورة.
+  final PayQr? zaincashQr;
+  final PayQr? masterQr;
+  bool get any => zaincash != null || master != null || zaincashQr != null || masterQr != null;
 
   static BalanceReqPay fromJson(Object? raw) => raw is Map
-      ? BalanceReqPay(zaincash: _str(raw['zaincash']), master: _str(raw['master']), note: _str(raw['note']))
+      ? BalanceReqPay(
+          zaincash: _str(raw['zaincash']),
+          master: _str(raw['master']),
+          note: _str(raw['note']),
+          zaincashQr: PayQr.of(raw['zaincash_qr'], raw['zaincash_show']),
+          masterQr: PayQr.of(raw['master_qr'], raw['master_show']),
+        )
       : const BalanceReqPay();
 }
 

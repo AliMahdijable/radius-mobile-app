@@ -21,6 +21,8 @@ import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import '../tickets/ticket_image.dart';
 import 'balance_request_widgets.dart';
+import '../../services/pay_qr.dart' show PayQr;
+import '../../widgets/pay_qr_tile.dart';
 
 /// «طلباتك»: آخر عشرة (المالك ٢٤ نوفمبر: «الطلبات اخر ١٠ قرات») — الخادم يعيد عشرين.
 const kBalanceReqSubList = 10;
@@ -334,9 +336,12 @@ class _PayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // «باركود الدفع» (٢٥ نوفمبر): كلّ طريقةٍ برقمها أو باركودها أو كليهما كما اختار مديرك
     final rows = <Widget>[
-      if (pay.zaincash != null) _PayRow(key: const ValueKey('balreq-pay-zaincash'), icon: LucideIcons.smartphone, title: 'زين كاش', value: pay.zaincash!, owner: owner),
-      if (pay.master != null) _PayRow(key: const ValueKey('balreq-pay-master'), icon: LucideIcons.creditCard, title: 'ماستر كارد', value: pay.master!, owner: owner),
+      if (pay.zaincash != null || pay.zaincashQr != null)
+        _PayWay(id: 'balreq-pay-zaincash', icon: LucideIcons.smartphone, title: 'زين كاش', value: pay.zaincash, qr: pay.zaincashQr, owner: owner),
+      if (pay.master != null || pay.masterQr != null)
+        _PayWay(id: 'balreq-pay-master', icon: LucideIcons.creditCard, title: 'ماستر كارد', value: pay.master, qr: pay.masterQr, owner: owner),
     ];
     return BalanceReqCard(
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
@@ -354,6 +359,58 @@ class _PayCard extends StatelessWidget {
         ],
       ]),
     );
+  }
+}
+
+/// «باركود الدفع» (٢٥ نوفمبر): الطريقة كما اختار مديرك — الرقم، أو الرقم والباركود، أو الباركود وحده؛ وتعذّر تحميل الصورة ⇒ الرقم
+/// احتياطاً (لا يبقى بلا طريقٍ للدفع).
+class _PayWay extends StatefulWidget {
+  const _PayWay({required this.id, required this.icon, required this.title, required this.value, required this.qr, required this.owner});
+  final String id;
+  final IconData icon;
+  final String title;
+  final String? value;
+  final PayQr? qr;
+  final String owner;
+
+  @override
+  State<_PayWay> createState() => _PayWayState();
+}
+
+class _PayWayState extends State<_PayWay> {
+  bool _broken = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget;
+    final qr = _broken ? null : w.qr;
+    final showNumber = w.value != null && (qr == null || !qr.qrOnly);
+    return Column(key: ValueKey('${w.id}-way'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (showNumber) _PayRow(key: ValueKey(w.id), icon: w.icon, title: w.title, value: w.value!, owner: w.owner),
+      if (qr != null)
+        Padding(
+          padding: EdgeInsets.only(top: showNumber ? 0 : Sp.md, bottom: Sp.md),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (!showNumber) ...[
+              Text('${w.title} — باسم ${w.owner}', maxLines: 2, style: AppType.muted()),
+              const SizedBox(height: Sp.sm),
+            ],
+            PayQrTile(
+              key: ValueKey('${w.id}-qr'),
+              url: qr.url,
+              title: 'باركود ${w.title} — باسم ${w.owner}',
+              onBroken: () {
+                if (mounted) setState(() => _broken = true);
+              },
+            ),
+          ]),
+        ),
+      if (!showNumber && qr == null)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: Sp.md),
+          child: Text('تعذّر تحميل باركود ${w.title} — اسأل مديرك عن الرقم', style: AppType.muted()),
+        ),
+    ]);
   }
 }
 

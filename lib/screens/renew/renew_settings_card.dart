@@ -6,13 +6,19 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_section.dart';
+import '../../services/pay_qr.dart' show PayQrPicker;
+import 'pay_qr_field.dart';
 import 'renew_requests_screen.dart';
 import '../../services/merged_text.dart';
 
 /// «طلب التجديد من التطبيق» في «بوابة المشترك» (٤ نوفمبر): مفتاح الوكيل (مشتركوه يرون زرّ الطلب) + أين يحوّلون (زين كاش/الماستر)
 /// + ملاحظة لهم. يظهر حين يُفتح المفتاح العامّ لحسابه وحده؛ والحفظ بـ«تعديل إعدادات النظام» (بدونها للقراءة بقفل).
+/// «باركود الدفع» (٢٥ نوفمبر): صورة باركود لكلّ طريقة + «مع الرقم / الباركود وحده» — حين يقول الخادم qr_available وحده.
 class RenewSettingsCard extends StatefulWidget {
-  const RenewSettingsCard({super.key});
+  const RenewSettingsCard({super.key, this.qrPicker});
+
+  /// للاختبار: اختيار صورة الباركود بلا معرض.
+  final PayQrPicker? qrPicker;
 
   @override
   State<RenewSettingsCard> createState() => _RenewSettingsCardState();
@@ -25,6 +31,9 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
   final _master = TextEditingController();
   final _note = TextEditingController();
   String _base = '';
+  // «باركود الدفع»: حال كلّ طريقة الآن وكما حُفظت
+  Map<String, PayQrDraft> _qr = const {};
+  Map<String, PayQrDraft> _qrBase = const {};
 
   @override
   void initState() {
@@ -46,13 +55,19 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
   void _onEdit() => setState(() {});
 
   String get _current => '${_zain.text.trim()}|${_master.text.trim()}|${_note.text.trim()}';
-  bool get _dirty => _current != _base;
+  Map<String, Object?> get _qrChanges => _a?.qrAvailable == true ? payQrPatch(_qr, _qrBase) : const {};
+  bool get _dirty => _current != _base || _qrChanges.isNotEmpty;
 
   void _fill(RenewAccess a) {
     _zain.text = a.zaincash ?? '';
     _master.text = a.master ?? '';
     _note.text = a.note ?? '';
     _base = _current;
+    _qrBase = {
+      'zaincash': PayQrDraft(url: a.zaincashQr, qrOnly: a.zaincashQr != null && a.zaincashQrOnly),
+      'master': PayQrDraft(url: a.masterQr, qrOnly: a.masterQr != null && a.masterQrOnly),
+    };
+    _qr = Map.of(_qrBase);
   }
 
   Future<void> _load() async {
@@ -70,7 +85,8 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
         ? await RenewRequestsApi.saveSettings(enabled: enabled)
         : debtEnabled != null
             ? await RenewRequestsApi.saveSettings(debtEnabled: debtEnabled)
-            : await RenewRequestsApi.saveSettings(zaincash: _zain.text.trim(), master: _master.text.trim(), note: _note.text.trim());
+            : await RenewRequestsApi.saveSettings(
+                zaincash: _zain.text.trim(), master: _master.text.trim(), note: _note.text.trim(), qr: _qrChanges);
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -87,6 +103,11 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
           // الحفظ لا يردّ debt_available (للقراءة وحدها) — يبقى كما قُرئ
           debtAvailable: _a?.debtAvailable ?? false,
           debtEnabled: s.debtEnabled,
+          qrAvailable: s.qrAvailable,
+          zaincashQr: s.zaincashQr,
+          masterQr: s.masterQr,
+          zaincashQrOnly: s.zaincashQrOnly,
+          masterQrOnly: s.masterQrOnly,
         );
         if (enabled == null && debtEnabled == null) _fill(_a!);
       }
@@ -106,6 +127,17 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
     ));
     if (ok) await RenewRequestsState.ensureFresh(force: true);
   }
+
+  Widget _qrField(String m, String label, String hint, bool edit) => PayQrField(
+        key: ValueKey('pay-qr-$m'),
+        method: m,
+        label: label,
+        hint: hint,
+        value: _qr[m] ?? PayQrDraft.empty,
+        enabled: edit,
+        picker: widget.qrPicker,
+        onChanged: (v) => setState(() => _qr = {..._qr, m: v}),
+      );
 
   /// حقلٌ بطراز «بوابة المشترك» (portal_settings_screen._field): عنوانٌ صغير فوق حقلٍ ممتلئٍ بإطار.
   Widget _field(Key key, String label, TextEditingController c, String hint,
@@ -238,9 +270,20 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
               const SizedBox(height: Sp.md),
               _field(const ValueKey('renew-zaincash'), 'رقم زين كاش', _zain, '07XXXXXXXXX',
                   enabled: edit, keyboard: TextInputType.phone, ltr: true, maxLength: 20),
+              if (a.qrAvailable) ...[
+                const SizedBox(height: Sp.sm),
+                _qrField('zaincash', 'باركود زين كاش', 'اختياريّ — لقطة شاشة لباركود الاستلام من تطبيق زين كاش (الصيرفة تطلبه بدل الرقم)', edit),
+              ],
               const SizedBox(height: Sp.md),
               _field(const ValueKey('renew-master'), 'رقم الماستر / كي كارد', _master, '1234 5678 9012 3456',
                   enabled: edit, keyboard: TextInputType.number, ltr: true, maxLength: 30),
+              if (a.qrAvailable) ...[
+                const SizedBox(height: Sp.sm),
+                _qrField('master', 'باركود الماستر', 'اختياريّ — لقطة شاشة لباركود بطاقتك من تطبيقها', edit),
+                const SizedBox(height: Sp.sm),
+                Text('الباركود يظهر لمشتركيك عند التجديد والتسديد، ولمدرائك الفرعيّين بـ«طلب رصيد من مديرك».',
+                    key: const ValueKey('pay-qr-where'), style: AppType.micro(color: AppColors.textMid)),
+              ],
               const SizedBox(height: Sp.md),
               _field(const ValueKey('renew-note'), 'ملاحظة للمشترك (اختياريّ)', _note, 'مثلاً: حوّل باسم علي واكتب يوزرك',
                   enabled: edit, maxLength: 300, maxLines: 3),
