@@ -1,0 +1,78 @@
+# تشخيصٌ مؤقّت (٢٥ نوفمبر): الكتابة في محرّر القوالب على ويندوز حقيقيّ — المالك: «من يسوي تعديل قالب بمجرد ما يكتب اي شي
+# يصير كراش». يشغّل integration_test/windows_typing_test.dart داخل التطبيق (المحرّك والخطوط الحقيقيّة) ويكتب بـSendInput،
+# ثمّ ينشر السجلّ كاملاً في فرع ci/wintype-diag (آخر تشغيلٍ وحده). يُحذف الفرعان بعد معرفة السبب.
+name: windows-typing-diag
+
+on:
+  push:
+    branches: [diag/wintype]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-typing-diag
+  cancel-in-progress: true
+
+jobs:
+  typing:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Typing (debug)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter test integration_test/windows_typing_test.dart -d windows -r expanded 2>&1 | tee typing_debug.log
+
+      - name: Typing (release engine)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter test integration_test/windows_typing_test.dart -d windows --release -r expanded 2>&1 | tee typing_release.log
+
+      - name: Crash records
+        if: always()
+        shell: pwsh
+        run: |
+          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddHours(-2)} -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in @('Application Error','Windows Error Reporting','.NET Runtime') } |
+            Select-Object -First 20 | Format-List TimeCreated, ProviderName, Id, Message | Out-File -Encoding utf8 crash_events.log
+          if (!(Test-Path crash_events.log)) { 'none' | Out-File crash_events.log }
+
+      - name: Publish to ci/wintype-diag
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p ci_out
+          cp typing_debug.log typing_release.log crash_events.log ci_out/ 2>/dev/null || true
+          {
+            echo "sha=${GITHUB_SHA}"
+            echo "status=${JOB_STATUS}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > ci_out/RESULT.txt
+          cd ci_out
+          git init -q
+          git config user.name "windows-ci"
+          git config user.email "windows-ci@users.noreply.github.com"
+          git checkout -q -b ci/wintype-diag
+          git add -A
+          git commit -qm "typing diag ${GITHUB_SHA::8} — ${JOB_STATUS}"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/wintype-diag
