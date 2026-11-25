@@ -195,8 +195,10 @@ bool transientNetworkError(Object? e) {
 
 void _installDesktopErrorReport() {
   final seen = <String>{};
-  void report(Object error, StackTrace? stack) {
-    final text = error.toString();
+  void report(Object error, StackTrace? stack, [String? phase]) {
+    final raw = error.toString();
+    // مرحلة الخطأ من فلاتر («while dispatching a platform message»، «during layout»…) — تفرّق كتابةً من رسمٍ من نقرة.
+    final text = phase == null || phase.isEmpty ? raw : '[$phase] $raw';
     // مكان الخطأ في كودنا أوّلاً: «Null check operator…» وحده (٢٣ أكتوبر) لا يدلّ على شاشة.
     final where = desktopErrorWhere(stack);
     final key = '$where|${text.length > 160 ? text.substring(0, 160) : text}';
@@ -207,7 +209,14 @@ void _installDesktopErrorReport() {
 
   final previous = FlutterError.onError;
   FlutterError.onError = (details) {
-    report(details.exception, details.stack);
+    String? phase;
+    try {
+      phase = details.context?.toDescription();
+      if (phase != null && phase.length > 60) phase = phase.substring(0, 60);
+    } catch (_) {
+      phase = null;
+    }
+    report(details.exception, details.stack, phase);
     previous?.call(details);
   };
   PlatformDispatcher.instance.onError = (error, stack) {
@@ -221,10 +230,20 @@ void _installDesktopErrorReport() {
 @visibleForTesting
 String desktopErrorWhere(StackTrace? stack) {
   if (stack == null) return '';
+  final text = stack.toString();
   final re = RegExp(r'package:rad_mysvcs/([^ ):]+\.dart):(\d+)');
   final out = <String>[];
-  for (final m in re.allMatches(stack.toString())) {
+  for (final m in re.allMatches(text)) {
     final f = '${m.group(1)}:${m.group(2)}';
+    if (!out.contains(f)) out.add(f);
+    if (out.length == 3) break;
+  }
+  if (out.isNotEmpty) return out.join(' ← ');
+  // خطأٌ داخل فلاتر نفسها بلا سطرٍ من كودنا (٢٥ نوفمبر: «RangeError (length): … 0: -1» من ويندوز بلا موضع — الكتابة
+  // بمحرّر القوالب): أوّل ثلاثة مواضع من أيّ حزمة (flutter/… أو dart:…) — وإلّا لا يُعرف أين يُصلَح.
+  final any = RegExp(r'\((?:package:|dart:)([^ ()]+?\.dart):(\d+)(?::\d+)?\)');
+  for (final m in any.allMatches(text)) {
+    final f = '${m.group(1)!.replaceFirst('flutter/src/', 'flutter/')}:${m.group(2)}';
     if (!out.contains(f)) out.add(f);
     if (out.length == 3) break;
   }
