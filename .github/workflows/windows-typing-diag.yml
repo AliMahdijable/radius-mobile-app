@@ -34,17 +34,47 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      - name: Typing (debug)
+      - name: UIA client (debug run)
+        shell: pwsh
+        run: |
+          $p = Start-Process pwsh -ArgumentList '-NoProfile','-File','ci/uia_poll.ps1','-Out','uia_debug.log','-Seconds','1500' -PassThru -WindowStyle Hidden
+          $p.Id | Out-File -Encoding ascii uia_pid.txt
+
+      - name: Typing (debug + UIA)
         continue-on-error: true
         run: |
           set -o pipefail
           flutter test integration_test/windows_typing_test.dart -d windows -r expanded 2>&1 | tee typing_debug.log
 
-      - name: Typing (release engine)
+      - name: Stop UIA client
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path uia_pid.txt) { Stop-Process -Id (Get-Content uia_pid.txt) -ErrorAction SilentlyContinue }
+
+      - name: UIA client (profile run)
+        shell: pwsh
+        run: |
+          $p = Start-Process pwsh -ArgumentList '-NoProfile','-File','ci/uia_poll.ps1','-Out','uia_profile.log','-Seconds','1500' -PassThru -WindowStyle Hidden
+          $p.Id | Out-File -Encoding ascii uia_pid.txt
+
+      - name: Typing (profile + UIA)
         continue-on-error: true
         run: |
           set -o pipefail
-          flutter test integration_test/windows_typing_test.dart -d windows --release -r expanded 2>&1 | tee typing_release.log
+          flutter drive --profile -d windows --driver=test_driver/integration_test.dart --target=integration_test/windows_typing_test.dart 2>&1 | tee typing_profile.log
+
+      - name: Stop UIA client 2
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path uia_pid.txt) { Stop-Process -Id (Get-Content uia_pid.txt) -ErrorAction SilentlyContinue }
+
+      - name: Typing (profile, no UIA)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter drive --profile -d windows --driver=test_driver/integration_test.dart --target=integration_test/windows_typing_test.dart 2>&1 | tee typing_profile_nouia.log
 
       - name: Crash records
         if: always()
@@ -62,7 +92,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           mkdir -p ci_out
-          cp typing_debug.log typing_release.log crash_events.log ci_out/ 2>/dev/null || true
+          cp typing_*.log uia_*.log crash_events.log ci_out/ 2>/dev/null || true
           {
             echo "sha=${GITHUB_SHA}"
             echo "status=${JOB_STATUS}"

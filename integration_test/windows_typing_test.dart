@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/core/platform/desk_nav_guard.dart';
+import 'package:rad_mysvcs/core/platform/desk_ui_scale.dart';
 import 'package:rad_mysvcs/screens/whatsapp/connection_alerts_screen.dart';
 import 'package:rad_mysvcs/screens/whatsapp/whatsapp_templates_screen.dart';
 import 'package:win32/win32.dart';
@@ -126,47 +128,54 @@ Future<void> typeRound(WidgetTester t, Finder field, String label) async {
   activateLayout('00000409');
 }
 
+Widget _deskWrap(Widget child) => DeskUiScaleScope(child: DeskNavGuardScope(child: child));
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(visualSetUpAll);
 
-  testWidgets('قوالب الواتساب — كتابة حقيقيّة على ويندوز', (t) async {
-    final inner = await visualSetUp(s1bSasOwner);
-    ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff);
-    await pumpVisual(t, desk, home: (_) => const WhatsAppTemplatesScreen());
-    await settle(t, 2500);
-    final tiles = find.byType(InkWell);
-    say('templates: tiles=${tiles.evaluate().length}');
-    await t.tap(tiles.first, warnIfMissed: false);
-    await settle(t, 1500);
-    final fields = find.byType(TextField);
-    say('templates: text fields=${fields.evaluate().length}');
-    await typeRound(t, fields.last, 'wa-template');
-    say('templates: DONE');
-  });
+  for (final scale in <double?>[null, 0.85]) {
+    final tag = scale == null ? '100%' : '${(scale * 100).round()}%';
 
-  testWidgets('«تنبيه المشترك» — كتابة حقيقيّة على ويندوز', (t) async {
-    final inner = await visualSetUp(s1bSasOwner);
-    ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff, routes: {
-      'GET /api/v2/connection-alerts/settings': {
-        'success': true,
-        'data': {'enabled': true, 'signal_dbm': -60, 'ccq_pct': 50, 'fiber_rx_dbm': -27, 'fiber_temp_c': 70, 'name_mode': 'name', 'is_default': false},
-      },
+    testWidgets('قوالب الواتساب — كتابة حقيقيّة على ويندوز ($tag)', (t) async {
+      DeskUiScale.choice.value = scale;
+      final inner = await visualSetUp(s1bSasOwner);
+      ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff);
+      await pumpVisual(t, desk, home: (_) => const WhatsAppTemplatesScreen(), wrap: _deskWrap);
+      await settle(t, 2500);
+      final tiles = find.byType(InkWell);
+      say('templates[$tag]: tiles=${tiles.evaluate().length} deskScale=${DeskUiScale.current}');
+      await t.tap(tiles.first, warnIfMissed: false);
+      await settle(t, 1500);
+      final fields = find.byType(TextField);
+      say('templates[$tag]: text fields=${fields.evaluate().length}');
+      await typeRound(t, fields.last, 'wa-template[$tag]');
+      say('templates[$tag]: DONE');
+      DeskUiScale.choice.value = null;
     });
-    await pumpVisual(t, desk, home: (_) => const ConnectionAlertsScreen());
-    await settle(t, 2500);
-    final fields = find.byType(TextField);
-    say('conn-alerts: text fields=${fields.evaluate().length}');
-    if (fields.evaluate().isEmpty) {
-      say('conn-alerts: no field visible (wide layout) — scrolling');
-      await t.drag(find.byType(Scrollable).first, const Offset(0, -600));
-      await settle(t, 800);
-    }
-    final f2 = find.byType(TextField);
-    say('conn-alerts: text fields after scroll=${f2.evaluate().length}');
-    if (f2.evaluate().isNotEmpty) await typeRound(t, f2.first, 'conn-alert');
-    say('conn-alerts: DONE');
-  });
+
+    testWidgets('«تنبيه المشترك» — كتابة حقيقيّة على ويندوز ($tag)', (t) async {
+      DeskUiScale.choice.value = scale;
+      final inner = await visualSetUp(s1bSasOwner);
+      ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff, routes: {
+        'GET /api/v2/connection-alerts/settings': {
+          'success': true,
+          'data': {'enabled': true, 'signal_dbm': -60, 'ccq_pct': 50, 'fiber_rx_dbm': -27, 'fiber_temp_c': 70, 'name_mode': 'name', 'is_default': false},
+        },
+      });
+      await pumpVisual(t, desk, home: (_) => const ConnectionAlertsScreen(), wrap: _deskWrap);
+      await settle(t, 2500);
+      if (find.byType(TextField).evaluate().isEmpty) {
+        await t.drag(find.byType(Scrollable).first, const Offset(0, -600));
+        await settle(t, 800);
+      }
+      final f2 = find.byType(TextField);
+      say('conn-alerts[$tag]: text fields=${f2.evaluate().length} deskScale=${DeskUiScale.current}');
+      if (f2.evaluate().isNotEmpty) await typeRound(t, f2.first, 'conn-alert[$tag]');
+      say('conn-alerts[$tag]: DONE');
+      DeskUiScale.choice.value = null;
+    });
+  }
 
   testWidgets('حقل بسيط (مرجع) — كتابة حقيقيّة', (t) async {
     final c = TextEditingController(text: 'مرحباً {name} ✅ 📶\nسطر ثانٍ');
@@ -179,6 +188,6 @@ void main() {
     await settle(t, 800);
     await typeRound(t, find.byType(TextField), 'plain-multiline');
     say('plain: DONE text=${c.text.length}');
-    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    say('ALL DONE');
   });
 }
