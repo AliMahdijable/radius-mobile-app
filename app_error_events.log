@@ -1,0 +1,15 @@
+
+TimeCreated : 11/25/2026 11:59:54 AM
+Id          : 1000
+Message     : Faulting application name: rundll32.exe_kernel32.dll, version: 10.0.26100.7309, time stamp: 0x62bbfc11
+              Faulting module name: KERNELBASE.dll, version: 10.0.26100.33822, time stamp: 0xea72bec6
+              Exception code: 0x80000003
+              Fault offset: 0x0000000000118ed2
+              Faulting process id: 0x2470
+              Faulting application start time: 0x1DD7CD47B9C55B8
+              Faulting application path: C:\Windows\system32\rundll32.exe
+              Faulting module path: C:\Windows\System32\KERNELBASE.dll
+              Report Id: 3c9b7eb6-efee-42ff-92ac-6fefc5f104d6
+              Faulting package full name: 
+              Faulting package-relative application ID: 
+
