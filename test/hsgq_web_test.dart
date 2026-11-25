@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -9,6 +10,8 @@ import 'package:rad_mysvcs/api/hsgq_web.dart';
 import 'package:rad_mysvcs/api/olt_profile.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
+import 'package:rad_mysvcs/core/net/device_net.dart';
+import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 
 import 'support/snmp_wire.dart';
 
@@ -157,6 +160,78 @@ class _FakeWeb {
   int count(String what) => paths.where((p) => p.contains(what)).length;
 }
 
+/// ممرّ VPN وهميّ يصل صفحة الأولت المحلّيّة (كـserver/connVpn/pipe.js: فتح، كتابة، قراءةٌ تنتظر، إغلاق).
+class _LoopPipes implements VpnPipeTransport {
+  _LoopPipes(this.port);
+  final int port;
+  final opened = <String>[];
+  final _socks = <String, Socket>{};
+  final _bufs = <String, BytesBuilder>{};
+  final _ended = <String>{};
+  final _waiters = <String, Completer<void>>{};
+  var _n = 0;
+
+  @override
+  Future<({String id, int? ms})> open(String host, int p, Duration timeout) async {
+    final id = (++_n).toRadixString(16).padLeft(24, '0');
+    final s = await Socket.connect(InternetAddress.loopbackIPv4, port);
+    opened.add('$host:$p');
+    _socks[id] = s;
+    _bufs[id] = BytesBuilder();
+    s.listen((d) {
+      _bufs[id]?.add(d);
+      _waiters.remove(id)?.complete();
+    }, onDone: () {
+      _ended.add(id);
+      _waiters.remove(id)?.complete();
+    }, onError: (Object _) {});
+    return (id: id, ms: 3);
+  }
+
+  @override
+  Future<bool> write(String id, Uint8List data) async {
+    final s = _socks[id];
+    if (s == null) return false;
+    s.add(data);
+    return true;
+  }
+
+  @override
+  Future<PipeRead?> read(String id, Duration wait) async {
+    final b = _bufs[id];
+    if (b == null) return null;
+    if (b.isEmpty && !_ended.contains(id)) {
+      final c = _waiters[id] = Completer<void>();
+      await c.future.timeout(wait, onTimeout: () {});
+    }
+    final data = b.takeBytes();
+    final end = _ended.contains(id);
+    if (end) {
+      _bufs.remove(id);
+      _socks.remove(id)?.destroy();
+    }
+    return PipeRead(data, end);
+  }
+
+  @override
+  Future<void> close(String id) async {
+    _socks.remove(id)?.destroy();
+    _bufs.remove(id);
+  }
+
+  @override
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) => throw UnimplementedError();
+
+  @override
+  Future<List<int>> ping(String host, int count, Duration timeout) async => const [];
+
+  @override
+  Future<PipeRoute> route() async => const PipeRoute.ok('own');
+
+  @override
+  Future<void> release() async {}
+}
+
 final _profile = OltProfile.resolve(OltProfile.fromRecord(brand: 'hsgq'), sysObjectId: '1.3.6.1.4.1.50224.3.1.1', sysDescr: 'SNMP_V1.0');
 
 void main() {
@@ -177,6 +252,26 @@ void main() {
         if (ready != null) return ready;
         return HsgqWeb.fill(_host, await olt.get(oids));
       };
+
+  test('«وضع VPN» (٢٥ نوفمبر): صفحة الأولت تمرّ بممرّ الـVPN كقرّاء SNMP — عنوانٌ خاصّ ⇒ الممرّ لا اتّصالٌ مباشر (كانت تختفي خارج الشبكة)', () async {
+    final pipes = _LoopPipes(web.server.port);
+    final realT = VpnPipe.transport;
+    final realOn = DeviceNet.vpnOn;
+    VpnPipe.transport = pipes;
+    DeviceNet.vpnOn = () => true;
+    HsgqWeb.urlFor = (h, p) => Uri.parse('http://$h$p');
+    try {
+      HsgqWeb.register('10.70.9.9', 'root', 'admin');
+      final t = await HsgqWeb.table('10.70.9.9');
+      expect(t, isNotNull);
+      expect(t!.length, 6, reason: 'القائمة كاملةً عبر الممرّ');
+      expect(pipes.opened, isNotEmpty);
+      expect(pipes.opened, everyElement('10.70.9.9:80'));
+    } finally {
+      VpnPipe.transport = realT;
+      DeviceNet.vpnOn = realOn;
+    }
+  });
 
   group('E04 ‏V3.0.18: القائمة من الصفحة، والضوء من SNMP', () {
     test('🚨 كلّ ONU بحالتها وماكها واسمها المكتوب — كان «٠ مشترك»', () async {

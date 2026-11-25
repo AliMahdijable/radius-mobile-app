@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' show md5;
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import 'snmp_client.dart';
 
 /// ONU كما تعرضها صفحة أولت HSGQ (`/onu_allow_list?port_id=N`).
@@ -346,7 +347,9 @@ class HsgqWeb {
     Map<String, dynamic>? body,
     String? token,
   }) async {
-    final client = HttpClient()..connectionTimeout = timeout;
+    // «وضع VPN» (٢٥ نوفمبر — جرد المالك «تاكدت من كلشي يخص فحص vpn بمجيمع المواقع»): كان HttpClient خامّاً فالصفحة لا تمرّ بالممرّ
+    // وقائمة الـONU تختفي خارج شبكة الوكيل؛ الآن كقرّاء الأجهزة كلّها (عنوانٌ خاصّ + الوضع ⇒ الممرّ، وغيره مباشرٌ كما كان).
+    final client = DeviceNet.adopt(HttpClient()..connectionTimeout = timeout);
     try {
       final req = await client.openUrl(method, urlFor(host, path)).timeout(timeout);
       req.headers.set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*');
