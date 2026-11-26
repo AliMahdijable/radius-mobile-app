@@ -61,7 +61,16 @@ Map<String, dynamic> _staff8() => {
       'created_at': '2026-11-23T05:10:00Z',
     };
 
-Map<String, dynamic> _task(int id, String status, {String? staff, int? staffId, bool ticket = false, String? fail}) => {
+Map<String, dynamic> _task(int id, String status,
+        {String? staff,
+        int? staffId,
+        bool ticket = false,
+        String? fail,
+        String? phone2,
+        String? holdUntil,
+        String? hold,
+        bool creds = false}) =>
+    {
       'id': id,
       'title': 'النت مقطوع عند المشترك — بدّل الكونكتر وافحص الإشارة',
       'details': 'المشترك يقول إنّ الراوتر يضيء أحمر منذ الصباح',
@@ -72,12 +81,15 @@ Map<String, dynamic> _task(int id, String status, {String? staff, int? staffId, 
       'source': ticket ? 'ticket' : 'manual',
       'ticket_id': ticket ? 55 : null,
       'ticket_category': ticket ? 'internet' : null,
-      'subscriber': {'name': 'علي كريم', 'username': 'ali.k@sn', 'phone': '07801112233'},
+      'subscriber': {'name': 'علي كريم', 'username': 'ali.k@sn', 'phone': '07801112233', 'phone2': phone2, 'idx': '4411'},
       'address': 'حيّ الجامعة — قرب جامع الرحمن، الشارع الثالث',
       'location': {'lat': 30.5085, 'lng': 47.7804},
       'assigned_staff_id': staffId,
       'assigned_staff_name': staff,
       'fail_reason': fail,
+      'hold_until': holdUntil,
+      'hold_reason': hold,
+      'credentials_sent': creds,
       'created_by': 'mahdi',
       'created_at': _ago(const Duration(hours: 2)),
       'assigned_at': staff == null ? null : _ago(const Duration(hours: 1)),
@@ -85,6 +97,7 @@ Map<String, dynamic> _task(int id, String status, {String? staff, int? staffId, 
       'updated_at': _ago(const Duration(minutes: 30)),
       'actions': switch (status) {
         'done' || 'cancelled' => ['reopen'],
+        'failed' || 'paused' => ['assign', 'cancel', 'reopen'],
         _ => ['assign', 'cancel'],
       },
     };
@@ -131,6 +144,13 @@ class _FieldServer implements HttpClientAdapter {
     _task(101, 'new', ticket: true),
     _task(102, 'on_way', staff: 'أحمد علي', staffId: 7),
     _task(103, 'failed', staff: 'أحمد علي', staffId: 7, fail: 'المشترك غير موجود في البيت'),
+    // ٢٦ نوفمبر: مؤجّلةٌ برقمٍ ثانٍ
+    _task(104, 'paused',
+        staff: 'أحمد علي',
+        staffId: 7,
+        phone2: '07709998877',
+        holdUntil: DateTime.now().toUtc().add(const Duration(hours: 20)).toIso8601String(),
+        hold: 'طلب المشترك التأجيل لباجر'),
   ];
 
   /// كلّ كتابة: (الطريقة، المسار، الجسم).
@@ -145,6 +165,10 @@ class _FieldServer implements HttpClientAdapter {
 
   /// ردّ الكتابة القادمة: (status, body) — null ⇒ نجاح.
   (int, Object)? nextWrite;
+
+  /// قراءات كلمة مرور المشترك (بيانات الدخول للفنّي — ٢٦ نوفمبر)، وأسئلة الحركات.
+  final passwordReads = <String>[];
+  final activityQueries = <String>[];
 
   static ResponseBody _json(int status, Object body) => ResponseBody.fromString(jsonEncode(body), status, headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType]
@@ -178,8 +202,24 @@ class _FieldServer implements HttpClientAdapter {
         'data': [
           if ('علي كريم ali.k@sn'.contains(q))
             {'idx': '4411', 'username': 'ali.k@sn', 'firstname': 'علي', 'lastname': 'كريم', 'phone': null},
-          if ('علياء'.contains(q)) {'idx': '4412', 'username': 'alyaa@sn', 'firstname': 'علياء', 'lastname': '', 'phone': '07709998877'},
+          if ('علياء'.contains(q))
+            {
+              'idx': '4412',
+              'username': 'alyaa@sn',
+              'firstname': 'علياء',
+              'lastname': '',
+              'phone': '07709998877',
+              'latitude': 30.51,
+              'longitude': 47.78
+            },
         ],
+      });
+    }
+    if (RegExp(r'^/api/v2/subscribers/\d+/password$').hasMatch(p)) {
+      passwordReads.add(p);
+      return _json(200, {
+        'success': true,
+        'data': {'password': 'Xk9#pass 2026'}
       });
     }
     if (!p.startsWith('/api/v2/field')) return inner.fetch(o, requestStream, cancelFuture);
@@ -190,6 +230,95 @@ class _FieldServer implements HttpClientAdapter {
       if (r != null) return _json(r.$1, r.$2);
     }
     if (p == '/api/v2/field/summary') return _json(200, summary);
+    if (p == '/api/v2/field/activity') {
+      activityQueries.add('team:${o.queryParameters['period']}');
+      return _json(200, {
+        'success': true,
+        'period': o.queryParameters['period'],
+        'items': [
+          {
+            'staff_id': 7,
+            'full_name': 'أحمد علي',
+            'is_active': true,
+            'deleted': false,
+            'total': 14,
+            'counts': {'assigned': 4, 'on_way': 3, 'working': 3, 'done': 2, 'failed': 1, 'paused': 1, 'note': 0, 'unassigned': 0},
+          },
+          {'staff_id': 8, 'full_name': 'حسين كاظم', 'is_active': false, 'deleted': false, 'total': 0, 'counts': <String, int>{}},
+          {
+            'staff_id': 5,
+            'full_name': 'كرار المحذوف',
+            'is_active': false,
+            'deleted': true,
+            'total': 2,
+            'counts': {'assigned': 1, 'unassigned': 1},
+          },
+        ],
+      });
+    }
+    final act = RegExp(r'^/api/v2/field/staff/(\d+)/activity$').firstMatch(p);
+    if (act != null) {
+      activityQueries.add('staff${act.group(1)}:${o.queryParameters['period']}:${o.queryParameters['offset']}');
+      final first = '${o.queryParameters['offset']}' == '0';
+      return _json(200, {
+        'success': true,
+        'staff': _staff7(),
+        'period': o.queryParameters['period'],
+        if (first) 'total': 14,
+        if (first) 'counts': {'assigned': 4, 'on_way': 3, 'working': 3, 'done': 2, 'failed': 1, 'paused': 1, 'note': 0, 'unassigned': 0},
+        if (first)
+          'by_type': [
+            {
+              'type_id': 1,
+              'type_name': 'صيانة الشبكة',
+              'total': 10,
+              'counts': {'assigned': 3, 'on_way': 2, 'working': 2, 'done': 2, 'paused': 1}
+            },
+            {
+              'type_id': null,
+              'type_name': 'بلا نوع',
+              'total': 4,
+              'counts': {'assigned': 1, 'on_way': 1, 'working': 1, 'failed': 1}
+            },
+          ],
+        'items': [
+          if (first) ...[
+            {
+              'id': 91,
+              'task_id': 104,
+              'task_title': 'صيانة ضعيف — الإشارة تنقطع عند المشترك',
+              'subscriber_name': 'علي كريم',
+              'type_name': 'صيانة الشبكة',
+              'move': 'paused',
+              'move_label': 'أجّل',
+              'by': null,
+              'note': 'طلب المشترك التأجيل لباجر',
+              'hold_until': DateTime.now().toUtc().add(const Duration(hours: 20)).toIso8601String(),
+              'created_at': _ago(const Duration(minutes: 50)),
+            },
+            {
+              'id': 89,
+              'task_id': 102,
+              'task_title': 'تركيب راوتر',
+              'move': 'assigned',
+              'move_label': 'استلم مهمّة',
+              'by': 'mahdi',
+              'created_at': _ago(const Duration(hours: 3)),
+            },
+          ] else
+            {
+              'id': 80,
+              'task_id': 101,
+              'task_title': 'زيارة قديمة',
+              'move': 'done',
+              'move_label': 'أنجز',
+              'created_at': _ago(const Duration(days: 2)),
+            },
+        ],
+        'has_more': first,
+        'next_offset': first ? 2 : 3,
+      });
+    }
     if (p == '/api/v2/field/ticket-tasks') {
       ticketTaskQueries.add('${o.queryParameters['ids']}');
       return _json(200, {'success': true, 'items': ticketTasks});
@@ -224,6 +353,9 @@ class _FieldServer implements HttpClientAdapter {
         'new': ['new'],
         'active': ['assigned', 'on_way', 'working'],
         'failed': ['failed'],
+        'paused': ['paused'],
+        'done': ['done'],
+        'cancelled': ['cancelled'],
         'closed': ['done', 'failed', 'cancelled'],
       };
       final items = f == 'all' ? tasks : tasks.where((t) => (by[f] ?? const []).contains(t['status'])).toList();
@@ -351,8 +483,11 @@ void main() {
       expect((task.id, task.status, task.statusLabel, task.fromTicket, task.ticketId), (101, 'new', 'بانتظار الإسناد', true, 55));
       expect((task.subscriber?.title, task.subscriber?.phone, task.location?.lat), ('علي كريم', '07801112233', 30.5085));
       expect(task.actions, {'assign', 'cancel'});
-      await t.runAsync(() => FieldTeamApi.tasks(filter: FieldTaskFilter.closed));
-      expect(server.listQueries.last, {'filter': 'closed', 'offset': 0, 'limit': 30}, reason: 'بلا بحثٍ ⇒ لا q');
+      await t.runAsync(() => FieldTeamApi.tasks(filter: FieldTaskFilter.done));
+      expect(server.listQueries.last, {'filter': 'done', 'offset': 0, 'limit': 30}, reason: 'بلا بحثٍ ⇒ لا q');
+      // ٢٦ نوفمبر: بالشخص وبالنوع
+      await t.runAsync(() => FieldTeamApi.tasks(filter: FieldTaskFilter.all, staffId: 7, typeId: 1));
+      expect(server.listQueries.last, {'filter': 'all', 'offset': 0, 'limit': 30, 'staff_id': 7, 'type_id': 1});
     });
 
     testWidgets('الكتابات: الإنشاء والإسناد والإلغاء والإعادة والملاحظة بأجسامها', (t) async {
@@ -454,6 +589,82 @@ void main() {
       expect((r.bytes, r.expired), (null, true));
     });
 
+    // ═══ ٢٦ نوفمبر: التعليق والتأجيل، والرقم الثاني، وبيانات الدخول، والحركات، وصلاحيّتا الموظّف ═══
+    testWidgets('الملخّص: صلاحيّتا الموظّف (وخادمٌ أقدم بلاهما = المدير كلّه)، والمعلّقة بعددها', (t) async {
+      final server = await _setUp();
+      server.summary = {
+        'success': true,
+        'available': true,
+        'can_manage': true,
+        'can_reopen': false,
+        'can_admin': false,
+        'counts': {'new': 1, 'active': 2, 'failed': 0, 'paused': 3, 'done_today': 1},
+      };
+      final s = (await t.runAsync<FieldSummary?>(FieldTeamApi.summary))!;
+      expect((s.canManage, s.canReopen, s.canAdmin, s.paused, s.countOf(FieldTaskFilter.paused)), (true, false, false, 3, 3));
+      server.summary = {'success': true, 'available': true, 'can_manage': true, 'counts': <String, int>{}};
+      final old = (await t.runAsync<FieldSummary?>(FieldTeamApi.summary))!;
+      expect((old.canReopen, old.canAdmin), (true, true), reason: 'خادمٌ أقدم ⇒ المدير يدير كلّه');
+    });
+
+    testWidgets('النموذج: المعلّقة بموعدها وسببها، والرقم الثاني ورقم المشترك، وبيانات الدخول المرسلة', (t) async {
+      await _setUp();
+      final r = (await t.runAsync(() => FieldTeamApi.task(104)))!;
+      final task = r.task!;
+      expect((task.status, task.isPaused, task.statusLabel, task.holdReason), ('paused', true, 'معلّقة', 'طلب المشترك التأجيل لباجر'));
+      expect(task.holdUntil, isNotNull);
+      expect((task.subscriber?.phone2, task.subscriber?.idx, task.subscriber?.otherPhone), ('07709998877', '4411', '07709998877'));
+      expect((task.credentialsSent, task.credentialsOpen), (false, true));
+      expect(task.actions, {'assign', 'cancel', 'reopen'});
+      final only2 = FieldTask.fromJson({
+        'id': 9,
+        'title': 'x',
+        'status': 'done',
+        'subscriber': {'phone2': '07700000000'},
+      })!;
+      expect((only2.subscriber?.mainPhone, only2.subscriber?.otherPhone, only2.credentialsOpen), ('07700000000', null, false));
+    });
+
+    testWidgets('الكتابات الجديدة: الاستئناف لغيره، وبيانات الدخول وسحبها، وكلمة المرور برقمه، والإنشاء بالموقع والثاني', (t) async {
+      final server = await _setUp();
+      await t.runAsync(() => FieldTeamApi.reopen(104, staffId: 7));
+      _expectWrite(server, 'POST', '/api/v2/field/tasks/104/reopen', {'staff_id': 7});
+      await t.runAsync(() => FieldTeamApi.sendCredentials(104, 'Xk9#pass 2026', username: ' ali.k@sn '));
+      _expectWrite(server, 'POST', '/api/v2/field/tasks/104/credentials', {'password': 'Xk9#pass 2026', 'username': 'ali.k@sn'});
+      await t.runAsync(() => FieldTeamApi.dropCredentials(104));
+      expect((server.writes.last.$1, server.writes.last.$2), ('DELETE', '/api/v2/field/tasks/104/credentials'));
+      expect(await t.runAsync(() => FieldTeamApi.subscriberPassword('4411')), 'Xk9#pass 2026');
+      expect(await t.runAsync(() => FieldTeamApi.subscriberPassword('../x')), isNull, reason: 'رقمٌ أرقامٌ وحدها');
+      expect(server.passwordReads, ['/api/v2/subscribers/4411/password']);
+      await t.runAsync(() => FieldTeamApi.createTask(
+            title: 'صيانة',
+            subscriber: const FieldSubscriber(name: 'علي', username: 'ali.k@sn', phone: '0780', phone2: '0770', idx: '4411'),
+            location: (lat: 30.5, lng: 47.7),
+            password: 'p1',
+          ));
+      _expectWrite(server, 'POST', '/api/v2/field/tasks', {
+        'title': 'صيانة',
+        'subscriber': {'name': 'علي', 'username': 'ali.k@sn', 'phone': '0780', 'phone2': '0770', 'idx': '4411', 'password': 'p1'},
+        'lat': 30.5,
+        'lng': 47.7,
+      });
+    });
+
+    testWidgets('الحركات: الفريق بعدّه لكلّ شخص، والشخص بنوع الحركة والمهمّة وصفحاته', (t) async {
+      final server = await _setUp();
+      final team = (await t.runAsync(() => FieldTeamApi.teamActivity(FieldPeriod.today)))!;
+      expect([for (final r in team.items!) (r.fullName, r.total, r.deleted, r.counts['done'])],
+          [('أحمد علي', 14, false, 2), ('حسين كاظم', 0, false, 0), ('كرار المحذوف', 2, true, 0)]);
+      final a = (await t.runAsync(() => FieldTeamApi.staffActivity(7, FieldPeriod.week)))!.data!;
+      expect((a.total, a.counts!['paused']), (14, 1));
+      expect([for (final x in a.byType!) (x.name, x.total)], [('صيانة الشبكة', 10), ('بلا نوع', 4)]);
+      expect([for (final m in a.items) (m.move, m.moveLabel, m.by)], [('paused', 'أجّل', null), ('assigned', 'استلم مهمّة', 'mahdi')]);
+      expect(a.items.first.holdUntil, isNotNull);
+      final b = (await t.runAsync(() => FieldTeamApi.staffActivity(7, FieldPeriod.week, offset: a.nextOffset)))!.data!;
+      expect((b.counts, b.items.single.move), (null, 'done'), reason: 'العدّ مع الصفحة الأولى وحدها');
+      expect(server.activityQueries, ['team:today', 'staff7:7d:0', 'staff7:7d:2']);
+    });
+
     testWidgets('بحث «من مشتركيك»: الاسم واليوزر والهاتف', (t) async {
       await _setUp();
       final r = (await t.runAsync(() => FieldTeamApi.searchSubscribers('علي')))!;
@@ -493,7 +704,7 @@ void main() {
 
       FieldTeamState.debugSet(const FieldSummary(available: true, canManage: false));
       m = field()!;
-      expect((m.isLocked, m.unavailable, m.badge), (true, 'لمدير الصفحة وحده الآن', null));
+      expect((m.isLocked, m.unavailable, m.badge), (true, 'تحتاج صلاحيّة «الصيانة والمبيعات» من مديرك', null));
 
       ProviderService.debugSet('ftth');
       expect(field(), isNull, reason: 'FTTH القديم بلا قسم (الموقع noFtth)');
@@ -634,11 +845,136 @@ void main() {
       _expectWrite(server, 'POST', '/api/v2/field/tasks', {
         'title': 'تركيب راوتر',
         'staff_id': 7,
-        'subscriber': {'name': 'علي كريم', 'username': 'ali.k@sn', 'phone': '07801112233'},
+        'subscriber': {'name': 'علي كريم', 'username': 'ali.k@sn', 'phone': '07801112233', 'idx': '4411'},
       });
       expect(find.byKey(const ValueKey('field-new-submit')), findsNothing, reason: 'أُغلقت بعد الإنشاء');
       expect(t.takeException(), isNull);
       await settle(t, seconds: 4); // رسالة التأكيد تختفي بعد ٣ ثوانٍ
+      await t.pumpWidget(const SizedBox());
+    });
+
+    // ═══ ٢٦ نوفمبر ═══
+    for (final (w, s) in [(320.0, 1.2), (430.0, 1.0)]) {
+      testWidgets('المعلّقة @$w ×$s: سببها وموعدها، والرقم الثاني، والاستئناف لمن يُختار، وبيانات الدخول برقمه', (t) async {
+        final server = await _setUp();
+        FieldTeamState.debugSet(const FieldSummary(available: true, canManage: true));
+        await _pump(t, const FieldTaskScreen(taskId: 104), w: w, s: s);
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('field-task-paused')), findsOneWidget);
+        expect(find.textContaining('أجّلها الفنّي إلى'), findsOneWidget);
+        expect(find.textContaining('طلب المشترك التأجيل لباجر'), findsWidgets);
+        _noClippedText(t, 'المعلّقة @$w ×$s');
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-reopen-card')), 300, scrollable: _page());
+        expect(find.text('استئناف المهمّة'), findsOneWidget);
+        await t.tap(find.byKey(const ValueKey('field-reopen-pick')));
+        await settle(t, seconds: 1);
+        expect(find.textContaining('حسين كاظم'), findsNothing, reason: 'الموقوف لا يُختار');
+        await t.tap(find.textContaining('أحمد علي').last);
+        await settle(t, seconds: 1);
+        await t.tap(find.byKey(const ValueKey('field-reopen')));
+        await settle(t, seconds: 1);
+        _expectWrite(server, 'POST', '/api/v2/field/tasks/104/reopen', {'staff_id': 7});
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-sub-phone2')), 300, scrollable: _page());
+        expect(find.byKey(const ValueKey('field-sub-call2')), findsOneWidget);
+        expect(find.byKey(const ValueKey('field-sub-wa2')), findsOneWidget);
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-creds-send')), 300, scrollable: _page());
+        _noClippedText(t, 'الرقم الثاني وبيانات الدخول @$w ×$s');
+        await t.tap(find.byKey(const ValueKey('field-creds-send')));
+        await settle(t, seconds: 2);
+        expect(server.passwordReads, ['/api/v2/subscribers/4411/password']);
+        _expectWrite(server, 'POST', '/api/v2/field/tasks/104/credentials', {'password': 'Xk9#pass 2026', 'username': 'ali.k@sn'});
+        expect(t.takeException(), isNull);
+        await settle(t, seconds: 4);
+        await t.pumpWidget(const SizedBox());
+      });
+    }
+
+    testWidgets('الموظّف بلا «إعادة الفتح»: تغيير الفنّي والاستئناف والإلغاء مقفلةٌ بمكانها ولا تُرسل شيئاً', (t) async {
+      final server = await _setUp();
+      FieldTeamState.debugSet(const FieldSummary(available: true, canManage: true, canReopen: false, canAdmin: false));
+      await _pump(t, const FieldTaskScreen(taskId: 102), w: 360, s: 1.2);
+      await settle(t, seconds: 2);
+      expect(find.byKey(const ValueKey('field-assign-locked')), findsOneWidget);
+      expect(find.byKey(const ValueKey('field-assign-pick')), findsNothing);
+      await t.scrollUntilVisible(find.byKey(const ValueKey('field-cancel-locked')), 300, scrollable: _page());
+      await t.tap(find.byKey(const ValueKey('field-cancel-locked')));
+      await settle(t, seconds: 1);
+      expect(find.text('إعادة الفتح وتغيير المُسندة والإلغاء تحتاج صلاحيّةً من مديرك'), findsOneWidget);
+      _noClippedText(t, 'الموظّف مقفل');
+      await t.pumpWidget(const SizedBox());
+      await settle(t, seconds: 1);
+      await _pump(t, const FieldTaskScreen(taskId: 104), w: 360, s: 1.2);
+      await settle(t, seconds: 2);
+      await t.scrollUntilVisible(find.byKey(const ValueKey('field-reopen-locked')), 300, scrollable: _page());
+      expect(find.byKey(const ValueKey('field-reopen')), findsNothing);
+      expect(server.writes, isEmpty, reason: 'لا كتابة من زرٍّ مقفل');
+      expect(t.takeException(), isNull);
+      await settle(t, seconds: 5);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    for (final (w, s) in [(320.0, 1.2), (480.0, 1.0)]) {
+      testWidgets('الفريق للموظّف @$w ×$s: الإدارة مقفلة، وحركات الفريق والشخص بلا قصّ', (t) async {
+        final server = await _setUp();
+        server.summary = {...server.summary, 'can_reopen': true, 'can_admin': false};
+        await _pump(t, const FieldTeamScreen(), w: w, s: s);
+        await settle(t, seconds: 2);
+        await t.tap(find.text('الفريق (2)'));
+        await settle(t, seconds: 2);
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-team-moves')), 300, scrollable: _page());
+        expect(find.text('حركات الفريق'), findsOneWidget);
+        expect(find.textContaining('14 حركة'), findsOneWidget);
+        expect(find.text('(حُذف)'), findsOneWidget);
+        _noClippedText(t, 'حركات الفريق @$w ×$s');
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-staff-add-locked')), 300, scrollable: _page());
+        expect(find.byKey(const ValueKey('field-staff-add')), findsNothing);
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-staff-moves-7')), 300, scrollable: _page());
+        expect(find.byKey(const ValueKey('field-staff-admin-locked-7')), findsOneWidget);
+        expect(find.byKey(const ValueKey('field-staff-edit-7')), findsNothing);
+        await t.tap(find.byKey(const ValueKey('field-staff-moves-7')));
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('field-activity-counts')), findsOneWidget);
+        expect(find.text('بنوع المهمّة'), findsOneWidget);
+        expect(find.textContaining('صيانة ضعيف'), findsOneWidget);
+        _noClippedText(t, 'حركات الشخص @$w ×$s');
+        await t.scrollUntilVisible(find.byKey(const ValueKey('field-activity-more')), 300, scrollable: _sheet());
+        await t.tap(find.byKey(const ValueKey('field-activity-more')));
+        await settle(t, seconds: 1);
+        expect(find.textContaining('زيارة قديمة'), findsOneWidget);
+        expect(server.activityQueries.where((q) => q.startsWith('staff7')).toList(), ['staff7:7d:0', 'staff7:7d:2']);
+        expect(t.takeException(), isNull);
+        await settle(t, seconds: 4);
+        await t.pumpWidget(const SizedBox());
+      });
+    }
+
+    testWidgets('مهمّةٌ جديدة: الموقع المحفوظ من صفّه، وكلمة مروره للفنّي بمفتاحها', (t) async {
+      final server = await _setUp();
+      await _pump(t, const FieldTeamScreen(), w: 320, s: 1.2);
+      await settle(t, seconds: 2);
+      await t.tap(find.byKey(const ValueKey('field-new-task')));
+      await settle(t, seconds: 2);
+      await t.enterText(find.descendant(of: find.byKey(const ValueKey('field-new-title')), matching: find.byType(TextField)), 'صيانة');
+      await t.enterText(find.descendant(of: find.byKey(const ValueKey('field-new-search')), matching: find.byType(TextField)), 'علياء');
+      await settle(t, seconds: 2);
+      await t.tap(find.byKey(const ValueKey('field-new-hit-alyaa@sn')));
+      await settle(t, seconds: 1);
+      expect(find.text('موقعه المحفوظ يصل الفنّي'), findsOneWidget);
+      await t.scrollUntilVisible(find.byKey(const ValueKey('field-new-creds')), 200, scrollable: _sheet());
+      await t.tap(find.byKey(const ValueKey('field-new-creds')));
+      await settle(t, seconds: 1);
+      _noClippedText(t, 'مهمّة جديدة بموقعٍ وبيانات دخول @320 ×1.2');
+      await t.tap(find.byKey(const ValueKey('field-new-submit')));
+      await settle(t, seconds: 2);
+      expect(server.passwordReads, ['/api/v2/subscribers/4412/password']);
+      _expectWrite(server, 'POST', '/api/v2/field/tasks', {
+        'title': 'صيانة',
+        'subscriber': {'name': 'علياء', 'username': 'alyaa@sn', 'phone': '07709998877', 'idx': '4412', 'password': 'Xk9#pass 2026'},
+        'lat': 30.51,
+        'lng': 47.78,
+      });
+      expect(t.takeException(), isNull);
+      await settle(t, seconds: 4);
       await t.pumpWidget(const SizedBox());
     });
 

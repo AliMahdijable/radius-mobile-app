@@ -185,8 +185,8 @@ List<AppModule> buildAppModules() {
         tone: AppTone.info,
         title: 'المشروع الوطني',
         subtitle: 'التذاكر والطلبات وعروض الاشتراك وتفاصيل الاشتراك — من ساس الشركة',
-        page: () => const MergedSection.openOnly(
-            title: 'المشروع الوطني', reason: 'أقسام ساس الشركة المفتوحة وحدها', child: SasFtthScreen()),
+        page: () =>
+            const MergedSection.openOnly(title: 'المشروع الوطني', reason: 'أقسام ساس الشركة المفتوحة وحدها', child: SasFtthScreen()),
       ),
     if (national && permShown(const ['subscribers.view']))
       AppModule(
@@ -391,9 +391,7 @@ List<AppModule> buildAppModules() {
         title: 'طلب رصيد من مديرك',
         subtitle: 'مديرك ${BalanceReqState.me.value.parent?.title ?? ''} — اطلب رصيداً وأرسل صورة الحوالة',
         page: () => const MergedSection.openOnly(
-            title: 'طلب رصيد من مديرك',
-            reason: 'طلب الرصيد للصفحة المفتوحة وحدها — افتحها من «شركاتي»',
-            child: SubBalanceRequestScreen()),
+            title: 'طلب رصيد من مديرك', reason: 'طلب الرصيد للصفحة المفتوحة وحدها — افتحها من «شركاتي»', child: SubBalanceRequestScreen()),
       ),
     if (SelfDepositState.visible)
       AppModule(
@@ -426,11 +424,9 @@ List<AppModule> buildAppModules() {
         icon: LucideIcons.walletCards,
         tone: AppTone.success,
         title: 'شحن من pay الجزيرة',
-        subtitle: JtpayState.gate.value!.paused
-            ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
-            : 'زين كاش أو بطاقة ← رصيد pay ← صفحتك بالساس',
-        page: () => MergedSection.openOnly(
-            title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.trm(), child: const JtpayScreen()),
+        subtitle:
+            JtpayState.gate.value!.paused ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم' : 'زين كاش أو بطاقة ← رصيد pay ← صفحتك بالساس',
+        page: () => MergedSection.openOnly(title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.trm(), child: const JtpayScreen()),
       ),
     // §١٢ «الكارتات» — مخزون كارتات التعبئة. الخادم يقول `enabled` في admin-widgets والبطاقة تتبعه،
     // ومجهولة الشارة لا تُظهرها. الموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها.
@@ -491,13 +487,13 @@ List<AppModule> buildAppModules() {
         page: TicketsScreen.mergedPage,
       ),
     // «الصيانة والمبيعات» (٢٣ نوفمبر — المالك: «كل مدير عنده قسم خاص به اللي هو قسم الصيانة»): الفريق الميدانيّ ومهامّه كالموقع —
-    // حين يقول الخادم إنّه مفتوحٌ للحساب (المفتاح field_team)، ومقفلٌ بمكانه للموظّف (المرحلة الأولى للمدير وحده)، والمقيَّد بمديرٍ
+    // حين يقول الخادم إنّه مفتوحٌ للحساب (المفتاح field_team)، ومقفلٌ بمكانه لموظّفٍ بلا صلاحيّة field.view (٢٦ نوفمبر)، والمقيَّد بمديرٍ
     // فرعيّ لا يراه (الخادم: available=false). FTTH القديم بلا قسم (الموقع noFtth). الرقم: بانتظار إسنادك.
     if (FieldTeamState.visible && !ProviderService.isFtth)
       AppModule(
         id: 'field_team',
         group: AppModuleGroup.manage,
-        unavailable: FieldTeamState.canManage ? null : 'لمدير الصفحة وحده الآن',
+        unavailable: FieldTeamState.canManage ? null : 'تحتاج صلاحيّة «الصيانة والمبيعات» من مديرك',
         icon: LucideIcons.hardHat,
         tone: AppTone.warning,
         title: kFieldTeamTitle,
@@ -595,8 +591,8 @@ List<AppModule> buildAppModules() {
         title: 'more.packages'.tr(),
         subtitle: 'more.packages_hint'.tr(),
         // «كل الشركات»: للمفتوحة وحدها — الأسعار لكلّ شركةٍ على حدة (نطاق التسعير لا يُوجَّه)
-        page: () => MergedSection.openOnly(
-            title: 'more.packages'.tr(), reason: 'merged.reason_prices'.trm(), child: const PackagesScreen()),
+        page: () =>
+            MergedSection.openOnly(title: 'more.packages'.tr(), reason: 'merged.reason_prices'.trm(), child: const PackagesScreen()),
       ),
     if (permShown(const ['discounts.view']))
       AppModule(
@@ -624,8 +620,8 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'sp.title'.tr(),
         subtitle: 'sp.module_hint'.tr(),
-        page: () => MergedSection.openOnly(
-            title: 'sp.title'.tr(), reason: 'merged.reason_prices'.trm(), child: const SubscriberPricesScreen()),
+        page: () =>
+            MergedSection.openOnly(title: 'sp.title'.tr(), reason: 'merged.reason_prices'.trm(), child: const SubscriberPricesScreen()),
       ),
     if (permShown(const ['employees.view']))
       AppModule(

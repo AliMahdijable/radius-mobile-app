@@ -18,10 +18,13 @@ import 'field_team_widgets.dart';
 /// «الفريق» (الموقع StaffTab): رمز رابط تطبيق الفريق، والأشخاص بحال كلٍّ منهم (نشِطٌ الآن · آخر ظهور · موقوف) ومهامّه الجارية،
 /// والإضافة (حسابٌ ميدانيّ مستقلّ يُحسب من حدّ الموظّفين، أو موظّفٌ موجود بحسابه نفسه)، والتعديل وكلمة المرور والحذف.
 class FieldStaffTab extends StatefulWidget {
-  const FieldStaffTab({super.key, required this.tick, required this.onChanged, required this.onRefresh});
+  const FieldStaffTab({super.key, required this.tick, required this.onChanged, required this.onRefresh, this.canAdmin = true});
   final int tick;
   final VoidCallback onChanged;
   final Future<void> Function() onRefresh;
+
+  /// إدارة الفريق (الإضافة والتعديل وكلمات المرور والحذف والإيقاف) — مدير الصفحة وحده (٢٦ نوفمبر: الموظّف يرى ويقرأ الحركات).
+  final bool canAdmin;
 
   @override
   State<FieldStaffTab> createState() => _FieldStaffTabState();
@@ -90,6 +93,8 @@ class _FieldStaffTabState extends State<FieldStaffTab> {
     widget.onChanged();
   }
 
+  Future<void> _moves(int id, String name) => showFieldSheet<void>(context, FieldActivitySheet(staffId: id, name: name));
+
   Future<void> _add() async {
     final done = await showFieldSheet<bool>(context, FieldStaffSheet(existing: _items ?? const []));
     if (mounted && done == true) widget.onChanged();
@@ -138,6 +143,8 @@ class _FieldStaffTabState extends State<FieldStaffTab> {
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.huge),
         children: [
           const FieldTeamLinkCard(),
+          const SizedBox(height: Sp.md),
+          FieldTeamMovesCard(key: ValueKey('field-moves-${widget.tick}'), onOpen: (id, name) => unawaited(_moves(id, name))),
           const SizedBox(height: Sp.lg),
           Row(children: [
             Expanded(
@@ -148,12 +155,20 @@ class _FieldStaffTabState extends State<FieldStaffTab> {
                 ]),
               ),
             ),
-            FieldFilledButton(
-              key: const ValueKey('field-staff-add'),
-              icon: LucideIcons.userPlus,
-              label: 'إضافة للفريق',
-              onTap: () => unawaited(_add()),
-            ),
+            if (widget.canAdmin)
+              FieldFilledButton(
+                key: const ValueKey('field-staff-add'),
+                icon: LucideIcons.userPlus,
+                label: 'إضافة للفريق',
+                onTap: () => unawaited(_add()),
+              )
+            else
+              FieldOutlineButton(
+                key: const ValueKey('field-staff-add-locked'),
+                icon: LucideIcons.lock,
+                label: 'إضافة للفريق',
+                onTap: () => fieldLockedTap(context, kFieldNeedAdmin),
+              ),
           ]),
           const SizedBox(height: Sp.md),
           if (_loading && _items == null)
@@ -179,10 +194,12 @@ class _FieldStaffTabState extends State<FieldStaffTab> {
                 staff: s,
                 now: now,
                 toggling: _toggling == s.id,
-                onToggle: _toggling != null ? null : (v) => unawaited(_toggle(s, v)),
+                canAdmin: widget.canAdmin,
+                onToggle: _toggling != null || !widget.canAdmin ? null : (v) => unawaited(_toggle(s, v)),
                 onEdit: () => unawaited(_edit(s)),
                 onPassword: () => unawaited(_password(s)),
                 onDelete: () => unawaited(_delete(s)),
+                onMoves: () => unawaited(_moves(s.id, s.fullName)),
               ),
               const SizedBox(height: Sp.sm),
             ],
@@ -264,6 +281,8 @@ class _StaffCard extends StatelessWidget {
     required this.onEdit,
     required this.onPassword,
     required this.onDelete,
+    required this.onMoves,
+    this.canAdmin = true,
   });
   final FieldStaff staff;
   final DateTime now;
@@ -272,6 +291,8 @@ class _StaffCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onPassword;
   final VoidCallback onDelete;
+  final VoidCallback onMoves;
+  final bool canAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -322,6 +343,13 @@ class _StaffCard extends StatelessWidget {
           const SizedBox(width: Sp.sm),
           Expanded(child: _MiniStat(label: 'آخر ظهور', value: seen, color: live ? AppColors.success : AppColors.textHi, small: true)),
         ]),
+        if (s.doneToday > 0 || s.pausedTasks > 0) ...[
+          const SizedBox(height: Sp.sm),
+          Wrap(key: ValueKey('field-staff-today-${s.id}'), spacing: Sp.sm, runSpacing: 4, children: [
+            if (s.doneToday > 0) FieldPill(label: 'أنجز اليوم ${s.doneToday}', tone: AppTone.success),
+            if (s.pausedTasks > 0) FieldPill(label: 'معلّقة ${s.pausedTasks}', tone: AppTone.warning),
+          ]),
+        ],
         if ((s.username ?? '').isNotEmpty || (s.phone ?? '').isNotEmpty || (s.address ?? '').isNotEmpty) ...[
           const SizedBox(height: Sp.md),
           if ((s.username ?? '').isNotEmpty) _InfoRow(icon: LucideIcons.atSign, text: s.username!, ltr: true),
@@ -333,17 +361,26 @@ class _StaffCard extends StatelessWidget {
         Divider(height: 1, color: AppColors.border),
         const SizedBox(height: Sp.md),
         Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
-          FieldOutlineButton(key: ValueKey('field-staff-edit-${s.id}'), icon: LucideIcons.pencil, label: 'تعديل', onTap: onEdit),
-          if (s.isOwn)
+          FieldOutlineButton(key: ValueKey('field-staff-moves-${s.id}'), icon: LucideIcons.activity, label: 'حركاته', onTap: onMoves),
+          if (canAdmin) ...[
+            FieldOutlineButton(key: ValueKey('field-staff-edit-${s.id}'), icon: LucideIcons.pencil, label: 'تعديل', onTap: onEdit),
+            if (s.isOwn)
+              FieldOutlineButton(
+                  key: ValueKey('field-staff-pw-${s.id}'), icon: LucideIcons.keyRound, label: 'كلمة المرور', onTap: onPassword),
             FieldOutlineButton(
-                key: ValueKey('field-staff-pw-${s.id}'), icon: LucideIcons.keyRound, label: 'كلمة المرور', onTap: onPassword),
-          FieldOutlineButton(
-            key: ValueKey('field-staff-del-${s.id}'),
-            icon: LucideIcons.trash2,
-            tone: AppTone.danger,
-            label: 'حذف',
-            onTap: onDelete,
-          ),
+              key: ValueKey('field-staff-del-${s.id}'),
+              icon: LucideIcons.trash2,
+              tone: AppTone.danger,
+              label: 'حذف',
+              onTap: onDelete,
+            ),
+          ] else
+            FieldOutlineButton(
+              key: ValueKey('field-staff-admin-locked-${s.id}'),
+              icon: LucideIcons.lock,
+              label: 'إدارة الحساب',
+              onTap: () => fieldLockedTap(context, kFieldNeedAdmin),
+            ),
         ]),
       ]),
     );
@@ -863,6 +900,307 @@ class _FieldPasswordSheetState extends State<FieldPasswordSheet> {
           trailing: _SuggestButton(onTap: () => setState(() => _password.text = fieldSuggestPassword())),
         ),
       ),
+    );
+  }
+}
+
+// ─────────── حركات الفريق والشخص (٢٦ نوفمبر — المالك: «عرض حركات كل موظف ونوعها وعددها») ───────────
+
+AppTone _moveTone(String m) => switch (m) {
+      'done' => AppTone.success,
+      'failed' => AppTone.danger,
+      'paused' => AppTone.warning,
+      'working' || 'on_way' => AppTone.info,
+      'assigned' => AppTone.brand,
+      _ => AppTone.neutral,
+    };
+
+/// شارات العدّ بنوع الحركة (غير الصفر، بترتيبٍ ثابت).
+class _MovePills extends StatelessWidget {
+  const _MovePills({required this.counts});
+  final Map<String, int> counts;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final list = [
+      for (final m in kFieldMoves)
+        if ((counts[m] ?? 0) > 0) m
+    ];
+    if (list.isEmpty) return Text('لا حركات في هذه الفترة', style: AppType.micro(color: AppColors.textMid));
+    return Wrap(spacing: Sp.x6, runSpacing: 4, children: [
+      for (final m in list) FieldPill(label: '${kFieldMoveLabels[m]} ${counts[m]}', tone: _moveTone(m)),
+    ]);
+  }
+}
+
+/// «حركات الفريق»: لكلّ شخصٍ عدد حركاته بنوعها في الفترة (الأكثر أوّلاً) — والنقر يفتح حركاته.
+class FieldTeamMovesCard extends StatefulWidget {
+  const FieldTeamMovesCard({super.key, required this.onOpen});
+  final void Function(int id, String name) onOpen;
+
+  @override
+  State<FieldTeamMovesCard> createState() => _FieldTeamMovesCardState();
+}
+
+class _FieldTeamMovesCardState extends State<FieldTeamMovesCard> {
+  FieldPeriod _period = FieldPeriod.today;
+  List<FieldTeamMoves>? _items;
+  String? _error;
+  int _seq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final seq = ++_seq;
+    final r = await FieldTeamApi.teamActivity(_period);
+    if (!mounted || seq != _seq) return;
+    setState(() {
+      _items = r.items ?? _items;
+      _error = r.items == null ? r.error : null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final items = _items;
+    return FieldCard(
+      key: const ValueKey('field-team-moves'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const FieldSectionHead(
+            icon: LucideIcons.activity, tone: AppTone.info, title: 'حركات الفريق', desc: 'ما فعله كلّ شخصٍ وعدده — اضغط اسمه لتفاصيله'),
+        const SizedBox(height: Sp.md),
+        SheetSegmented(
+          key: const ValueKey('field-moves-period'),
+          labels: [for (final p in FieldPeriod.values) p.label],
+          selectedIndex: _period.index,
+          onSelect: (i) {
+            setState(() => _period = FieldPeriod.values[i]);
+            unawaited(_load());
+          },
+        ),
+        const SizedBox(height: Sp.md),
+        if (items == null && _error == null)
+          const Padding(padding: EdgeInsets.all(Sp.md), child: Center(child: CircularProgressIndicator()))
+        else if (items == null)
+          Text(_error ?? 'تعذّر جلب الحركات', style: AppType.muted(color: AppColors.textMid))
+        else if (items.isEmpty)
+          Text('لا أحد في الفريق بعد', style: AppType.muted(color: AppColors.textMid))
+        else
+          for (final (i, r) in items.indexed) ...[
+            if (i > 0) Divider(height: Sp.lg, color: AppColors.border),
+            InkWell(
+              key: ValueKey('field-moves-row-${r.staffId}'),
+              borderRadius: BorderRadius.circular(R.md),
+              onTap: r.deleted ? null : () => widget.onOpen(r.staffId, r.fullName),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  FieldAvatar(name: r.fullName.isEmpty ? '؟' : r.fullName, size: 32),
+                  const SizedBox(width: Sp.md),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Wrap(spacing: Sp.x6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        Text(iso(r.fullName.isEmpty ? 'محذوف' : r.fullName), style: AppType.bodyStrong(color: AppColors.textHi)),
+                        if (r.deleted) Text('(حُذف)', style: AppType.micro(color: AppColors.textMid)),
+                        if (!r.deleted && !r.isActive) Text('(موقوف)', style: AppType.micro(color: AppColors.textMid)),
+                        Text('${r.total} حركة', style: AppType.micro(color: AppColors.textMid)),
+                      ]),
+                      const SizedBox(height: 4),
+                      _MovePills(counts: r.counts),
+                    ]),
+                  ),
+                ]),
+              ),
+            ),
+          ],
+      ]),
+    );
+  }
+}
+
+/// حركات شخص: بنوع الحركة وبنوع المهمّة، ثمّ القائمة بالوقت (صفحاتٌ من ٣٠).
+class FieldActivitySheet extends StatefulWidget {
+  const FieldActivitySheet({super.key, required this.staffId, required this.name});
+  final int staffId;
+  final String name;
+
+  @override
+  State<FieldActivitySheet> createState() => _FieldActivitySheetState();
+}
+
+class _FieldActivitySheetState extends State<FieldActivitySheet> {
+  FieldPeriod _period = FieldPeriod.week;
+  FieldStaffActivity? _first;
+  List<FieldMove> _items = const [];
+  bool _hasMore = false;
+  int _next = 0;
+  bool _loading = true;
+  bool _more = false;
+  String? _error;
+  int _seq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final seq = ++_seq;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final r = await FieldTeamApi.staffActivity(widget.staffId, _period);
+    if (!mounted || seq != _seq) return;
+    setState(() {
+      _loading = false;
+      final d = r.data;
+      if (d == null) {
+        _error = r.error;
+        return;
+      }
+      _first = d;
+      _items = d.items;
+      _hasMore = d.hasMore;
+      _next = d.nextOffset;
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_more || !_hasMore) return;
+    setState(() => _more = true);
+    final seq = _seq;
+    final r = await FieldTeamApi.staffActivity(widget.staffId, _period, offset: _next);
+    if (!mounted || seq != _seq) return;
+    setState(() {
+      _more = false;
+      final d = r.data;
+      if (d == null) return;
+      final seen = {for (final m in _items) m.id};
+      _items = [..._items, ...d.items.where((m) => !seen.contains(m.id))];
+      _hasMore = d.hasMore;
+      _next = d.nextOffset;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final f = _first;
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.activity,
+        title: 'حركات ${widget.name}',
+        subtitle: 'ما استلمه وما فعله في كلّ مهمّة، بعدده ونوعه',
+        subtitleMaxLines: 2,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(key: const ValueKey('field-activity'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SheetSegmented(
+          key: const ValueKey('field-activity-period'),
+          labels: [for (final p in FieldPeriod.values) p.label],
+          selectedIndex: _period.index,
+          onSelect: (i) {
+            setState(() => _period = FieldPeriod.values[i]);
+            unawaited(_load());
+          },
+        ),
+        const SizedBox(height: Sp.md),
+        if (_loading)
+          const Padding(padding: EdgeInsets.all(Sp.xl), child: Center(child: CircularProgressIndicator()))
+        else if (_error != null || f == null)
+          Text(_error ?? 'تعذّر جلب الحركات', style: AppType.muted(color: AppColors.textMid))
+        else ...[
+          FieldCard(
+            key: const ValueKey('field-activity-counts'),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('بنوع الحركة (${f.total ?? 0})', style: AppType.bodyStrong(color: AppColors.textHi)),
+              const SizedBox(height: Sp.sm),
+              _MovePills(counts: f.counts ?? const {}),
+              if ((f.byType ?? const []).isNotEmpty) ...[
+                const SizedBox(height: Sp.md),
+                Divider(height: 1, color: AppColors.border),
+                const SizedBox(height: Sp.md),
+                Text('بنوع المهمّة', style: AppType.bodyStrong(color: AppColors.textHi)),
+                const SizedBox(height: Sp.sm),
+                for (final ty in f.byType!) ...[
+                  Container(
+                    padding: const EdgeInsets.all(Sp.sm + 2),
+                    decoration: BoxDecoration(color: AppColors.surfaceSunken, borderRadius: BorderRadius.circular(R.md)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text(iso(ty.name),
+                                maxLines: 3, style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700))),
+                        Text('${ty.total} حركة', style: AppType.micro(color: AppColors.textMid)),
+                      ]),
+                      const SizedBox(height: 4),
+                      _MovePills(counts: ty.counts),
+                    ]),
+                  ),
+                  const SizedBox(height: Sp.x6),
+                ],
+              ],
+            ]),
+          ),
+          const SizedBox(height: Sp.md),
+          FieldCard(
+            key: const ValueKey('field-activity-list'),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const FieldSectionHead(icon: LucideIcons.clock, tone: AppTone.neutral, title: 'الحركات'),
+              const SizedBox(height: Sp.sm),
+              if (_items.isEmpty)
+                Text('لا حركات في هذه الفترة', style: AppType.muted(color: AppColors.textMid))
+              else
+                for (final (i, m) in _items.indexed) ...[
+                  if (i > 0) Divider(height: Sp.lg, color: AppColors.border),
+                  Row(key: ValueKey('field-move-${m.id}'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    FieldPill(label: m.moveLabel, tone: _moveTone(m.move)),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(iso(m.taskTitle), style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                          isoJoin([
+                            if ((m.subscriberName ?? '').isNotEmpty) m.subscriberName!,
+                            if ((m.typeName ?? '').isNotEmpty) m.typeName!,
+                            if ((m.by ?? '').isNotEmpty) 'بيد ${m.by}',
+                            fieldAgo(m.createdAt),
+                          ], ' · '),
+                          style: AppType.micro(color: AppColors.textMid),
+                        ),
+                        if (m.holdUntil != null)
+                          Text('إلى ${fieldAtText(m.holdUntil)}',
+                              style: AppType.micro(color: AppColors.warningOnSoft).copyWith(fontWeight: FontWeight.w700)),
+                        if ((m.note ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(m.note!, style: AppType.label(color: AppColors.textBody).copyWith(height: 1.55)),
+                        ],
+                      ]),
+                    ),
+                  ]),
+                ],
+              if (_hasMore)
+                Center(
+                  child: TextButton(
+                    key: const ValueKey('field-activity-more'),
+                    onPressed: _more ? null : _loadMore,
+                    child: _more
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text('عرض المزيد', style: AppType.label(color: AppColors.brand)),
+                  ),
+                ),
+            ]),
+          ),
+        ],
+      ]),
     );
   }
 }
