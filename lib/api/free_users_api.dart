@@ -51,6 +51,8 @@ class FreeItem {
     this.lastError,
     this.failCount = 0,
     this.holderFrom,
+    this.debt,
+    this.debtSource,
   });
 
   final int id;
@@ -75,6 +77,19 @@ class FreeItem {
   /// بداية الحامل الحاليّ (بغداد) — «كشف حساب» يبدأ منها.
   final String? holderFrom;
 
+  /// دين اليوزر الآن (د.ع، موجبٌ = عليه) من دفتر شركته — يرسله الخادم مع القائمة (٢٦ نوفمبر). null = لا يُعرف: خادمٌ أقدم، أو
+  /// شركةٌ دينها بالساس ([debtSource] = sas)، أو تعذّرت قراءته (unknown).
+  final int? debt;
+
+  /// ledger · sas · unknown — null من خادمٍ أقدم.
+  final String? debtSource;
+
+  /// الدين معروفٌ من الدفتر (صفرٌ أو أكثر).
+  bool get debtKnown => debtSource == 'ledger' && debt != null;
+
+  /// عليه دينٌ معروف ⇒ شريط الدين وزرّ «تسديد» على البطاقة (المالك: «زر التسديد مفترض مايظهر الا من يكون بالدين»).
+  bool get inDebt => debtKnown && debt! > 0;
+
   /// الاسم الظاهر: المسجَّل، وإلّا اليوزر.
   String get title => subName ?? username;
 
@@ -98,6 +113,8 @@ class FreeItem {
       lastError: _str(raw['last_error']),
       failCount: _int(raw['fail_count']),
       holderFrom: _str(raw['holder_from']),
+      debt: _intOrNull(raw['debt']),
+      debtSource: _str(raw['debt_source']),
     );
   }
 }

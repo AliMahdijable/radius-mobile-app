@@ -9,6 +9,7 @@ import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -21,11 +22,15 @@ import '../subscribers/sheets/add_debt_sheet.dart';
 import '../subscribers/sheets/movements_sheet.dart';
 import '../subscribers/sheets/pay_debt_sheet.dart';
 import '../subscribers/sheets/subscriber_picker_sheet.dart';
+import '../subscribers/widgets/subscriber_actions.dart';
 
 /// «اليوزرات الفري» بالتطبيق (٢٦ نوفمبر — المالك: «تمام كلشي يعني تطبيق وويب»): يوزرٌ تعطيه الشركة فري يُخصَّص لمشترك بسعره
 /// الشهريّ؛ البيع يشغّله ويمدّ «مدفوع لحدّ» بنفس الساعة، والنظام يطفّيه عند انتهائه ويبلّغ المشترك. كالموقع /v2/free-users حرفاً:
 /// التخصيص، البيع/التجديد (نقدي/جزئي/دين)، التعديل، السجلّ، «مدّة فحص» لصفحات الفحص، الترك — و«تسديد» و«إضافة دين» بنوافذ صفحة
 /// المشتركين نفسها باسم الحامل ورقمه، و«كشف حساب» من بداية حامله. الموظّف بلا مفتاحٍ يرى الزرّ مقفلاً بمكانه لا مخفيّاً.
+/// الأزرار (٢٦ نوفمبر — المالك: «مو منطقي … وماخذات مساحه … وزر التسديد مفترض مايظهر الا من يكون بالدين حاكي العمليات»):
+/// بنمط «العمليات» بصفحة المشترك — أربع بلاطات (بيع/تجديد · السجلّ · كشف حساب · المزيد) وشيت «إجراءات أخرى» للباقي، وبلوك الدين
+/// بزرّ «تسديد» حين يكون عليه دينٌ معروف وحده.
 class FreeUsersScreen extends StatefulWidget {
   const FreeUsersScreen({super.key});
 
@@ -161,10 +166,8 @@ class _FreeUsersScreenState extends State<FreeUsersScreen> {
   // ═══════════════ البطاقة ═══════════════
 
   Widget _itemCard(FreeList l, FreeItem it) {
-    final canManage = Perms.has('free.manage');
     final canSell = Perms.has('free.sell');
     final canPay = Perms.has('subscribers.pay_debt');
-    final canAddDebt = Perms.has('subscribers.add_debt');
     final canStatement = Perms.has('subscribers.view_activity');
     final busy = _busy == it.id;
     final (badgeFg, badgeBg, badgeText) = switch (it.state) {
@@ -214,24 +217,131 @@ class _FreeUsersScreenState extends State<FreeUsersScreen> {
                 style: AppType.label(color: AppColors.warningOnSoft)),
           ),
         ],
-        const SizedBox(height: Sp.sm),
-        Wrap(spacing: Sp.xs, runSpacing: Sp.xs, children: [
-          _btn(it.state == FreeState.pending ? 'بيع' : 'تجديد', LucideIcons.badgeDollarSign, canSell && !busy ? () => _sell(it) : null,
-              locked: !canSell, primary: true, key: 'sell-${it.id}'),
-          _btn('تعديل', LucideIcons.pencil, canManage && !busy ? () => _edit(it) : null, locked: !canManage, key: 'edit-${it.id}'),
-          _btn('السجلّ', LucideIcons.history, busy ? null : () => _history(it), key: 'hist-${it.id}'),
-          _btn('تسديد', LucideIcons.handCoins, canPay && !busy ? () => _debt(it, pay: true) : null, locked: !canPay, key: 'pay-${it.id}'),
-          _btn('إضافة دين', LucideIcons.circlePlus, canAddDebt && !busy ? () => _debt(it, pay: false) : null,
-              locked: !canAddDebt, key: 'debt-${it.id}'),
-          _btn('كشف حساب', LucideIcons.fileText, canStatement && !busy ? () => _statement(it) : null,
-              locked: !canStatement, key: 'stmt-${it.id}'),
-          if (l.test && it.state == FreeState.active && canManage)
-            _btn('مدّة فحص', LucideIcons.timer, busy ? null : () => _shorten(it), key: 'test-${it.id}'),
-          _btn('ترك', LucideIcons.logOut, canManage && !busy ? () => _release(l, it) : null,
-              locked: !canManage, danger: true, key: 'release-${it.id}'),
+        if (it.inDebt) ...[
+          const SizedBox(height: Sp.sm),
+          _debtBlock(it, canPay: canPay, busy: busy),
+        ],
+        const SizedBox(height: Sp.md),
+        // «العمليات» كصفحة المشترك: أربع بلاطات بصفٍّ واحد، والباقي في «المزيد»
+        SubscriberActionTiles(actions: [
+          SubAction(
+            key: ValueKey('free-btn-sell-${it.id}'),
+            icon: LucideIcons.badgeDollarSign,
+            label: it.state == FreeState.pending ? 'بيع' : 'تجديد',
+            filled: true,
+            locked: !canSell,
+            onTap: busy ? null : () => _sell(it),
+          ),
+          SubAction(
+            key: ValueKey('free-btn-hist-${it.id}'),
+            icon: LucideIcons.history,
+            label: 'السجلّ',
+            onTap: busy ? null : () => _history(it),
+          ),
+          SubAction(
+            key: ValueKey('free-btn-stmt-${it.id}'),
+            icon: LucideIcons.fileText,
+            label: 'الكشف',
+            locked: !canStatement,
+            onTap: busy ? null : () => _statement(it),
+          ),
+          SubAction(
+            key: ValueKey('free-btn-more-${it.id}'),
+            icon: Icons.more_horiz_rounded,
+            label: 'المزيد',
+            busy: busy,
+            onTap: busy ? null : () => _more(l, it),
+          ),
         ]),
       ]),
     );
+  }
+
+  /// بلوك الدين (٢٦ نوفمبر — المالك: «زر التسديد مفترض مايظهر الا من يكون بالدين»): عليه دينٌ معروف ⇒ المبلغ وزرّ «تسديد» بجانبه،
+  /// كبلوك الدين بصفحة المشترك. لا دين ⇒ لا بلوك ولا «تسديد» أبداً؛ دينٌ لا يُعرف (خادمٌ أقدم، دين الساس، تعذّرٌ) ⇒ «تسديد» في «المزيد».
+  Widget _debtBlock(FreeItem it, {required bool canPay, required bool busy}) => Container(
+        key: ValueKey('free-debt-${it.id}'),
+        padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.sm, Sp.sm, Sp.sm),
+        decoration: BoxDecoration(
+          color: AppColors.dangerSoftBg,
+          borderRadius: BorderRadius.circular(R.md),
+          border: Border.all(color: AppColors.dangerSoftBorder),
+        ),
+        child: Row(children: [
+          Icon(LucideIcons.circleAlert, size: 18, color: AppColors.dangerOnSoft),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text('عليه دين', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.dangerOnSoft)),
+              Text(iso('${formatIQD(it.debt!)} د.ع'),
+                  key: ValueKey('free-debt-amount-${it.id}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.bodyBold(color: AppColors.dangerOnSoft)),
+            ]),
+          ),
+          const SizedBox(width: Sp.sm),
+          FilledButton.icon(
+            key: ValueKey('free-btn-pay-${it.id}'),
+            // المقفل بمكانه: نقرته رسالة القفل (لا مخفيّ ولا معطّلٌ صامت)
+            onPressed: !canPay ? () => showNoPermission(context, action: true) : (busy ? null : () => _debt(it, pay: true)),
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: Sp.md)),
+            icon: busy
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrand))
+                : Icon(canPay ? LucideIcons.handCoins : LucideIcons.lock, size: 16),
+            label: const Text('تسديد'),
+          ),
+        ]),
+      );
+
+  /// «المزيد» = شيت «إجراءات أخرى» نفسه بصفحة المشترك: الدين، ثمّ اليوزر (تعديل، مدّة فحص لصفحات الفحص، ترك بالأحمر).
+  Future<void> _more(FreeList l, FreeItem it) {
+    final canManage = Perms.has('free.manage');
+    final canPay = Perms.has('subscribers.pay_debt');
+    final canAddDebt = Perms.has('subscribers.add_debt');
+    return showMoreActionsSheet(context, subtitle: it.username, groups: [
+      SubActionGroup('الدين', [
+        if (!it.debtKnown)
+          SubAction(
+            key: ValueKey('free-btn-pay-${it.id}'),
+            icon: LucideIcons.handCoins,
+            label: 'تسديد',
+            locked: !canPay,
+            onTap: () => _debt(it, pay: true),
+          ),
+        SubAction(
+          key: ValueKey('free-btn-debt-${it.id}'),
+          icon: LucideIcons.circlePlus,
+          label: 'إضافة دين',
+          locked: !canAddDebt,
+          onTap: () => _debt(it, pay: false),
+        ),
+      ]),
+      SubActionGroup('اليوزر', [
+        SubAction(
+          key: ValueKey('free-btn-edit-${it.id}'),
+          icon: LucideIcons.pencil,
+          label: 'تعديل الاسم والهاتف والسعر',
+          locked: !canManage,
+          onTap: () => _edit(it),
+        ),
+        if (l.test && it.state == FreeState.active && canManage)
+          SubAction(
+            key: ValueKey('free-btn-test-${it.id}'),
+            icon: LucideIcons.timer,
+            label: 'مدّة فحص',
+            onTap: () => _shorten(it),
+          ),
+        SubAction(
+          key: ValueKey('free-btn-release-${it.id}'),
+          icon: LucideIcons.logOut,
+          label: 'ترك اليوزر',
+          color: AppColors.error,
+          locked: !canManage,
+          onTap: () => _release(l, it),
+        ),
+      ]),
+    ]);
   }
 
   // ═══════════════ الأفعال ═══════════════
@@ -392,23 +502,6 @@ class _FreeUsersScreenState extends State<FreeUsersScreen> {
         showCheckmark: false,
         onSelected: (_) => setState(() => _view = v),
       );
-
-  Widget _btn(String label, IconData icon, VoidCallback? onTap,
-      {bool locked = false, bool primary = false, bool danger = false, String? key}) {
-    final ic = Icon(locked ? LucideIcons.lock : icon, size: 16);
-    final k = key == null ? null : ValueKey('free-btn-$key');
-    if (primary) return FilledButton.icon(key: k, onPressed: onTap, icon: ic, label: Text(label));
-    if (danger) {
-      return TextButton.icon(
-        key: k,
-        onPressed: onTap,
-        icon: ic,
-        label: Text(label),
-        style: TextButton.styleFrom(foregroundColor: AppColors.dangerOnSoft),
-      );
-    }
-    return OutlinedButton.icon(key: k, onPressed: onTap, icon: ic, label: Text(label));
-  }
 
   Widget _card(Widget child, {Key? key}) => Container(
         key: key,

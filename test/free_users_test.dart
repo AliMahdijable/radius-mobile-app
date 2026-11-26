@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/free_users_api.dart';
+import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
 import 'package:rad_mysvcs/screens/free_users/free_users_screen.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
@@ -20,6 +22,8 @@ Map<String, dynamic> _item(
   int price = 35000,
   String? phone = '077023920320',
   int fails = 0,
+  int? debt,
+  String? debtSource,
 }) =>
     {
       'id': id,
@@ -35,6 +39,9 @@ Map<String, dynamic> _item(
       'last_error': null,
       'fail_count': fails,
       'holder_from': '2026-11-26 12:30',
+      // دين الحامل مع القائمة (٢٦ نوفمبر) — بلا [debt] ولا [debtSource] = خادمٌ أقدم (لا يُعرف)
+      if (debt != null || debtSource != null) 'debt': debt,
+      if (debt != null || debtSource != null) 'debt_source': debtSource ?? 'ledger',
     };
 
 Map<String, dynamic> _list(List<Map<String, dynamic>> items, {bool enabled = true, bool test = true}) => {
@@ -98,15 +105,71 @@ void main() {
       expect(find.textContaining('review@poox'), findsOneWidget);
       expect(find.textContaining('35,000'), findsWidgets);
       expect(find.text('شغّال'), findsWidgets);
-      for (final b in ['sell-1', 'edit-1', 'hist-1', 'pay-1', 'debt-1', 'stmt-1', 'test-1', 'release-1']) {
+      // «العمليات» (المالك ٢٦ نوفمبر: «حاكي العمليات»): أربع بلاطات على البطاقة، والباقي في «المزيد»
+      for (final b in ['sell-1', 'hist-1', 'stmt-1', 'more-1']) {
         expect(find.byKey(ValueKey('free-btn-$b')), findsOneWidget, reason: b);
       }
+      for (final b in ['edit-1', 'debt-1', 'test-1', 'release-1', 'pay-1']) {
+        expect(find.byKey(ValueKey('free-btn-$b')), findsNothing, reason: '$b في «المزيد» لا على البطاقة');
+      }
+      await t.tap(find.byKey(const ValueKey('free-btn-more-1')));
+      await t.pumpAndSettle();
+      expect(find.text('إجراءات أخرى'), findsOneWidget);
+      for (final b in ['pay-1', 'debt-1', 'edit-1', 'test-1', 'release-1']) {
+        expect(find.byKey(ValueKey('free-btn-$b')), findsOneWidget, reason: '$b في «المزيد» (دينٌ لا يُعرف من خادمٍ أقدم ⇒ «تسديد» هنا)');
+      }
+      Navigator.of(t.element(find.text('إجراءات أخرى'))).pop();
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const ValueKey('free-btn-more-3')), 250, scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+      await t.ensureVisible(find.byKey(const ValueKey('free-btn-more-3')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('free-btn-more-3')));
+      await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('free-btn-test-3')), findsNothing, reason: '«مدّة فحص» للشغّال وحده');
+      Navigator.of(t.element(find.text('إجراءات أخرى'))).pop();
+      await t.pumpAndSettle();
+      await t.drag(find.byType(ListView), const Offset(0, 4000));
+      await t.pumpAndSettle();
       expect(FreeUsersState.on, true, reason: 'ما رأته الشاشة يكتب حال القائمة');
       await t.tap(find.byKey(const ValueKey('free-view-expired')));
       await t.pumpAndSettle();
       expect(find.text('محمد علي'), findsNothing);
       expect(find.text('عبد الرحمن عبد الكريم الموسوي'), findsOneWidget);
+      await simDrain(t);
+    });
+
+    testWidgets('«تسديد» حين عليه دين وحده: بلوك الدين بالمبلغ على بطاقته؛ لا دين ⇒ لا «تسديد» أبداً؛ دين الساس ⇒ في «المزيد»', (t) async {
+      server.reply('GET', '/api/v2/free-users', 200, _list([
+        _item(1, debt: 35000),
+        _item(3, name: 'علاء رمح', user: 'free77@x', idx: '86091', state: 'expired', debt: 0),
+        _item(4, name: 'ابو بشير', user: 'free78@x', idx: '86092', debtSource: 'sas'),
+      ]));
+      await open(t);
+      expect(find.byKey(const ValueKey('free-debt-1')), findsOneWidget);
+      expect(find.text('35,000 د.ع'), findsWidgets);
+      expect(find.byKey(const ValueKey('free-btn-pay-1')), findsOneWidget, reason: 'زرّ «تسديد» ببلوك الدين');
+      await t.tap(find.byKey(const ValueKey('free-btn-more-1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('free-btn-pay-1')), findsOneWidget, reason: 'مرّةً واحدة — ليس في «المزيد» أيضاً');
+      Navigator.of(t.element(find.text('إجراءات أخرى'))).pop();
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const ValueKey('free-btn-more-3')), 250, scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+      await t.ensureVisible(find.byKey(const ValueKey('free-btn-more-3')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('free-debt-3')), findsNothing, reason: 'دينه صفر');
+      await t.tap(find.byKey(const ValueKey('free-btn-more-3')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('free-btn-pay-3')), findsNothing, reason: 'لا دين ⇒ لا «تسديد» في أيّ مكان');
+      expect(find.byKey(const ValueKey('free-btn-debt-3')), findsOneWidget, reason: '«إضافة دين» باقٍ');
+      Navigator.of(t.element(find.text('إجراءات أخرى'))).pop();
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const ValueKey('free-btn-more-4')), 250, scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+      await t.ensureVisible(find.byKey(const ValueKey('free-btn-more-4')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('free-debt-4')), findsNothing);
+      await t.tap(find.byKey(const ValueKey('free-btn-more-4')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('free-btn-pay-4')), findsOneWidget, reason: 'دين الساس لا يُعرف هنا ⇒ «تسديد» في «المزيد»');
       await simDrain(t);
     });
 
@@ -185,8 +248,7 @@ void main() {
       });
       await open(t);
       final lists = server.calls('GET', '/api/v2/free-users').length;
-      await t.scrollUntilVisible(find.byKey(const ValueKey('free-btn-release-1')), 250, scrollable: find.byType(Scrollable).first, maxScrolls: 40);
-      await t.ensureVisible(find.byKey(const ValueKey('free-btn-release-1')));
+      await t.tap(find.byKey(const ValueKey('free-btn-more-1')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('free-btn-release-1')));
       await t.pumpAndSettle();
@@ -199,7 +261,7 @@ void main() {
     });
 
     testWidgets('«تسديد» ⇒ دين اليوزر من /debt ثمّ نافذة التسديد نفسها باسم الحامل ودينه', (t) async {
-      server.reply('GET', '/api/v2/free-users', 200, _list(_two));
+      server.reply('GET', '/api/v2/free-users', 200, _list([_item(1, debt: 35000), _two[1]]));
       server.reply('GET', '/api/v2/free-users/1/debt', 200, {'success': true, 'balance': -35000, 'source': 'ledger'});
       await open(t);
       await t.scrollUntilVisible(find.byKey(const ValueKey('free-btn-pay-1')), 250, scrollable: find.byType(Scrollable).first, maxScrolls: 40);
@@ -223,8 +285,7 @@ void main() {
       server.reply('GET', '/api/v2/free-users/1/debt', 409,
           {'success': false, 'code': 'FREE_DEBT_UNAVAILABLE', 'message': 'تعذّرت قراءة دين «محمد علي» الآن — أعد المحاولة'});
       await open(t);
-      await t.scrollUntilVisible(find.byKey(const ValueKey('free-btn-debt-1')), 250, scrollable: find.byType(Scrollable).first, maxScrolls: 40);
-      await t.ensureVisible(find.byKey(const ValueKey('free-btn-debt-1')));
+      await t.tap(find.byKey(const ValueKey('free-btn-more-1')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('free-btn-debt-1')));
       await t.pumpAndSettle();
@@ -234,13 +295,36 @@ void main() {
 
     testWidgets('موظّفٌ بلا مفاتيحها ⇒ الأزرار بمكانها مقفلةً (لا مخفيّة)؛ والعرض وحده يعمل', (t) async {
       PermissionsService.debugSet(isEmployee: true, permissions: const {'free.view': true});
-      server.reply('GET', '/api/v2/free-users', 200, _list(_two));
+      server.reply('GET', '/api/v2/free-users', 200, _list([_item(1, debt: 35000), _two[1]]));
       await open(t);
-      for (final b in ['sell-1', 'edit-1', 'pay-1', 'debt-1', 'stmt-1', 'release-1']) {
-        final w = t.widget<ButtonStyleButton>(find.byKey(ValueKey('free-btn-$b')));
-        expect(w.onPressed, isNull, reason: '$b مقفل');
+      Finder lockIn(String b) => find.descendant(of: find.byKey(ValueKey('free-btn-$b')), matching: find.byType(PermLockBadge));
+      expect(lockIn('sell-1'), findsOneWidget, reason: 'البيع مقفلٌ بمكانه');
+      expect(lockIn('stmt-1'), findsOneWidget, reason: 'كشف الحساب مقفل');
+      expect(lockIn('hist-1'), findsNothing, reason: 'السجلّ عرضٌ');
+      expect(find.descendant(of: find.byKey(const ValueKey('free-btn-pay-1')), matching: find.byIcon(LucideIcons.lock)), findsOneWidget,
+          reason: '«تسديد» ببلوك الدين بقفل');
+      final before = server.requests.length;
+      await t.tap(find.byKey(const ValueKey('free-btn-sell-1')));
+      await t.pumpAndSettle();
+      expect(find.text('المدّة'), findsNothing, reason: 'لا نافذة بيع');
+      await t.pump(const Duration(seconds: 6)); // رسالة القفل تطفو ثمّ تزول — لا تحجب الزرّ التالي
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('free-btn-pay-1')));
+      await t.pumpAndSettle();
+      await t.pump(const Duration(seconds: 6));
+      await t.pumpAndSettle();
+      expect(server.requests.length, before, reason: 'نقرة المقفل رسالةٌ وحدها — لا طلب');
+      await t.tap(find.byKey(const ValueKey('free-btn-more-1')));
+      await t.pumpAndSettle();
+      for (final b in ['edit-1', 'debt-1', 'release-1']) {
+        expect(find.descendant(of: find.byKey(ValueKey('free-btn-$b')), matching: find.byType(PermLockIcon)), findsOneWidget, reason: '$b مقفل');
       }
-      expect(t.widget<ButtonStyleButton>(find.byKey(const ValueKey('free-btn-hist-1'))).onPressed, isNotNull, reason: 'السجلّ عرضٌ');
+      await t.tap(find.byKey(const ValueKey('free-btn-release-1')));
+      await t.pumpAndSettle();
+      expect(find.text('إجراءات أخرى'), findsOneWidget, reason: 'المقفل لا يغلق الشيت');
+      expect(server.requests.length, before);
+      Navigator.of(t.element(find.text('إجراءات أخرى'))).pop();
+      await t.pumpAndSettle();
       expect(t.widget<ButtonStyleButton>(find.byKey(const ValueKey('free-assign'))).onPressed, isNull);
       await simDrain(t);
     });

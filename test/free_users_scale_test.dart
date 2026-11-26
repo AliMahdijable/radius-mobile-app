@@ -9,7 +9,7 @@ import 'sim_el/sim_harness.dart';
 /// «اليوزرات الفري» بذوق المالك («لا نصّ يخرج ولا رقم يُقصّ» — ٣٢٠ إلى ٤٨٠ بخطٍّ ×١٫٢، فاتحاً وداكناً): القائمة كلّها حتى آخر بطاقة،
 /// ونوافذ البيع (بالجزئيّ) والتعديل والسجلّ والتسديد — بلا فيضٍ ولا استثناء.
 
-Map<String, dynamic> _item(int id, String state, String name, String user, int price) => {
+Map<String, dynamic> _item(int id, String state, String name, String user, int price, {int? debt}) => {
       'id': id,
       'idx': '${1000 + id}',
       'username': user,
@@ -23,6 +23,8 @@ Map<String, dynamic> _item(int id, String state, String name, String user, int p
       'last_error': null,
       'fail_count': state == 'active' && id == 2 ? 3 : 0,
       'holder_from': '2026-11-26 12:30',
+      if (debt != null) 'debt': debt,
+      if (debt != null) 'debt_source': 'ledger',
     };
 
 void main() {
@@ -50,8 +52,8 @@ void main() {
             'last30': {'sales': 148, 'total': 12450000, 'paid': 9870000, 'debt': 2580000},
           },
           'items': [
-            _item(1, 'active', 'محمد علي', 'review@poox', 35000),
-            _item(2, 'active', 'عبد الرحمن عبد الكريم الموسوي البغدادي', 'admin@laith7-very-long-username', 1250000),
+            _item(1, 'active', 'محمد علي', 'review@poox', 35000, debt: 0),
+            _item(2, 'active', 'عبد الرحمن عبد الكريم الموسوي البغدادي', 'admin@laith7-very-long-username', 1250000, debt: 2500000),
             _item(3, 'expired', 'علاء رمح', 'free77@x', 30000),
             _item(4, 'pending', 'ابو بشير', 'free78@x', 25000),
           ],
@@ -96,12 +98,18 @@ void main() {
         expect(t.takeException(), isNull, reason: 'البيع بالجزئيّ ١٢ شهراً');
         Navigator.of(t.element(find.text('المدّة'))).pop();
         await t.pumpAndSettle();
-        await sheet('edit-2', 'نافذة التعديل');
+        await sheet('more-2', 'إجراءات أخرى');
+        expect(find.text('إجراءات أخرى'), findsOneWidget);
+        await t.tap(find.byKey(const ValueKey('free-btn-edit-2')));
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull, reason: 'نافذة التعديل');
         Navigator.of(t.element(find.text('اسم المشترك'))).pop();
         await t.pumpAndSettle();
         await sheet('hist-2', 'نافذة السجلّ');
         Navigator.of(t.element(find.text('المبيعات'))).pop();
         await t.pumpAndSettle();
+        // بلوك الدين (عليه 2,500,000) بزرّ «تسديد» على البطاقة نفسها
+        expect(find.byKey(const ValueKey('free-debt-2')), findsOneWidget);
         await sheet('pay-2', 'نافذة التسديد باسم الحامل');
         expect(find.text('تسديد دين'), findsOneWidget);
         await simDrain(t);

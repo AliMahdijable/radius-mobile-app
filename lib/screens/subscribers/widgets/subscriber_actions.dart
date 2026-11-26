@@ -37,7 +37,15 @@ class SubAction {
     this.busy = false,
     this.locked = false,
     this.unavailable,
+    this.key,
+    this.filled = false,
   });
+
+  /// بلاطةٌ ممتلئة بالبراند — الإجراء الأساسيّ بين البلاطات (٢٦ نوفمبر، «اليوزرات الفري»: بيع/تجديد). المقفل يبقى بشكل المقفل.
+  final bool filled;
+
+  /// مفتاح البلاطة/الصفّ (اختياريّ — للاختبارات؛ ٢٦ نوفمبر مع «اليوزرات الفري»).
+  final Key? key;
 
   final IconData icon;
   final String label;
@@ -94,7 +102,7 @@ class SubscriberActionTiles extends StatelessWidget {
     final children = <Widget>[];
     for (var i = 0; i < actions.length; i++) {
       if (i > 0) children.add(const SizedBox(width: Sp.sm));
-      children.add(Expanded(child: _ActionTile(action: actions[i])));
+      children.add(Expanded(child: _ActionTile(key: actions[i].key, action: actions[i])));
     }
     // ⚠️ `IntrinsicHeight` ليس تجميلاً: الصفّ يعيش داخل `ListView`، أي
     // ارتفاع غير محدود. و`CrossAxisAlignment.stretch` وحده يمرّر
@@ -115,17 +123,19 @@ class SubscriberActionTiles extends StatelessWidget {
 }
 
 class _ActionTile extends StatelessWidget {
-  const _ActionTile({required this.action});
+  const _ActionTile({super.key, required this.action});
   final SubAction action;
 
   @override
   Widget build(BuildContext context) {
     final locked = action.isLocked;
     final enabled = !locked && action.onTap != null && !action.busy;
-    final color =
-        enabled ? (action.color ?? AppColors.brandAccent) : AppColors.textHint;
+    final filled = action.filled && enabled;
+    final color = enabled
+        ? (filled ? AppColors.onBrand : (action.color ?? AppColors.brandAccent))
+        : AppColors.textHint;
     final tile = Material(
-      color: AppColors.surface,
+      color: filled ? AppColors.brand : AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
       child: InkWell(
         onTap: locked
@@ -136,7 +146,7 @@ class _ActionTile extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: filled ? AppColors.brand : AppColors.border),
           ),
           padding:
               const EdgeInsets.symmetric(vertical: Sp.md, horizontal: Sp.x6),
@@ -166,7 +176,9 @@ class _ActionTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: AppType.muted(
-                  color: enabled ? AppColors.textBody : AppColors.textHint,
+                  color: enabled
+                      ? (filled ? AppColors.onBrand : AppColors.textBody)
+                      : AppColors.textHint,
                 ),
               ),
             ],
@@ -351,7 +363,7 @@ class _Group extends StatelessWidget {
             children: [
               for (var i = 0; i < group.items.length; i++) ...[
                 if (i > 0) Divider(height: 1, color: AppColors.divider),
-                _ActionRow(action: group.items[i]),
+                _ActionRow(key: group.items[i].key, action: group.items[i]),
               ],
             ],
           ),
@@ -362,7 +374,7 @@ class _Group extends StatelessWidget {
 }
 
 class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.action});
+  const _ActionRow({super.key, required this.action});
   final SubAction action;
 
   @override
