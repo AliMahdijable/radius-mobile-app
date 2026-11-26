@@ -16,10 +16,13 @@ import 'field_team_widgets.dart';
 /// يربط أنواعاً من تذاكر المشتركين فتصير كلّ تذكرةٍ منها مهمّة — تُسند فوراً لشخصه (تلقائيّ) أو تنتظر إسنادك (يدويّ). كلّ نوع تذكرةٍ
 /// يُربط بنوعٍ واحد: المأخوذ بنوعٍ آخر يظهر مقفلاً باسم صاحبه.
 class FieldTypesTab extends StatefulWidget {
-  const FieldTypesTab({super.key, required this.tick, required this.onChanged, required this.onRefresh});
+  const FieldTypesTab({super.key, required this.tick, required this.onChanged, required this.onRefresh, this.canAdmin = true});
   final int tick;
   final VoidCallback onChanged;
   final Future<void> Function() onRefresh;
+
+  /// إضافة الأنواع وتعديلها وحذفها — مدير الصفحة وحده (٢٦ نوفمبر: الموظّف يراها مقفلةً بمكانها).
+  final bool canAdmin;
 
   @override
   State<FieldTypesTab> createState() => _FieldTypesTabState();
@@ -148,12 +151,20 @@ class _FieldTypesTabState extends State<FieldTypesTab> {
                 if (items.isNotEmpty) TextSpan(text: ' (${items.length})', style: AppType.body(color: AppColors.textMid)),
               ])),
             ),
-            FieldFilledButton(
-              key: const ValueKey('field-type-add'),
-              icon: LucideIcons.plus,
-              label: 'نوع جديد',
-              onTap: _types == null ? null : () => unawaited(_edit(null)),
-            ),
+            if (widget.canAdmin)
+              FieldFilledButton(
+                key: const ValueKey('field-type-add'),
+                icon: LucideIcons.plus,
+                label: 'نوع جديد',
+                onTap: _types == null ? null : () => unawaited(_edit(null)),
+              )
+            else
+              FieldOutlineButton(
+                key: const ValueKey('field-type-add-locked'),
+                icon: LucideIcons.lock,
+                label: 'نوع جديد',
+                onTap: () => fieldLockedTap(context, kFieldNeedAdmin),
+              ),
           ]),
           const SizedBox(height: Sp.md),
           if (_loading && _types == null)
@@ -179,6 +190,7 @@ class _FieldTypesTabState extends State<FieldTypesTab> {
                 type: t,
                 catLabel: _catLabel,
                 person: t.isAuto ? _staffById(t.defaultStaffId) : null,
+                canAdmin: widget.canAdmin,
                 onEdit: () => unawaited(_edit(t)),
                 onDelete: () => unawaited(_delete(t)),
               ),
@@ -191,7 +203,15 @@ class _FieldTypesTabState extends State<FieldTypesTab> {
 }
 
 class _TypeCard extends StatelessWidget {
-  const _TypeCard({required this.type, required this.catLabel, required this.person, required this.onEdit, required this.onDelete});
+  const _TypeCard({
+    required this.type,
+    required this.catLabel,
+    required this.person,
+    required this.onEdit,
+    required this.onDelete,
+    this.canAdmin = true,
+  });
+  final bool canAdmin;
   final FieldType type;
   final String Function(String key) catLabel;
   final FieldStaff? person;
@@ -253,14 +273,22 @@ class _TypeCard extends StatelessWidget {
         Divider(height: 1, color: AppColors.border),
         const SizedBox(height: Sp.md),
         Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
-          FieldOutlineButton(key: ValueKey('field-type-edit-${t.id}'), icon: LucideIcons.pencil, label: 'تعديل', onTap: onEdit),
-          FieldOutlineButton(
-            key: ValueKey('field-type-del-${t.id}'),
-            icon: LucideIcons.trash2,
-            tone: AppTone.danger,
-            label: 'حذف',
-            onTap: onDelete,
-          ),
+          if (canAdmin) ...[
+            FieldOutlineButton(key: ValueKey('field-type-edit-${t.id}'), icon: LucideIcons.pencil, label: 'تعديل', onTap: onEdit),
+            FieldOutlineButton(
+              key: ValueKey('field-type-del-${t.id}'),
+              icon: LucideIcons.trash2,
+              tone: AppTone.danger,
+              label: 'حذف',
+              onTap: onDelete,
+            ),
+          ] else
+            FieldOutlineButton(
+              key: ValueKey('field-type-locked-${t.id}'),
+              icon: LucideIcons.lock,
+              label: 'تعديل',
+              onTap: () => fieldLockedTap(context, kFieldNeedAdmin),
+            ),
         ]),
       ]),
     );

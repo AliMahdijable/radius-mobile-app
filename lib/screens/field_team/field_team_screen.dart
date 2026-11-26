@@ -155,8 +155,8 @@ class _FieldTeamScreenState extends State<FieldTeamScreen> {
         key: ValueKey('field-locked'),
         icon: LucideIcons.lock,
         tone: AppTone.warning,
-        title: 'القسم لمدير الصفحة وحده الآن',
-        sub: 'مدير الصفحة يدير الفريق والمهامّ — وصلاحيّات الموظّف فيه بالمرحلة القادمة',
+        title: 'تحتاج صلاحيّة «الصيانة والمبيعات» من مديرك',
+        sub: 'مديرك يفتحها لك من صلاحيّات الموظّف — والقسم كلّه يظهر لك بعدها',
       ));
     }
     return Column(children: [
@@ -180,8 +180,10 @@ class _FieldTeamScreenState extends State<FieldTeamScreen> {
               onOpen: _openTask,
               onNew: _newTask,
             ),
-          _Tab.staff => FieldStaffTab(key: const ValueKey('field-tab-staff'), tick: _tick, onChanged: _changed, onRefresh: _refresh),
-          _Tab.types => FieldTypesTab(key: const ValueKey('field-tab-types'), tick: _tick, onChanged: _changed, onRefresh: _refresh),
+          _Tab.staff => FieldStaffTab(
+              key: const ValueKey('field-tab-staff'), tick: _tick, onChanged: _changed, onRefresh: _refresh, canAdmin: s.canAdmin),
+          _Tab.types => FieldTypesTab(
+              key: const ValueKey('field-tab-types'), tick: _tick, onChanged: _changed, onRefresh: _refresh, canAdmin: s.canAdmin),
         },
       ),
     ]);
@@ -224,10 +226,17 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
   String? _error;
   int _seq = 0;
 
+  /// فلتر الشخص والنوع (٢٦ نوفمبر — «فلتر المهمام وكل»): null = الكلّ.
+  FieldStaff? _staffF;
+  FieldType? _typeF;
+  List<FieldStaff> _staffList = const [];
+  List<FieldType> _typeList = const [];
+
   @override
   void initState() {
     super.initState();
     unawaited(_load());
+    unawaited(_loadPickers());
     // ما يفعله الفنّي يظهر خلال نصف دقيقة (كالموقع)
     _poll = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(_load(quiet: true)));
   }
@@ -246,6 +255,56 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
     super.dispose();
   }
 
+  Future<void> _loadPickers() async {
+    final (staff, types) = await (FieldTeamApi.staff(), FieldTeamApi.types()).wait;
+    if (!mounted) return;
+    setState(() {
+      _staffList = staff.items ?? _staffList;
+      _typeList = types.items ?? _typeList;
+    });
+  }
+
+  Future<void> _pickStaffF() async {
+    final picked = await showFieldPickSheet<int>(
+      context,
+      title: 'مهامّ من؟',
+      subtitle: 'الكلّ، أو شخصٌ من الفريق',
+      icon: LucideIcons.users,
+      selected: _staffF?.id,
+      options: [
+        const FieldPickOption<int>(value: null, label: 'كلّ الفريق', icon: LucideIcons.users),
+        for (final s in _staffList)
+          FieldPickOption<int>(value: s.id, label: s.fullName, sub: s.isActive ? s.roleLabel : 'موقوف', icon: LucideIcons.hardHat),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _staffF = _staffList.where((s) => s.id == picked.value).firstOrNull;
+      _items = const [];
+    });
+    unawaited(_load());
+  }
+
+  Future<void> _pickTypeF() async {
+    final picked = await showFieldPickSheet<int>(
+      context,
+      title: 'أيّ نوع؟',
+      subtitle: 'الكلّ، أو نوعٌ بعينه',
+      icon: LucideIcons.clipboardList,
+      selected: _typeF?.id,
+      options: [
+        const FieldPickOption<int>(value: null, label: 'كلّ الأنواع', icon: LucideIcons.clipboardList),
+        for (final t in _typeList) FieldPickOption<int>(value: t.id, label: t.name, icon: LucideIcons.clipboardList),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _typeF = _typeList.where((t) => t.id == picked.value).firstOrNull;
+      _items = const [];
+    });
+    unawaited(_load());
+  }
+
   Future<void> _load({bool quiet = false}) async {
     final seq = ++_seq;
     if (!quiet) {
@@ -261,7 +320,7 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
     var hasMore = false;
     String? error;
     while (true) {
-      final r = await FieldTeamApi.tasks(filter: _filter, query: _query, offset: offset);
+      final r = await FieldTeamApi.tasks(filter: _filter, query: _query, offset: offset, staffId: _staffF?.id, typeId: _typeF?.id);
       if (!mounted || seq != _seq) return;
       final p = r.page;
       if (p == null) {
@@ -291,7 +350,7 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
     if (_more || !_hasMore) return;
     setState(() => _more = true);
     final seq = _seq;
-    final r = await FieldTeamApi.tasks(filter: _filter, query: _query, offset: _next);
+    final r = await FieldTeamApi.tasks(filter: _filter, query: _query, offset: _next, staffId: _staffF?.id, typeId: _typeF?.id);
     if (!mounted || seq != _seq) return;
     setState(() {
       _more = false;
@@ -341,7 +400,7 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
               _Stat(LucideIcons.hourglass, AppTone.warning, 'بلا إسناد', s.waiting, 'مهمّة', FieldTaskFilter.waiting),
               _Stat(LucideIcons.wrench, AppTone.info, 'الجارية', s.active, 'عند الفريق', FieldTaskFilter.active),
               _Stat(LucideIcons.triangleAlert, AppTone.danger, 'تعذّرت', s.failed, 'تحتاج قرارك', FieldTaskFilter.failed),
-              _Stat(LucideIcons.circleCheck, AppTone.success, 'منجزة اليوم', s.doneToday, 'مهمّة', FieldTaskFilter.closed),
+              _Stat(LucideIcons.circleCheck, AppTone.success, 'منجزة اليوم', s.doneToday, 'مهمّة', FieldTaskFilter.done),
             ],
             selected: _filter,
             onTap: _setFilter,
@@ -383,6 +442,29 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
                     onTap: () => _setFilter(f),
                   ),
               ]),
+              const SizedBox(height: Sp.sm),
+              // بالشخص وبالنوع — كلٌّ بـ«الكلّ» (سطران على الضيّق، سطرٌ حين يتّسع)
+              LayoutBuilder(builder: (context, c) {
+                final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+                final staffBox = FieldPickerBox(
+                  key: const ValueKey('field-filter-staff'),
+                  icon: LucideIcons.users,
+                  text: _staffF?.fullName,
+                  placeholder: 'كلّ الفريق',
+                  onTap: _pickStaffF,
+                );
+                final typeBox = FieldPickerBox(
+                  key: const ValueKey('field-filter-type'),
+                  icon: LucideIcons.clipboardList,
+                  text: _typeF?.name,
+                  placeholder: 'كلّ الأنواع',
+                  onTap: _pickTypeF,
+                );
+                if (c.maxWidth >= 460 * scale) {
+                  return Row(children: [Expanded(child: staffBox), const SizedBox(width: Sp.sm), Expanded(child: typeBox)]);
+                }
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [staffBox, const SizedBox(height: Sp.sm), typeBox]);
+              }),
             ]),
           ),
           const SizedBox(height: Sp.md),
@@ -412,7 +494,7 @@ class _FieldTasksTabState extends State<FieldTasksTab> {
         FieldCenterState(
           key: const ValueKey('field-tasks-empty'),
           icon: LucideIcons.listChecks,
-          title: _query.isNotEmpty ? 'لا نتائج لهذا البحث' : 'لا مهامّ هنا',
+          title: _query.isNotEmpty || _staffF != null || _typeF != null ? 'لا نتائج لهذا الفلتر' : 'لا مهامّ هنا',
           sub: 'أنشئ مهمّةً بنفسك، أو اربط أنواع تذاكر المشتركين من «الأنواع» فتصير مهامّاً تلقائيّاً',
         ),
       ];
@@ -610,6 +692,21 @@ class FieldTaskCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     if ((who ?? '').isNotEmpty) _line(LucideIcons.userRound, who!, meta),
                     if ((t.address ?? '').isNotEmpty) _line(LucideIcons.mapPin, t.address!, meta),
+                  ],
+                  if (t.isPaused) ...[
+                    const SizedBox(height: Sp.sm),
+                    Container(
+                      key: ValueKey('field-task-hold-${t.id}'),
+                      padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: Sp.x6),
+                      decoration: BoxDecoration(color: AppColors.warningSoftBg, borderRadius: BorderRadius.circular(R.md)),
+                      child: Text(
+                        [
+                          t.holdUntil != null ? 'مؤجّلة إلى ${fieldAtText(t.holdUntil)}' : 'معلّقة',
+                          if ((t.holdReason ?? '').isNotEmpty) t.holdReason!
+                        ].join(' — '),
+                        style: AppType.label(color: AppColors.warningOnSoft).copyWith(height: 1.55),
+                      ),
+                    ),
                   ],
                   if (t.status == 'failed' && (t.failReason ?? '').isNotEmpty) ...[
                     const SizedBox(height: Sp.sm),

@@ -35,9 +35,12 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
   bool _loading = true;
   bool _changed = false;
 
-  /// فعلٌ جارٍ: assign · note · reopen · cancel — لا فعلان معاً.
+  /// فعلٌ جارٍ: assign · note · reopen · cancel · cred — لا فعلان معاً.
   String? _busy;
   int? _assignTo;
+
+  /// الاستئناف/إعادة الفتح لـ… (null = لنفس الفنّي إن بقي فعّالاً — ٢٦ نوفمبر).
+  int? _reopenTo;
   final _note = TextEditingController();
   Timer? _poll;
   int _seq = 0;
@@ -95,8 +98,59 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
     setState(() {
       if (name == 'note') _note.clear();
       if (name == 'assign') _assignTo = null;
+      if (name == 'reopen') _reopenTo = null;
     });
     await _load(quiet: true);
+  }
+
+  /// صلاحيّة إعادة الفتح والتغيير (الموظّف بـfield.reopen، والمدير دائماً) — من ملخّص القسم؛ الخادم يحكم أخيراً.
+  bool get _reopenOk => FieldTeamState.gate.value?.canReopen ?? true;
+
+  Future<void> _pickReopenTo() async {
+    final t = _task;
+    if (t == null) return;
+    final active = _staff.where((s) => s.isActive).toList();
+    final picked = await showFieldPickSheet<int>(
+      context,
+      title: t.isPaused ? 'استئنافها لـ…' : 'إعادة فتحها لـ…',
+      subtitle: 'لنفس الفنّي، أو اختر غيره — ويصله إشعارها',
+      icon: LucideIcons.userCheck,
+      selected: _reopenTo,
+      empty: 'لا أحد في الفريق بعد — أضفه من «الفريق»',
+      options: [
+        for (final s in active)
+          FieldPickOption<int>(
+            value: s.id,
+            label: s.fullName,
+            sub: s.id == t.assignedStaffId ? 'صاحبها · ${s.roleLabel}' : s.roleLabel,
+            icon: LucideIcons.hardHat,
+          ),
+      ],
+    );
+    if (picked != null && mounted) setState(() => _reopenTo = picked.value);
+  }
+
+  /// يوزر المشترك وكلمة مروره للفنّي (٢٦ نوفمبر — «امكان عند فتح التكت ارسال معلومات اليوزر والباسورد»): من صفحة المشترك برقمه،
+  /// وتعذّرها أو بلا رقمٍ ⇒ تُكتب.
+  Future<void> _sendCreds() async {
+    final t = _task;
+    if (t == null || _busy != null) return;
+    final idx = t.subscriber?.idx;
+    String? pw;
+    if ((idx ?? '').isNotEmpty) {
+      setState(() => _busy = 'cred');
+      pw = await FieldTeamApi.subscriberPassword(idx!);
+      if (!mounted) return;
+      setState(() => _busy = null);
+    }
+    String? user = t.subscriber?.username;
+    if ((pw ?? '').isEmpty) {
+      final typed = await showFieldSheet<({String user, String password})>(context, _CredSheet(username: user ?? ''));
+      if (typed == null || !mounted) return;
+      pw = typed.password;
+      user = typed.user;
+    }
+    await _act('cred', () => FieldTeamApi.sendCredentials(t.id, pw!, username: user), 'أُرسل يوزر المشترك وكلمة مروره للفنّي');
   }
 
   Future<void> _pickAssignee() async {
@@ -211,14 +265,23 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
       ),
       const SizedBox(height: Sp.md),
 
-      // الحال: تعذّرت / ملغاة / المراحل
+      // الحال: تعذّرت / معلّقة / ملغاة / المراحل
       if (t.status == 'failed')
         FieldNote(
           key: const ValueKey('field-task-failed'),
           icon: LucideIcons.circleX,
           tone: AppTone.danger,
           title: 'تعذّرت المهمّة',
-          text: [if ((t.failReason ?? '').isNotEmpty) t.failReason!, 'أعد فتحها لتُسندها من جديد، أو ألغها.'].join('\n'),
+          text: [if ((t.failReason ?? '').isNotEmpty) t.failReason!, 'أعد إسنادها لنفس الفنّي أو لغيره من أدناه، أو ألغها.'].join('\n'),
+        )
+      else if (t.isPaused)
+        FieldNote(
+          key: const ValueKey('field-task-paused'),
+          icon: LucideIcons.circlePause,
+          tone: AppTone.warning,
+          title: t.holdUntil != null ? 'أجّلها الفنّي إلى ${fieldAtText(t.holdUntil)}' : 'علّقها الفنّي',
+          text: [if ((t.holdReason ?? '').isNotEmpty) t.holdReason!, 'استأنفها لنفس الفنّي أو لغيره من «استئناف المهمّة» أدناه، أو ألغها.']
+              .join('\n'),
         )
       else if (t.status == 'cancelled')
         const FieldNote(icon: LucideIcons.ban, tone: AppTone.neutral, title: 'أُلغيت المهمّة', text: '')
@@ -276,7 +339,20 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
             ])
           else
             Text('لم تُسند لأحدٍ بعد', style: AppType.body(color: AppColors.textMid)),
-          if (t.actions.contains('assign')) ...[
+          if (t.actions.contains('assign') && const {'assigned', 'on_way', 'working'}.contains(t.status) && !_reopenOk) ...[
+            const SizedBox(height: Sp.md),
+            Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: Sp.md),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FieldOutlineButton(
+                key: const ValueKey('field-assign-locked'),
+                icon: LucideIcons.lock,
+                label: 'تغيير الفنّي',
+                onTap: () => fieldLockedTap(context, kFieldNeedReopen),
+              ),
+            ),
+          ] else if (t.actions.contains('assign') && const {'new', 'assigned', 'on_way', 'working'}.contains(t.status)) ...[
             const SizedBox(height: Sp.md),
             Divider(height: 1, color: AppColors.border),
             const SizedBox(height: Sp.md),
@@ -304,6 +380,57 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
         ]),
       ),
 
+      // الاستئناف وإعادة الفتح (٢٦ نوفمبر): لنفس الفنّي افتراضاً أو لمن يختاره
+      if (t.actions.contains('reopen')) ...[
+        const SizedBox(height: Sp.md),
+        FieldCard(
+          key: const ValueKey('field-reopen-card'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            FieldSectionHead(
+              icon: t.isPaused ? LucideIcons.circlePlay : LucideIcons.rotateCcw,
+              tone: t.isPaused ? AppTone.warning : AppTone.brand,
+              title: t.isPaused ? 'استئناف المهمّة' : (t.status == 'failed' ? 'إعادة إسنادها' : 'إعادة فتح المهمّة'),
+              desc: 'لنفس الفنّي، أو اختر غيره — ويصله إشعارها',
+            ),
+            const SizedBox(height: Sp.md),
+            if (_reopenOk) ...[
+              FieldPickerBox(
+                key: const ValueKey('field-reopen-pick'),
+                icon: LucideIcons.userCheck,
+                text: _staff.where((s) => s.id == _reopenTo).map((s) => s.fullName).firstOrNull,
+                placeholder: (t.assignedStaffName ?? '').isNotEmpty && (tech?.isActive ?? false)
+                    ? 'لنفس الفنّي — ${t.assignedStaffName}'
+                    : 'بانتظار الإسناد (تختار لاحقاً)',
+                onTap: _busy != null ? null : _pickReopenTo,
+              ),
+              const SizedBox(height: Sp.sm),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FieldFilledButton(
+                  key: const ValueKey('field-reopen'),
+                  icon: t.isPaused ? LucideIcons.circlePlay : LucideIcons.rotateCcw,
+                  label: t.isPaused ? 'استئناف' : 'إعادة فتح',
+                  busy: _busy == 'reopen',
+                  onTap: _busy != null
+                      ? null
+                      : () => unawaited(_act('reopen', () => FieldTeamApi.reopen(t.id, staffId: _reopenTo),
+                          t.isPaused ? 'استُؤنفت المهمّة — وصل الفنّي إشعارها' : 'أُعيد فتحها')),
+                ),
+              ),
+            ] else
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: FieldOutlineButton(
+                  key: const ValueKey('field-reopen-locked'),
+                  icon: LucideIcons.lock,
+                  label: t.isPaused ? 'استئناف' : 'إعادة فتح',
+                  onTap: () => fieldLockedTap(context, kFieldNeedReopen),
+                ),
+              ),
+          ]),
+        ),
+      ],
+
       // المشترك والموقع
       if ((who ?? '').isNotEmpty || (t.address ?? '').isNotEmpty || maps != null) ...[
         const SizedBox(height: Sp.md),
@@ -320,7 +447,8 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
                     Text(iso(who), style: AppType.bodyBold(color: AppColors.textHi)),
                     if (Sees.usernames && (sub?.name ?? '').isNotEmpty && (sub?.username ?? '').isNotEmpty)
                       Text(iso(sub!.username!), style: AppType.micro(color: AppColors.textMid)),
-                    if (Sees.phones && (sub?.phone ?? '').isNotEmpty) Text(iso(sub!.phone!), style: AppType.body(color: AppColors.textHi)),
+                    if (Sees.phones && (sub?.mainPhone ?? '').isNotEmpty)
+                      Text(iso(sub!.mainPhone!), style: AppType.body(color: AppColors.textHi)),
                   ]),
                 ),
               ])
@@ -338,23 +466,23 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
                 ]),
               ),
             ],
-            if ((sub?.phone ?? '').isNotEmpty || maps != null) ...[
+            if ((Sees.phones && (sub?.mainPhone ?? '').isNotEmpty) || maps != null) ...[
               const SizedBox(height: Sp.md),
               _QuickLinks(links: [
-                if ((sub?.phone ?? '').isNotEmpty) ...[
+                if (Sees.phones && (sub?.mainPhone ?? '').isNotEmpty) ...[
                   FieldQuickLink(
                     key: const ValueKey('field-sub-call'),
                     icon: LucideIcons.phone,
                     label: 'اتّصال',
                     tone: AppTone.brand,
-                    onTap: () => unawaited(fieldCall(context, sub!.phone!)),
+                    onTap: () => unawaited(fieldCall(context, sub!.mainPhone!)),
                   ),
                   FieldQuickLink(
                     key: const ValueKey('field-sub-wa'),
                     icon: LucideIcons.messageCircle,
                     label: 'واتساب',
                     tone: AppTone.success,
-                    onTap: () => unawaited(fieldWhatsApp(context, sub!.phone)),
+                    onTap: () => unawaited(fieldWhatsApp(context, sub!.mainPhone)),
                   ),
                 ],
                 if (maps != null)
@@ -366,6 +494,71 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
                     onTap: () => unawaited(fieldOpenUrl(context, maps, failText: 'تعذّر فتح الخريطة')),
                   ),
               ]),
+            ],
+            // الرقم الثاني (٢٦ نوفمبر)
+            if (Sees.phones && (sub?.otherPhone ?? '').isNotEmpty) ...[
+              const SizedBox(height: Sp.md),
+              Container(
+                key: const ValueKey('field-sub-phone2'),
+                padding: const EdgeInsets.all(Sp.md),
+                decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(R.md)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Wrap(spacing: Sp.x6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text('الرقم الثاني', style: AppType.micro(color: AppColors.textMid)),
+                    Text(iso(sub!.otherPhone!), style: AppType.bodyStrong(color: AppColors.textHi)),
+                  ]),
+                  const SizedBox(height: Sp.sm),
+                  _QuickLinks(links: [
+                    FieldQuickLink(
+                      key: const ValueKey('field-sub-call2'),
+                      icon: LucideIcons.phone,
+                      label: 'اتّصال',
+                      tone: AppTone.brand,
+                      onTap: () => unawaited(fieldCall(context, sub.otherPhone!)),
+                    ),
+                    FieldQuickLink(
+                      key: const ValueKey('field-sub-wa2'),
+                      icon: LucideIcons.messageCircle,
+                      label: 'واتساب',
+                      tone: AppTone.success,
+                      onTap: () => unawaited(fieldWhatsApp(context, sub.otherPhone)),
+                    ),
+                  ]),
+                ]),
+              ),
+            ],
+            // يوزر المشترك وكلمة مروره للفنّي (٢٦ نوفمبر)
+            if (t.credentialsOpen) ...[
+              const SizedBox(height: Sp.md),
+              Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: Sp.md),
+              if (t.credentialsSent)
+                Row(key: const ValueKey('field-creds-sent'), children: [
+                  Icon(LucideIcons.keyRound, size: 16, color: AppColors.success),
+                  const SizedBox(width: Sp.x6),
+                  Expanded(
+                    child: Text('أُرسل يوزره وكلمة مروره للفنّي',
+                        maxLines: 3, style: AppType.label(color: AppColors.success).copyWith(fontWeight: FontWeight.w700)),
+                  ),
+                  TextButton(
+                    key: const ValueKey('field-creds-drop'),
+                    onPressed: _busy != null
+                        ? null
+                        : () => unawaited(_act('cred', () => FieldTeamApi.dropCredentials(t.id), 'سُحبت بيانات الدخول من الفنّي')),
+                    child: Text('سحبها', style: AppType.label(color: AppColors.textMid)),
+                  ),
+                ])
+              else
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FieldOutlineButton(
+                    key: const ValueKey('field-creds-send'),
+                    icon: LucideIcons.keyRound,
+                    label: 'أرسل يوزره وكلمة مروره للفنّي',
+                    busy: _busy == 'cred',
+                    onTap: _busy != null ? null : () => unawaited(_sendCreds()),
+                  ),
+                ),
             ],
           ]),
         ),
@@ -422,28 +615,18 @@ class _FieldTaskScreenState extends State<FieldTaskScreen> {
         ]),
       ),
 
-      // إعادة الفتح · الإلغاء
-      if (t.actions.contains('reopen') || t.actions.contains('cancel')) ...[
+      // الإلغاء (إعادة الفتح صارت ببطاقتها أعلاه بمن يختاره)
+      if (t.actions.contains('cancel')) ...[
         const SizedBox(height: Sp.md),
         Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
-          if (t.actions.contains('reopen'))
-            FieldOutlineButton(
-              key: const ValueKey('field-reopen'),
-              icon: LucideIcons.rotateCcw,
-              label: 'إعادة فتح',
-              busy: _busy == 'reopen',
-              onTap:
-                  _busy != null ? null : () => unawaited(_act('reopen', () => FieldTeamApi.reopen(t.id), 'أُعيد فتحها — بانتظار إسنادك')),
-            ),
-          if (t.actions.contains('cancel'))
-            FieldOutlineButton(
-              key: const ValueKey('field-cancel'),
-              icon: LucideIcons.circleX,
-              tone: AppTone.danger,
-              label: 'إلغاء المهمّة',
-              busy: _busy == 'cancel',
-              onTap: _busy != null ? null : () => unawaited(_cancel()),
-            ),
+          FieldOutlineButton(
+            key: ValueKey(_reopenOk ? 'field-cancel' : 'field-cancel-locked'),
+            icon: _reopenOk ? LucideIcons.circleX : LucideIcons.lock,
+            tone: AppTone.danger,
+            label: 'إلغاء المهمّة',
+            busy: _busy == 'cancel',
+            onTap: !_reopenOk ? () => fieldLockedTap(context, kFieldNeedReopen) : (_busy != null ? null : () => unawaited(_cancel())),
+          ),
         ]),
       ],
     ];
@@ -542,6 +725,7 @@ class _Stepper extends StatelessWidget {
     'cancelled' => (icon: LucideIcons.ban, tone: AppTone.neutral, title: label),
     'on_way' => (icon: LucideIcons.navigation, tone: AppTone.info, title: label),
     'working' => (icon: LucideIcons.wrench, tone: AppTone.info, title: label),
+    'paused' => (icon: LucideIcons.circlePause, tone: AppTone.warning, title: label),
     _ => (icon: LucideIcons.rotateCcw, tone: AppTone.brand, title: label),
   };
 }
@@ -574,6 +758,11 @@ class _EventRow extends StatelessWidget {
                 Text(look.title, style: AppType.bodyStrong(color: AppColors.textHi)),
                 Text(isoJoin([if (e.who.isNotEmpty) e.who, fieldAgo(e.createdAt)], ' · '), style: AppType.micro(color: AppColors.textMid)),
               ]),
+              if (e.statusTo == 'paused' && e.holdUntil != null) ...[
+                const SizedBox(height: 2),
+                Text('إلى ${fieldAtText(e.holdUntil)}',
+                    style: AppType.micro(color: AppColors.warningOnSoft).copyWith(fontWeight: FontWeight.w700)),
+              ],
               if ((e.note ?? '').isNotEmpty) ...[
                 const SizedBox(height: Sp.x6),
                 Container(
@@ -688,6 +877,67 @@ class _EventImageState extends State<_EventImage> {
           child: Image.memory(b, width: 112, height: 112, fit: BoxFit.cover, gaplessPlayback: true, cacheWidth: 360),
         ),
       ),
+    );
+  }
+}
+
+/// بيانات الدخول بالكتابة (٢٦ نوفمبر): حين تتعذّر قراءة كلمة المرور من صفحة المشترك أو لا رقم له. تُرجع اليوزر وكلمة المرور.
+class _CredSheet extends StatefulWidget {
+  const _CredSheet({required this.username});
+  final String username;
+
+  @override
+  State<_CredSheet> createState() => _CredSheetState();
+}
+
+class _CredSheetState extends State<_CredSheet> {
+  late final _user = TextEditingController(text: widget.username);
+  final _pw = TextEditingController();
+
+  @override
+  void dispose() {
+    _user.dispose();
+    _pw.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final ready = _pw.text.isNotEmpty;
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.keyRound,
+        title: 'بيانات دخول المشترك',
+        subtitle: 'تصل الفنّي في المهمّة وحدها، وتُمحى حين تُنجز',
+        subtitleMaxLines: 2,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        key: const ValueKey('field-creds-confirm'),
+        label: 'إرسال للفنّي',
+        icon: LucideIcons.send,
+        onPressed: ready ? () => Navigator.of(context).pop((user: _user.text.trim(), password: _pw.text)) : null,
+      ),
+      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SheetSection(
+          label: 'اليوزر',
+          child: FieldTextBox(
+              key: const ValueKey('field-creds-user'), controller: _user, icon: LucideIcons.atSign, hint: 'يوزر المشترك', ltr: true),
+        ),
+        const SizedBox(height: Sp.md),
+        SheetSection(
+          label: 'كلمة المرور',
+          child: FieldTextBox(
+            key: const ValueKey('field-creds-pw'),
+            controller: _pw,
+            icon: LucideIcons.keyRound,
+            hint: 'كلمة مرور المشترك',
+            ltr: true,
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+      ]),
     );
   }
 }

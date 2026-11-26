@@ -158,11 +158,8 @@ class EmployeePageRef {
   /// صفحاتٌ من JSON (قائمة) — يُسقط التالف، وأقلّ من صفحتين ⇒ [] (موظّفٌ بصفحةٍ واحدة).
   static List<EmployeePageRef> listFrom(Object? raw) {
     if (raw is! List) return const [];
-    final out = raw
-        .whereType<Map>()
-        .map((m) => EmployeePageRef.fromJson(Map<String, dynamic>.from(m)))
-        .whereType<EmployeePageRef>()
-        .toList();
+    final out =
+        raw.whereType<Map>().map((m) => EmployeePageRef.fromJson(Map<String, dynamic>.from(m))).whereType<EmployeePageRef>().toList();
     return out.length >= 2 ? List.unmodifiable(out) : const [];
   }
 }
@@ -436,6 +433,11 @@ class ElEmployeePerms {
   /// وحدها (خارج الأدوار الجاهزة) كـ[balanceReportKeys]. مطابقٌ للويب (EL_FREE_KEYS).
   static const freeKeys = <String>{'free.view', 'free.manage', 'free.sell'};
 
+  /// «الصيانة والمبيعات» (٢٦ نوفمبر — المالك: «اضافة صلاحيه للموظفين ينفتح له قسم الصيانة لكن لاتنسى ميزة فتح التذكره المغلقة
+  /// والمسنده وتغيرها هم تضيفها كصلاحيه»): القسم، وإعادة الفتح وتغيير المُسندة والإلغاء معه. مسارات `/v2/field/` ممرَّرةٌ لايرث لنك
+  /// وفايبر اكس والشركات المُضافة (الخادم يحكم بهما). تُمنح وحدها (خارج الأدوار الجاهزة) كـ[freeKeys].
+  static const fieldKeys = <String>{'field.view', 'field.reopen'};
+
   /// «المدراء» لموزّع ايرث لنك (٢٠ نوفمبر — المالك: «ولاتنسى صلاحيات الموظفين اذا رد ينطي لموظف صلاحيه التحويل»؛ الخادم
   /// server/earthlink/elManagers.js): العرض، والشحن (مالٌ لا يُستردّ — بكلمة الإيداع المحفوظة وحدها)، و«ديون أخرى» (ديون المدراء).
   /// لايرث لنك وحدها، تُمنح فرادى (خارج الأدوار الجاهزة — والدور يعيد ضبطها كمفاتيح «تقارير الأرصدة»: أحوط لمالٍ لا يُستردّ)، والكتالوج
@@ -542,6 +544,8 @@ class ElEmployeePerms {
     ...balanceReportKeys,
     // «اليوزرات الفري» (٢٦ نوفمبر) — تُمنح وحدها؛ الوطنيّ يُسقطها ([_kitKeysForSession])
     ...freeKeys,
+    // «الصيانة والمبيعات» (٢٦ نوفمبر) — تُمنح وحدها
+    ...fieldKeys,
   };
 
   /// موظّفونا لحساب فايبر اكس (٣١ أكتوبر — المالك: «فايبر اكس خلي موظفينا فقط… احنه اصلا موفرين هلمزية»): ما يفرضه
@@ -594,6 +598,8 @@ class ElEmployeePerms {
     ...messageExclusionKeys,
     // «تقارير الأرصدة» (٢٠ نوفمبر) — تُمنح وحدها (خارج الأدوار الجاهزة)
     ...balanceReportKeys,
+    // «الصيانة والمبيعات» (٢٦ نوفمبر) — تُمنح وحدها
+    ...fieldKeys,
   };
 
   /// ما يختلف معناه لموظّف فايبر اكس عن ايرث لنك.
@@ -661,6 +667,8 @@ class ElEmployeePerms {
     ...elManagerKeys,
     // «اليوزرات الفري» (٢٦ نوفمبر) — تُمنح وحدها (خارج الأدوار الجاهزة)
     ...freeKeys,
+    // «الصيانة والمبيعات» (٢٦ نوفمبر) — تُمنح وحدها
+    ...fieldKeys,
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في
@@ -915,11 +923,7 @@ class EmployeesApi {
       final list = body['data'];
       if (list is! List) return (rows: const <Employee>[], error: null);
       return (
-        rows: list
-            .whereType<Map>()
-            .map((m) => Employee.fromJson(Map<String, dynamic>.from(m)))
-            .whereType<Employee>()
-            .toList(),
+        rows: list.whereType<Map>().map((m) => Employee.fromJson(Map<String, dynamic>.from(m))).whereType<Employee>().toList(),
         error: null,
       );
     } on DioException catch (e) {

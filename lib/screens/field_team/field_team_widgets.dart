@@ -24,11 +24,38 @@ AppTone fieldStatusTone(String status) => switch (status) {
       'on_way' || 'working' => AppTone.info,
       'done' => AppTone.success,
       'failed' => AppTone.danger,
+      'paused' => AppTone.warning,
       _ => AppTone.neutral,
     };
 
 /// «منذ…» بالعربيّة من لحظة الخادم.
 String fieldAgo(DateTime? at) => timeAgoAr(at);
+
+/// وقتٌ قادم (موعد التأجيل — ٢٦ نوفمبر) بتوقيت بغداد: «اليوم 18:00» · «غداً 09:00» · «2026/11/28 · 09:00».
+String fieldAtText(DateTime? at, {DateTime? now}) {
+  if (at == null) return '';
+  const off = Duration(hours: 3);
+  final b = at.toUtc().add(off);
+  final n = (now ?? DateTime.now()).toUtc().add(off);
+  final day = DateTime.utc(b.year, b.month, b.day);
+  final today = DateTime.utc(n.year, n.month, n.day);
+  final d = day.difference(today).inDays;
+  String two(int x) => x.toString().padLeft(2, '0');
+  final clock = '${two(b.hour)}:${two(b.minute)}';
+  if (d == 0) return 'اليوم $clock';
+  if (d == 1) return 'غداً $clock';
+  if (d == -1) return 'أمس $clock';
+  return '${b.year}/${two(b.month)}/${two(b.day)} · $clock';
+}
+
+/// زرٌّ مقفلٌ بمكانه (صلاحيّتا الموظّف — ٢٦ نوفمبر): يُرى بقفله، والنقر يقول السبب.
+const kFieldNeedReopen = 'إعادة الفتح وتغيير المُسندة والإلغاء تحتاج صلاحيّةً من مديرك';
+const kFieldNeedAdmin = 'إدارة الفريق والأنواع لمدير الصفحة وحده';
+void fieldLockedTap(BuildContext context, String reason) {
+  ScaffoldMessenger.maybeOf(context)
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(reason), behavior: SnackBarBehavior.floating));
+}
 
 /// أوّل حرفين من الاسم (أحمد علي ⇒ أع).
 String fieldInitials(String name) {

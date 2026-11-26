@@ -19,8 +19,9 @@ import '../services/employee_visibility.dart';
 /// ([CompanyRoute.explicit]) — «كل الشركات» لا تمرّرها، فالقسم لكلّ صفحةٍ وحدها كالموقع.
 const kFieldTeamAppUrl = 'https://pro.mysvcs.net/team/';
 
-/// حالات المهمّة كما يرسلها الخادم (core.STATUSES).
-const kFieldStatuses = ['new', 'assigned', 'on_way', 'working', 'done', 'failed', 'cancelled'];
+/// حالات المهمّة كما يرسلها الخادم (core.STATUSES). paused (٢٦ نوفمبر): علّقها الفنّي (أو أجّلها لموعد — [FieldTask.holdUntil])،
+/// والمدير يستأنفها لنفسه أو لغيره.
+const kFieldStatuses = ['new', 'assigned', 'on_way', 'working', 'done', 'failed', 'cancelled', 'paused'];
 
 /// أسماء الحالات (core.STATUS_LABELS) — للحالة التي لا يرسل الخادم اسمها (لا يحدث عادةً).
 const kFieldStatusLabels = <String, String>{
@@ -31,6 +32,7 @@ const kFieldStatusLabels = <String, String>{
   'done': 'منجزة',
   'failed': 'تعذّرت',
   'cancelled': 'ملغاة',
+  'paused': 'معلّقة',
 };
 
 /// أنواع العمل (core.ROLES) بترتيب الموقع.
@@ -60,13 +62,15 @@ int? fieldStepAt(String status) => switch (status) {
       _ => null,
     };
 
-/// شرائح القائمة (الموقع: FILTERS) — والخادم يفهمها بأسمائها.
+/// شرائح القائمة (الموقع: FILTERS — ٢٦ نوفمبر «فلتر المهمام وكل»: «الكلّ» أوّلاً، والمعلّقة والمنجزة والملغاة) — والخادم يفهمها بأسمائها.
 enum FieldTaskFilter {
+  all('all', 'الكلّ'),
   waiting('new', 'بانتظار الإسناد'),
   active('active', 'الجارية'),
+  paused('paused', 'المعلّقة'),
   failed('failed', 'تعذّرت'),
-  closed('closed', 'المنتهية'),
-  all('all', 'الكلّ');
+  done('done', 'المنجزة'),
+  cancelled('cancelled', 'الملغاة');
 
   const FieldTaskFilter(this.wire, this.label);
   final String wire;
@@ -109,28 +113,44 @@ class FieldSummary {
   const FieldSummary({
     required this.available,
     required this.canManage,
+    this.canReopen = true,
+    this.canAdmin = true,
     this.waiting = 0,
     this.active = 0,
     this.failed = 0,
+    this.paused = 0,
     this.doneToday = 0,
     this.staffCount = 0,
   });
 
   factory FieldSummary.fromJson(Map<String, dynamic> j) {
     final c = _map(j['counts']);
+    final manage = _bool(j['can_manage']);
     return FieldSummary(
       available: _bool(j['available']),
-      canManage: _bool(j['can_manage']),
+      canManage: manage,
+      // خادمٌ أقدم بلا الحقلين: المدير وحده يدير القسم ⇒ كلّه له
+      canReopen: j.containsKey('can_reopen') ? _bool(j['can_reopen']) : manage,
+      canAdmin: j.containsKey('can_admin') ? _bool(j['can_admin']) : manage,
       waiting: _int(c['new']) ?? 0,
       active: _int(c['active']) ?? 0,
       failed: _int(c['failed']) ?? 0,
+      paused: _int(c['paused']) ?? 0,
       doneToday: _int(c['done_today']) ?? 0,
       staffCount: _int(j['staff_count']) ?? 0,
     );
   }
 
   final bool available;
+
+  /// القسم مفتوحٌ له: المدير، أو موظّفٌ بصلاحيّة «الصيانة والمبيعات» (field.view — ٢٦ نوفمبر).
   final bool canManage;
+
+  /// إعادة الفتح والاستئناف وتغيير المُسندة والإلغاء (المدير، أو موظّفٌ بـfield.reopen).
+  final bool canReopen;
+
+  /// إدارة الفريق (الحسابات وكلمات المرور) والأنواع — مدير الصفحة وحده.
+  final bool canAdmin;
 
   /// «بانتظار الإسناد».
   final int waiting;
@@ -138,12 +158,14 @@ class FieldSummary {
   /// عند الفريق: مُسندة + في الطريق + قيد العمل.
   final int active;
   final int failed;
+  final int paused;
   final int doneToday;
   final int staffCount;
 
   int countOf(FieldTaskFilter f) => switch (f) {
         FieldTaskFilter.waiting => waiting,
         FieldTaskFilter.active => active,
+        FieldTaskFilter.paused => paused,
         FieldTaskFilter.failed => failed,
         _ => 0,
       };
@@ -164,6 +186,8 @@ class FieldStaff {
     this.lastLoginAt,
     this.lastSeenAt,
     this.activeTasks = 0,
+    this.pausedTasks = 0,
+    this.doneToday = 0,
   });
 
   static FieldStaff? fromJson(Map<String, dynamic> j) {
@@ -184,6 +208,8 @@ class FieldStaff {
       lastLoginAt: _time(j['last_login_at']),
       lastSeenAt: _time(j['last_seen_at']),
       activeTasks: _int(j['active_tasks']) ?? 0,
+      pausedTasks: _int(j['paused_tasks']) ?? 0,
+      doneToday: _int(j['done_today']) ?? 0,
     );
   }
 
@@ -202,6 +228,12 @@ class FieldStaff {
   final DateTime? lastLoginAt;
   final DateTime? lastSeenAt;
   final int activeTasks;
+
+  /// المعلّقة عنده (بانتظار قرار المدير) — ٢٦ نوفمبر.
+  final int pausedTasks;
+
+  /// أنجزها اليوم (بتوقيت بغداد).
+  final int doneToday;
 
   bool get isOwn => kind == 'own';
 
@@ -260,10 +292,22 @@ class FieldType {
 }
 
 class FieldSubscriber {
-  const FieldSubscriber({this.name, this.username, this.phone});
+  const FieldSubscriber({this.name, this.username, this.phone, this.phone2, this.idx});
   final String? name;
   final String? username;
   final String? phone;
+
+  /// الرقم الثاني (٢٦ نوفمبر — «أرقام تواصل إضافيّة» أو ما كُتب).
+  final String? phone2;
+
+  /// رقم المشترك عند شركته — لقراءة كلمة مروره وإرسالها للفنّي.
+  final String? idx;
+
+  /// الرقم الأوّل، وبلاه الثاني.
+  String? get mainPhone => (phone ?? '').isNotEmpty ? phone : phone2;
+
+  /// الثاني حين يوجد الأوّل.
+  String? get otherPhone => (phone ?? '').isNotEmpty && (phone2 ?? '').isNotEmpty ? phone2 : null;
 
   /// الاسم، وإلّا اسم الدخول — و«ما يراه الموظّف»: اليوزر مخفيّ ⇒ «بلا اسم».
   String? get title => !Sees.usernames && (username ?? '').isNotEmpty ? Sees.nameOf(name, username!) : (name ?? username);
@@ -291,6 +335,9 @@ class FieldTask {
     this.createdAt,
     this.assignedAt,
     this.updatedAt,
+    this.holdUntil,
+    this.holdReason,
+    this.credentialsSent = false,
   });
 
   static FieldTask? fromJson(Map<String, dynamic> j) {
@@ -299,7 +346,13 @@ class FieldTask {
     final raw = _str(j['status']) ?? 'new';
     final status = kFieldStatuses.contains(raw) ? raw : 'new';
     final sub = _map(j['subscriber']);
-    final subscriber = FieldSubscriber(name: _str(sub['name']), username: _str(sub['username']), phone: _str(sub['phone']));
+    final subscriber = FieldSubscriber(
+      name: _str(sub['name']),
+      username: _str(sub['username']),
+      phone: _str(sub['phone']),
+      phone2: _str(sub['phone2']),
+      idx: _str(sub['idx']),
+    );
     final acts = j['actions'];
     return FieldTask(
       id: id,
@@ -311,7 +364,9 @@ class FieldTask {
       typeName: _str(j['type_name']),
       source: _str(j['source']) == 'ticket' ? 'ticket' : 'manual',
       ticketId: _int(j['ticket_id']),
-      subscriber: subscriber.name == null && subscriber.username == null && subscriber.phone == null ? null : subscriber,
+      subscriber: subscriber.name == null && subscriber.username == null && subscriber.phone == null && subscriber.phone2 == null
+          ? null
+          : subscriber,
       address: _str(j['address']),
       location: _loc(j['location']),
       assignedStaffId: _int(j['assigned_staff_id']),
@@ -321,6 +376,9 @@ class FieldTask {
       createdAt: _time(j['created_at']),
       assignedAt: _time(j['assigned_at']),
       updatedAt: _time(j['updated_at']),
+      holdUntil: _time(j['hold_until']),
+      holdReason: _str(j['hold_reason']),
+      credentialsSent: _bool(j['credentials_sent']),
       actions: acts is List
           ? {
               for (final a in acts)
@@ -352,10 +410,21 @@ class FieldTask {
   final DateTime? assignedAt;
   final DateTime? updatedAt;
 
+  /// موعد التأجيل (المعلّقة بموعد = «مؤجّلة») وسبب التعليق كما كتبه الفنّي.
+  final DateTime? holdUntil;
+  final String? holdReason;
+
+  /// أُرسل يوزر المشترك وكلمة مروره للفنّي (المدير لا يرى كلمة المرور هنا).
+  final bool credentialsSent;
+
   /// ما يُتاح للمدير الآن (core.managerActions): assign · cancel · reopen.
   final Set<String> actions;
 
   bool get fromTicket => source == 'ticket';
+  bool get isPaused => status == 'paused';
+
+  /// حالٌ تُرسل فيها بيانات الدخول (الخادم core.CRED_STATUSES).
+  bool get credentialsOpen => const {'new', 'assigned', 'on_way', 'working', 'paused'}.contains(status);
 }
 
 class FieldEvent {
@@ -370,6 +439,7 @@ class FieldEvent {
     this.hasImage = false,
     this.location,
     this.createdAt,
+    this.holdUntil,
   });
 
   static FieldEvent? fromJson(Map<String, dynamic> j) {
@@ -386,10 +456,14 @@ class FieldEvent {
       hasImage: _bool(j['has_image']),
       location: _loc(j['location']),
       createdAt: _time(j['created_at']),
+      holdUntil: _time(j['hold_until']),
     );
   }
 
   final int id;
+
+  /// موعد التأجيل في سطر «معلّقة/مؤجّلة».
+  final DateTime? holdUntil;
 
   /// manager · employee · staff · system.
   final String side;
@@ -430,6 +504,120 @@ class FieldTicketTask {
   final String? typeName;
 }
 
+// ─────────── حركات الشخص والفريق (٢٦ نوفمبر — «عرض حركات كل موظف ونوعها وعددها») ───────────
+
+/// فترة الحركات: اليوم (بتوقيت بغداد) · ٧ أيّام · ٣٠ يوماً · الكلّ.
+enum FieldPeriod {
+  today('today', 'اليوم'),
+  week('7d', '٧ أيّام'),
+  month('30d', '٣٠ يوماً'),
+  all('all', 'الكلّ');
+
+  const FieldPeriod(this.wire, this.label);
+  final String wire;
+  final String label;
+}
+
+/// أنواع الحركة بترتيب العرض (الخادم core.MOVES).
+const kFieldMoves = ['done', 'failed', 'paused', 'working', 'on_way', 'assigned', 'note', 'unassigned'];
+const kFieldMoveLabels = <String, String>{
+  'assigned': 'استلم',
+  'on_way': 'في الطريق',
+  'working': 'بدأ العمل',
+  'done': 'أنجز',
+  'failed': 'تعذّر',
+  'paused': 'علّق',
+  'note': 'ملاحظة',
+  'unassigned': 'سُحبت منه',
+};
+
+Map<String, int> _counts(Object? v) {
+  final m = _map(v);
+  return {for (final k in kFieldMoves) k: _int(m[k]) ?? 0};
+}
+
+class FieldMove {
+  const FieldMove({
+    required this.id,
+    required this.taskId,
+    required this.taskTitle,
+    required this.move,
+    required this.moveLabel,
+    this.subscriberName,
+    this.typeName,
+    this.by,
+    this.note,
+    this.holdUntil,
+    this.createdAt,
+  });
+
+  static FieldMove? fromJson(Map<String, dynamic> j) {
+    final id = _int(j['id']);
+    final move = _str(j['move']);
+    if (id == null || move == null) return null;
+    return FieldMove(
+      id: id,
+      taskId: _int(j['task_id']) ?? 0,
+      taskTitle: _str(j['task_title']) ?? '',
+      move: move,
+      moveLabel: _str(j['move_label']) ?? kFieldMoveLabels[move] ?? move,
+      subscriberName: _str(j['subscriber_name']),
+      typeName: _str(j['type_name']),
+      by: _str(j['by']),
+      note: _str(j['note']),
+      holdUntil: _time(j['hold_until']),
+      createdAt: _time(j['created_at']),
+    );
+  }
+
+  final int id;
+  final int taskId;
+  final String taskTitle;
+  final String move;
+  final String moveLabel;
+  final String? subscriberName;
+  final String? typeName;
+  final String? by;
+  final String? note;
+  final DateTime? holdUntil;
+  final DateTime? createdAt;
+}
+
+class FieldStaffActivity {
+  const FieldStaffActivity({
+    required this.counts,
+    required this.total,
+    required this.byType,
+    required this.items,
+    required this.hasMore,
+    required this.nextOffset,
+  });
+
+  /// [counts]/[total]/[byType] مع الصفحة الأولى وحدها (null بعدها).
+  final Map<String, int>? counts;
+  final int? total;
+  final List<({String name, int total, Map<String, int> counts})>? byType;
+  final List<FieldMove> items;
+  final bool hasMore;
+  final int nextOffset;
+}
+
+class FieldTeamMoves {
+  const FieldTeamMoves(
+      {required this.staffId,
+      required this.fullName,
+      required this.isActive,
+      required this.deleted,
+      required this.counts,
+      required this.total});
+  final int staffId;
+  final String fullName;
+  final bool isActive;
+  final bool deleted;
+  final Map<String, int> counts;
+  final int total;
+}
+
 class FieldTasksPage {
   const FieldTasksPage({required this.items, required this.hasMore, required this.nextOffset});
   final List<FieldTask> items;
@@ -439,6 +627,16 @@ class FieldTasksPage {
 
 /// النتيجة بلا استثناء للواجهة: `ok` أو رسالة الخادم العربيّة كما هي (`message`).
 typedef FieldResult = ({bool ok, String? error});
+
+/// مشتركٌ من البحث في مشتركيه — ومعه رقمه وموقعه المحفوظ (٢٦ نوفمبر).
+typedef FieldSearchHit = ({
+  String username,
+  String name,
+  String? phone,
+  String? package,
+  String? idx,
+  ({double lat, double lng})? location
+});
 
 class FieldTeamApi {
   FieldTeamApi._();
@@ -651,6 +849,8 @@ class FieldTeamApi {
     required FieldTaskFilter filter,
     String query = '',
     int offset = 0,
+    int? staffId,
+    int? typeId,
   }) async {
     try {
       final r = await ApiClient.dio.get<Object?>(
@@ -660,6 +860,8 @@ class FieldTeamApi {
           'offset': offset,
           'limit': pageSize,
           if (query.trim().isNotEmpty) 'q': query.trim(),
+          if (staffId != null) 'staff_id': staffId,
+          if (typeId != null) 'type_id': typeId,
         },
         options: _opts(),
       );
@@ -702,6 +904,7 @@ class FieldTeamApi {
   }
 
   /// مهمّةٌ جديدة. [subscriber] من مشتركيه أو «تفاصيل أخرى» (null = بلا مشترك). [staffId] null ⇒ بانتظار الإسناد.
+  /// ٢٦ نوفمبر: [location] موقعه المحفوظ من صفّه، و[password] كلمة مروره للفنّي (اختيار المدير)، والرقم الثاني يُكمّله الخادم إن غاب.
   static Future<({FieldTask? task, String? error})> createTask({
     String? title,
     int? typeId,
@@ -709,6 +912,8 @@ class FieldTeamApi {
     FieldSubscriber? subscriber,
     String? address,
     String? details,
+    ({double lat, double lng})? location,
+    String? password,
   }) async {
     final sub = subscriber == null
         ? null
@@ -716,6 +921,9 @@ class FieldTeamApi {
             if ((subscriber.name ?? '').isNotEmpty) 'name': subscriber.name,
             if ((subscriber.username ?? '').isNotEmpty) 'username': subscriber.username,
             if ((subscriber.phone ?? '').isNotEmpty) 'phone': subscriber.phone,
+            if ((subscriber.phone2 ?? '').isNotEmpty) 'phone2': subscriber.phone2,
+            if ((subscriber.idx ?? '').isNotEmpty) 'idx': subscriber.idx,
+            if ((password ?? '').isNotEmpty) 'password': password,
           };
     final body = <String, Object?>{
       if ((title ?? '').trim().isNotEmpty) 'title': title!.trim(),
@@ -724,6 +932,8 @@ class FieldTeamApi {
       if (sub != null && sub.isNotEmpty) 'subscriber': sub,
       if ((address ?? '').trim().isNotEmpty) 'address': address!.trim(),
       if ((details ?? '').trim().isNotEmpty) 'details': details!.trim(),
+      if (location != null) 'lat': location.lat,
+      if (location != null) 'lng': location.lng,
     };
     try {
       final r = await ApiClient.dio.post<Object?>('$base/tasks', data: body, options: _opts());
@@ -751,7 +961,104 @@ class FieldTeamApi {
   static Future<FieldResult> cancel(int id, {String? reason}) =>
       _post('$base/tasks/$id/cancel', {if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim()}, 'تعذّر الإلغاء');
 
-  static Future<FieldResult> reopen(int id) => _post('$base/tasks/$id/reopen', const {}, 'تعذّرت إعادة الفتح');
+  /// إعادة الفتح أو الاستئناف (٢٦ نوفمبر): [staffId] null ⇒ لنفس الفنّي إن بقي فعّالاً (وإلّا بانتظار الإسناد)، وإلّا لمن اختاره.
+  static Future<FieldResult> reopen(int id, {int? staffId}) =>
+      _post('$base/tasks/$id/reopen', {if (staffId != null) 'staff_id': staffId}, 'تعذّرت إعادة الفتح');
+
+  /// يوزر المشترك وكلمة مروره للفنّي (٢٦ نوفمبر) — تُختم بالخادم وتُمحى بانتهاء المهمّة.
+  static Future<FieldResult> sendCredentials(int id, String password, {String? username}) => _post(
+        '$base/tasks/$id/credentials',
+        {'password': password, if ((username ?? '').trim().isNotEmpty) 'username': username!.trim()},
+        'تعذّر إرسال بيانات الدخول',
+      );
+
+  static Future<FieldResult> dropCredentials(int id) async {
+    try {
+      final r = await ApiClient.dio.delete<Object?>('$base/tasks/$id/credentials', options: _opts());
+      if (!_ok(r)) return (ok: false, error: _msg(r.data, 'تعذّر السحب'));
+      return (ok: true, error: null);
+    } catch (e) {
+      _log('creds drop', e);
+      return (ok: false, error: _errOf(e, 'تعذّر السحب'));
+    }
+  }
+
+  /// كلمة مرور المشترك من شركته (`GET /api/v2/subscribers/:idx/password` — مسار «عرض كلمة المرور» نفسه بصلاحيّاته). null = تعذّرت.
+  static Future<String?> subscriberPassword(String idx) async {
+    if (!RegExp(r'^\d{1,20}$').hasMatch(idx)) return null;
+    try {
+      final r = await ApiClient.dio.get<Object?>('/api/v2/subscribers/$idx/password', options: _opts());
+      if ((r.statusCode ?? 0) >= 300) return null;
+      return _str(_map(_map(r.data)['data'])['password']);
+    } catch (e) {
+      _log('sub password', e);
+      return null;
+    }
+  }
+
+  /// حركات شخص ([FieldPeriod]) بصفحاتٍ من ٣٠ — العدّ مع الأولى.
+  static Future<({FieldStaffActivity? data, String? error})> staffActivity(int id, FieldPeriod period, {int offset = 0}) async {
+    try {
+      final r = await ApiClient.dio.get<Object?>(
+        '$base/staff/$id/activity',
+        queryParameters: {'period': period.wire, 'offset': offset, 'limit': pageSize},
+        options: _opts(),
+      );
+      if (!_ok(r)) return (data: null, error: _msg(r.data, 'تعذّر جلب الحركات'));
+      final b = _map(r.data);
+      final raw = b['items'];
+      final types = b['by_type'];
+      return (
+        data: FieldStaffActivity(
+          counts: b.containsKey('counts') ? _counts(b['counts']) : null,
+          total: _int(b['total']),
+          byType: types is List
+              ? [
+                  for (final t in types.whereType<Map>())
+                    (name: _str(t['type_name']) ?? 'بلا نوع', total: _int(t['total']) ?? 0, counts: _counts(t['counts'])),
+                ]
+              : null,
+          items:
+              raw is List ? [for (final m in raw.whereType<Map>()) FieldMove.fromJson(_map(m))].whereType<FieldMove>().toList() : const [],
+          hasMore: _bool(b['has_more']),
+          nextOffset: _int(b['next_offset']) ?? offset,
+        ),
+        error: null,
+      );
+    } catch (e) {
+      _log('staff activity', e);
+      return (data: null, error: _errOf(e, 'تعذّر جلب الحركات'));
+    }
+  }
+
+  /// حركات الفريق مجمّعةً لكلّ شخص (الأكثر أوّلاً، ومن حُذف وله حركاتٌ موسوماً).
+  static Future<({List<FieldTeamMoves>? items, String? error})> teamActivity(FieldPeriod period) async {
+    try {
+      final r = await ApiClient.dio.get<Object?>('$base/activity', queryParameters: {'period': period.wire}, options: _opts());
+      if (!_ok(r)) return (items: null, error: _msg(r.data, 'تعذّر جلب الحركات'));
+      final raw = _map(r.data)['items'];
+      return (
+        items: raw is List
+            ? [
+                for (final m in raw.whereType<Map>())
+                  if (_int(m['staff_id']) != null)
+                    FieldTeamMoves(
+                      staffId: _int(m['staff_id'])!,
+                      fullName: _str(m['full_name']) ?? '',
+                      isActive: _bool(m['is_active']),
+                      deleted: _bool(m['deleted']),
+                      counts: _counts(m['counts']),
+                      total: _int(m['total']) ?? 0,
+                    ),
+              ]
+            : <FieldTeamMoves>[],
+        error: null,
+      );
+    } catch (e) {
+      _log('team activity', e);
+      return (items: null, error: _errOf(e, 'تعذّر جلب الحركات'));
+    }
+  }
 
   static Future<FieldResult> note(int id, String note) => _post('$base/tasks/$id/note', {'note': note.trim()}, 'تعذّر إرسال الملاحظة');
 
@@ -782,8 +1089,7 @@ class FieldTeamApi {
   }
 
   /// بحث «من مشتركيك» (`GET /api/subscribers/search` — بحث «بيع جديد» نفسه، يعمل للحساب الكبير أيضاً): ٨ نتائج.
-  static Future<({List<({String username, String name, String? phone, String? package})>? items, String? error})> searchSubscribers(
-      String term) async {
+  static Future<({List<FieldSearchHit>? items, String? error})> searchSubscribers(String term) async {
     try {
       final r = await ApiClient.dio.get<Object?>(
         '/api/subscribers/search',
@@ -793,17 +1099,22 @@ class FieldTeamApi {
       final body = _map(r.data);
       final raw = body['data'];
       if ((r.statusCode ?? 0) >= 300 || raw is! List) return (items: null, error: _msg(r.data, 'تعذّر البحث في مشتركيك'));
-      final out = <({String username, String name, String? phone, String? package})>[];
+      final out = <FieldSearchHit>[];
       for (final m in raw.whereType<Map>()) {
         final j = _map(m);
         final user = _str(j['username']);
         if (user == null) continue;
         final name = [_str(j['firstname']), _str(j['lastname'])].whereType<String>().join(' ').trim();
+        final lat = _num(j['latitude']);
+        final lng = _num(j['longitude']);
         out.add((
           username: user,
           name: name.isEmpty ? user : name,
           phone: _str(j['phone']),
           package: _str(j['profile_name']) ?? _str(j['package_name']),
+          idx: _str(j['idx']),
+          // موقعه المحفوظ (حقل العنوان «gps:» — الخادم ٢٦ نوفمبر)؛ صفرٌ = لا موقع
+          location: lat != null && lng != null && (lat != 0 || lng != 0) ? (lat: lat, lng: lng) : null,
         ));
         if (out.length >= 8) break;
       }

@@ -13,7 +13,8 @@ import '../../theme/typography.dart';
 import 'field_team_widgets.dart';
 import '../../services/employee_visibility.dart';
 
-typedef _Picked = ({String name, String username, String? phone});
+// ٢٦ نوفمبر: ومعه رقمه (لكلمة مروره) وموقعه المحفوظ (يصل الفنّي زرّ الخريطة) — والرقم الثاني يُكمّله الخادم إن كان محفوظاً
+typedef _Picked = FieldSearchHit;
 
 /// «مهمّة جديدة» (الموقع NewTaskSheet): صيانة، تركيب، أو زيارة مشترك — تُسند لشخصٍ الآن أو لاحقاً. المشترك من مشتركيه افتراضاً
 /// (المالك ٢٣ نوفمبر: «اختيار المشترك يكدر الوكيل يختار من ضمن مشتركينه مو يكتبه كتابه، الافتراضي من مشتركينه او يعطي تفاصيل اخرى»)،
@@ -34,6 +35,10 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
   final _subName = TextEditingController();
   final _subUser = TextEditingController();
   final _subPhone = TextEditingController();
+  final _subPhone2 = TextEditingController();
+
+  /// يوزر المشترك المختار وكلمة مروره للفنّي (٢٦ نوفمبر — «امكان عند فتح التكت ارسال معلومات اليوزر والباسورد»).
+  bool _sendCreds = false;
 
   List<FieldType> _types = const [];
   List<FieldStaff> _staff = const [];
@@ -59,7 +64,7 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
   @override
   void dispose() {
     _debounce?.cancel();
-    for (final c in [_title, _address, _details, _term, _pickedPhone, _subName, _subUser, _subPhone]) {
+    for (final c in [_title, _address, _details, _term, _pickedPhone, _subName, _subUser, _subPhone, _subPhone2]) {
       c.dispose();
     }
     super.dispose();
@@ -97,10 +102,7 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
     setState(() {
       _searching = false;
       _searchError = r.items == null ? r.error : null;
-      _hits = [
-        for (final h in r.items ?? const <({String username, String name, String? phone, String? package})>[])
-          (name: h.name, username: h.username, phone: h.phone)
-      ];
+      _hits = r.items ?? const <FieldSearchHit>[];
     });
   }
 
@@ -109,13 +111,19 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
       final p = _picked;
       if (p == null) return null;
       final phone = (p.phone ?? '').trim().isNotEmpty ? p.phone!.trim() : _pickedPhone.text.trim();
-      return FieldSubscriber(name: p.name, username: p.username, phone: phone.isEmpty ? null : phone);
+      return FieldSubscriber(name: p.name, username: p.username, phone: phone.isEmpty ? null : phone, idx: p.idx);
     }
     final name = _subName.text.trim();
     final user = _subUser.text.trim();
     final phone = _subPhone.text.trim();
-    if (name.isEmpty && user.isEmpty && phone.isEmpty) return null;
-    return FieldSubscriber(name: name.isEmpty ? null : name, username: user.isEmpty ? null : user, phone: phone.isEmpty ? null : phone);
+    final phone2 = _subPhone2.text.trim();
+    if (name.isEmpty && user.isEmpty && phone.isEmpty && phone2.isEmpty) return null;
+    return FieldSubscriber(
+      name: name.isEmpty ? null : name,
+      username: user.isEmpty ? null : user,
+      phone: phone.isEmpty ? null : phone,
+      phone2: phone2.isEmpty ? null : phone2,
+    );
   }
 
   bool get _ready => !_busy && (_title.text.trim().isNotEmpty || _typeId != null);
@@ -124,6 +132,17 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
     if (!_ready) return;
     setState(() => _busy = true);
     final staffId = _staffId;
+    final picked = _subMode == 0 ? _picked : null;
+    String? password;
+    if (picked != null && _sendCreds && (picked.idx ?? '').isNotEmpty) {
+      password = await FieldTeamApi.subscriberPassword(picked.idx!);
+      if (!mounted) return;
+      if ((password ?? '').isEmpty) {
+        setState(() => _busy = false);
+        showSheetSnack(context, 'تعذّرت قراءة كلمة مرور المشترك — أطفئ «أرسل يوزره وكلمة مروره» أو أعد المحاولة', isError: true);
+        return;
+      }
+    }
     final r = await FieldTeamApi.createTask(
       title: _title.text,
       typeId: _typeId,
@@ -131,6 +150,8 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
       subscriber: _subscriber(),
       address: _address.text,
       details: _details.text,
+      location: picked?.location,
+      password: password,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -323,11 +344,45 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
               onPressed: () => setState(() {
                 _picked = null;
                 _pickedPhone.clear();
+                _sendCreds = false;
               }),
               child: Text('تغيير', style: AppType.label(color: AppColors.brand).copyWith(fontWeight: FontWeight.w700)),
             ),
           ]),
         ),
+        const SizedBox(height: Sp.sm),
+        Wrap(key: const ValueKey('field-new-picked-extras'), spacing: Sp.md, runSpacing: 4, children: [
+          if (p.location != null)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(LucideIcons.mapPin, size: 14, color: AppColors.success),
+              const SizedBox(width: 4),
+              Text('موقعه المحفوظ يصل الفنّي', style: AppType.micro(color: AppColors.success).copyWith(fontWeight: FontWeight.w700)),
+            ]),
+          Text('رقمه الثاني يُضاف إن كان محفوظاً', style: AppType.micro(color: AppColors.textMid)),
+        ]),
+        if ((p.idx ?? '').isNotEmpty) ...[
+          const SizedBox(height: Sp.sm),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(children: [
+              Icon(LucideIcons.keyRound, size: 18, color: AppColors.brand),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('أرسل يوزره وكلمة مروره للفنّي',
+                      style: AppType.label(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w700)),
+                  Text('يراها الفنّي في المهمّة وحدها، وتُمحى حين تُنجز', style: AppType.micro(color: AppColors.textMid)),
+                ]),
+              ),
+              Switch(key: const ValueKey('field-new-creds'), value: _sendCreds, onChanged: (v) => setState(() => _sendCreds = v)),
+            ]),
+          ),
+        ],
         if ((p.phone ?? '').isEmpty) ...[
           const SizedBox(height: Sp.md),
           SheetSection(
@@ -420,6 +475,19 @@ class _FieldNewTaskSheetState extends State<FieldNewTaskSheet> {
           child: FieldTextBox(
             key: const ValueKey('field-new-sub-phone'),
             controller: _subPhone,
+            icon: LucideIcons.phone,
+            hint: '07XX XXX XXXX',
+            ltr: true,
+            keyboardType: TextInputType.phone,
+            maxLength: 24,
+          ),
+        ),
+        const SizedBox(height: Sp.md),
+        SheetSection(
+          label: 'الرقم الثاني (اختياريّ)',
+          child: FieldTextBox(
+            key: const ValueKey('field-new-sub-phone2'),
+            controller: _subPhone2,
             icon: LucideIcons.phone,
             hint: '07XX XXX XXXX',
             ltr: true,
