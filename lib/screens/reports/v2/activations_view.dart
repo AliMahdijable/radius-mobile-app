@@ -127,6 +127,27 @@ class ActivationsView {
     return (activations: a, extends_: e, cashCount: cc, debtCount: dc, sasCount: sc, cash: cash, debt: debt, known: known);
   }
 
+  /// «نقداً» مقسوماً بطريقة الاستلام (٢٦ نوفمبر — الجدول المعتمد: «مجموع «نقدي» ينقسم «كاش» و«حوالة» لكل طريقة»): «كاش X • زين كاش Y
+  /// • ماستر Z • أخرى W» من pay_kind السطر نفسه (الخادم) — null حين لا حوالة بمبلغٍ بالسطور أو مالٌ مجهول (البطاقة كما كانت).
+  static String? cashSplit(List<ActivityRow> rows) {
+    const ways = ['cash', 'zaincash', 'master', 'other'];
+    final by = <String, num>{};
+    for (final r in rows) {
+      if (kindOf(r) != ActKind.cash) continue;
+      final c = moneyOf(r).cash;
+      if (c == null) return null;
+      final p = r.payKind;
+      final k = ways.contains(p) ? p! : 'cash';
+      by[k] = (by[k] ?? 0) + c;
+    }
+    if (!ways.skip(1).any((k) => (by[k] ?? 0) != 0)) return null;
+    String sm(num v) => '${v < 0 ? '-' : ''}${formatIQD(v)}';
+    return [
+      for (final k in ways)
+        if ((by[k] ?? 0) != 0) '${PayKinds.labels[k]} ${sm(by[k]!)}',
+    ].join(' • ');
+  }
+
   static List<RpKpi> kpis(List<ActivityRow> rows, List<ActivityRow>? prev) {
     final t = totals(rows);
     final p = prev == null ? null : totals(prev);
@@ -157,6 +178,8 @@ class ActivationsView {
             value: t.cash,
             icon: LucideIcons.wallet,
             tone: RpTone.money,
+            // «كاش X • زين كاش Y …» حين بالفترة حوالة (٢٦ نوفمبر)
+            hint: cashSplit(rows),
             delta: p == null || !p.known ? null : rpDelta(t.cash, p.cash)),
         RpKpi(
             id: ActKpiIds.debt,

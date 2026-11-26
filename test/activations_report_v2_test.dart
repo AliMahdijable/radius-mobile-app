@@ -197,6 +197,32 @@ void main() {
       expect(k[ActKpiIds.debt]!.upIsGood, isFalse);
     });
 
+    test('«نقداً» مقسوماً بطريقة الاستلام (٢٦ نوفمبر): كاش ثمّ كلّ حوالةٍ بمبلغها من pay_kind — وبلا حوالة كما كان', () {
+      final raw = _day(DateTime(2026, 11, 3));
+      final r0 = rows(raw);
+      expect(ActivationsView.cashSplit(r0), isNull, reason: 'لا حوالة ⇒ لا سطر');
+      expect({for (final x in ActivationsView.kpis(r0, null)) x.id: x}[ActKpiIds.cash]!.hint, isNull);
+      // نقديّان بزين كاش وماستر، والجزئيّ (20,000 مدفوعة) بـ«أخرى»؛ غير النقديّ بطريقة «بالدين» لا يدخل
+      final withVia = [
+        for (final (i, m) in raw.indexed)
+          {
+            ...m,
+            if (i == 0) 'pay_kind': 'zaincash',
+            if (i == 1) 'pay_kind': 'master',
+            if (i == 3) 'pay_kind': 'other',
+            if (i == 4) 'pay_kind': 'debt',
+          },
+      ];
+      final r = rows(withVia);
+      expect(ActivationsView.cashSplit(r), 'كاش 35,000 • زين كاش 35,000 • ماستر 35,000 • أخرى 20,000');
+      final cash = {for (final x in ActivationsView.kpis(r, null)) x.id: x}[ActKpiIds.cash]!;
+      expect([cash.value, cash.hint], [125000, 'كاش 35,000 • زين كاش 35,000 • ماستر 35,000 • أخرى 20,000'], reason: 'المجموع نفسه');
+      // كاشٌ صفر (فلتر «ماستر» مثلاً) ⇒ لا «كاش 0»: الطرق التي فيها مالٌ وحدها
+      expect(ActivationsView.cashSplit(r.where((x) => x.payKind == 'master').toList()), 'ماستر 35,000');
+      // مالٌ مجهول ⇒ لا قسمة
+      expect(ActivationsView.cashSplit(rows([for (final m in withVia) {...m, 'money_amount': null}])), isNull);
+    });
+
     test('مبلغٌ مجهول (خادمٌ قديم) ⇒ لا بطاقة مال ولا صفرٌ كاذب — الأعداد وحدها', () {
       final r = rows(_day(DateTime(2026, 11, 3), money: false));
       expect(ActivationsView.totals(r).known, isFalse);
