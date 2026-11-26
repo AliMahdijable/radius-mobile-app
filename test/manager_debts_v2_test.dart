@@ -36,8 +36,11 @@ Map<String, Object?> _bal(int id, String sub, int amount, String at) =>
 // ═══════════════════════════════ المنفردة ═══════════════════════════════
 
 class _Single implements HttpClientAdapter {
-  _Single(this.inner, {this.busy = 0, this.failCore = false});
+  _Single(this.inner, {this.busy = 0, this.failCore = false, this.viaMaster = false});
   final HttpClientAdapter inner;
+
+  /// «الحوالات» (٢٧ نوفمبر): شحن m1 النقديّ (101) بحوالة ماستر — paid_via من الخادم (9c1fb45).
+  final bool viaMaster;
 
   /// مديرون إضافيّون (m10…) بحركةٍ واحدة، وأوّلهم كثير الحركات — لاختبار السقوف.
   final int busy;
@@ -91,7 +94,7 @@ class _Single implements HttpClientAdapter {
       final limit = int.tryParse('${o.queryParameters['limit']}') ?? 100;
       final rows = switch (id) {
         1 => [
-            _bal(101, 'deposit_cash', 50000, '2026-11-22 09:00:00'),
+            {..._bal(101, 'deposit_cash', 50000, '2026-11-22 09:00:00'), if (viaMaster) 'paid_via': 'master'},
             _bal(102, 'deposit_loan', 30000, '2026-11-21 10:00:00'),
             _bal(103, 'sas_pay_debt', 10000, '2026-10-05 10:00:00'),
           ],
@@ -334,8 +337,8 @@ void main() {
     await settleAsync(t, 6);
   }
 
-  Future<_Single> single(WidgetTester t, {Map<String, Object>? prefs, int busy = 0, bool failCore = false}) async {
-    final srv = _Single(await visualSetUp(s1bSasOwner), busy: busy, failCore: failCore);
+  Future<_Single> single(WidgetTester t, {Map<String, Object>? prefs, int busy = 0, bool failCore = false, bool viaMaster = false}) async {
+    final srv = _Single(await visualSetUp(s1bSasOwner), busy: busy, failCore: failCore, viaMaster: viaMaster);
     ApiClient.dio.httpClientAdapter = srv;
     if (prefs != null) SharedPreferences.setMockInitialValues(prefs);
     ManagerDebtsV2Screen.clock = () => _now;
@@ -387,6 +390,39 @@ void main() {
       expect(r.details, contains('عدد الحركات: 3'));
       expect(r.details.any((d) => d.startsWith('إيرادات مستحصَلة: 60,000')), isTrue);
       expect(r.subtitle, startsWith('كل الفترات'));
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  testWidgets('«الحوالات» (٢٧ نوفمبر): «إيرادات مستحصَلة» مقسوماً «كاش • ماستر» تحت الرقم وفي رأس الملفّ، والطريقة على سطر الحركة', (t) async {
+    await single(t, viaMaster: true);
+    final got = <ReportExportRequest>[];
+    ReportExportActions.debugSink = (r) async => got.add(r);
+    try {
+      await open(t);
+      expect(hero(t), 65000, reason: 'المجموع نفسه');
+      // شحن ماستر 50,000؛ وتسديد الساس 10,000 وتسديد أخرى 5,000 بلا طريقة ⇒ كاش 15,000
+      expect(t.widget<RpHeroKpi>(find.byType(RpHeroKpi)).note, startsWith('منه كاش 15,000 د.ع • ماستر 50,000 د.ع — شحن نقدي + تسديد ديون'));
+      await unfold(t, RpRowsCard);
+      expect(find.textContaining('شحن نقدي · ماستر'), findsOneWidget);
+      expect(find.textContaining('تسديد دين SAS · '), findsNothing, reason: 'بلا طريقة ⇒ كما كان');
+      await tapExport(t, 'Excel');
+      final r = got.single;
+      expect(r.details, contains('إيرادات مستحصَلة: 65,000 د.ع (كاش 15,000 د.ع • ماستر 50,000 د.ع)'));
+      expect([for (final row in r.rows) ...row], contains('شحن نقدي · ماستر'));
+      expect(t.takeException(), isNull);
+    } finally {
+      await down(t);
+    }
+  });
+
+  testWidgets('بلا حوالةٍ ⇒ سطر «إيرادات مستحصَلة» كما كان حرفاً', (t) async {
+    await single(t);
+    try {
+      await open(t);
+      expect(t.widget<RpHeroKpi>(find.byType(RpHeroKpi)).note, 'شحن نقدي + تسديد ديون (SAS + أخرى) — تتبع كلّ الفلاتر');
       expect(t.takeException(), isNull);
     } finally {
       await down(t);

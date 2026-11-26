@@ -40,7 +40,22 @@ class ManagerMovement {
     required this.eventAt,
     this.debtId,
     this.relatedDebtId,
+    this.paidVia,
+    this.paidViaName,
   });
+
+  /// «الحوالات» (٢٧ نوفمبر — الخادم 9c1fb45: من سطر نشاط الحركة): طريقة استلام الحركة النقديّة — zaincash · master · other (+ اسمها)،
+  /// وnull للكاش أو ما لا تُعرف طريقته.
+  final String? paidVia;
+  final String? paidViaName;
+
+  /// «ماستر» · «زين كاش» · اسم «أخرى» — null للكاش.
+  String? get viaLabel => switch (paidVia) {
+        'zaincash' => 'زين كاش',
+        'master' => 'ماستر',
+        'other' => (paidViaName ?? '').trim().isEmpty ? 'أخرى' : paidViaName!.trim(),
+        _ => null,
+      };
 
   /// 'balance' | 'debt_created' | 'debt_payment'
   final String rowType;
@@ -89,6 +104,8 @@ class ManagerMovement {
       debtId: j['debt_id'] != null ? _toInt(j['debt_id']) : null,
       relatedDebtId:
           j['related_debt_id'] != null ? _toInt(j['related_debt_id']) : null,
+      paidVia: const ['zaincash', 'master', 'other'].contains(j['paid_via']) ? j['paid_via'] as String : null,
+      paidViaName: j['paid_via'] == 'other' && '${j['paid_via_name'] ?? ''}'.trim().isNotEmpty ? '${j['paid_via_name']}'.trim() : null,
     );
   }
 

@@ -402,7 +402,8 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
           e.managerName,
           e.manager.username,
           stampAr(e.date.toLocal()),
-          e.meta.label,
+          // «شحن نقدي · ماستر» (٢٧ نوفمبر): الملفّ كالسطر
+          ManagerDebtsView.labelOf(e),
           e.amount == 0 ? '' : '${e.amount.abs().round()}',
           e.meta.debit ? '-' : '+',
           switch (e.movement.source) {
@@ -432,7 +433,8 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       if (drill != null) 'الحركات: $drill',
       if (_q.trim().isNotEmpty) 'المدير: «${_q.trim()}»',
       if (pick == null && _rowSort != rpDateDesc) orderLine(_rowFields, _rowSort) ?? '',
-      'إيرادات مستحصَلة: ${ManagerDebtsView.money(ManagerDebtsView.incomingOf(events))}',
+      'إيرادات مستحصَلة: ${ManagerDebtsView.money(ManagerDebtsView.incomingOf(events))}'
+          '${(ManagerDebtsView.incomingSplit(events) ?? '').isEmpty ? '' : ' (${ManagerDebtsView.incomingSplit(events)})'}',
       'المتبقّي: SAS ${_hasSas ? ManagerDebtsView.money(_sas) : '—'} · أخرى ${ManagerDebtsView.money(_custom)} · الإجمالي ${ManagerDebtsView.money(_sas + _custom)}',
       if (_someNoSas) _hasSas ? 'SAS بلا ايرث لنك — $_noSasNote' : _noSasNote,
       'عدد الحركات: ${rows.length}',
@@ -584,7 +586,11 @@ class _ManagerDebtsV2State extends State<ManagerDebtsV2Screen> {
       kpi: hero,
       compareWith: '',
       spark: const [],
-      note: _hasSas ? 'شحن نقدي + تسديد ديون (SAS + أخرى) — تتبع كلّ الفلاتر' : 'شحن نقدي + تسديد ديون أخرى — تتبع كلّ الفلاتر',
+      // «كاش X • ماستر Y» أوّلاً حين فيها حوالة (٢٧ نوفمبر — الجدول المعتمد)
+      note: [
+        if (ManagerDebtsView.incomingSplit(events) case final split?) 'منه $split',
+        _hasSas ? 'شحن نقدي + تسديد ديون (SAS + أخرى) — تتبع كلّ الفلاتر' : 'شحن نقدي + تسديد ديون أخرى — تتبع كلّ الفلاتر',
+      ].join(' — '),
       notes: _warnings,
       onTap: () => _drillIncoming(hero, events),
     ));

@@ -147,6 +147,25 @@ class ManagerDebtsView {
 
   static double incomingOf(List<MgrEvent> events) => events.where((e) => e.incoming).fold<double>(0, (a, e) => a + e.amount);
 
+  /// «إيرادات مستحصَلة» مقسوماً بطريقة الاستلام (٢٧ نوفمبر — الجدول المعتمد: «ديون المدراء الفرعيين … نفس التقسيم بمجموع المسدَّد»):
+  /// «كاش X • ماستر Y» حين فيها حوالة (paid_via من الخادم)، الطرق التي فيها مالٌ وحدها؛ null غير ذلك (السطر كما كان).
+  static String? incomingSplit(List<MgrEvent> events) {
+    final by = <String, double>{};
+    for (final e in events) {
+      if (!e.incoming) continue;
+      final k = e.movement.viaLabel ?? 'كاش';
+      by[k] = (by[k] ?? 0) + e.amount;
+    }
+    if (!by.entries.any((x) => x.key != 'كاش' && x.value != 0)) return null;
+    const order = ['كاش', 'زين كاش', 'ماستر'];
+    int rank(String k) => order.contains(k) ? order.indexOf(k) : order.length;
+    final keys = by.keys.where((k) => by[k] != 0).toList()..sort((a, b) => rank(a) != rank(b) ? rank(a) - rank(b) : a.compareTo(b));
+    return keys.map((k) => '$k ${money(by[k]!)}').join(' • ');
+  }
+
+  /// نوع الحركة ومعه طريقة الحوالة: «شحن نقدي · ماستر» — السطر والملفّ المصدَّر.
+  static String labelOf(MgrEvent e) => e.movement.viaLabel == null ? e.meta.label : '${e.meta.label} · ${e.movement.viaLabel}';
+
   /// متبقّي SAS: دين المدراء المطابقين للبحث عند الساس الآن (النوع والفترة لا يمسّانه)، بلا من لم يُقرأ دينه.
   static double sasOf(List<Manager> managers, String query) {
     final q = query.trim().toLowerCase();
@@ -196,7 +215,7 @@ class ManagerDebtsView {
       tone: meta.tone,
       title: e.managerName,
       detail: [
-        meta.label,
+        labelOf(e),
         if (e.manager.fullName.isNotEmpty) e.manager.username,
         if ((e.movement.note ?? '').trim().isNotEmpty) e.movement.note!.trim(),
       ].join(' · '),
