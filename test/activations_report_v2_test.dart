@@ -417,6 +417,15 @@ void main() {
         await tapExport(t, 'PDF');
         expect(got.single.rows.length, 1);
         expect(got.single.details, contains('بحث: «11031»'));
+        expect(got.single.summary, isEmpty, reason: 'البحث يحصر السطور ⇒ لا بطاقات الشاشة في رأس الـPDF');
+        // تصميم الـPDF (٢٦ نوفمبر): بلا بحث ⇒ بطاقات الشاشة نفسها في رأسه، عناوينها وقيمها حرفاً
+        await t.enterText(find.descendant(of: rows, matching: find.byType(TextField)), '');
+        await t.pump(const Duration(milliseconds: 200));
+        got.clear();
+        await tapExport(t, 'PDF');
+        final onScreen = t.widget<RpKpiGrid>(find.byType(RpKpiGrid).first).kpis;
+        expect([for (final s in got.single.summary) s.label], [for (final k in onScreen) k.label]);
+        expect([for (final s in got.single.summary) s.value], [for (final k in onScreen) k.text]);
         expect(t.takeException(), isNull);
       } finally {
         await down(t);

@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
-// ignore: implementation_imports
-import 'package:pdf/src/pdf/font/bidi_utils.dart' as pdf_bidi;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
@@ -14,7 +12,10 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../core/widgets/print_feedback.dart';
+import '../../../services/pdf_kit.dart';
 import '../../../services/print_output.dart';
+
+export '../../../services/pdf_kit.dart' show PdfStat, PdfTone;
 
 /// ================================================================
 /// Report export — CSV/Excel + PDF/Print للتقارير.
@@ -135,6 +136,7 @@ class ReportExportRequest {
     required this.columns,
     required this.rows,
     this.columnWeights,
+    this.summary = const [],
   });
 
   /// `csv` · `pdf` (طباعة) · `share` (الملفّ PDF للمشاركة).
@@ -147,6 +149,9 @@ class ReportExportRequest {
   final List<String> columns;
   final List<List<String>> rows;
   final List<double>? columnWeights;
+
+  /// بطاقات ملخّص الشاشة في رأس الـPDF — أرقامها كما على الشاشة (فارغةٌ حين لا تصف الصفوف نفسها: بحثٌ أو حركات بطاقة).
+  final List<PdfStat> summary;
 }
 
 class ReportExportActions {
@@ -221,11 +226,13 @@ class ReportExportActions {
     required List<List<String>> rows,
     List<double>? columnWeights,
     String fileNameBase = 'report',
+    List<PdfStat> summary = const [],
   }) async {
     final sink = debugSink;
     if (sink != null) {
       return sink(ReportExportRequest(
-          how: 'pdf', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, columnWeights: columnWeights));
+          how: 'pdf', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, columnWeights: columnWeights,
+          summary: summary));
     }
     try {
       final doc = await ReportPdf.build(
@@ -235,6 +242,7 @@ class ReportExportActions {
         columns: columns,
         rows: rows,
         columnWeights: columnWeights,
+        summary: summary,
       );
       // A4 دائماً (أفقيّاً حين تكثر الأعمدة)، فلا يذهب لطابعة الكاشير المباشرة.
       final r = await PrintOutput.send(
@@ -261,11 +269,13 @@ class ReportExportActions {
     required List<List<String>> rows,
     List<double>? columnWeights,
     String fileNameBase = 'report',
+    List<PdfStat> summary = const [],
   }) async {
     final sink = debugSink;
     if (sink != null) {
       return sink(ReportExportRequest(
-          how: 'share', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, columnWeights: columnWeights));
+          how: 'share', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, columnWeights: columnWeights,
+          summary: summary));
     }
     try {
       final doc = await ReportPdf.build(
@@ -275,6 +285,7 @@ class ReportExportActions {
         columns: columns,
         rows: rows,
         columnWeights: columnWeights,
+        summary: summary,
       );
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/${fileNameBase}_${DateTime.now().millisecondsSinceEpoch}.pdf');
@@ -301,20 +312,23 @@ class ReportExportActions {
 /// RTL ⇒ حروفٌ منفصلة معكوسة. الآن: ترتيب الأعمدة كما كان، وكلّ خليّةٍ باتّجاه نصّها (العربيّ RTL، والتاريخ واليوزر والأرقام
 /// LTR كي لا يتبادل «2026-11-05 22:47» موضعيه)؛ «45000.0» ⇒ «45,000» بأعمدة المال؛ وA4 أفقيّ حين تكثر الأعمدة فلا يُقطع
 /// «admin@x» ولا «تسديد دين» حرفاً حرفاً.
+///
+/// ٢٦ نوفمبر (المالك: «تصميم كلش مخزي … حسّن التصميم اكثر ومعلومات اوضح»): التصميم من [PdfKit] — شريط العنوان والفترة،
+/// الفلاتر رقائق، ملخّص الشاشة بطاقاتٍ ([summary] — أرقام الشاشة نفسها، لا يُجمع هنا عمود: «المبلغ» في الماليّ يخلط الدين
+/// بتسديده)، رأس الجدول بلون الهويّة يتكرّر بكلّ صفحة، أسطرٌ متناوبة، السالب أحمر، وتذييلٌ «صفحة X من Y» ووقت الطباعة.
 class ReportPdf {
   ReportPdf._();
 
-  static final _arabic = RegExp(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]');
   static final _wholeDecimal = RegExp(r'^-?\d+\.0+$');
   static final _int = RegExp(r'^-?\d+$');
 
   /// كلماتٌ في رأس العمود تجعله عمود مال (فواصل الآلاف).
-  static const _moneyWords = ['مبلغ', 'كلفة', 'سعر', 'رصيد', 'دين', 'ديون', 'مدفوع', 'ربح', 'مجموع', 'إجمالي', 'صافي', 'مصروف', 'محصّل', 'المحصل', 'تحصيل'];
+  static const _moneyWords = ['مبلغ', 'كلفة', 'سعر', 'رصيد', 'دين', 'ديون', 'مدفوع', 'ربح', 'مجموع', 'إجمالي', 'صافي', 'مصروف', 'محصّل', 'المحصل', 'تحصيل', 'دائن'];
 
   /// الأعمدة من هذا العدد فصاعداً ⇒ A4 أفقيّ.
   static const wideFrom = 6;
 
-  static bool isArabic(String s) => _arabic.hasMatch(s);
+  static bool isArabic(String s) => PdfKit.isArabic(s);
 
   static bool moneyColumn(String header) => _moneyWords.any(header.contains);
 
@@ -334,68 +348,14 @@ class ReportPdf {
   /// اتّجاه نصّ الخليّة: العربيّ RTL (يُشكَّل ويُرتَّب)، وما سواه LTR.
   static pw.TextDirection directionOf(String s) => isArabic(s) ? pw.TextDirection.rtl : pw.TextDirection.ltr;
 
-  /// النصّ مشكَّلاً بترتيبه المرئيّ من اليسار — يُرسم LTR كما هو. مخبّأ: «تسديد دين» يتكرّر آلاف المرّات في التقرير الواحد.
-  static String visual(String logical) {
-    final hit = _visual[logical];
-    if (hit != null) return hit;
-    if (_visual.length > 20000) _visual.clear();
-    return _visual[logical] = pdf_bidi.logicalToVisual(logical).split(' ').reversed.join(' ');
-  }
-
-  static final _visual = <String, String>{};
+  /// النصّ مشكَّلاً بترتيبه المرئيّ — انظر [PdfKit.visual].
+  static String visual(String logical) => PdfKit.visual(logical);
 
   /// نصّ الخليّة: العربيّ عبر [rtl]، وما سواه نصٌّ LTR عاديّ.
-  static pw.Widget text(String s, pw.TextStyle style, {pw.TextAlign align = pw.TextAlign.right}) =>
-      isArabic(s) ? rtl(s, style, align: align) : pw.Text(s, style: style, textAlign: align, textDirection: pw.TextDirection.ltr);
+  static pw.Widget text(String s, pw.TextStyle style, {pw.TextAlign align = pw.TextAlign.right}) => PdfKit.text(s, style, align: align);
 
-  /// نصٌّ عربيّ بلا عيب المسافات في مكتبة pdf: اتّجاه RTL فيها يعكس موضع كلّ كلمةٍ بعرض حبرها لا بعرض تقدّمها، فتضيع
-  /// المسافة بعد «ر» و«د» وتتضاعف بعد «:» («عددالصفوف»، «غيرنقدي»، «موظف:  كرار»). هنا: الأسطر تُقسَّم بالكلمات المنطقيّة
-  /// على عرض الخليّة، وكلّ سطرٍ يُشكَّل ويُرتَّب مرّةً ([visual]) ثمّ يُرسم LTR — المسافة مسافةٌ حقيقيّة.
-  static pw.Widget rtl(String s, pw.TextStyle style, {pw.TextAlign align = pw.TextAlign.right}) {
-    final words = s.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    return pw.LayoutBuilder(builder: (ctx, c) {
-      final font = style.font!.getFont(ctx);
-      final size = style.fontSize!;
-      double width(String v) => v.isEmpty ? 0 : font.stringMetrics(v).advanceWidth * size;
-      final maxW = c == null || !c.maxWidth.isFinite ? double.infinity : c.maxWidth - 0.5;
-      final lines = <String>[];
-      final whole = visual(words.join(' '));
-      if (width(whole) <= maxW) {
-        lines.add(whole);
-      } else {
-        final space = width(' ');
-        var cur = <String>[];
-        var curW = 0.0;
-        for (final w in words) {
-          final ww = width(visual(w));
-          if (cur.isNotEmpty && curW + space + ww > maxW) {
-            lines.add(visual(cur.join(' ')));
-            cur = [w];
-            curW = ww;
-          } else {
-            curW += (cur.isEmpty ? 0 : space) + ww;
-            cur.add(w);
-          }
-        }
-        if (cur.isNotEmpty) lines.add(visual(cur.join(' ')));
-      }
-      return pw.Column(
-        mainAxisSize: pw.MainAxisSize.min,
-        crossAxisAlignment: align == pw.TextAlign.center
-            ? pw.CrossAxisAlignment.center
-            : (align == pw.TextAlign.left ? pw.CrossAxisAlignment.start : pw.CrossAxisAlignment.end),
-        children: [
-          for (final l in lines) pw.Text(l, style: style, textAlign: align, textDirection: pw.TextDirection.ltr),
-        ],
-      );
-    });
-  }
-
-  static String _now() {
-    final n = DateTime.now();
-    String p(int v) => v.toString().padLeft(2, '0');
-    return '${n.year}-${p(n.month)}-${p(n.day)} ${p(n.hour)}:${p(n.minute)}';
-  }
+  /// نصٌّ عربيّ بلا عيب المسافات في مكتبة pdf — انظر [PdfKit.rtl].
+  static pw.Widget rtl(String s, pw.TextStyle style, {pw.TextAlign align = pw.TextAlign.right}) => PdfKit.rtl(s, style, align: align);
 
   static Future<pw.Document> build({
     required String title,
@@ -404,82 +364,107 @@ class ReportPdf {
     required List<String> columns,
     required List<List<String>> rows,
     List<double>? columnWeights,
+    List<PdfStat> summary = const [],
+    DateTime? printedAt,
   }) async {
     // خطّ التطبيق المضمَّن — كان Cairo من خطوط Google عند كلّ طباعة: حاسبةٌ بلا إنترنت لحظتها لا تطبع التقرير أصلاً.
     final theme = await PdfFonts.theme();
-    final font = theme.defaultTextStyle.font!;
-    final fontBold = theme.defaultTextStyle.fontBold!;
+    final at = printedAt ?? DateTime.now();
+    final format = formatFor(columns.length);
+    final wide = format.width > format.height;
     final money = [for (final c in columns) moneyColumn(c)];
     final dense = columns.length >= 8;
-    final cellStyle = pw.TextStyle(font: font, fontSize: dense ? 9 : 10, lineSpacing: 1.5);
-    final headerStyle = pw.TextStyle(font: fontBold, fontSize: dense ? 9.5 : 10.5, color: PdfColors.white);
-    final doc = pw.Document();
+    final size = dense ? 8.6 : 9.6;
+    final cellStyle = PdfKit.st(size: size, lineSpacing: 1.4);
+    final negStyle = PdfKit.st(size: size, color: PdfKit.red, lineSpacing: 1.4);
+    final headerStyle = PdfKit.st(size: dense ? 8.8 : 9.8, color: PdfColors.white, bold: true);
+    const side = pw.BorderSide(color: PdfKit.rule, width: 0.6);
+    const inner = pw.BorderSide(color: PdfKit.rule, width: 0.45);
+
+    pw.Widget cell(List<String> row, int i) {
+      final v = cellText(i < row.length ? row[i] : '', money: money[i]);
+      final neg = money[i] && (v.startsWith('-') || v.startsWith('−'));
+      return pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+        alignment: pw.Alignment.centerRight,
+        child: v.isEmpty ? pw.SizedBox() : PdfKit.text(v, neg ? negStyle : cellStyle),
+      );
+    }
+
+    final doc = pw.Document(theme: theme);
     doc.addPage(
       pw.MultiPage(
-        pageFormat: formatFor(columns.length),
+        pageFormat: format,
         // الافتراضيّ ٢٠ صفحة ⇒ تقريرٌ بأكثر من ~٤٠٠ صفّ كان «فشل الطباعة» (TooManyPagesException) — التصدير حتى ٥٠٠٠ صفّ
         maxPages: 600,
         textDirection: pw.TextDirection.rtl,
-        theme: pw.ThemeData.withFont(base: font, bold: fontBold),
-        margin: const pw.EdgeInsets.all(24),
+        theme: theme,
+        margin: const pw.EdgeInsets.fromLTRB(22, 20, 22, 14),
+        header: (ctx) => ctx.pageNumber == 1 ? pw.SizedBox() : PdfKit.runningHeader(title, subtitle: subtitle),
+        footer: (ctx) => PdfKit.footer(ctx, printedAt: at),
         build: (ctx) => [
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              text(title, pw.TextStyle(fontSize: 17, font: fontBold)),
-              pw.Text(_now(),
-                  textDirection: pw.TextDirection.ltr,
-                  style: const pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
-            ],
-          ),
-          if (subtitle != null && subtitle.isNotEmpty) ...[
-            pw.SizedBox(height: 4),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: text(subtitle, pw.TextStyle(font: font, fontSize: 11, color: PdfColors.grey700)),
-            ),
+          PdfKit.band(title: title, subtitle: subtitle, side: [PdfKit.stamp(at), 'وقت الطباعة']),
+          // الفلاتر المختارة — الملفّ المطبوع يقول ما فيه وما نقص منه
+          if (details.any((d) => d.trim().isNotEmpty)) ...[
+            pw.SizedBox(height: 9),
+            PdfKit.chips(details),
           ],
-          // الفلاتر المختارة سطراً سطراً — الملفّ المطبوع يقول ما فيه
-          for (final d in details) ...[
-            pw.SizedBox(height: 2),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: text(d, pw.TextStyle(font: font, fontSize: 10.5, color: PdfColors.grey800)),
-            ),
+          if (summary.isNotEmpty) ...[
+            pw.SizedBox(height: 10),
+            PdfKit.statGrid(summary, perRow: summary.length < (wide ? 5 : 4) ? summary.length : (wide ? 5 : 4)),
           ],
           pw.SizedBox(height: 12),
-          // ترتيب الأعمدة كـExcel (مطلب 2026-07-12): العمود[0] على أقصى اليسار — والنصّ داخل كلّ خليّةٍ باتّجاهه هو.
-          pw.Directionality(
-            textDirection: pw.TextDirection.ltr,
-            child: pw.TableHelper.fromTextArray(
-              headers: [
-                for (final c in columns) text(c, headerStyle, align: pw.TextAlign.center),
-              ],
-              data: rows,
-              cellBuilder: (i, data, rowNum) {
-                final v = cellText('${data ?? ''}', money: i < money.length && money[i]);
-                return text(v, cellStyle);
-              },
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.teal600),
-              oddRowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
-              cellAlignment: pw.Alignment.centerRight,
-              headerAlignment: pw.Alignment.center,
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-              headerPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.4),
-              columnWidths: {
-                for (int i = 0; i < columns.length; i++)
-                  i: pw.FlexColumnWidth(
-                    columnWeights != null && i < columnWeights.length ? columnWeights[i] : 1.0,
+          if (rows.isEmpty)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfKit.rule, width: 0.6)),
+              child: pw.Center(child: PdfKit.rtl('لا بيانات بهذه الفلاتر', PdfKit.st(size: 11, color: PdfKit.muted))),
+            )
+          else
+            // ترتيب الأعمدة كـExcel (مطلب 2026-07-12): العمود[0] على أقصى اليسار — والنصّ داخل كلّ خليّةٍ باتّجاهه هو.
+            pw.Directionality(
+              textDirection: pw.TextDirection.ltr,
+              child: pw.Table(
+                border: const pw.TableBorder(
+                  left: side,
+                  right: side,
+                  top: side,
+                  bottom: side,
+                  horizontalInside: inner,
+                  verticalInside: inner,
+                ),
+                defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+                columnWidths: {
+                  for (int i = 0; i < columns.length; i++)
+                    i: pw.FlexColumnWidth(columnWeights != null && i < columnWeights.length ? columnWeights[i] : 1.0),
+                },
+                children: [
+                  // رأس الجدول يتكرّر أعلى كلّ صفحة
+                  pw.TableRow(
+                    repeat: true,
+                    decoration: const pw.BoxDecoration(color: PdfKit.brand),
+                    children: [
+                      for (final c in columns)
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                          alignment: pw.Alignment.center,
+                          child: PdfKit.text(c, headerStyle, align: pw.TextAlign.center),
+                        ),
+                    ],
                   ),
-              },
+                  for (var r = 0; r < rows.length; r++)
+                    pw.TableRow(
+                      decoration: r.isOdd ? const pw.BoxDecoration(color: PdfKit.tintLight) : null,
+                      children: [for (var i = 0; i < columns.length; i++) cell(rows[r], i)],
+                    ),
+                ],
+              ),
             ),
-          ),
           pw.SizedBox(height: 6),
-          pw.Align(
-            alignment: pw.Alignment.centerLeft,
-            child: text('عدد الصفوف: ${rows.length}', pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700, font: font)),
-          ),
+          pw.Row(children: [
+            PdfKit.rtl('عدد الصفوف: ${rows.length}', PdfKit.st(size: 9, color: PdfKit.muted)),
+            pw.Spacer(),
+          ]),
         ],
       ),
     );

@@ -139,10 +139,41 @@ void main() {
       expect(r.details.any((d) => d.startsWith('النوع: ')), isTrue);
       expect(r.details, contains('بحث: «تسديد»'));
       expect(r.details, contains('عدد الحركات: 1'));
+      // تصميم الـPDF (٢٦ نوفمبر): البحث يحصر السطور ⇒ لا بطاقات الكشف في الرأس؛ بلا بحث ⇒ بطاقات الشاشة نفسها
+      got.clear();
+      await t.tap(find.text('PDF'));
+      for (var i = 0; i < 4; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(got.single.how, 'pdf');
+      expect(got.single.summary, isEmpty, reason: 'ملخّص الحساب كلّه لا يصف سطور البحث');
+      await t.scrollUntilVisible(find.descendant(of: rows, matching: find.byType(TextField)), -400,
+          scrollable: find.byType(Scrollable).first);
+      await t.enterText(find.descendant(of: rows, matching: find.byType(TextField)), '');
+      await t.pump(const Duration(milliseconds: 200));
+      got.clear();
+      await t.scrollUntilVisible(find.text('PDF'), 400, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.text('PDF'));
+      for (var i = 0; i < 4; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      final onScreen = t.widget<RpKpiGrid>(find.byType(RpKpiGrid).first).kpis;
+      final hero = t.widget<RpHeroKpi>(find.byType(RpHeroKpi).first).kpi;
+      expect([for (final s in got.single.summary) s.label], [hero.label, for (final k in onScreen) k.label]);
+      expect([for (final s in got.single.summary) s.value], [hero.text, for (final k in onScreen) k.text]);
       expect(t.takeException(), isNull);
     } finally {
       await down(t);
     }
+  });
+
+  test('ملخّص الكشف في الـPDF: لا بحث ولا «طريقة الدفع»', () {
+    expect(AccountStatementV2Screen.summaryFits(query: '', pays: const {}), isTrue);
+    expect(AccountStatementV2Screen.summaryFits(query: '  ', pays: const {}), isTrue);
+    expect(AccountStatementV2Screen.summaryFits(query: 'تسديد', pays: const {}), isFalse);
+    expect(AccountStatementV2Screen.summaryFits(query: '', pays: const {'cash'}), isFalse, reason: 'الكاش وحده ≠ مدفوع الحساب كلّه');
   });
 
   // «الترتيب بالنقر» (المالك ٢٣ نوفمبر): «رتّب حسب» فوق الحركات — المبلغ الأكبر أوّلاً قائمةً واحدة والتاريخ على كلّ سطر، الصفر

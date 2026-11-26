@@ -650,16 +650,20 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     final data = _exportRows(rows, v.co);
     final details = _exportDetails(count: data.length, drill: drill, withSearch: withSearch, complete: v.complete, sorted: main && _rowSort != rpDateDesc);
     final subtitle = '${_f!.range.name} · ${_f!.range.rangeText}';
+    // بطاقات الشاشة في رأس الـPDF — حين تصف هذه الصفوف نفسها (لا بحث يحصرها ولا حركات بطاقة)
+    final summary = pick == null && (!withSearch || _q.trim().isEmpty) ? rpPdfSummary(ActivationsView.kpis(v.rows, null)) : const <PdfStat>[];
     switch (how) {
       case 'pdf':
         return ReportExportActions.pdf(context,
-            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activations');
+            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activations',
+            summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
             title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, fileNameBase: 'activations');
       default:
         return ReportExportActions.sharePdf(context,
-            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activations');
+            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activations',
+            summary: summary);
     }
   }
 

@@ -48,6 +48,11 @@ class AccountStatementV2Screen extends StatefulWidget {
   @visibleForTesting
   static DateTime Function() clock = DateTime.now;
 
+  /// بطاقات الكشف في رأس الـPDF حين تصف السطور المصدَّرة نفسها: الملخّص حساب المشترك كلّه (من الخادم) ⇒ لا بحث ولا «طريقة الدفع»
+  /// تحصر الحركات، وإلّا قال الرأس رقماً غير ما في الجدول.
+  @visibleForTesting
+  static bool summaryFits({required String query, required Set<String> pays}) => query.trim().isEmpty && pays.isEmpty;
+
   @override
   State<AccountStatementV2Screen> createState() => _StatementV2State();
 }
@@ -270,6 +275,27 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
     return out;
   }
 
+  /// الرقم الكبير وبطاقات الكشف — نفسها على الشاشة وفي رأس الـPDF.
+  RpKpi _heroKpi(StatementResponse d) {
+    final b = d.summary.balance;
+    return RpKpi(
+      label: b < 0 ? 'reports.owes_manager'.tr() : 'reports.has_credit'.tr(),
+      value: b.abs(),
+      icon: b < 0 ? LucideIcons.trendingDown : LucideIcons.trendingUp,
+      tone: b < 0 ? RpTone.loss : RpTone.money,
+    );
+  }
+
+  List<RpKpi> _gridKpis(StatementResponse d) {
+    final s = d.summary;
+    return [
+      RpKpi(label: 'reports.paid'.tr(), value: s.totalPayments, icon: LucideIcons.banknote, tone: RpTone.money),
+      RpKpi(label: 'subscribers.debt_short'.tr(), value: s.totalDebt, icon: LucideIcons.creditCard, tone: RpTone.debt, upIsGood: false),
+      RpKpi(label: 'reports.activations_count'.tr(), value: s.totalActivations, icon: LucideIcons.zap, tone: RpTone.brand, isCount: true),
+      RpKpi(label: 'reports.movements_count'.tr(), value: s.totalTransactions, icon: LucideIcons.history, tone: RpTone.info, isCount: true),
+    ];
+  }
+
   // ═══════════════ التصدير ═══════════════
 
   Future<void> _export(String how) async {
@@ -316,16 +342,19 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
     final title = 'reports.account_statement'.tr();
     final subtitle = '${_f!.range.name} · ${_f!.range.rangeText}';
     const weights = [2.0, 1.3, 1.1, 1.4, 2.6, 1.1, 1.2, 1.6];
+    final summary = AccountStatementV2Screen.summaryFits(query: _q, pays: _paysSet) ? rpPdfSummary([_heroKpi(d), ..._gridKpis(d)]) : const <PdfStat>[];
     switch (how) {
       case 'pdf':
         return ReportExportActions.pdf(context,
-            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: weights, fileNameBase: 'statement');
+            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: weights, fileNameBase: 'statement',
+            summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
             title: title, subtitle: subtitle, details: details, columns: columns, rows: data, fileNameBase: 'statement');
       default:
         return ReportExportActions.sharePdf(context,
-            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: weights, fileNameBase: 'statement');
+            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: weights, fileNameBase: 'statement',
+            summary: summary);
     }
   }
 
@@ -403,25 +432,13 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       ));
       return _gapped(parts);
     }
-    final s = d.summary;
-    final b = s.balance;
     parts.add(RpHeroKpi(
-      kpi: RpKpi(
-        label: b < 0 ? 'reports.owes_manager'.tr() : 'reports.has_credit'.tr(),
-        value: b.abs(),
-        icon: b < 0 ? LucideIcons.trendingDown : LucideIcons.trendingUp,
-        tone: b < 0 ? RpTone.loss : RpTone.money,
-      ),
+      kpi: _heroKpi(d),
       compareWith: '',
       spark: const [],
       note: 'المدفوع بالفترة − الدين الحاليّ (كما كان الكشف يحسبه)',
     ));
-    parts.add(RpKpiGrid(compareWith: '', kpis: [
-      RpKpi(label: 'reports.paid'.tr(), value: s.totalPayments, icon: LucideIcons.banknote, tone: RpTone.money),
-      RpKpi(label: 'subscribers.debt_short'.tr(), value: s.totalDebt, icon: LucideIcons.creditCard, tone: RpTone.debt, upIsGood: false),
-      RpKpi(label: 'reports.activations_count'.tr(), value: s.totalActivations, icon: LucideIcons.zap, tone: RpTone.brand, isCount: true),
-      RpKpi(label: 'reports.movements_count'.tr(), value: s.totalTransactions, icon: LucideIcons.history, tone: RpTone.info, isCount: true),
-    ]));
+    parts.add(RpKpiGrid(compareWith: '', kpis: _gridKpis(d)));
     final rows = sortList(_search(d.rows), _rowSort, _rowFields, _rowValue);
     parts.add(RpRowsCard(
       query: _q,
