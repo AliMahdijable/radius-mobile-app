@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/employee_commissions_api.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
@@ -90,7 +91,8 @@ class ActivityLogView {
   static String actorOf(ActivityRow r) =>
       (r.actingEmployeeFullName ?? '').trim().isNotEmpty ? r.actingEmployeeFullName!.trim() : (r.adminUsername ?? '').trim();
 
-  static RpRow row(ActivityRow r, {RpCompany? company}) {
+  /// [commission]: «عمولة الموظف» لهذا السطر (٢٦ نوفمبر — [EmpCommissions.of]) تحت مبلغه — null ⇒ لا شيء.
+  static RpRow row(ActivityRow r, {RpCompany? company, num? commission}) {
     final t = at(r);
     final desc = (r.actionDescription ?? '').trim();
     final label = arabicActionLabel(r.actionType, desc);
@@ -124,11 +126,12 @@ class ActivityLogView {
       time: tm == null || _dateOnly(r.createdAt) ? '' : clock12Ar(tm),
       company: company,
       balanceAfter: r.balanceAfter,
+      cost: withEmpCommission(null, commission),
     );
   }
 
   /// الأيّام الأحدث أوّلاً — ومجموع اليوم: ما دخل نقداً (تفعيلٌ نقديّ، تسديد) — صرفيّات اليوم لا تُطرح هنا (سجلٌّ لا صندوق).
-  static List<RpDay> days(List<ActivityRow> rows, {RpCompany? Function(ActivityRow)? companyOf, int? limit}) {
+  static List<RpDay> days(List<ActivityRow> rows, {RpCompany? Function(ActivityRow)? companyOf, int? limit, num? Function(ActivityRow)? commissionOf}) {
     final byDay = <String, List<ActivityRow>>{};
     final order = <String>[];
     for (final r in rows) {
@@ -156,7 +159,7 @@ class ActivityLogView {
         date: k.isEmpty ? 'بلا تاريخ' : k,
         count: all.length,
         sum: all.fold<num>(0, (a, r) => a + cashOf(r)),
-        rows: [for (final r in shown) row(r, company: companyOf?.call(r))],
+        rows: [for (final r in shown) row(r, company: companyOf?.call(r), commission: commissionOf?.call(r))],
       ));
     }
     return out;

@@ -297,7 +297,8 @@ void main() {
       await settle(t, frames: 30);
       await t.scrollUntilVisible(key('salary-due-card'), 300, scrollable: find.byType(Scrollable).first);
       expect(key('salary-due-card'), findsOneWidget);
-      expect(find.text('«صرف» يسجّل الراتب صرفيّةً فيدخل الصندوق فوراً — اصرفها قبل التسوية ليطابق النقد ما بيدك.'), findsOneWidget);
+      // «بس يظهر سعر الكلي والحركه» (المالك ٢٦ نوفمبر): بلا سطر شرحٍ تحت الموظّفين
+      expect(find.byKey(const ValueKey('salary-due-note')), findsNothing);
 
       for (final none in [null, {'feature_enabled': true, 'count': 0, 'amount': 0, 'employees': <Object>[]}]) {
         server.salaryDue = none;
@@ -313,7 +314,7 @@ void main() {
   group('التقرير الماليّ', () {
     setUpAll(visualSetUpAll);
 
-    testWidgets('البطاقة تحت البطاقات بملاحظتها، ولا شيء لخادمٍ أقدم', (t) async {
+    testWidgets('البطاقة تحت البطاقات بلا سطر شرح، ولا شيء لخادمٍ أقدم', (t) async {
       for (final due in [dueJson(), null]) {
         final a = _DueOverVisual(await visualSetUp(s1bSasOwner), due);
         ApiClient.dio.httpClientAdapter = a;
@@ -325,7 +326,8 @@ void main() {
         expect(a.dueCalls, greaterThan(0));
         if (due != null) {
           await t.scrollUntilVisible(find.byKey(const ValueKey('salary-due-card')), 300, scrollable: find.byType(Scrollable).first);
-          expect(find.text('حتى اليوم، ولا تدخل الأرقام أعلاه — تُحسب صرفيّةً وفي صافي الربح يوم صرفها.'), findsOneWidget);
+          expect(find.byKey(const ValueKey('salary-due-card')), findsOneWidget);
+          expect(find.byKey(const ValueKey('salary-due-note')), findsNothing, reason: '«بس يظهر سعر الكلي والحركه»');
         } else {
           expect(find.byKey(const ValueKey('salary-due-card')), findsNothing);
         }

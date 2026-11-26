@@ -41,6 +41,8 @@ import 'cash_by_via_card.dart';
 import '../../../core/util/format.dart';
 import '../../../services/employee_visibility.dart';
 import '../../../api/employee_ledger_api.dart';
+import '../../../api/employee_commissions_api.dart';
+import '../../employees/employee_commissions_card.dart';
 import '../../employees/salary_due_card.dart';
 
 /// التقرير الماليّ على الشكل الموحّد (٢٢ نوفمبر — المالك: «اي التطبيق أوّلاً … وانطلق» بعد صور المقترح).
@@ -226,7 +228,22 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
 
   Future<void> _load() {
     unawaited(_loadDue());
+    unawaited(_loadComm());
     return _merged ? _loadMerged() : _loadSingle();
+  }
+
+  /// «عمولات الموظفين» (٢٦ نوفمبر — المالك: «شون رح يميز ٥ الالف رحت للموظف»): للعلم تحت البطاقات — للصفحة المفتوحة وحدها.
+  EmpCommissions? _comm;
+
+  Future<void> _loadComm() async {
+    final f = _f;
+    if (_merged || f == null) {
+      if (_comm != null) setState(() => _comm = null);
+      return;
+    }
+    final c = await EmployeeCommissionsApi.fetch(f.range.from, f.range.to);
+    if (!mounted || _merged || _f?.range.from != f.range.from || _f?.range.to != f.range.to) return;
+    setState(() => _comm = c);
   }
 
   /// «رواتب مستحقّة» (٢٦ نوفمبر): للعلم تحت البطاقات — للصفحة المفتوحة وحدها (لا «كل الشركات»؛ المسار لا يُوجَّه).
@@ -1329,10 +1346,11 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     if (!_merged && (_due?.any ?? false)) {
       parts.add(SalaryDueCard(
         due: _due!,
-        note: 'حتى اليوم، ولا تدخل الأرقام أعلاه — تُحسب صرفيّةً وفي صافي الربح يوم صرفها.',
         onPaid: _load,
       ));
     }
+    // «عمولات الموظفين» (٢٦ نوفمبر): عمليّاتهم الكاملة بالفترة × ربحهم، و«صافي الربح بعد العمولات» — بلا سطور شرح («بس يظهر سعر الكلي والحركه»)
+    if (!_merged && (_comm?.any ?? false)) parts.add(EmployeeCommissionsCard(c: _comm!, net: hero.value));
     // «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — الخادم يرسله حين توجد حوالةٌ بالفترة؛ «كل الشركات» بلا تقسيم
     if (!_merged && v.kpis.cashByVia != null) parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue));
     parts.add(RpCountsRow(items: FinanceView.counts(v.kpis)));

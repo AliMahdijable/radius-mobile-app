@@ -517,7 +517,6 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
           const SizedBox(height: Sp.lg),
           SalaryDueCard(
             due: _due!,
-            note: '«صرف» يسجّل الراتب صرفيّةً فيدخل الصندوق فوراً — اصرفها قبل التسوية ليطابق النقد ما بيدك.',
             onPaid: _load,
           ),
         ],

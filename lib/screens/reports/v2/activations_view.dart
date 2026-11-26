@@ -1,5 +1,6 @@
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/employee_commissions_api.dart';
 import '../../../api/reports_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
@@ -193,7 +194,8 @@ class ActivationsView {
   static String actorOf(ActivityRow r) =>
       (r.actingEmployeeFullName ?? '').trim().isNotEmpty ? r.actingEmployeeFullName!.trim() : (r.adminUsername ?? '').trim();
 
-  static RpRow row(ActivityRow r, {RpCompany? company}) {
+  /// [commission]: «عمولة الموظف» لهذا السطر (٢٦ نوفمبر — [EmpCommissions.of]) بعد «منها بالدين» إن وُجد — null ⇒ كما كان.
+  static RpRow row(ActivityRow r, {RpCompany? company, num? commission}) {
     final k = kindOf(r);
     final m = moneyOf(r);
     final t = timeOf(r);
@@ -226,13 +228,13 @@ class ActivationsView {
       amount: k == ActKind.extend || k == ActKind.sas ? null : amount,
       time: t == null || _dateOnly(r.createdAt) ? '' : clock12Ar(t),
       company: company,
-      cost: k == ActKind.cash && r.partialUnpaid > 0 ? 'منها بالدين ${formatIQD(r.partialUnpaid)}' : null,
+      cost: withEmpCommission(k == ActKind.cash && r.partialUnpaid > 0 ? 'منها بالدين ${formatIQD(r.partialUnpaid)}' : null, commission),
       balanceAfter: r.balanceAfter,
     );
   }
 
   /// الأيّام بتوقيت الجهاز الأحدث أوّلاً، ومجموع اليوم نقده.
-  static List<RpDay> days(List<ActivityRow> rows, {RpCompany? Function(ActivityRow)? companyOf, int? limit}) {
+  static List<RpDay> days(List<ActivityRow> rows, {RpCompany? Function(ActivityRow)? companyOf, int? limit, num? Function(ActivityRow)? commissionOf}) {
     final byDay = <String, List<ActivityRow>>{};
     final order = <String>[];
     for (final r in rows) {
@@ -252,7 +254,7 @@ class ActivationsView {
         date: k.isEmpty ? 'بلا تاريخ' : k,
         count: all.length,
         sum: all.fold<num>(0, (a, r) => a + (moneyOf(r).cash ?? 0)),
-        rows: [for (final r in shown) row(r, company: companyOf?.call(r))],
+        rows: [for (final r in shown) row(r, company: companyOf?.call(r), commission: commissionOf?.call(r))],
       ));
     }
     return out;

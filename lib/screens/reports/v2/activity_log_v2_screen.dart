@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/archive_info.dart';
 import '../../../api/company_route.dart';
+import '../../../api/employee_commissions_api.dart';
 import '../../../api/expenses_api.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../api/report_people_api.dart';
@@ -206,7 +207,27 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     _load();
   }
 
-  Future<void> _load() => _merged ? _loadMerged() : _loadSingle();
+  Future<void> _load() {
+    unawaited(_loadComm());
+    return _merged ? _loadMerged() : _loadSingle();
+  }
+
+  /// «عمولة الموظف» على سطور عمليّاته الكاملة (٢٦ نوفمبر — المالك: «شون رح يميز ٥ الالف رحت للموظف») — للصفحة المفتوحة وحدها (لا
+  /// «كل الشركات»؛ المسار لا يُوجَّه)، وبلا صلاحيّة الرواتب لا شيء (الخادم يردّ 403 ⇒ null).
+  EmpCommissions? _comm;
+
+  Future<void> _loadComm() async {
+    final f = _f;
+    if (_merged || f == null) {
+      if (_comm != null) setState(() => _comm = null);
+      return;
+    }
+    final c = await EmployeeCommissionsApi.fetch(f.range.from, f.range.to);
+    if (!mounted || _merged || _f?.range.from != f.range.from || _f?.range.to != f.range.to) return;
+    setState(() => _comm = c);
+  }
+
+  num? _commOf(ActivityRow r) => _merged ? null : _comm?.of(r.id);
 
   void _apply(RpFilterValue v) {
     final f = v.copyWith(compare: false);
@@ -668,7 +689,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
             rows: RpRowsCard(
               query: q,
               total: shown.length,
-              days: ActivityLogView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80),
+              days: ActivityLogView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80, commissionOf: _commOf),
               more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
               onSearch: (x) => setLocal(() => q = x),
               empty: s.isEmpty ? null : 'لا حركة تطابق «$s»',
@@ -861,8 +882,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       total: rows.length,
       // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
       days: _rowSort.key == 'date'
-          ? ActivityLogView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible)
-          : rpFlat(rows, _visible, (r) => ActivityLogView.row(r, company: _merged ? _coOf(r, v.co) : null), _dateOf),
+          ? ActivityLogView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible, commissionOf: _commOf)
+          : rpFlat(rows, _visible, (r) => ActivityLogView.row(r, company: _merged ? _coOf(r, v.co) : null, commission: _commOf(r)), _dateOf),
       sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
