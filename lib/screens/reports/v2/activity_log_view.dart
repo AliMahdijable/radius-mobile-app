@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/employee_commissions_api.dart';
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show TwRowStatus;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../core/util/server_time.dart';
@@ -92,7 +93,18 @@ class ActivityLogView {
       (r.actingEmployeeFullName ?? '').trim().isNotEmpty ? r.actingEmployeeFullName!.trim() : (r.adminUsername ?? '').trim();
 
   /// [commission]: «عمولة الموظف» لهذا السطر (٢٦ نوفمبر — [EmpCommissions.of]) تحت مبلغه — null ⇒ لا شيء.
-  static RpRow row(ActivityRow r, {RpCompany? company, num? commission}) {
+  /// سطرٌ دُفع حوالةً (زين كاش/ماستر/أخرى — pay_kind) — له حالٌ عند «لم تُسحب / سُحبت» (٢٦ نوفمبر).
+  static bool isTransfer(ActivityRow r) => const ['zaincash', 'master', 'other'].contains(r.payKind);
+
+  /// الوصف كما يُعرض ويُصدَّر، ومعه حال الحوالة حين تُعرف ([tw]، ٢٦ نوفمبر — الجدول المعتمد: «… وسطر الحوالة يكتب «لم تُسحب» لو
+  /// «سُحبت»»): «تسديد دين … — حوالة ماستر — لم تُسحب».
+  static String headOf(ActivityRow r, {TwRowStatus? tw, int? nowMs}) {
+    final desc = (r.actionDescription ?? '').trim();
+    final head = rpHideUser(r.editSummary ?? (desc.isNotEmpty ? desc : arabicActionLabel(r.actionType, desc)), r.userUsername ?? r.targetName);
+    return tw != null && isTransfer(r) ? '$head — ${tw.text(nowMs: nowMs)}' : head;
+  }
+
+  static RpRow row(ActivityRow r, {RpCompany? company, num? commission, TwRowStatus? tw}) {
     final t = at(r);
     final desc = (r.actionDescription ?? '').trim();
     final label = arabicActionLabel(r.actionType, desc);
@@ -108,7 +120,7 @@ class ActivityLogView {
     final tm = timeOf(r);
     // التعديل بما تغيّر «من … إلى …» (المالك ٢٢ نوفمبر) — لا «تعديل المشترك — phone»
     final title = rpSubjectTitle(fullName: r.userFullName, target: r.targetName, username: r.userUsername, fallback: label);
-    final head = rpHideUser(r.editSummary ?? (desc.isNotEmpty ? desc : label), r.userUsername ?? r.targetName);
+    final head = headOf(r, tw: tw);
     // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد الاسم ما لم يحمله الوصف أصلاً
     final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName, detail: head);
     final detail = [
@@ -131,7 +143,8 @@ class ActivityLogView {
   }
 
   /// الأيّام الأحدث أوّلاً — ومجموع اليوم: ما دخل نقداً (تفعيلٌ نقديّ، تسديد) — صرفيّات اليوم لا تُطرح هنا (سجلٌّ لا صندوق).
-  static List<RpDay> days(List<ActivityRow> rows, {RpCompany? Function(ActivityRow)? companyOf, int? limit, num? Function(ActivityRow)? commissionOf}) {
+  static List<RpDay> days(List<ActivityRow> rows,
+      {RpCompany? Function(ActivityRow)? companyOf, int? limit, num? Function(ActivityRow)? commissionOf, TwRowStatus? Function(ActivityRow)? twOf}) {
     final byDay = <String, List<ActivityRow>>{};
     final order = <String>[];
     for (final r in rows) {
@@ -159,7 +172,7 @@ class ActivityLogView {
         date: k.isEmpty ? 'بلا تاريخ' : k,
         count: all.length,
         sum: all.fold<num>(0, (a, r) => a + cashOf(r)),
-        rows: [for (final r in shown) row(r, company: companyOf?.call(r), commission: commissionOf?.call(r))],
+        rows: [for (final r in shown) row(r, company: companyOf?.call(r), commission: commissionOf?.call(r), tw: twOf?.call(r))],
       ));
     }
     return out;

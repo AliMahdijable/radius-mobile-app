@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/ar_date.dart';
+import '../core/util/format.dart';
 import '../core/util/server_time.dart';
 import 'api_client.dart';
 import 'company_route.dart';
@@ -201,6 +203,35 @@ abstract final class TransferPayApi {
         if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
       });
 
+  /// «لم تُسحب / سُحبت» لسطور حوالة (٢٦ نوفمبر — GET /api/v2/transfer-pots/rows، صلاحيّة «تسوية الحساب»): رقم السطر (activity_logs)
+  /// ⇒ حاله. null حين تعذّر (لا صلاحيّة، خادمٌ أقدم، انقطاع) ⇒ لا كلمة على السطور (لا «لم تُسحب» كاذبة). للصفحة المفتوحة وحدها.
+  static Future<Map<int, TwRowStatus>?> rowStatus(Iterable<int> ids) async {
+    final list = ids.where((x) => x > 0).toSet().toList()..sort();
+    if (list.isEmpty) return const {};
+    final out = <int, TwRowStatus>{};
+    try {
+      for (var i = 0; i < list.length; i += 200) {
+        final chunk = list.skip(i).take(200).join(',');
+        final r = await CompanyRoute.runOpen(
+            () => ApiClient.dio.get<Map<String, dynamic>>('/api/v2/transfer-pots/rows', queryParameters: {'ids': chunk}));
+        final b = r.data;
+        final d = b?['data'];
+        if (b == null || b['success'] != true || d is! Map) return null;
+        final rows = d['rows'];
+        if (rows is! Map) return null;
+        for (final e in rows.entries) {
+          final id = int.tryParse('${e.key}');
+          final st = TwRowStatus.fromJson(e.value);
+          if (id != null && st != null) out[id] = st;
+        }
+      }
+      return out;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[transfer-pay] rows: $e');
+      return null;
+    }
+  }
+
   static Future<TransferWriteResult> _write(String path, Map<String, Object?> body) async {
     try {
       final r = await CompanyRoute.runOpen(() => ApiClient.dio.post<Map<String, dynamic>>(path, data: body));
@@ -263,6 +294,33 @@ class CashByViaData {
 
   /// سطر التصدير: «منه: كاش X · زين كاش Y · …».
   String exportLine(num total, String Function(num) money) => 'منه: ${rows(total).map((r) => '${r.label} ${money(r.sum)}').join(' · ')}';
+}
+
+/// حال سطر حوالة (٢٦ نوفمبر — الجدول المعتمد: «… وسطر الحوالة يكتب «لم تُسحب» لو «سُحبت»»): ما لم يُسحب منه للصندوق، وما سُحب، ووقت
+/// آخر سحبٍ أكل منه — FIFO لكلّ طريقة (الأقدم أوّلاً) كـ«تقارير الأرصدة».
+class TwRowStatus {
+  const TwRowStatus({required this.pending, required this.withdrawn, this.atMs});
+
+  final num pending;
+  final num withdrawn;
+  final int? atMs;
+
+  static TwRowStatus? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final at = _num(raw['at_ms']).toInt();
+    return TwRowStatus(pending: _num(raw['pending']), withdrawn: _num(raw['withdrawn']), atMs: at > 0 ? at : null);
+  }
+
+  bool get isPending => pending > 0.5;
+
+  /// «لم تُسحب» · «لم يُسحب منها 30,000» · «سُحبت للصندوق 2026/11/24».
+  String text({int? nowMs}) {
+    if (isPending) return withdrawn > 0.5 ? 'لم يُسحب منها ${formatIQD(pending)}' : 'لم تُسحب';
+    final at = atMs;
+    if (at == null) return 'سُحبت للصندوق';
+    DateTime bag(int ms) => DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).add(const Duration(hours: 3));
+    return 'سُحبت للصندوق ${iqDateOf(bag(at), today: bag(nowMs ?? DateTime.now().millisecondsSinceEpoch))}';
+  }
 }
 
 /// مبلغ طريقةٍ واحدة (زين كاش / ماستر / «أخرى» باسمها) في [FinanceTwData].

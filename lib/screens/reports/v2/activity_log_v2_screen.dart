@@ -12,6 +12,7 @@ import '../../../api/expenses_api.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../api/report_people_api.dart';
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show TransferPayApi, TwRowStatus;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
@@ -212,6 +213,26 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     return _merged ? _loadMerged() : _loadSingle();
   }
 
+  /// «لم تُسحب / سُحبت» لسطور الحوالة (٢٦ نوفمبر): للصفحة المفتوحة وحدها، ومن له «تسوية الحساب» — غيره/تعذّر ⇒ null فلا كلمة.
+  Map<int, TwRowStatus>? _tw;
+  int _twSeq = 0;
+
+  Future<void> _loadTw(List<ActivityRow>? rows) async {
+    final seq = ++_twSeq;
+    final ids = _merged || rows == null || !TransferPay.available.value
+        ? const <int>[]
+        : [for (final r in rows) if (ActivityLogView.isTransfer(r)) r.id];
+    if (ids.isEmpty) {
+      if (_tw != null && mounted) setState(() => _tw = null);
+      return;
+    }
+    final m = await TransferPayApi.rowStatus(ids);
+    if (!mounted || seq != _twSeq || _merged) return;
+    setState(() => _tw = m);
+  }
+
+  TwRowStatus? _twOf(ActivityRow r) => _merged || !ActivityLogView.isTransfer(r) ? null : _tw?[r.id];
+
   /// «عمولة الموظف» على سطور عمليّاته الكاملة (٢٦ نوفمبر — المالك: «شون رح يميز ٥ الالف رحت للموظف») — للصفحة المفتوحة وحدها (لا
   /// «كل الشركات»؛ المسار لا يُوجَّه)، وبلا صلاحيّة الرواتب لا شيء (الخادم يردّ 403 ⇒ null).
   EmpCommissions? _comm;
@@ -389,6 +410,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       _error = acts.ok ? null : acts.error;
       _visible = _page;
     });
+    unawaited(_loadTw(acts.ok ? acts.rows : null));
   }
 
   static String _day(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -596,7 +618,10 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
             Sees.usernames ? (r.userUsername ?? '') : kHiddenWord,
             ActivityLogView.moneyOf(r) == null ? '' : '${ActivityLogView.moneyOf(r)}',
             exportTimeAr(r.createdAt),
-            rpHideUser(r.editSummary ?? (r.actionDescription ?? '').replaceAll('\n', ' '), r.userUsername ?? r.targetName),
+            // «… — لم تُسحب» (٢٦ نوفمبر): الملفّ كالسطر
+            _twOf(r) == null
+                ? rpHideUser(r.editSummary ?? (r.actionDescription ?? '').replaceAll('\n', ' '), r.userUsername ?? r.targetName)
+                : ActivityLogView.headOf(r, tw: _twOf(r)).replaceAll('\n', ' '),
             arabicActionLabel(r.actionType, r.actionDescription ?? ''),
             ActivityLogView.actorOf(r),
           ],
@@ -689,7 +714,7 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
             rows: RpRowsCard(
               query: q,
               total: shown.length,
-              days: ActivityLogView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80, commissionOf: _commOf),
+              days: ActivityLogView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80, commissionOf: _commOf, twOf: _twOf),
               more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
               onSearch: (x) => setLocal(() => q = x),
               empty: s.isEmpty ? null : 'لا حركة تطابق «$s»',
@@ -882,8 +907,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
       total: rows.length,
       // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
       days: _rowSort.key == 'date'
-          ? ActivityLogView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible, commissionOf: _commOf)
-          : rpFlat(rows, _visible, (r) => ActivityLogView.row(r, company: _merged ? _coOf(r, v.co) : null, commission: _commOf(r)), _dateOf),
+          ? ActivityLogView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible, commissionOf: _commOf, twOf: _twOf)
+          : rpFlat(rows, _visible, (r) => ActivityLogView.row(r, company: _merged ? _coOf(r, v.co) : null, commission: _commOf(r), tw: _twOf(r)), _dateOf),
       sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),

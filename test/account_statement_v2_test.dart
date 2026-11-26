@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/core/util/order_rules.dart';
 import 'package:rad_mysvcs/screens/reports/v2/account_statement_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
+import 'package:rad_mysvcs/services/transfer_pay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -23,15 +24,29 @@ class _Server implements HttpClientAdapter {
   final VisualServer inner;
   final asked = <Map<String, dynamic>>[];
 
+  /// «لم تُسحب / سُحبت» (٢٦ نوفمبر): سطر التسديد (2) بماستر، وردّ /api/v2/transfer-pots/rows — null = الحاضنة.
+  Map<String, Object?>? twRows;
+  final twAsked = <String>[];
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
+    if (twRows != null && o.uri.path == '/api/v2/transfer-pay') {
+      return ResponseBody.fromString(jsonEncode({'success': true, 'data': {'available': true, 'methods': ['cash', 'zaincash', 'master', 'other'], 'names': []}}), 200,
+          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    }
+    if (twRows != null && o.uri.path == '/api/v2/transfer-pots/rows') {
+      twAsked.add('${o.queryParameters['ids']}');
+      return ResponseBody.fromString(jsonEncode({'success': true, 'data': {'rows': twRows, 'unmatched': 0}}), 200,
+          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    }
     if (o.method.toUpperCase() == 'GET' && o.uri.path == '/api/reports/account-statement') {
       final q = Map<String, dynamic>.from(o.queryParameters);
       asked.add(q);
       final types = '${q['action_types'] ?? ''}'.split(',').where((s) => s.isNotEmpty).toSet();
       final tx = [
         {'id': 1, 'created_at': '2026-11-20 15:00:00', 'action_type': 'SUBSCRIBER_ACTIVATE', 'description': 'تفعيل غير نقدي — FTTH 50', 'amount': 35000, 'admin_name': 'admin@sup', 'balance_after': -35000},
-        {'id': 2, 'created_at': '2026-11-21 12:00:00', 'action_type': 'DEBT_PAY', 'description': 'تسديد دين', 'amount': 20000, 'admin_name': 'زينب', 'balance_after': -15000},
+        {'id': 2, 'created_at': '2026-11-21 12:00:00', 'action_type': 'DEBT_PAY', 'description': 'تسديد دين', 'amount': 20000, 'admin_name': 'زينب', 'balance_after': -15000,
+          if (twRows != null) 'pay_kind': 'master'},
         {'id': 3, 'created_at': '2026-11-22 09:00:00', 'action_type': 'SUBSCRIBER_EXTEND', 'description': 'تمديد', 'amount': 0, 'admin_name': 'admin@sup'},
       ].where((t) => types.isEmpty || types.contains(t['action_type'])).toList().reversed.toList(); // ORDER BY created_at DESC كالخادم
       return ResponseBody.fromString(
@@ -103,6 +118,37 @@ void main() {
       expect(find.text('قارن'), findsNothing);
       expect(t.takeException(), isNull);
     } finally {
+      await down(t);
+    }
+  });
+
+  testWidgets('«لم تُسحب / سُحبت» (٢٦ نوفمبر): سطر الحوالة وحده يُسأل، وحاله بعد وصفه على السطر وفي الملفّ', (t) async {
+    await up();
+    server.twRows = {
+      '2': {'pending': 20000, 'withdrawn': 0, 'at_ms': null},
+    };
+    TransferPay.available.value = true;
+    final got = <ReportExportRequest>[];
+    ReportExportActions.debugSink = (r) async => got.add(r);
+    try {
+      await open(t);
+      expect(server.twAsked, ['2']);
+      final rows = t.widget<RpRowsCard>(find.byType(RpRowsCard));
+      final all = [for (final d in rows.days) ...d.rows];
+      final pay = all.singleWhere((r) => r.detail.contains('لم تُسحب'), orElse: () => throw StateError('لا سطر بحالٍ'));
+      expect(pay.title, contains('تسديد'));
+      expect(pay.detail, 'لم تُسحب · زينب', reason: 'الحال جزءٌ بذاته قبل المنفّذ — وغير الحوالة بلا حال');
+      final export = find.text('Excel');
+      await t.scrollUntilVisible(export, 600, scrollable: find.byType(Scrollable).first);
+      await t.tap(export);
+      for (var i = 0; i < 8; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect([for (final row in got.single.rows) ...row], contains('تسديد دين — لم تُسحب'));
+      expect(t.takeException(), isNull);
+    } finally {
+      TransferPay.available.value = false;
       await down(t);
     }
   });

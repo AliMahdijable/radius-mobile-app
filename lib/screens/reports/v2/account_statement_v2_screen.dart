@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show TransferPayApi, TwRowStatus;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../core/util/order_rules.dart';
@@ -163,6 +164,38 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _visible = _page;
     });
+    unawaited(_loadTw(r.data?.rows));
+  }
+
+  /// «لم تُسحب / سُحبت» لسطور الحوالة (٢٦ نوفمبر — الجدول المعتمد: «… وسطر الحوالة يكتب «لم تُسحب» لو «سُحبت»»): كشف الشركة المفتوحة
+  /// وحدها، ومن له «تسوية الحساب» — غيره/تعذّر ⇒ null فلا كلمة.
+  Map<int, TwRowStatus>? _tw;
+  int _twSeq = 0;
+
+  static bool _isTransfer(StatementRow r) => const ['zaincash', 'master', 'other'].contains(r.payKind);
+
+  Future<void> _loadTw(List<StatementRow>? rows) async {
+    final seq = ++_twSeq;
+    final ids = widget.companyKey != null || rows == null || !TransferPay.available.value
+        ? const <int>[]
+        : [for (final r in rows) if (_isTransfer(r)) r.id];
+    if (ids.isEmpty) {
+      if (_tw != null && mounted) setState(() => _tw = null);
+      return;
+    }
+    final m = await TransferPayApi.rowStatus(ids);
+    if (!mounted || seq != _twSeq) return;
+    setState(() => _tw = m);
+  }
+
+  /// حال الحوالة لسطرٍ دُفع حوالةً — null لغيره أو حين لا تُعرف.
+  TwRowStatus? _twFor(StatementRow r) => widget.companyKey == null && _isTransfer(r) ? (_tw?[r.id]) : null;
+
+  /// الوصف ومعه حال الحوالة حين تُعرف (الملفّ المصدَّر): «تسديد دين … — حوالة ماستر — لم تُسحب».
+  String _descOf(StatementRow r) {
+    final desc = (r.description ?? '').trim();
+    final tw = _twFor(r);
+    return tw == null ? desc : '$desc — ${tw.text()}';
   }
 
   void _apply(RpFilterValue v) {
@@ -227,7 +260,12 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
       icon: icon,
       tone: tone,
       title: label,
-      detail: [if (desc.isNotEmpty && desc != label) desc, if ((r.adminName ?? '').isNotEmpty) r.adminName!].join(' · '),
+      // حال الحوالة جزءٌ بذاته (الوصف يغيب حين يساوي العنوان — «تسديد دين»)
+      detail: [
+        if (desc.isNotEmpty && desc != label) desc,
+        if (_twFor(r) case final tw?) tw.text(),
+        if ((r.adminName ?? '').isNotEmpty) r.adminName!,
+      ].join(' · '),
       amount: r.amount == 0 ? null : r.amount.abs(),
       time: t == null ? '' : clock12Ar(t),
       balanceAfter: r.balanceAfter,
@@ -314,7 +352,8 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
           Sees.usernames ? widget.username : kHiddenWord,
           r.amount == 0 ? '' : '${r.amount}',
           exportTimeAr(r.createdAt),
-          (r.description ?? '').replaceAll('\n', ' '),
+          // «… — لم تُسحب» (٢٦ نوفمبر): الملفّ كالسطر
+          _descOf(r).replaceAll('\n', ' '),
           arabicActionLabel(r.actionType ?? '', r.description ?? ''),
           r.adminName ?? '',
           r.balanceAfter == null ? '' : rpBalanceText(r.balanceAfter!),

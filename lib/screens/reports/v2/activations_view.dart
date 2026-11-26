@@ -2,6 +2,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/employee_commissions_api.dart';
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show TwRowStatus;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../core/util/server_time.dart';
@@ -80,10 +81,19 @@ class ActivationsView {
     };
   }
 
-  /// «تفعيل نقدي · ماستر» حين دُفع حوالةً — السطر والملفّ المصدَّر.
-  static String kindWithVia(ActivityRow r, ActKind k) {
+  /// سطرٌ نقديّ دُفع حوالةً (زين كاش/ماستر/أخرى) — له حالٌ عند «لم تُسحب / سُحبت» (٢٦ نوفمبر).
+  static bool isTransfer(ActivityRow r) {
     final p = r.payKind;
-    return (p == 'zaincash' || p == 'master' || p == 'other') ? '${kindLabel(k)} · ${PayKinds.labels[p]}' : kindLabel(k);
+    return kindOf(r) == ActKind.cash && (p == 'zaincash' || p == 'master' || p == 'other');
+  }
+
+  /// «تفعيل نقدي · ماستر» حين دُفع حوالةً — السطر والملفّ المصدَّر؛ ومعه حال الحوالة حين تُعرف ([tw]، ٢٦ نوفمبر — الجدول المعتمد:
+  /// «… وسطر الحوالة يكتب «لم تُسحب» لو «سُحبت»»): «تفعيل نقدي · ماستر — لم تُسحب».
+  static String kindWithVia(ActivityRow r, ActKind k, {TwRowStatus? tw, int? nowMs}) {
+    final p = r.payKind;
+    if (!(p == 'zaincash' || p == 'master' || p == 'other')) return kindLabel(k);
+    final base = '${kindLabel(k)} · ${PayKinds.labels[p]}';
+    return tw == null || k != ActKind.cash ? base : '$base — ${tw.text(nowMs: nowMs)}';
   }
 
   /// مال السطر: «نقداً» للنقديّ، و«بالدين» لغير النقديّ ولغير المدفوع من الجزئيّ. null = مجهول (خادمٌ بلا money_amount).
@@ -218,7 +228,7 @@ class ActivationsView {
       (r.actingEmployeeFullName ?? '').trim().isNotEmpty ? r.actingEmployeeFullName!.trim() : (r.adminUsername ?? '').trim();
 
   /// [commission]: «عمولة الموظف» لهذا السطر (٢٦ نوفمبر — [EmpCommissions.of]) بعد «منها بالدين» إن وُجد — null ⇒ كما كان.
-  static RpRow row(ActivityRow r, {RpCompany? company, num? commission}) {
+  static RpRow row(ActivityRow r, {RpCompany? company, num? commission, TwRowStatus? tw}) {
     final k = kindOf(r);
     final m = moneyOf(r);
     final t = timeOf(r);
@@ -227,7 +237,7 @@ class ActivationsView {
     // «العربي ومن ثم اليوزر» (٢٣ نوفمبر): اليوزر بعد النوع حين العنوان الاسم — كالتقرير الماليّ
     final user = rpUserAfterName(title: title, username: r.userUsername ?? r.targetName);
     final detail = [
-      kindWithVia(r, k),
+      kindWithVia(r, k, tw: tw),
       if (user != null) user,
       if ((r.packageName ?? '').isNotEmpty) r.packageName!,
       if (actorOf(r).isNotEmpty) actorOf(r),
@@ -257,7 +267,8 @@ class ActivationsView {
   }
 
   /// الأيّام بتوقيت الجهاز الأحدث أوّلاً، ومجموع اليوم نقده.
-  static List<RpDay> days(List<ActivityRow> rows, {RpCompany? Function(ActivityRow)? companyOf, int? limit, num? Function(ActivityRow)? commissionOf}) {
+  static List<RpDay> days(List<ActivityRow> rows,
+      {RpCompany? Function(ActivityRow)? companyOf, int? limit, num? Function(ActivityRow)? commissionOf, TwRowStatus? Function(ActivityRow)? twOf}) {
     final byDay = <String, List<ActivityRow>>{};
     final order = <String>[];
     for (final r in rows) {
@@ -277,7 +288,7 @@ class ActivationsView {
         date: k.isEmpty ? 'بلا تاريخ' : k,
         count: all.length,
         sum: all.fold<num>(0, (a, r) => a + (moneyOf(r).cash ?? 0)),
-        rows: [for (final r in shown) row(r, company: companyOf?.call(r), commission: commissionOf?.call(r))],
+        rows: [for (final r in shown) row(r, company: companyOf?.call(r), commission: commissionOf?.call(r), tw: twOf?.call(r))],
       ));
     }
     return out;

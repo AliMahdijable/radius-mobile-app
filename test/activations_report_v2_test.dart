@@ -8,6 +8,7 @@ import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/employee_filter.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
+import 'package:rad_mysvcs/api/transfer_pay_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activations_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activations_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
@@ -16,6 +17,7 @@ import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
+import 'package:rad_mysvcs/services/transfer_pay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -78,6 +80,13 @@ class _Server implements HttpClientAdapter {
   bool echoEmployees = true;
   final failing = <String>{};
 
+  /// «لم تُسحب / سُحبت» (٢٦ نوفمبر): ردّ /api/v2/transfer-pots/rows — null = الحاضنة (لا يُجاب)؛ والمعرّفات المطلوبة بترتيبها.
+  Map<String, Object?>? twRows;
+  final twAsked = <String>[];
+
+  /// «الحوالات» مفتوحةٌ للصفحة (/api/v2/transfer-pay) — false ⇒ مطفأة.
+  bool tpOn = true;
+
   ResponseBody _json(Object body, String? key) => ResponseBody.fromString(jsonEncode(body), 200, headers: {
         Headers.contentTypeHeader: ['application/json'],
         if (key != null) 'x-company-key': [key],
@@ -86,6 +95,13 @@ class _Server implements HttpClientAdapter {
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
     final key = o.headers['x-company-key']?.toString();
+    if (twRows != null && o.uri.path == '/api/v2/transfer-pay') {
+      return _json({'success': true, 'data': {'available': tpOn, 'methods': ['cash', 'zaincash', 'master', 'other'], 'names': []}}, null);
+    }
+    if (twRows != null && o.uri.path == '/api/v2/transfer-pots/rows') {
+      twAsked.add('${o.queryParameters['ids']}');
+      return _json({'success': true, 'data': {'rows': twRows, 'unmatched': 0}}, null);
+    }
     if (o.method.toUpperCase() == 'GET' && o.uri.path == '/api/activities') {
       final q = Map<String, dynamic>.from(o.queryParameters);
       asked.add((key, q));
@@ -221,6 +237,30 @@ void main() {
       expect(ActivationsView.cashSplit(r.where((x) => x.payKind == 'master').toList()), 'ماستر 35,000');
       // مالٌ مجهول ⇒ لا قسمة
       expect(ActivationsView.cashSplit(rows([for (final m in withVia) {...m, 'money_amount': null}])), isNull);
+    });
+
+    test('«لم تُسحب / سُحبت» على السطر (٢٦ نوفمبر): بعد الطريقة — لم تُسحب، بعضها، سُحبت بيومها؛ وغير الحوالة بلا حال', () {
+      final r = rows([
+        for (final (i, m) in _day(DateTime(2026, 11, 3)).indexed) {...m, if (i == 0) 'pay_kind': 'master', if (i == 1) 'pay_kind': 'cash'},
+      ]);
+      final master = r.firstWhere((x) => x.payKind == 'master');
+      final cash = r.firstWhere((x) => x.payKind == 'cash');
+      expect(ActivationsView.isTransfer(master), isTrue);
+      expect(ActivationsView.isTransfer(cash), isFalse);
+      const pending = TwRowStatus(pending: 35000, withdrawn: 0);
+      const part = TwRowStatus(pending: 15000, withdrawn: 20000, atMs: 1795600000000);
+      final done = TwRowStatus(pending: 0, withdrawn: 35000, atMs: DateTime.utc(2026, 11, 24, 9).millisecondsSinceEpoch);
+      expect(ActivationsView.kindWithVia(master, ActKind.cash, tw: pending), 'تفعيل نقدي · ماستر — لم تُسحب');
+      expect(ActivationsView.kindWithVia(master, ActKind.cash, tw: part), 'تفعيل نقدي · ماستر — لم يُسحب منها 15,000');
+      expect(ActivationsView.kindWithVia(master, ActKind.cash, tw: done), 'تفعيل نقدي · ماستر — سُحبت للصندوق 2026/11/24');
+      expect(ActivationsView.kindWithVia(master, ActKind.cash), 'تفعيل نقدي · ماستر', reason: 'بلا حال (تعذّر/لا صلاحيّة) كما كان');
+      expect(ActivationsView.kindWithVia(cash, ActKind.cash, tw: pending), 'تفعيل نقدي', reason: 'الكاش لا حال له');
+      expect(ActivationsView.row(master, tw: pending).detail, startsWith('تفعيل نقدي · ماستر — لم تُسحب'));
+      // ردّ الخادم
+      final st = TwRowStatus.fromJson({'pending': '15000', 'withdrawn': 20000, 'at_ms': 1795600000000})!;
+      expect([st.pending, st.withdrawn, st.atMs, st.isPending], [15000, 20000, 1795600000000, isTrue]);
+      expect(TwRowStatus.fromJson({'pending': 0, 'withdrawn': 1, 'at_ms': null})!.atMs, isNull);
+      expect(TwRowStatus.fromJson('x'), isNull);
     });
 
     test('مبلغٌ مجهول (خادمٌ قديم) ⇒ لا بطاقة مال ولا صفرٌ كاذب — الأعداد وحدها', () {
@@ -407,6 +447,63 @@ void main() {
         expect(t.widget<RpHeader>(find.byType(RpHeader)).onPeriod, isNull);
         expect(find.byKey(const ValueKey('rp-head-compare')), findsNothing);
         expect(find.textContaining('صلاحيّتك «التفعيلات اليوميّة»'), findsOneWidget);
+        expect(t.takeException(), isNull);
+      } finally {
+        await down(t);
+      }
+    });
+
+    testWidgets('«لم تُسحب / سُحبت» (٢٦ نوفمبر): سطور الحوالة وحدها تُسأل، وحالها على السطر وفي الملفّ؛ والحوالات مطفأة ⇒ لا سؤال', (t) async {
+      await up(prefs: {
+        'report.v2.activations': jsonEncode({'p': 'thisMonth', 'c': false}),
+      });
+      final day = _day(DateTime(2026, 11, 22));
+      server.rows[null] = [
+        for (final (i, m) in day.indexed) {...m, if (i == 0) 'pay_kind': 'master', if (i == 1) 'pay_kind': 'zaincash', if (i == 2) 'pay_kind': 'cash'},
+      ];
+      final mId = day[0]['id'], zId = day[1]['id'];
+      server.twRows = {
+        '$mId': {'pending': 35000, 'withdrawn': 0, 'at_ms': null},
+        '$zId': {'pending': 0, 'withdrawn': 35000, 'at_ms': DateTime.utc(2026, 11, 22, 12).millisecondsSinceEpoch},
+      };
+      TransferPay.available.value = true;
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        expect(server.twAsked, [([mId as int, zId as int]..sort()).join(',')], reason: 'الحوالتان وحدهما بطلبٍ واحد');
+        await unfold(t, RpRowsCard);
+        await t.pump(const Duration(milliseconds: 200));
+        expect(find.textContaining('تفعيل نقدي · ماستر — لم تُسحب'), findsOneWidget);
+        expect(find.textContaining('تفعيل نقدي · زين كاش — سُحبت للصندوق'), findsOneWidget);
+        await tapExport(t, 'Excel');
+        final cells = [for (final row in got.single.rows) ...row];
+        expect(cells, contains('تفعيل نقدي · ماستر — لم تُسحب'));
+        expect(cells.any((c) => c.startsWith('تفعيل نقدي · زين كاش — سُحبت للصندوق')), isTrue);
+        expect(t.takeException(), isNull);
+      } finally {
+        TransferPay.available.value = false;
+        await down(t);
+      }
+    });
+
+    testWidgets('«لم تُسحب / سُحبت»: الحوالات مطفأة للصفحة ⇒ لا سؤال ولا كلمة', (t) async {
+      await up(prefs: {
+        'report.v2.activations': jsonEncode({'p': 'thisMonth', 'c': false}),
+      });
+      server.rows[null] = [
+        for (final (i, m) in _day(DateTime(2026, 11, 22)).indexed) {...m, if (i == 0) 'pay_kind': 'master'},
+      ];
+      // الخادم يجيب السؤال لو جاء (فيُعدّ) — والحوالات مطفأة للصفحة
+      server.twRows = {'${_day(DateTime(2026, 11, 22))[0]['id']}': {'pending': 35000, 'withdrawn': 0, 'at_ms': null}};
+      server.tpOn = false;
+      TransferPay.available.value = false;
+      try {
+        await open(t);
+        expect(server.twAsked, isEmpty);
+        await unfold(t, RpRowsCard);
+        await t.pump(const Duration(milliseconds: 200));
+        expect(find.textContaining('لم تُسحب'), findsNothing);
         expect(t.takeException(), isNull);
       } finally {
         await down(t);

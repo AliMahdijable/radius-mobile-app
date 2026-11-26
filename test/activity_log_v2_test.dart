@@ -8,6 +8,7 @@ import 'package:rad_mysvcs/api/employee_filter.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
+import 'package:rad_mysvcs/api/transfer_pay_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activity_log_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/activity_log_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
@@ -15,6 +16,7 @@ import 'package:rad_mysvcs/screens/reports/v2/report_period.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_sheets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/services/transfer_pay.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -68,6 +70,10 @@ class _Server implements HttpClientAdapter {
   final expensesAsked = <(String?, Map<String, dynamic>)>[];
   final failing = <String>{};
 
+  /// «لم تُسحب / سُحبت» (٢٦ نوفمبر): ردّ /api/v2/transfer-pots/rows — null = الحاضنة؛ والمعرّفات المطلوبة.
+  Map<String, Object?>? twRows;
+  final twAsked = <String>[];
+
   /// خادمٌ بعد dff8f91: يطبّق employee_ids ويعلّم ردّه بـemployee_filter (أعلاه) — false = خادمٌ قديم.
   bool echoEmployees = true;
 
@@ -85,6 +91,13 @@ class _Server implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
     final key = o.headers['x-company-key']?.toString();
     final q = Map<String, dynamic>.from(o.queryParameters);
+    if (twRows != null && o.uri.path == '/api/v2/transfer-pay') {
+      return _json({'success': true, 'data': {'available': true, 'methods': ['cash', 'zaincash', 'master', 'other'], 'names': []}}, null);
+    }
+    if (twRows != null && o.uri.path == '/api/v2/transfer-pots/rows') {
+      twAsked.add('${q['ids']}');
+      return _json({'success': true, 'data': {'rows': twRows, 'unmatched': 0}}, null);
+    }
     if (o.method.toUpperCase() == 'GET' && o.uri.path == '/api/activities') {
       asked.add((key, q));
       if (key != null && failing.contains(key)) return _json({'success': false, 'message': 'انتهت جلستها'}, key);
@@ -166,6 +179,27 @@ void main() {
       expect(ActivityLogView.row(edit).amount, isNull);
     });
 
+    test('«لم تُسحب / سُحبت» (٢٦ نوفمبر): بعد الوصف لسطر الحوالة وحده — والصرفيّة برقمٍ مثله لا تأخذ حاله', () {
+      final raw = [
+        for (final m in _day(20))
+          {...m, if (m['id'] == 2003) 'pay_kind': 'master', if (m['id'] == 2001) 'pay_kind': 'cash'},
+      ];
+      final r = rows(raw);
+      final pay = r.firstWhere((x) => x.id == 2003);
+      final cash = r.firstWhere((x) => x.id == 2001);
+      expect(ActivityLogView.isTransfer(pay), isTrue);
+      expect(ActivityLogView.isTransfer(cash), isFalse);
+      const pending = TwRowStatus(pending: 20000, withdrawn: 0);
+      expect(ActivityLogView.headOf(pay, tw: pending), 'تسديد دين — لم تُسحب');
+      expect(ActivityLogView.row(pay, tw: pending).detail, startsWith('تسديد دين — لم تُسحب'));
+      expect(ActivityLogView.row(pay).detail, startsWith('تسديد دين'), reason: 'بلا حال كما كان');
+      expect(ActivityLogView.row(pay).detail.contains('لم تُسحب'), isFalse);
+      expect(ActivityLogView.headOf(cash, tw: pending), 'تفعيل نقدي — FTTH 50', reason: 'الكاش لا حال له');
+      final exp = ActivityLogView.expenseRow(id: 2003, amount: 1000, date: '2026-11-20', note: 'وقود');
+      final days = ActivityLogView.days([pay, exp], twOf: (x) => ActivityLogView.isTransfer(x) ? pending : null);
+      expect(days.single.rows.where((x) => x.detail.contains('لم تُسحب')).length, 1, reason: 'الحوالة وحدها');
+    });
+
     test('مجموع اليوم ما دخل نقداً (تفعيلٌ نقديّ وتسديد)، والصرفيّة صفّاً بتاريخها', () {
       final r = [...rows(_day(20)), ActivityLogView.expenseRow(id: 1, amount: 15000, date: '2026-11-20', note: 'وقود')];
       final days = ActivityLogView.days(ActivityLogView.filter(r, const []));
@@ -216,6 +250,41 @@ void main() {
       await t.tap(find.text(label));
       await settleAsync(t, 6);
     }
+
+    testWidgets('«لم تُسحب / سُحبت» (٢٦ نوفمبر): سطور الحوالة وحدها تُسأل، وحالها على السطر وفي الملفّ', (t) async {
+      await up();
+      server.rows[null] = [
+        for (final m in _month())
+          {...m, if (m['id'] == 2203) 'pay_kind': 'zaincash', if (m['id'] == 2201) 'pay_kind': 'master', if (m['id'] == 2202) 'pay_kind': 'cash'},
+      ];
+      server.twRows = {
+        '2201': {'pending': 35000, 'withdrawn': 0, 'at_ms': null},
+        '2203': {'pending': 0, 'withdrawn': 20000, 'at_ms': DateTime.utc(2026, 11, 22, 12).millisecondsSinceEpoch},
+      };
+      TransferPay.available.value = true;
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        expect(server.twAsked, ['2201,2203']);
+        // قائمة الحركات قد تكون مطويّة ⇒ لمسة عنوانها
+        if (find.textContaining('— لم تُسحب').evaluate().isEmpty) {
+          final title = find.descendant(of: find.byType(RpRowsCard), matching: find.byType(RpTitle)).first;
+          await t.ensureVisible(title);
+          await t.tap(title);
+          await t.pump(const Duration(milliseconds: 200));
+        }
+        expect(find.textContaining('تفعيل نقدي — FTTH 50 — لم تُسحب'), findsOneWidget);
+        expect(find.textContaining('تسديد دين — سُحبت للصندوق'), findsOneWidget);
+        await tapExport(t, 'Excel');
+        final cells = [for (final row in got.single.rows) ...row];
+        expect(cells, contains('تفعيل نقدي — FTTH 50 — لم تُسحب'));
+        expect(t.takeException(), isNull);
+      } finally {
+        TransferPay.available.value = false;
+        await down(t);
+      }
+    });
 
     testWidgets('هذا الأسبوع افتراضاً: الإشعارات تُستثنى من الخادم، والصرفيّات تُدمج، ولا مقارنة', (t) async {
       await up();

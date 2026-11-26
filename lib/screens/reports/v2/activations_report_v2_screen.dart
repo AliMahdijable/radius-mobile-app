@@ -10,6 +10,7 @@ import '../../../api/employee_commissions_api.dart';
 import '../../../api/merged_dashboard_api.dart';
 import '../../../api/report_people_api.dart';
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show TransferPayApi, TwRowStatus;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
@@ -182,6 +183,25 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
     return _merged ? _loadMerged() : _loadSingle();
   }
 
+  /// «لم تُسحب / سُحبت» لسطور الحوالة (٢٦ نوفمبر): للصفحة المفتوحة وحدها (لا «كل الشركات»)، ومن له «تسوية الحساب» — غيره/تعذّر ⇒
+  /// null فلا كلمة على السطور.
+  Map<int, TwRowStatus>? _tw;
+  int _twSeq = 0;
+
+  Future<void> _loadTw(List<ActivityRow>? rows) async {
+    final seq = ++_twSeq;
+    final ids = _merged || rows == null || !TransferPay.available.value
+        ? const <int>[]
+        : [for (final r in rows) if (ActivationsView.isTransfer(r)) r.id];
+    if (ids.isEmpty) {
+      if (_tw != null && mounted) setState(() => _tw = null);
+      return;
+    }
+    final m = await TransferPayApi.rowStatus(ids);
+    if (!mounted || seq != _twSeq || _merged) return;
+    setState(() => _tw = m);
+  }
+
   /// «عمولة الموظف» على سطور عمليّاته الكاملة (٢٦ نوفمبر — المالك: «شون رح يميز ٥ الالف رحت للموظف») — للصفحة المفتوحة وحدها (لا
   /// «كل الشركات»؛ المسار لا يُوجَّه)، وبلا صلاحيّة الرواتب لا شيء (الخادم يردّ 403 ⇒ null).
   EmpCommissions? _comm;
@@ -320,6 +340,7 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       _error = cur.ok ? null : cur.error;
       _visible = _page;
     });
+    unawaited(_loadTw(cur.ok ? cur.rows : null));
     if (!f.compare || _todayOnly || !cur.ok) return;
     final prev = await _fetch(f.range.previous, group: _open, ids: ids);
     if (!mounted || seq != _seq || _merged) return;
@@ -581,7 +602,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
               if (_merged) MergedMode.companyOf(co[r])?.name ?? '',
               rpSubjectTitle(fullName: r.userFullName, target: r.targetName, username: r.userUsername, fallback: ''),
               Sees.usernames ? (r.userUsername ?? '') : kHiddenWord,
-              ActivationsView.kindLabel(k),
+              // «تفعيل نقدي · ماستر — لم تُسحب» (٢٦ نوفمبر): الملفّ كالسطر
+              ActivationsView.kindWithVia(r, k, tw: _merged ? null : _tw?[r.id]),
               r.packageName ?? '',
               amount == null || amount == 0 ? '' : '$amount',
               k == ActKind.cash && r.partialUnpaid > 0 ? '${r.partialUnpaid}' : '',
@@ -715,7 +737,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
             rows: RpRowsCard(
               query: q,
               total: shown.length,
-              days: ActivationsView.days(shown, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80, commissionOf: _commOf),
+              days: ActivationsView.days(shown,
+                  companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: 80, commissionOf: _commOf, twOf: _merged ? null : (r) => _tw?[r.id]),
               more: shown.length > 80 ? 'الأولى 80 — كلّها بالتصدير' : null,
               onSearch: (x) => setLocal(() => q = x),
               empty: s.isEmpty ? null : 'لا حركة تطابق «$s»',
@@ -926,8 +949,10 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
       total: rows.length,
       // بالتاريخ يوماً بيوم كما كانت؛ وبغيره قائمةٌ واحدة وتاريخ كلّ سطرٍ عليه
       days: _rowSort.key == 'date'
-          ? ActivationsView.days(rows, companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible, commissionOf: _commOf)
-          : rpFlat(rows, _visible, (r) => ActivationsView.row(r, company: _merged ? _coOf(r, v.co) : null, commission: _commOf(r)), _dateOf),
+          ? ActivationsView.days(rows,
+              companyOf: _merged ? (r) => _coOf(r, v.co) : null, limit: _visible, commissionOf: _commOf, twOf: _merged ? null : (r) => _tw?[r.id])
+          : rpFlat(rows, _visible,
+              (r) => ActivationsView.row(r, company: _merged ? _coOf(r, v.co) : null, commission: _commOf(r), tw: _merged ? null : _tw?[r.id]), _dateOf),
       sort: RpRowsSort(fields: _rowFields, value: _rowSort, onPick: _pickSort),
       more: rows.length > _visible ? 'عرض المزيد (${rows.length - _visible})' : null,
       onMore: () => setState(() => _visible += _page),
