@@ -53,6 +53,9 @@ class _SalesServer implements HttpClientAdapter {
   /// ردّ البيع القادم: (status, body) — null ⇒ نجاحٌ نقديّ.
   (int, Object)? nextSale;
 
+  /// «بيعٌ بحوالة» (٢٧ نوفمبر): البيع 12 بماستر و«منه بالحوالات» بالمجاميع.
+  bool tw = false;
+
   static final items = [
     {
       'id': 1, 'name': 'راوتر TP-Link C6', 'code': 'C6', 'unit': 'piece', 'unit_label': 'قطعة',
@@ -122,13 +125,13 @@ class _SalesServer implements HttpClientAdapter {
       return _json(200, {
         'success': true, 'enabled': enabled,
         'data': [
-          sale(12, 'cash', 'done', name: 'أبو حسين'),
+          {...sale(12, 'cash', 'done', name: 'أبو حسين'), if (tw) 'paid_via': 'master'},
           sale(11, 'debt', 'done', username: 'ali.k@sn', name: 'علي كريم', total: 35000, cost: 27500),
           sale(10, 'debt', 'unknown', username: 'huda@sn', total: 45000, cost: 32000),
           sale(9, 'cash', 'void', total: 25000, cost: 18000),
           if (voidUnknown) voidUnknownSale(),
         ],
-        'totals': {'count': 2, 'revenue': 90000, 'cost': 64500, 'profit': 25500, 'cash': 55000, 'debt': 35000},
+        'totals': {'count': 2, 'revenue': 90000, 'cost': 64500, 'profit': 25500, 'cash': 55000, 'debt': 35000, if (tw) 'transfers': 55000},
         'unresolved': 1,
       });
     }
@@ -675,6 +678,24 @@ void main() {
       expect(find.text('ربح الوحدة'), findsWidgets, reason: 'خانات البيع/الكلفة/الربح بكلّ بطاقة');
       expect(find.text('300,375 د.ع'), findsOneWidget);
       expect(t.takeException(), isNull);
+    });
+
+    testWidgets('«بيعٌ بحوالة»: سطر البيع بطريقته بدل «نقداً» (لا سطر جديد)، و«نقداً» تحته «حوالات»؛ وبلاها كما كان', (t) async {
+      for (final tw in [true, false]) {
+        final server = _SalesServer(await visualSetUp(s1bSasOwner))..tw = tw;
+        ApiClient.dio.httpClientAdapter = server;
+        await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+        await settle(t, seconds: 2);
+        final row = find.byKey(const ValueKey('sale-row-12'));
+        expect(row, findsOneWidget);
+        expect(find.descendant(of: row, matching: find.text('حوالة ماستر')), tw ? findsOneWidget : findsNothing);
+        expect(find.descendant(of: row, matching: find.text('sales.st_cash'.tr())), tw ? findsNothing : findsOneWidget);
+        expect(find.text('sales.kpi_cash_tw'.tr(namedArgs: {'amount': '55,000 د.ع'})), tw ? findsOneWidget : findsNothing);
+        expect(find.text('sales.kpi_cash_hint'.tr()), tw ? findsNothing : findsOneWidget);
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+        await settle(t, seconds: 1);
+      }
     });
 
     testWidgets('إلغاء بيعٍ على الدين: معاينة الدين ثمّ «تُرجَع نقداً» يُرسل refund وexpected_paid', (t) async {

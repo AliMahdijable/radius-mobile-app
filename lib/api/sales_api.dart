@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/util/error_text.dart';
 import '../services/auth_storage.dart';
+import '../services/transfer_pay.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 
@@ -28,6 +29,8 @@ class SalesProbe {
     this.canSell = false,
     this.canItems = false,
     this.canVoid = false,
+    this.transferAvailable = false,
+    this.transferNames = const [],
   });
 
   static const off = SalesProbe(enabled: false);
@@ -41,10 +44,16 @@ class SalesProbe {
   final bool canItems;
   final bool canVoid;
 
+  /// «بيعٌ بحوالة» (٢٧ نوفمبر): يقبل الخادم البيع النقديّ بطريقته لهذه الصفحة (يرسل `transfer` حين يُفتح وحده)، وأسماء «أخرى».
+  final bool transferAvailable;
+  final List<String> transferNames;
+
   bool get scoped => reason == 'scoped';
 
   static SalesProbe fromJson(Map<String, dynamic> j) {
     final can = j['can'] is Map ? Map<String, dynamic>.from(j['can'] as Map) : const <String, dynamic>{};
+    final tw = j['transfer'] is Map ? Map<String, dynamic>.from(j['transfer'] as Map) : null;
+    final twOn = tw != null && tw['available'] == true;
     return SalesProbe(
       enabled: j['enabled'] == true,
       reason: _str(j['reason']),
@@ -52,6 +61,10 @@ class SalesProbe {
       canSell: can['sell'] == true,
       canItems: can['items'] == true,
       canVoid: can['void'] == true,
+      transferAvailable: twOn,
+      transferNames: twOn && tw['names'] is List
+          ? (tw['names'] as List).whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty).take(8).toList()
+          : const <String>[],
     );
   }
 }
@@ -190,6 +203,8 @@ class Sale {
     this.voidRefund,
     this.voidBalanceBefore,
     this.voidStartedAt,
+    this.paidVia,
+    this.paidViaName,
   });
 
   final int id;
@@ -225,6 +240,22 @@ class Sale {
   final num? voidBalanceBefore;
   final DateTime? voidStartedAt;
   final List<SaleLine> lines;
+
+  /// «بيعٌ بحوالة» (٢٧ نوفمبر): طريقة استلام البيع النقديّ — null كاش. `zaincash` · `master` · `other` (باسمه [paidViaName]).
+  final String? paidVia;
+  final String? paidViaName;
+
+  /// «حوالة ماستر» / «حوالة زين كاش» / «حوالة <اسمها>» — null للكاش والدين.
+  String? get viaLabel {
+    final v = paidVia;
+    if (payment != 'cash' || v == null) return null;
+    final n = switch (v) {
+      'zaincash' => 'زين كاش',
+      'master' => 'ماستر',
+      _ => (paidViaName ?? '').trim().isEmpty ? 'أخرى' : paidViaName!.trim(),
+    };
+    return 'حوالة $n';
+  }
 
   bool get isDebt => payment == 'debt';
   bool get isDone => status == 'done';
@@ -279,6 +310,8 @@ class Sale {
       voidRefund: j['void_refund'] == null ? null : _num(j['void_refund']),
       voidBalanceBefore: j['void_balance_before'] == null ? null : _num(j['void_balance_before']),
       voidStartedAt: _date(j['void_started_at']),
+      paidVia: switch (j['paid_via']) { final String v when const {'zaincash', 'master', 'other'}.contains(v) => v, _ => null },
+      paidViaName: _str(j['paid_via_name']),
       lines: raw is List
           ? raw.whereType<Map>().map((m) => SaleLine.fromJson(Map<String, dynamic>.from(m))).toList()
           : const <SaleLine>[],
@@ -350,6 +383,7 @@ class SalesTotals {
     this.profit = 0,
     this.cash = 0,
     this.debt = 0,
+    this.transfers = 0,
   });
   final int count;
   final num revenue;
@@ -358,6 +392,9 @@ class SalesTotals {
   final num cash;
   final num debt;
 
+  /// «بيعٌ بحوالة»: منه بالحوالات (داخل [cash]) — 0 حين لا يرسله الخادم.
+  final num transfers;
+
   static SalesTotals fromJson(Map<String, dynamic> j) => SalesTotals(
         count: _int(j['count']) ?? 0,
         revenue: _num(j['revenue']),
@@ -365,6 +402,7 @@ class SalesTotals {
         profit: _num(j['profit']),
         cash: _num(j['cash']),
         debt: _num(j['debt']),
+        transfers: _num(j['transfers']),
       );
 }
 
@@ -781,6 +819,7 @@ class SalesApi {
     required Map<String, dynamic> customer,
     String? note,
     required String? companyKey,
+    PaidVia? paidVia,
   }) async {
     // «كل الشركات» — الخطوة ٢: البيع لمشتركٍ في شركةٍ موجَّهة يطلب مرجع نافذته (الخادم يربط البيع بالمشترك الذي قُرئ من الشركة
     // نفسها — companyRoutingAllow sales-sell) ⇒ قراءة المشترك منها أوّلاً: يسكّ الخادم المرجع ويحفظه CompanyRefs ثمّ يُرفق بالبيع.
@@ -804,6 +843,8 @@ class SalesApi {
           'lines': lines.map((l) => l.toJson()).toList(),
           'customer': customer,
           if (note != null && note.isNotEmpty) 'note': note,
+          // «بيعٌ بحوالة»: الكاش لا يُرسل شيئاً (كما كان حرفاً)، والحوالة طريقتها (+ اسم «أخرى»)
+          if (paidVia != null && payment == 'cash') ...paidVia.toBody(),
         },
       );
       return _saleFrom(_map(r.data));

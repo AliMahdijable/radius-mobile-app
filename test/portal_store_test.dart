@@ -39,6 +39,15 @@ class _StoreServer implements HttpClientAdapter {
   /// ردّ «تمّ» القادم (status, body) — null ⇒ نجاح.
   (int, Object)? nextDone;
 
+  /// «بيعٌ بحوالة» (٢٧ نوفمبر): null ⇒ الفحص لا يُجاب هنا (كما كان)؛ true/false ⇒ probe بـtransfer أو بدونه.
+  bool? tw;
+
+  /// ردّ البيع القادم (status, body) — null ⇒ نجاح (النقد بطريقته يُعاد كما أُرسل).
+  (int, Object)? nextSale;
+
+  /// الفحص يتعذّر (500) ⇒ SalesApi.probe() == null.
+  bool probeFail = false;
+
   late List<Map<String, dynamic>> orders = [
     order(7, 'pending', item: 1, name: 'راوتر TP-Link C6', qty: 2, price: 45000,
         sub: {'idx': '501', 'username': 'ali.k@sn', 'name': 'علي كريم', 'phone': '07701234567'}, note: 'بعد العصر لو سمحت', pay: 'cash'),
@@ -161,7 +170,36 @@ class _StoreServer implements HttpClientAdapter {
         'totals': {'count': 0, 'revenue': 0, 'cost': 0, 'profit': 0, 'cash': 0, 'debt': 0}, 'unresolved': 0,
       });
     }
-    if (p == '/api/v2/sales' && m == 'POST') return _json(200, {'success': true, 'data': sale(13)});
+    if (p == '/api/v2/sales/probe' && m == 'GET' && probeFail) return _json(500, {'success': false, 'message': 'Internal error'});
+    if (p == '/api/v2/sales/probe' && m == 'GET' && tw != null) {
+      return _json(200, {
+        'success': true, 'enabled': true, 'can': {'view': true, 'sell': true, 'items': true, 'void': true},
+        if (tw!) 'transfer': {'available': true, 'methods': ['cash', 'zaincash', 'master', 'other'], 'names': ['آسيا حوالة']},
+      });
+    }
+    if (p == '/api/v2/sales' && m == 'POST') {
+      final r = nextSale;
+      if (r != null) {
+        nextSale = null;
+        return _json(r.$1, r.$2);
+      }
+      final b = o.data is Map ? Map<String, dynamic>.from(o.data as Map) : const <String, dynamic>{};
+      if (b['payment'] == 'cash') {
+        return _json(200, {
+          'success': true,
+          'data': {
+            ...sale(14), 'payment': 'cash', 'total': 15000, 'cost': 7500, 'profit': 7500,
+            'customer': {'kind': 'subscriber', 'idx': '502', 'username': 'huda@sn', 'name': null, 'phone': null},
+            'lines': [
+              {'item_id': 2, 'name': 'كيبل Cat6', 'unit': 'meter', 'qty': 30, 'unit_price': 500, 'unit_cost': 250, 'total': 15000, 'cost': 7500, 'profit': 7500},
+            ],
+            if (b['paid_via'] != null) 'paid_via': b['paid_via'],
+            if (b['paid_via_name'] != null) 'paid_via_name': b['paid_via_name'],
+          },
+        });
+      }
+      return _json(200, {'success': true, 'data': sale(13)});
+    }
     if (p.startsWith('/api/v2/subscribers/')) {
       return _json(200, {'success': true, 'data': {'idx': '501', 'username': 'ali.k@sn', 'firstname': 'علي', 'lastname': 'كريم'}});
     }
@@ -287,6 +325,26 @@ void main() {
       // متجرٌ موقوف بلا معروض ⇒ لا تبويب؛ وبمعروضٍ سابق ⇒ يظهر للعرض
       expect(StoreView.fromJson({...s.view(), 'available': false, 'items': const []}).showTab, isFalse);
       expect(StoreView.fromJson({...s.view(), 'available': false}).showTab, isTrue);
+    });
+
+    test('«بيعٌ بحوالة»: probe.transfer والبيع بطريقته ومجموع الحوالات — وغيابها كما كان', () {
+      final on = SalesProbe.fromJson({
+        'success': true, 'enabled': true,
+        'transfer': {'available': true, 'names': [' آسيا حوالة ', '', 3, 'كي كارد', 'a', 'b', 'c', 'd', 'e', 'f', 'g']},
+      });
+      expect((on.transferAvailable, on.transferNames.length, on.transferNames.first), (true, 8, 'آسيا حوالة'));
+      final off = SalesProbe.fromJson({'success': true, 'enabled': true});
+      expect((off.transferAvailable, off.transferNames), (false, const <String>[]));
+      expect(SalesProbe.fromJson({'enabled': true, 'transfer': {'available': false, 'names': ['x']}}).transferNames, isEmpty);
+      Sale sale(Map<String, dynamic> extra) => Sale.fromJson({..._StoreServer.sale(1), ...extra})!;
+      expect(sale({'payment': 'cash', 'paid_via': 'master'}).viaLabel, 'حوالة ماستر');
+      expect(sale({'payment': 'cash', 'paid_via': 'zaincash'}).viaLabel, 'حوالة زين كاش');
+      expect(sale({'payment': 'cash', 'paid_via': 'other', 'paid_via_name': 'آسيا حوالة'}).viaLabel, 'حوالة آسيا حوالة');
+      expect(sale({'payment': 'cash', 'paid_via': 'bitcoin'}).viaLabel, isNull, reason: 'طريقةٌ مجهولة تُهمل');
+      expect(sale({'payment': 'cash'}).viaLabel, isNull);
+      expect(sale({'payment': 'debt', 'paid_via': 'master'}).viaLabel, isNull, reason: 'الدين بلا طريقة');
+      expect(SalesTotals.fromJson({'cash': 90000, 'transfers': 45000}).transfers, 45000);
+      expect(SalesTotals.fromJson({'cash': 90000}).transfers, 0);
     });
 
     test('StoreOrder: المشترك والحال، وحالٌ مجهولة تُهمل', () {
@@ -560,6 +618,143 @@ void main() {
         await shoot(t, s1bSasOwner, 'store3_sell', d, vs);
       }, skip: const String.fromEnvironment('VISUAL_OUT').isEmpty);
     }
+
+    group('«بيعٌ بحوالة» (٢٧ نوفمبر — الخادم ceb899a)', () {
+      // نصوصٌ تُحسب داخل كلّ فحص (الترجمة تُحمَّل في setUpAll بعد تسجيل المجموعة)
+      String sellTwText() => 'sales.sell_tw_n'.tr(namedArgs: {'via': 'حوالة زين كاش', 'amount': '15,000 د.ع'});
+      String sellCashText() => 'sales.sell_cash_n'.tr(namedArgs: {'amount': '15,000 د.ع'});
+      Map<String, dynamic> body(_StoreServer s, [int i = 0]) => s.writes('/api/v2/sales')[i][1]! as Map<String, dynamic>;
+
+      testWidgets('طلبٌ بزين كاش والخادم يقبل ⇒ «نقداً» و«استلمته» زين كاش ⇒ paid_via ⇒ الإشعار بالطريقة ⇒ «تمّ»', (t) async {
+        final server = await _open(t, setup: (s) => s.tw = true);
+        await _toStore(t);
+        await t.ensureVisible(find.byKey(const ValueKey('store-sell-8')));
+        await t.tap(find.byKey(const ValueKey('store-sell-8')));
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('sale-paid-via')), findsOneWidget);
+        expect(find.byKey(const ValueKey('sale-tw-off')), findsNothing);
+        expect(find.text(sellTwText()), findsOneWidget, reason: 'الدفع «نقداً» والزرّ بالطريقة');
+        await t.tap(find.text(sellTwText()));
+        await settle(t, seconds: 1);
+        expect(find.textContaining('بيع #14 — 15,000 د.ع حوالة زين كاش'), findsWidgets, reason: 'الإشعار بالطريقة');
+        await settle(t, seconds: 2);
+        final b = body(server);
+        expect((b['payment'], b['paid_via'], b.containsKey('paid_via_name')), ('cash', 'zaincash', false));
+        expect((b['customer'] as Map)['idx'], '502');
+        expect(server.writes('/api/v2/portal/store/orders'), [
+          ['/api/v2/portal/store/orders/8/done', {'sale_id': 14}],
+        ]);
+        await settle(t, seconds: 4);
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('يُغيَّر لكاش ⇒ «بيع نقداً» ولا paid_via (الجسم كما كان)', (t) async {
+        final server = await _open(t, setup: (s) => s.tw = true);
+        await _toStore(t);
+        await t.ensureVisible(find.byKey(const ValueKey('store-sell-8')));
+        await t.tap(find.byKey(const ValueKey('store-sell-8')));
+        await settle(t, seconds: 2);
+        await t.ensureVisible(find.byKey(const ValueKey('paid-via-cash')));
+        await t.tap(find.byKey(const ValueKey('paid-via-cash')));
+        await settle(t, seconds: 1);
+        expect(find.text(sellCashText()), findsOneWidget);
+        await t.tap(find.text(sellCashText()));
+        await settle(t, seconds: 3);
+        final b = body(server);
+        expect((b['payment'], b.containsKey('paid_via')), ('cash', false));
+        await settle(t, seconds: 4);
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('«أخرى» بلا اسم ⇒ لا بيع؛ باسمها ⇒ paid_via=other + الاسم', (t) async {
+        final server = await _open(t, setup: (s) => s.tw = true);
+        await _toStore(t);
+        await t.ensureVisible(find.byKey(const ValueKey('store-sell-8')));
+        await t.tap(find.byKey(const ValueKey('store-sell-8')));
+        await settle(t, seconds: 2);
+        await t.ensureVisible(find.byKey(const ValueKey('paid-via-other')));
+        await t.tap(find.byKey(const ValueKey('paid-via-other')));
+        await settle(t, seconds: 1);
+        final sellOther = 'sales.sell_tw_n'.tr(namedArgs: {'via': 'حوالة أخرى', 'amount': '15,000 د.ع'});
+        await t.tap(find.text(sellOther));
+        await settle(t, seconds: 1);
+        expect(server.writes('/api/v2/sales'), isEmpty, reason: 'بلا اسم لا يُرسل');
+        await t.enterText(find.byKey(const ValueKey('paid-via-other-name')), 'آسيا حوالة');
+        await settle(t, seconds: 1);
+        await t.tap(find.text('sales.sell_tw_n'.tr(namedArgs: {'via': 'حوالة آسيا حوالة', 'amount': '15,000 د.ع'})));
+        await settle(t, seconds: 3);
+        final b = body(server);
+        expect((b['paid_via'], b['paid_via_name']), ('other', 'آسيا حوالة'));
+        await settle(t, seconds: 4);
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('المفتاح مطفأ للصفحة ⇒ لا «استلمته» وملاحظةٌ صادقة، والبيع كاشٌ بلا paid_via', (t) async {
+        final server = await _open(t, setup: (s) => s.tw = false);
+        await _toStore(t);
+        await t.ensureVisible(find.byKey(const ValueKey('store-sell-8')));
+        await t.tap(find.byKey(const ValueKey('store-sell-8')));
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('sale-paid-via')), findsNothing);
+        expect(find.text('sales.tw_off_note'.tr(namedArgs: {'via': 'زين كاش'})), findsOneWidget);
+        await t.tap(find.text(sellCashText()));
+        await settle(t, seconds: 3);
+        final b = body(server);
+        expect((b['payment'], b.containsKey('paid_via')), ('cash', false));
+        await settle(t, seconds: 4);
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('الفحص يتعذّر ⇒ كاشٌ كما كان بلا ملاحظة (لا نقول ما لا نعرف)', (t) async {
+        final server = await _open(t, setup: (s) => s.probeFail = true);
+        await _toStore(t);
+        await t.ensureVisible(find.byKey(const ValueKey('store-sell-8')));
+        await t.tap(find.byKey(const ValueKey('store-sell-8')));
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('sale-paid-via')), findsNothing);
+        expect(find.byKey(const ValueKey('sale-tw-off')), findsNothing);
+        await t.tap(find.text(sellCashText()));
+        await settle(t, seconds: 3);
+        expect(body(server).containsKey('paid_via'), isFalse);
+        await settle(t, seconds: 4);
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('الخادم يرفض (أُطفئ بعد الفتح) ⇒ رسالته و«استلمته» يختفي على «بيع نقداً»، والثانية كاشٌ بمرجعٍ جديد', (t) async {
+        final server = await _open(t, setup: (s) {
+          s.tw = true;
+          s.nextSale = (409, {'success': false, 'code': 'SALE_TRANSFER_OFF', 'message': 'البيع بحوالة غير مفعّلٍ لهذه الصفحة بعد — لم يُنفَّذ شيء. اختر «كاش».'});
+        });
+        await _toStore(t);
+        await t.ensureVisible(find.byKey(const ValueKey('store-sell-8')));
+        await t.tap(find.byKey(const ValueKey('store-sell-8')));
+        await settle(t, seconds: 2);
+        await t.tap(find.text(sellTwText()));
+        await settle(t, seconds: 2);
+        expect(find.textContaining('البيع بحوالة غير مفعّلٍ لهذه الصفحة بعد'), findsOneWidget);
+        expect(find.byKey(const ValueKey('sale-paid-via')), findsNothing);
+        expect(find.byKey(const ValueKey('sale-tw-off')), findsOneWidget);
+        await t.tap(find.text(sellCashText()));
+        await settle(t, seconds: 3);
+        final first = body(server);
+        final second = body(server, 1);
+        expect((first['paid_via'], second.containsKey('paid_via')), ('zaincash', false));
+        expect(second['client_ref'], isNot(first['client_ref']));
+        await settle(t, seconds: 4);
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('طلبٌ كاش ⇒ النافذة كما كانت (على الدين افتراضاً، لا «استلمته» ولا سؤال الفحص)', (t) async {
+        final server = await _open(t, setup: (s) => s.tw = true);
+        await _toStore(t);
+        await t.tap(find.byKey(const ValueKey('store-sell-7')));
+        await settle(t, seconds: 2);
+        expect(find.byKey(const ValueKey('sale-paid-via')), findsNothing);
+        expect(find.text('sales.sell_debt_n'.tr(namedArgs: {'amount': '90,000 د.ع'})), findsOneWidget);
+        expect(server.calls.where((c) => c.$2 == '/api/v2/sales/probe'), isEmpty);
+        expect(t.takeException(), isNull);
+      });
+    });
 
     testWidgets('إشعار store_order ⇒ «المبيعات» على «المتجر»', (t) async {
       final server = _StoreServer(await visualSetUp(s1bSasOwner));

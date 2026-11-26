@@ -27,10 +27,12 @@ import '../../services/permissions_service.dart';
 import '../../services/print_prefs.dart';
 import '../../services/sale_print.dart';
 import '../../services/subscriber_events.dart';
+import '../../services/transfer_pay.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_company_strip.dart';
+import '../../widgets/paid_via_picker.dart';
 import '../desktop/desk_widgets.dart';
 import '../reports/v2/report_kit.dart';
 import '../reports/v2/report_period.dart';
@@ -575,6 +577,8 @@ class _SalesScreenState extends State<SalesScreen> {
         // التبويب للصفحة المفتوحة وحدها (_storeAllowed) ⇒ _co هنا null دائماً — من شجرة القسم كبقيّة بيوعه
         companyKey: _co,
         onSold: (sale) => unawaited(_markStoreDone(o, sale.id)),
+        // «بيعٌ بحوالة» (٢٧ نوفمبر): طلبٌ مدفوعٌ بزين كاش/ماستر ⇒ «استلمته» معبّأ بطريقته حين يقبله الخادم
+        initialPaidVia: o.isTransfer ? PaidVia.fromRequest(o.payMethod) : null,
       ),
     ));
   }
@@ -924,7 +928,7 @@ class _SalesScreenState extends State<SalesScreen> {
             icon: LucideIcons.wallet,
             label: 'sales.kpi_cash'.tr(),
             value: _money(t.cash),
-            sub: 'sales.kpi_cash_hint'.tr(),
+            sub: t.transfers > 0 ? 'sales.kpi_cash_tw'.tr(namedArgs: {'amount': _money(t.transfers)}) : 'sales.kpi_cash_hint'.tr(),
             tone: AppTone.info,
           ),
           // «بيع بالدين» = ما بيع على الدين بالفترة (لا يتغيّر بالتسديد)، وتحته ما بقي منه على المشتركين الآن — كان
@@ -1605,7 +1609,7 @@ class _ActionButton extends StatelessWidget {
       if (s.isDebt && debt != null && debt.isPartial) return (label: 'sales.st_partial'.tr(), tone: AppTone.warning);
       return s.isDebt
           ? (label: 'sales.st_debt'.tr(), tone: AppTone.info)
-          : (label: 'sales.st_cash'.tr(), tone: AppTone.success);
+          : (label: s.viaLabel ?? 'sales.st_cash'.tr(), tone: AppTone.success);
     case 'void':
       return (label: 'sales.st_void'.tr(), tone: AppTone.brand);
     case 'failed':
@@ -2346,6 +2350,7 @@ class _NewSaleSheet extends StatefulWidget {
     required this.companyKey,
     this.initialLines,
     this.onSold,
+    this.initialPaidVia,
   });
   final List<SaleItem> items;
 
@@ -2364,6 +2369,10 @@ class _NewSaleSheet extends StatefulWidget {
   /// «بيع مادّة» من صفحة المشترك: الزبون مختارٌ مسبقاً، والدفع على دينه إن ملك «إضافة دين» (والتأكيد قبل الإرسال كما هو).
   final _Hit? initial;
 
+  /// «بيعٌ بحوالة» (٢٧ نوفمبر): طلب متجرٍ مدفوعٍ بحوالة ⇒ «استلمته» معبّأ بطريقته (الدفع «نقداً»، يُغيَّر لكاش) حين يقبله الخادم
+  /// للصفحة (`probe.transfer`)؛ البيع العاديّ (null) كما كان حرفاً.
+  final PaidVia? initialPaidVia;
+
   @override
   State<_NewSaleSheet> createState() => _NewSaleSheetState();
 }
@@ -2376,7 +2385,12 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
   final _term = TextEditingController();
   String _ref = SalesApi.newClientRef();
   late bool _subscriber = widget.initial != null;
-  late bool _debt = widget.initial != null && _canDebt;
+  late bool _debt = widget.initialPaidVia == null && widget.initial != null && _canDebt;
+
+  /// «بيعٌ بحوالة»: «استلمته» ظاهر (الخادم يقبله للصفحة)، أو ملاحظة «غير مفعّل ⇒ كاش» (ردٌّ صريح بلا حوالة، أو رفضٌ بعد الفتح).
+  bool _twOn = false;
+  bool _twOffNote = false;
+  late PaidVia _paidVia = widget.initialPaidVia ?? PaidVia.cash;
   late _Hit? _picked = widget.initial;
   List<_Hit> _hits = const [];
   bool _searching = false;
@@ -2401,6 +2415,20 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
       c.price.text = AmountShorthand.format(l.price);
       _lines.add(c);
     }
+    // طلب المتجر للصفحة المفتوحة وحدها (_storeAllowed) ⇒ الفحص لها
+    if (widget.initialPaidVia != null && widget.companyKey == null) unawaited(_loadTw());
+  }
+
+  /// هل يقبل الخادم البيع بحوالة لهذه الصفحة؟ تعذّر القراءة ⇒ لا شيء (كاشٌ كما كان، بلا ملاحظةٍ لا نعرف صحّتها).
+  Future<void> _loadTw() async {
+    final p = await SalesApi.probe();
+    if (!mounted || p == null) return;
+    if (p.transferNames.isNotEmpty) TransferPay.recentOthers.value = p.transferNames;
+    setState(() {
+      _twOn = p.transferAvailable;
+      _twOffNote = !p.transferAvailable;
+      if (!_twOn) _paidVia = PaidVia.cash;
+    });
   }
 
   @override
@@ -2437,7 +2465,8 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
       _lines.every(_lineOk) &&
       _total > 0 &&
       (!_subscriber || _picked != null) &&
-      (!_debt || (_subscriber && _picked != null && _canDebt));
+      (!_debt || (_subscriber && _picked != null && _canDebt)) &&
+      (!_twOn || _debt || _paidVia.valid);
 
   void _addItem(SaleItem it) {
     if (_lines.any((l) => l.item.id == it.id)) return;
@@ -2501,6 +2530,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
             },
       note: _note.text.trim(),
       companyKey: widget.companyKey,
+      paidVia: _twOn && !_debt ? _paidVia : null,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -2514,11 +2544,18 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
                   'amount': _money(s.total),
                   'user': s.username ?? s.customerLabel,
                 })
-              : 'sales.sold_cash'.tr(namedArgs: {
-                  'id': '${s.id}',
-                  'amount': _money(s.total),
-                  'profit': _signedMoney(s.profit),
-                });
+              : s.viaLabel != null
+                  ? 'sales.sold_tw'.tr(namedArgs: {
+                      'id': '${s.id}',
+                      'amount': _money(s.total),
+                      'via': s.viaLabel!,
+                      'profit': _signedMoney(s.profit),
+                    })
+                  : 'sales.sold_cash'.tr(namedArgs: {
+                      'id': '${s.id}',
+                      'amount': _money(s.total),
+                      'profit': _signedMoney(s.profit),
+                    });
       // «إصدار فاتورة» مفعَّلاً ⇒ تُطبع الآن (لا للبيع المكرَّر)؛ ونتيجتها على الصفحة الأمّ — النافذة تُغلق.
       if (PrintPrefs.saleInvoice.value && !r.duplicate) {
         final host = Navigator.of(context, rootNavigator: true).context;
@@ -2547,6 +2584,12 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
     setState(() {
       _ref = SalesApi.newClientRef();
       _confirmDebt = false;
+      // أُطفئ «البيع بحوالة» بعد فتح النافذة ⇒ «استلمته» يختفي على كاشٍ ظاهر (الضغطة التالية بعلمه)
+      if (r.code == 'SALE_TRANSFER_OFF') {
+        _twOn = false;
+        _twOffNote = true;
+        _paidVia = PaidVia.cash;
+      }
     });
     showSheetSnack(context, r.message ?? 'sales.not_saved'.tr(), isError: true);
   }
@@ -2563,6 +2606,8 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
       label = _confirmDebt
           ? 'sales.confirm_n'.tr(namedArgs: {'amount': _money(total)})
           : 'sales.sell_debt_n'.tr(namedArgs: {'amount': total > 0 ? _money(total) : ''});
+    } else if (_twOn && !_paidVia.isCash) {
+      label = 'sales.sell_tw_n'.tr(namedArgs: {'via': 'حوالة ${_paidVia.label}', 'amount': total > 0 ? _money(total) : ''});
     } else {
       label = 'sales.sell_cash_n'.tr(namedArgs: {'amount': total > 0 ? _money(total) : ''});
     }
@@ -2687,6 +2732,22 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
               );
             }),
           ),
+          if (_twOn && !_debt) ...[
+            const SizedBox(height: Sp.md),
+            PaidViaPicker(
+              key: const ValueKey('sale-paid-via'),
+              value: _paidVia,
+              enabled: !_locked,
+              onChanged: (v) => setState(() => _paidVia = v),
+            ),
+          ] else if (_twOffNote && !_debt && widget.initialPaidVia != null) ...[
+            const SizedBox(height: Sp.sm),
+            Text(
+              'sales.tw_off_note'.tr(namedArgs: {'via': widget.initialPaidVia!.label}),
+              key: const ValueKey('sale-tw-off'),
+              style: AppType.muted(color: AppColors.textHint),
+            ),
+          ],
           const SizedBox(height: Sp.lg),
           _SheetText(controller: _note, icon: LucideIcons.fileText, hint: 'sales.f_note_opt'.tr(), maxLength: 200, enabled: !_locked),
           const SizedBox(height: Sp.sm),
