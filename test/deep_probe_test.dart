@@ -295,7 +295,8 @@ void main() {
 
     test('الأضعف إشارةً أوّلاً', () {
       // من يراقب سكتراً يبحث عن الشكوى لا عن الأفضل.
-      expect(card.contains('(a.signal ?? 0).compareTo(b.signal ?? 0)'), isTrue);
+      // ٢٦ نوفمبر: بإشارة المشترك عند الوكيل (كيف يستقبلنا أوّلاً) — الرقم نفسه في البطاقة واللوحة والبرج والفحص.
+      expect(card.contains('(a.agentSignal ?? 0).compareTo(b.agentSignal ?? 0)'), isTrue);
     });
 
     test('المنافذ المطفأة لا تُغرق العاملة', () {
@@ -356,7 +357,9 @@ void main() {
           reason: 'الإشارة وحدها تكذب — الجودة خانتها تليها');
       final cell = card.substring(card.indexOf('class _PeerCell'), card.indexOf('/// أرقام الوصلة كما يراها الجهاز'));
       expect(cell.contains('Text(iso(p.name)'), isTrue);
-      expect(cell.contains("'\${p.signal}'"), isTrue);
+      // ٢٦ نوفمبر: الإشارة كلوحة الجهاز «كيف يستقبلنا/كيف نستقبله» (المالك: «شوف الاختلاف بالفحص… بجميع الاوضاع»)
+      expect(cell.contains("Text(iso(known ? '\$sig' : '—')"), isTrue);
+      expect(cell.contains('rxSignal: other'), isTrue, reason: 'الرقم الثاني «rx …» تحته');
     });
 
     test('الوصلة قسم مستقلّ لا مدفون في النظام', () {

@@ -1526,7 +1526,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     // كلّ المتّصلين — الأضعف إشارةً أوّلاً ومن لا قراءة إشارةٍ له آخراً. كانت «أضعف ٣» وحدها فقال البرج «٥ مشتركين» وعرض ثلاثة
     // (بلاغ المالك ٢٨ أكتوبر).
     final weakest = [...?r?.peers]..sort((x, y) {
-        final a = x.signal, b = y.signal;
+        final a = x.agentSignal, b = y.agentSignal;
         if (a == null && b == null) return 0;
         if (a == null) return 1;
         if (b == null) return -1;
@@ -1656,7 +1656,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       );
 
   Widget _peerRow(PeerLink p) {
-    final tone = Grade.signal(p.signal);
+    final tone = Grade.signal(p.agentSignal);
     // CCQ والسرعتان (المالك ٤ نوفمبر: «المفترض ccq وريت هم») سطراً ثانياً — بجانب الاسم كانت تأكله على الهاتف الضيّق
     final rx = (p.rxRate ?? 0) > 0 ? p.rxRate : null;
     final tx = (p.txRate ?? 0) > 0 ? p.txRate : null;
@@ -1673,7 +1673,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         Row(children: [
           Expanded(child: Text(iso(p.name), style: AppType.body(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis)),
           // بلا قراءة إشارة ⇒ «—» لا «null dBm» (القائمة صارت تضمّهم آخراً).
-          Text(iso(p.signal == null ? '—' : '${p.signal} dBm'), style: AppType.bodyBold(color: p.signal == null ? AppColors.textLow : tone.fill)),
+          Text(iso(p.signalPair == null ? '—' : '${p.signalPair} dBm'), style: AppType.bodyBold(color: p.agentSignal == null ? AppColors.textLow : tone.fill)),
         ]),
         if (second.isNotEmpty)
           Text(iso(second), style: AppType.muted(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),

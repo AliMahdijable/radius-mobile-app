@@ -1556,7 +1556,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   List<Widget> _clientCells(MikrotikWirelessClient c, {required bool ip, required bool ccq}) {
     final name = c.hostname ?? c.comment;
-    final sig = _signalColorFor(c.signalStrength);
+    final sig = _signalColorFor(c.agentSignal);
     final q = c.txCcq > 0 ? c.txCcq : c.rxCcq;
     final mono = AppType.body(color: AppColors.textMid).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
     return [
@@ -1824,7 +1824,7 @@ Widget _wirelessCard(MikrotikWireless w, MikrotikW60gLink? link) {
   // Wireless clients (registration table)
   // ══════════════════════════════════════════════════════════════
 Widget _clientRow(MikrotikWirelessClient c) {
-    final signalColor = _signalColorFor(c.signalStrength);
+    final signalColor = _signalColorFor(c.agentSignal);
     final hasName = c.hostname != null || c.comment != null;
     // Use best CCQ (tx-ccq usually higher)
     final ccq = c.txCcq > 0 ? c.txCcq : c.rxCcq;

@@ -384,7 +384,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
 
   Widget _deskClientsTile() {
     final list = _stickyStations;
-    final weakest = list.isEmpty ? null : list.map((c) => c.signal).reduce(math.min);
+    final weakest = list.isEmpty ? null : list.map((c) => c.agentSignal).reduce(math.min);
     return DeskMetricTile(
       icon: LucideIcons.users,
       label: 'العملاء',
@@ -503,7 +503,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 Text('بلا اسم', style: AppType.body(color: AppColors.textLow)),
               if (ip) (c.ip ?? '').isNotEmpty ? DeskMonoCell(c.ip!, label: 'IP') : deskDash(),
               DeskMonoCell(c.mac, label: 'الماك'),
-              DeskDotValue(value: c.signalDisplay, unit: 'dBm', color: Grade.signal(c.signal).fill),
+              DeskDotValue(value: c.signalDisplay, unit: 'dBm', color: Grade.signal(c.agentSignal).fill),
               if (ccq)
                 c.ccq > 0
                     ? Align(
@@ -1239,7 +1239,7 @@ Widget _interfaceRow(UbntInterface iface) {
   // Stations section (لو AP mode)
   // ══════════════════════════════════════════════════════════════
 Widget _stationRow(UbntStation s) {
-    final signalColor = _signalColor(s.signal);
+    final signalColor = _signalColor(s.agentSignal);
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(8),

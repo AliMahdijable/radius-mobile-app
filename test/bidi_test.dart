@@ -54,7 +54,9 @@ void main() {
     // كلّ سطر هنا عطلٌ رآه المستخدم بعينه في لقطة.
     const sites = {
       'قيمة رقاقة الوصلة (V 24.2)': 'child: Text(iso(f.value),',
-      'إشارة المتّصل (-63)': "Text(iso(known ? '\${p.signal}' : '—')",
+      // ٢٦ نوفمبر: كيف يستقبلنا أوّلاً (-56) و«rx -64» تحته — كلاهما معزول
+      'إشارة المتّصل (-56)': "Text(iso(known ? '\$sig' : '—')",
+      'إشارتنا منه (rx -64)': "Text(iso('rx \$rxSignal')",
       'اسم المنفذ/المتّصل (pppoe-x> بقوس مقلوب)': 'child: Text(iso(p.name),',
       'اسم منفذ PON (EPON0/1)': 'child: Text(iso(p.label),',
       'معدّل النزول (M 251.2)': "Text(iso('↓ \${_bpsShort(p.rxBps)}')",

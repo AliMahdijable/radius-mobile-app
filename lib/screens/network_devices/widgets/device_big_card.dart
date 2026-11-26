@@ -440,7 +440,7 @@ class _Body extends StatelessWidget {
       case DeviceRole.sector:
         // سكتر يعمل محطّةً (أو بلا جدول عملاء): أرقام وصلته هو.
         if (g.isAp == false || (!g.peersKnown && peers.isEmpty && g.signal != null)) return _linkTiles(g, peers);
-        final sig = [for (final p in peers) if (p.signal != null && p.signal != 0) p.signal!];
+        final sig = [for (final p in peers) if (p.agentSignal != null) p.agentSignal!];
         final avg = sig.isEmpty ? null : (sig.reduce((a, b) => a + b) / sig.length).round();
         final worst = sig.isEmpty ? null : sig.reduce((a, b) => a < b ? a : b);
         final known = g.peersKnown || peers.isNotEmpty;
@@ -730,7 +730,7 @@ class _PeersSection extends StatelessWidget {
     if (peers.isEmpty) {
       return const _Notice(icon: LucideIcons.userX, text: 'لا متّصلين الآن');
     }
-    final sorted = [...peers]..sort((a, b) => (a.signal ?? 0).compareTo(b.signal ?? 0));
+    final sorted = [...peers]..sort((a, b) => (a.agentSignal ?? 0).compareTo(b.agentSignal ?? 0));
     final shown = sorted.take(rows * 2).toList();
     final more = peers.length - shown.length;
     return Column(
@@ -763,8 +763,12 @@ class _PeerCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final known = p.signal != null && p.signal != 0;
-    final tone = Grade.signal(p.signal);
+    // إشارته كما يقرؤها الوكيل في كلّ عرض: كيف يستقبلنا أوّلاً (المالك ٢٦ نوفمبر: «شوف الاختلاف بالفحص… بجميع الاوضاع»)، وما
+    // نستقبله منه سطراً ثانياً صغيراً «rx …» — الرقمان نفسهما في لوحة الجهاز «-56/-64» بلا أن يأكلا الاسم في خليّةٍ نصف العرض.
+    final sig = p.agentSignal;
+    final known = sig != null;
+    final tone = Grade.signal(sig);
+    final other = (p.txSignal ?? 0) != 0 && (p.signal ?? 0) != 0 ? p.signal : null;
     final rx = (p.rxRate ?? 0) > 0 ? p.rxRate : null;
     final tx = (p.txRate ?? 0) > 0 ? p.txRate : null;
     final ccq = p.hasCcq ? p.ccq : null;
@@ -785,12 +789,12 @@ class _PeerCell extends StatelessWidget {
                 child: Text(iso(p.name), style: AppType.bodyStrong(), maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: Sp.x6),
-              Text(iso(known ? '${p.signal}' : '—'), style: AppType.bodyBold(color: known ? tone.fill : AppColors.textMid)),
+              Text(iso(known ? '$sig' : '—'), style: AppType.bodyBold(color: known ? tone.fill : AppColors.textMid)),
             ],
           ),
-          if (ccq != null || rx != null || tx != null) ...[
+          if (ccq != null || rx != null || tx != null || other != null) ...[
             const SizedBox(height: 3),
-            _PeerQuality(ccq: ccq, rx: rx, tx: tx),
+            _PeerQuality(ccq: ccq, rx: rx, tx: tx, rxSignal: other),
           ],
         ],
       ),
@@ -801,10 +805,13 @@ class _PeerCell extends StatelessWidget {
 /// السطر الثاني في خليّة المتّصل: CCQ رقاقةٌ بلون سلّمها، ثمّ ↓الاستقبال ↑الإرسال Mbps كما في لوحة الجهاز. يصغر على الضيّق
 /// (خليّتان بالسطر على ٣٢٠) ولا يفيض.
 class _PeerQuality extends StatelessWidget {
-  const _PeerQuality({required this.ccq, required this.rx, required this.tx});
+  const _PeerQuality({required this.ccq, required this.rx, required this.tx, this.rxSignal});
   final int? ccq;
   final int? rx;
   final int? tx;
+
+  /// ما نستقبله من المشترك (dBm) حين يكون رقم السطر الأوّل كيف يستقبلنا — «rx -64» صغيراً (٢٦ نوفمبر).
+  final int? rxSignal;
 
   @override
   Widget build(BuildContext context) {
@@ -817,7 +824,7 @@ class _PeerQuality extends StatelessWidget {
             decoration: BoxDecoration(color: q.fill.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(R.pill)),
             child: Text(iso('$ccq%'), style: AppType.pillBold(color: q.fill)),
           ),
-        if (rx != null || tx != null) ...[
+        if (rx != null || tx != null || rxSignal != null) ...[
           if (q != null) const SizedBox(width: Sp.x6),
           Expanded(
             child: FittedBox(
@@ -835,7 +842,11 @@ class _PeerQuality extends StatelessWidget {
                     Icon(LucideIcons.arrowUp, size: 9, color: AppColors.info),
                     Text(' $tx', style: AppType.daysWordBold(color: AppColors.textHi)),
                   ],
-                  Text(' Mbps', style: AppType.daysWord(color: AppColors.textLow)),
+                  if (rx != null || tx != null) Text(' Mbps', style: AppType.daysWord(color: AppColors.textLow)),
+                  if (rxSignal != null) ...[
+                    if (rx != null || tx != null) const SizedBox(width: 6),
+                    Text(iso('rx $rxSignal'), style: AppType.daysWord(color: AppColors.textMid)),
+                  ],
                 ],
               ),
             ),

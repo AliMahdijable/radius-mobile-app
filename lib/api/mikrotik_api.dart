@@ -1550,6 +1550,9 @@ class MikrotikWirelessClient {
     return '$signalStrength';
   }
 
+  /// إشارة المشترك عند الوكيل (٦ و٢٦ نوفمبر): كيف يستقبلنا أوّلاً، وإلّا ما نستقبله — لونها وترتيبها في كلّ عرض.
+  int get agentSignal => txSignalStrength != 0 ? txSignalStrength : signalStrength;
+
   factory MikrotikWirelessClient.fromApiMap(
     Map<String, String> j, {
     String? hostname,

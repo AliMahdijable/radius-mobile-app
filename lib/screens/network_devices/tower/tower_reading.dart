@@ -280,7 +280,7 @@ class TowerReading {
 
     final wired = [for (final p in ports) if (_isEtherPort(p.name) || !_isWirelessPort(p.name)) p];
     final peerQuality = _avg(peers.map((p) => p.ccq));
-    final peerSignal = _avg(peers.map((p) => p.signal));
+    final peerSignal = _avg(peers.map((p) => p.agentSignal));
     return TowerReading(
       at: when,
       wireless: wireless,
