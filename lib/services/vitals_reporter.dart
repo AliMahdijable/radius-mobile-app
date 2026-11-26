@@ -36,6 +36,11 @@ class VitalsReporter {
   /// الإشارة لوصلةٍ لا لنقطة وصول (الفحص الأخير ٤ نوفمبر: سكترٌ يوبيكويتي بوضع AP أرسل «-96 dBm» — أرضيّة الضجيج، لا إشارة — فوصل
   /// المالكَ «📉 إشارة» كاذب): نقطة الوصول بمحطّةٍ واحدة (وصلة PtP) ⇒ إشارة تلك المحطّة؛ وبغير واحدة ⇒ `signal: null` صريحاً
   /// («لا تنطبق» — الخادم يغلق إنذاراً قديماً لها بصمت)؛ ومحطّاتها لم تُقرأ هذه المرّة ([DeviceGlance.peersKnown]) ⇒ لا مفتاح.
+  ///
+  /// وإشارة المحطّة **كيف تستقبلنا هي** (tx) لا ما نستقبله منها (٢٦ نوفمبر، المالك: «الإصلاح لازم بالتنبيهات هم» — القاعدة نفسها في
+  /// البطاقة والبرج واللوحات والفحص الشامل، [PeerLink.agentSignal]) — بمفتاحها `sigtx` ومعه `signal: null`: للخادم صفٌّ ومعدّلٌ لها لا
+  /// يرث معدّل الـrx (فرقُ الهوائيَّين كان سيُقرأ «📉 إشارة» كاذبة لحظة التحديث). محطّةٌ لا ترسل إشارتها ⇒ rx في `signal` كما كان
+  /// (والخادم لا يحكم به ما دام tx وصل خلال يوم)؛ وبغير محطّةٍ واحدة ⇒ null صريح للاثنين.
   @visibleForTesting
   static Map<String, dynamic>? readingOf(int id, DeviceGlance g, {List<PeerLink> peers = const []}) {
     final m = <String, dynamic>{'id': id};
@@ -47,8 +52,16 @@ class VitalsReporter {
       final s = g.signal;
       if (s != null && s < 0) m['signal'] = s;
     } else if (g.peersKnown) {
-      final s = peers.length == 1 ? peers.single.signal : null;
-      m['signal'] = s != null && s < 0 ? s : null;
+      final one = peers.length == 1 ? peers.single : null;
+      final tx = one?.txSignal;
+      if (tx != null && tx < 0) {
+        m['sigtx'] = tx;
+        m['signal'] = null;
+      } else {
+        final s = one?.signal;
+        m['signal'] = s != null && s < 0 ? s : null;
+        if (one == null) m['sigtx'] = null;
+      }
     }
     final c = g.ccq;
     if (c != null && c > 0) m['ccq'] = c;

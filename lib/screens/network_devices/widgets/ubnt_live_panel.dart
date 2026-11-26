@@ -298,7 +298,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         // أصغر لـPtMP (فيه clients متعدّدين — القسم مو الأهم)
         if (s.wireless != null) ...[
           const SizedBox(height: Sp.md),
-          _cardWrapper(child: _signalHero(s.wireless!)),
+          _cardWrapper(child: _signalHero(s.wireless!, ap: s.isAp ? _stickyStations : null)),
         ],
         // Traffic graph — widget مستقلّ مع KeepAlive → state ينجو من
         // parent rebuilds (كان يختفي/يعود على كل refresh قبل الإصلاح).
@@ -369,18 +369,28 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       // نقطة وصولٍ لعدّة عملاء: عددهم وأضعفهم — إشارتها وحدها متوسّطٌ لا يدلّ على أحد. الوصلة: إشارتها.
       if (s.isAp && _stickyStations.length != 1)
         _deskClientsTile()
+      // نقطة وصولٍ بمحطّةٍ واحدة (وصلة PtP): كيف تستقبلنا المحطّة (tx) أوّلاً والـrx بجانبها — لا wireless.signal (٢٦ نوفمبر)
+      else if (s.isAp && _stickyStations.single.agentSignal < 0)
+        _deskSignalTile(_stickyStations.single.agentSignal,
+            rx: _stickyStations.single.txSignal != 0 ? _stickyStations.single.signal : null)
       else if (w != null)
-        DeskMetricTile(
-          icon: LucideIcons.signal,
-          label: 'الإشارة',
-          color: Grade.signal(w.signal).fill,
-          value: DeskBigValue('${w.signal}', 'dBm', color: Grade.signal(w.signal).fill),
-          footer: deskSub(isoJoin([_signalLabel(w.signal), if (w.snr != null) 'SNR ${w.snr} dB'], ' · ')),
-        ),
+        _deskSignalTile(w.signal, snr: w.snr),
       DeskRateTile(down: true, bps: down?.bps, source: down?.name, measuring: _rates.isEmpty),
       DeskRateTile(down: false, bps: up?.bps, source: up?.name, measuring: _rates.isEmpty),
     ];
   }
+
+  Widget _deskSignalTile(int dbm, {int? rx, int? snr}) => DeskMetricTile(
+        icon: LucideIcons.signal,
+        label: 'الإشارة',
+        color: Grade.signal(dbm).fill,
+        value: DeskBigValue('$dbm', 'dBm', color: Grade.signal(dbm).fill),
+        footer: deskSub(isoJoin([
+          _signalLabel(dbm),
+          if (rx != null && rx < 0 && rx != dbm) 'rx $rx',
+          if (snr != null) 'SNR $snr dB',
+        ], ' · ')),
+      );
 
   Widget _deskClientsTile() {
     final list = _stickyStations;
@@ -438,7 +448,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             key: PageStorageKey('ubnt-$id-wireless'),
             initiallyExpanded: true,
             header: const DeskSectionHeader(icon: LucideIcons.wifi, title: 'اللاسلكيّ'),
-            content: _deskWirelessFacts(w, s.extras),
+            content: _deskWirelessFacts(w, s.extras, s.isAp),
           );
     // نقطة الوصول: العملاء أوّلاً بعرض الصفحة؛ الوصلة: الطرف الآخر بعد الواجهات واللاسلكيّ.
     return [
@@ -451,7 +461,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     ];
   }
 
-  Widget _deskWirelessFacts(UbntWireless w, [List<({String k, String v})> extras = const []]) {
+  /// [ap]: جهاز بثّ — إشارته وSNR المشتقّ منها ليسا له (rx محطّةٍ أو أرضيّة الضجيج)؛ إشارات مشتركيه في قائمتهم (٢٦ نوفمبر).
+  Widget _deskWirelessFacts(UbntWireless w, [List<({String k, String v})> extras = const [], bool ap = false]) {
     return DeskFactsGrid(facts: [
       if (w.essid.isNotEmpty) DeskFact('اسم الشبكة (SSID)', w.essid, ltr: true, copy: true),
       DeskFact('الوضع', _modeLabel(w.mode), ltr: true),
@@ -459,8 +470,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (w.frequency > 0) DeskFact('التردّد', '${w.frequency} MHz', ltr: true),
       if (w.chanbw > 0) DeskFact('عرض القناة', '${w.chanbw} MHz', ltr: true),
       if (w.channel > 0) DeskFact('القناة', '${w.channel}', ltr: true),
-      if (w.signal != 0) DeskFact('الإشارة', '${w.signal} dBm', ltr: true, color: Grade.signal(w.signal).fill),
-      if (w.snr != null) DeskFact('SNR', '${w.snr} dB', ltr: true, color: Grade.snr(w.snr).fill),
+      if (!ap && w.signal != 0) DeskFact('الإشارة', '${w.signal} dBm', ltr: true, color: Grade.signal(w.signal).fill),
+      if (!ap && w.snr != null) DeskFact('SNR', '${w.snr} dB', ltr: true, color: Grade.snr(w.snr).fill),
       if (w.hasCcq) DeskFact('جودة الوصلة (CCQ)', '${w.ccq}%', ltr: true, color: Grade.percentHigherBetter(w.ccq).fill),
       if (w.hasNoise) DeskFact('الضوضاء', '${w.noise} dBm', ltr: true),
       if (w.distance > 0)
@@ -1011,8 +1022,19 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Signal Hero — النجم! semi-circular gauge بلوّن حسب جودة الإشارة
   // ══════════════════════════════════════════════════════════════
-  Widget _signalHero(UbntWireless w) {
-    final signalColor = _signalColor(w.signal);
+  /// [ap]: محطّات جهاز البثّ — إشارته عند مشتركيه لا wireless.signal (rx محطّته الوحيدة أو أرضيّة الضجيج −96): متوسّط كيف
+  /// يستقبلوننا (tx أوّلاً، [UbntStation.agentSignal]) وتحته أضعفهم — أو الـrx لمحطّةٍ واحدة؛ بلا محطّاتٍ ⇒ «—» (٢٦ نوفمبر، المالك:
+  /// «اكو اجهزه بث ubntu هم لازم تصلح هلشي»). المحطّة/الوصلة: إشارتها هي كما كانت.
+  Widget _signalHero(UbntWireless w, {List<UbntStation>? ap}) {
+    final apSig = ap == null ? null : [for (final c in ap) if (c.agentSignal < 0) c.agentSignal];
+    final int? value =
+        apSig == null ? w.signal : (apSig.isEmpty ? null : (apSig.reduce((a, b) => a + b) / apSig.length).round());
+    final weakest = apSig != null && apSig.length >= 2 ? apSig.reduce(math.min) : null;
+    final one = ap != null && ap.length == 1 ? ap.single : null;
+    final rxOne = one != null && one.txSignal != 0 && one.signal < 0 && one.signal != one.txSignal ? one.signal : null;
+    final signalColor = value == null ? AppColors.textLow : _signalColor(value);
+    final percent =
+        ap == null ? w.signalQualityPercent : (value == null ? 0.0 : ((value + 95) / 55 * 100).clamp(0.0, 100.0).toDouble());
     return Container(
       padding: const EdgeInsets.all(Sp.lg),
       decoration: BoxDecoration(
@@ -1037,14 +1059,14 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           child: RepaintBoundary(
               child: CustomPaint(
             painter: _SignalGaugePainter(
-              percent: w.signalQualityPercent,
+              percent: percent,
               color: signalColor,
               background: AppColors.border,
             ),
             child: Center(
               child:
                   Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                Text('${w.signal}',
+                Text(value == null ? '—' : '$value',
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
                         fontSize: 30,
@@ -1063,19 +1085,25 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('جودة الإشارة',
+            Text(ap != null && ap.length >= 2 ? 'متوسّط المشتركين' : 'جودة الإشارة',
                 style: AppType.microBold(color: AppColors.textMid)),
             const SizedBox(height: 4),
-            Text(_signalLabel(w.signal),
+            Text(value != null ? _signalLabel(value) : (ap != null && ap.isEmpty ? 'لا عملاء الآن' : '—'),
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: signalColor,
                     height: 1.1)),
             const SizedBox(height: 10),
-            _metric('SNR', w.snr != null ? '${w.snr}' : '—',
-                w.snr != null ? 'dB' : '',
-                color: w.snr != null ? _snrColor(w.snr!) : AppColors.textLow),
+            if (weakest != null)
+              _metric('الأضعف', '$weakest', 'dBm', color: _signalColor(weakest))
+            else if (rxOne != null)
+              _metric('rx', '$rxOne', 'dBm', color: AppColors.textMid)
+            // جهاز البثّ: SNR المشتقّ من «إشارته» (أرضيّة الضجيج) ليس رقماً — إلّا ما يقوله الجهاز صراحةً
+            else if (ap == null || w.explicitSnr > 0)
+              _metric('SNR', w.snr != null ? '${w.snr}' : '—',
+                  w.snr != null ? 'dB' : '',
+                  color: w.snr != null ? _snrColor(w.snr!) : AppColors.textLow),
             const SizedBox(height: 4),
             _metric('Noise', w.hasNoise ? '${w.noise}' : '—',
                 w.hasNoise ? 'dBm' : '',
@@ -1098,7 +1126,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           width: 42,
           child: Text(label,
               style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow))),
+      // LTR: الرقم السالب في سطرٍ عربيّ كان يُرسم «66-» (والضجيج «95-») — الإشارة يسار الرقم كما يقرؤها الفنّي
       Text(value,
+          textDirection: TextDirection.ltr,
           style: AppType.bodyBold(color: color)),
       const SizedBox(width: 2),
       Text(unit, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),

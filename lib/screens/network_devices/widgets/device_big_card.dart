@@ -484,7 +484,11 @@ class _Body extends StatelessWidget {
   List<_TileData> _linkTiles(DeviceGlance g, List<PeerLink> peers) {
     // الطرف الآخر وحده في جدول المحطّة — إشارته وجودته هي الوصلة (ميكروتك محطّةً تُعيدها في glance نفسها).
     final peer = peers.length == 1 ? peers.first : null;
-    final signal = g.signal ?? peer?.signal;
+    // طرف الوصلة المرسل (نقطة وصولٍ بمحطّةٍ واحدة): إشارتها كيف تستقبلنا محطّتها (tx) أوّلاً والـrx تحتها — كبطاقة السكتر والبرج
+    // والفحص الشامل (٢٦ نوفمبر: «اكو اجهزه بث ubntu هم لازم تصلح هلشي»). المحطّة: إشارتها هي.
+    final txEnd = g.isAp == true && (peer?.txSignal ?? 0) < 0 ? peer!.txSignal : null;
+    final signal = txEnd ?? g.signal ?? peer?.signal;
+    final rxFoot = txEnd != null && (peer?.signal ?? 0) < 0 && peer!.signal != txEnd ? 'rx ${peer.signal}' : null;
     final ccq = g.ccq ?? peer?.ccq;
     int? pos(int? v) => v != null && v > 0 ? v : null;
     final rx = pos(g.rxRateMbps ?? peer?.rxRate);
@@ -504,7 +508,7 @@ class _Body extends StatelessWidget {
     return [
       signal == null || signal == 0
           ? const _TileData.empty('الإشارة', LucideIcons.signal)
-          : _TileData('الإشارة', LucideIcons.signal, '$signal', 'dBm', Grade.signal(signal)),
+          : _TileData('الإشارة', LucideIcons.signal, '$signal', 'dBm', Grade.signal(signal), foot: rxFoot),
       quality,
       rate == null
           ? const _TileData.empty('سرعة الربط', LucideIcons.gauge)

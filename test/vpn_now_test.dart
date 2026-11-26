@@ -381,7 +381,8 @@ void main() {
 
     final ap = DeviceVitals.fromVpn({'kind': 'airos', 'cpu': 8, 'temp': null, 'ap': true,
       'peers': [{'n': 'cust1', 's': -61, 'q': 95}, {'n': 'c2', 's': -72, 'q': 80}]});
-    expect(ap.vitals!.first.label, '—', reason: 'نقطة وصول: لا إشارة لها (عند محطّاتها)');
+    // نقطة وصول: لا إشارة لها هي — إشارتها عند محطّاتها: متوسّط كيف يستقبلوننا (٢٦ نوفمبر، كالبرج وبطاقة السكتر؛ كانت «—»)
+    expect([ap.vitals!.first.label, ap.vitals!.first.value], ['الإشارة', '-67'], reason: '(−61 −72)/2 = −66.5');
     expect(ap.vitals![1].value, '8');
     expect(ap.detail!.glance.isAp, isTrue);
     expect(ap.detail!.glance.peersKnown, isTrue);

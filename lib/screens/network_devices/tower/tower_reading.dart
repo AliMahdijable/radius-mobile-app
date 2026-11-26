@@ -190,7 +190,8 @@ class TowerReading {
         frequency = w.frequency > 0 ? w.frequency : null;
         channelWidth = w.chanbw > 0 ? w.chanbw : null;
         noise = w.hasNoise ? w.noise : null;
-        ownSignal = w.signal == 0 ? null : w.signal;
+        // جهاز بثٍّ (ap): wireless.signal فيه rx محطّته الوحيدة أو أرضيّة الضجيج — إشارته من محطّاته (tx أوّلاً) كمايكروتك (٢٦ نوفمبر)
+        ownSignal = (w.signal == 0 || w.mode.toLowerCase().startsWith('ap')) ? null : w.signal;
         ownQuality = w.hasCcq ? w.ccq : null;
       }
       temperature = raw.host.temperature > 0 ? raw.host.temperature : null;

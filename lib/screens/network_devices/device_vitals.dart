@@ -575,7 +575,8 @@ class DeviceVitals {
       temp: n(v['temp']),
       voltage: d(v['volt']),
       ppp: ppp != null && ppp > 0 ? ppp : null,
-      signal: sig == 0 ? null : sig,
+      // جهاز بثٍّ يوبيكويتي (ap): sig من mca-status أرضيّة الضجيج (−96) لا إشارة — إشارته عند محطّاته ([apSignalVital])
+      signal: sig == 0 || (airos && isAp == true) ? null : sig,
       ccq: n(v['ccq']),
       freqMhz: n(v['freq']),
       widthMhz: n(v['width']),
@@ -626,15 +627,18 @@ class DeviceVitals {
     return VitalsState(
       vitals: airos
           ? [
-              glance.signal == null
-                  ? Vital.empty.withIcon(LucideIcons.signal)
-                  : Vital(
-                      label: 'الإشارة',
-                      value: '${glance.signal}',
-                      unit: 'dBm',
-                      icon: LucideIcons.signal,
-                      tone: Grade.signal(glance.signal),
-                    ),
+              if (isAp == true)
+                apSignalVital(peers)
+              else if (glance.signal == null)
+                Vital.empty.withIcon(LucideIcons.signal)
+              else
+                Vital(
+                  label: 'الإشارة',
+                  value: '${glance.signal}',
+                  unit: 'dBm',
+                  icon: LucideIcons.signal,
+                  tone: Grade.signal(glance.signal),
+                ),
               pct('المعالج', glance.cpu, LucideIcons.cpu),
               temp(glance.temp),
             ]
@@ -997,6 +1001,20 @@ class DeviceVitals {
 
   // ── UBNT: الإشارة · المعالج · الحرارة ────────────────────────────
 
+  /// خانة «الإشارة» لجهاز بثٍّ (نقطة وصول) في القائمة والجدول: لا إشارة له هو — كانت تُعرض wireless.signal (rx محطّته الوحيدة، أو
+  /// أرضيّة الضجيج −96 بعدّة محطّات). إشارته عند مشتركيه: متوسّط كيف يستقبلوننا (tx أوّلاً، [PeerLink.agentSignal]) — الرقم نفسه في
+  /// البرج وبطاقة السكتر (٢٦ نوفمبر، المالك: «اكو اجهزه بث ubntu هم لازم تصلح هلشي»). بلا محطّاتٍ مقروءة ⇒ «—» لا رقمٌ مخترع.
+  @visibleForTesting
+  static Vital apSignalVital(List<PeerLink> peers) {
+    final sig = [
+      for (final p in peers)
+        if (p.agentSignal case final s? when s < 0) s,
+    ];
+    if (sig.isEmpty) return Vital.empty.withIcon(LucideIcons.signal);
+    final avg = (sig.reduce((a, b) => a + b) / sig.length).round();
+    return Vital(label: 'الإشارة', value: '$avg', unit: 'dBm', icon: LucideIcons.signal, tone: Grade.signal(avg));
+  }
+
   static Future<ProbeResult> _ubnt(
       NetworkDevice d, Map<String, dynamic> creds, CounterSample? prev) async {
     final user = (creds['user'] ?? '').toString();
@@ -1045,19 +1063,25 @@ class DeviceVitals {
         ),
     ];
 
+    // جهاز البثّ (وضع AP) لا إشارة له هو: wireless.signal فيه rx محطّته الوحيدة أو أرضيّة الضجيج (−96) بعدّة محطّات — إشارته عند
+    // مشتركيه ([apSignalVital])، وglance بلا إشارة كمايكروتك نقطة وصول (٢٦ نوفمبر).
+    final apMode = w?.mode.toLowerCase().startsWith('ap') ?? false;
     return ProbeResult(
       vitals: [
         // نقطة الوصول لا إشارة لها (هي المصدر) — والصفر هنا يعني «غير
         // متوفّر» لا «إشارة صفر dBm»، وهي قيمة ممتازة لو صُدّقت.
-        (w == null || w.signal == 0)
-            ? Vital.empty.withIcon(LucideIcons.signal)
-            : Vital(
-                label: 'الإشارة',
-                value: '${w.signal}',
-                unit: 'dBm',
-                icon: LucideIcons.signal,
-                tone: Grade.signal(w.signal),
-              ),
+        if (apMode)
+          apSignalVital(peers)
+        else if (w == null || w.signal == 0)
+          Vital.empty.withIcon(LucideIcons.signal)
+        else
+          Vital(
+            label: 'الإشارة',
+            value: '${w.signal}',
+            unit: 'dBm',
+            icon: LucideIcons.signal,
+            tone: Grade.signal(w.signal),
+          ),
         // المعالج من عدّاداته الحقيقيّة وحدها — لم يُقرأ ⇒ خانةٌ فارغة لا «0٪» (ولا متوسّط الحِمل كما كان).
         if (s.host.cpuload case final cpu?)
           Vital(
@@ -1115,7 +1139,7 @@ class DeviceVitals {
           hasRadio: true,
           cpu: s.host.cpuload,
           temp: s.host.temperature == 0 ? null : s.host.temperature,
-          signal: (w == null || w.signal == 0) ? null : w.signal,
+          signal: (w == null || w.signal == 0 || apMode) ? null : w.signal,
           noise: (w != null && w.hasNoise) ? w.noise : null,
           snr: w?.snr,
           ccq: (w != null && w.hasCcq) ? w.ccq : null,

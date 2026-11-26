@@ -81,14 +81,21 @@ void main() {
   test('الإشارة لوصلةٍ لا لنقطة وصول: سكتر بوضع AP لا يرسل «-96»؛ بمحطّةٍ واحدة ⇒ إشارتها؛ محطّاته لم تُقرأ ⇒ لا مفتاح', () {
     const p = PeerLink(name: 'a', signal: -63);
     const q = PeerLink(name: 'b', signal: -70);
-    // الحال الحيّة (٤ نوفمبر، سكتر يوبيكويتي): وضع AP، محطّاتٌ مقروءة، و«إشارة» الجهاز -96 ⇒ null صريح (لا تنطبق)
+    // الحال الحيّة (٤ نوفمبر، سكتر يوبيكويتي): وضع AP، محطّاتٌ مقروءة، و«إشارة» الجهاز -96 ⇒ null صريح (لا تنطبق) — للمقياسين
     expect(VitalsReporter.readingOf(1, const DeviceGlance(cpu: 5, signal: -96, isAp: true, peersKnown: true), peers: const [p, q]),
-        {'id': 1, 'cpu': 5, 'signal': null});
-    expect(VitalsReporter.readingOf(1, const DeviceGlance(signal: -96, isAp: true, peersKnown: true)), {'id': 1, 'signal': null},
+        {'id': 1, 'cpu': 5, 'signal': null, 'sigtx': null});
+    expect(VitalsReporter.readingOf(1, const DeviceGlance(signal: -96, isAp: true, peersKnown: true)), {'id': 1, 'signal': null, 'sigtx': null},
         reason: 'بلا محطّات أيضاً — والخريطة لا تُهمل: null الصريح يغلق إنذاراً قديماً');
-    // نقطة وصولٍ بمحطّةٍ واحدة = وصلة PtP ⇒ إشارة المحطّة (لا إشارة الجهاز)
+    // نقطة وصولٍ بمحطّةٍ واحدة = وصلة PtP ⇒ إشارة المحطّة (لا إشارة الجهاز) — rx وحده حين لا ترسل المحطّة إشارتها
     expect(VitalsReporter.readingOf(2, const DeviceGlance(signal: -96, ccq: 91, isAp: true, peersKnown: true), peers: const [p]),
         {'id': 2, 'signal': -63, 'ccq': 91});
+    // ٢٦ نوفمبر («الإصلاح لازم بالتنبيهات هم»): المحطّة ترسل كيف تستقبلنا ⇒ tx في `sigtx` (صفّه ومعدّله بالخادم) و`signal: null`
+    const t = PeerLink(name: 'c', signal: -63, txSignal: -71);
+    expect(VitalsReporter.readingOf(2, const DeviceGlance(signal: -96, ccq: 91, isAp: true, peersKnown: true), peers: const [t]),
+        {'id': 2, 'sigtx': -71, 'signal': null, 'ccq': 91});
+    // tx ليس رقم إشارة (0 = غير متوفّر عند المصدر ⇒ PeerLink يحمله null؛ موجبٌ ليس dBm) ⇒ rx كما كان
+    expect(VitalsReporter.readingOf(2, const DeviceGlance(isAp: true, peersKnown: true), peers: const [PeerLink(name: 'd', signal: -64, txSignal: 3)]),
+        {'id': 2, 'signal': -64});
     // قراءةٌ خفيفة (محطّاتها لم تُقرأ) ⇒ لا مفتاح إشارة أصلاً
     expect(VitalsReporter.readingOf(3, const DeviceGlance(cpu: 7, signal: -60, isAp: true)), {'id': 3, 'cpu': 7});
     // المحطّة/الوصلة ⇒ إشارتها هي
@@ -121,7 +128,7 @@ void main() {
       final body = server.bodies('POST', '/api/v2/agent-alerts/vitals').single;
       expect(body['readings'], [
         {'id': 1, 'cpu': 97, 'temp': 81},
-        {'id': 2, 'volt': 23.9, 'signal': null},
+        {'id': 2, 'volt': 23.9, 'signal': null, 'sigtx': null},
       ]);
       expect((body['readings'] as List)[1].containsKey('signal'), isTrue, reason: 'null بالجسم لا مفتاحٌ محذوف');
       expect(VitalsReporter.instance.pending, isEmpty);
