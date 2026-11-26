@@ -1426,7 +1426,10 @@ class WhatsAppApi {
     final subscriberName = arabicName.isNotEmpty ? arabicName : sub.username;
     final firstName = arabicName.isNotEmpty ? arabicName : sub.username;
     final price = sub.price?.toInt() ?? 0;
-    final priceStr = price > 0 ? formatIQD(price) : '0';
+    // «يخفي» (المالك ٢٦ نوفمبر): سعرٌ غير معروف (لا سعر على الصفّ، أو صفر) ⇒ يُحذف سطر السعر كلّه ([dropPriceLines]) بدل
+    // «السعر: 0» للمشترك — كسطر {password} المتعذّرة.
+    final priceKnown = price > 0;
+    final priceStr = priceKnown ? formatIQD(price) : '';
     final debt = sub.balanceAmount < 0 ? sub.balanceAmount.abs().round() : 0;
     final credit = sub.balanceAmount > 0 ? sub.balanceAmount.round() : 0;
     final remainingDays = sub.remainingDays?.toString() ?? '';
@@ -1456,8 +1459,20 @@ class WhatsAppApi {
     };
     // قوالب كتبت {subscriber_name} بمعنى اليوزر («اسم المستخدم: {subscriber_name}») ⇒ يبقى يوزراً هناك (كالخادم).
     var out = body.replaceAllMapped(_usernameLabelSubName, (m) => '${m[1]}{username}');
+    if (!priceKnown) out = dropPriceLines(out);
     vars.forEach((k, v) => out = out.replaceAll(k, v));
     return out;
+  }
+
+  /// سطر السعر حين لا يُعرف السعر (٢٦ نوفمبر — المالك: «يخفي»): كلّ سطرٍ يحمل `{package_price}` أو `{discounted_price}` يُحذف،
+  /// وتُطوى الأسطر الفارغة المتتالية (قاعدة [applyPassword] نفسها). نصٌّ بلاهما لا يُمسّ؛ ولو لم يبقَ إلّا سطر السعر يبقى النصّ كما
+  /// هو (يُملأ السعر فارغاً) — لا رسالة فارغة. دالّةٌ نقيّة.
+  static String dropPriceLines(String text) {
+    const keys = ['{package_price}', '{discounted_price}'];
+    if (!keys.any(text.contains)) return text;
+    final kept = text.split('\n').where((l) => !keys.any(l.contains)).join('\n');
+    final out = kept.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return out.trim().isEmpty ? text : out;
   }
 
   /// '2026/04/25  05:59:00 مساءً' style — v1 normalizes to this so we
