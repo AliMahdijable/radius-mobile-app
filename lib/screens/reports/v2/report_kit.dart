@@ -11,6 +11,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/employee_visibility.dart';
+import '../../../services/pdf_kit.dart';
 
 // «التقارير — الشكل الموحّد» (٢٢ نوفمبر — المالك: «التقارير بشكل عامة اريد تهتم بتصميمها من جديد كل انواع التقارير بوضع كل
 // الشركات من ناحيه الفلاتر وبوضع الشركه المنفرده»، ثمّ «صور وشرح تكدر تسوي حتى وراها نبلش؟»).
@@ -48,6 +49,23 @@ String rpNum(num v) => v < 0 ? iso('−${formatIQD(v)}') : formatIQD(v);
 
 /// المبلغ بالدينار كما يُكتب في التطبيق: «12,450,000 د.ع» — وبإشارته إن كان سالباً.
 String rpMoney(num v) => '${rpNum(v)} د.ع';
+
+/// بطاقات الشاشة في رأس ملفّ PDF (٢٦ نوفمبر — المالك: «معلومات اوضح»): القيمة كما تُعرض ([RpKpi.text]) واللون من نبرتها.
+/// تُمرَّر حين تصف الصفوف المصدَّرة نفسها وحدها (لا بحث ولا حركات بطاقة).
+List<PdfStat> rpPdfSummary(Iterable<RpKpi> kpis) => [
+      for (final k in kpis)
+        PdfStat(
+          k.label,
+          k.text,
+          tone: switch (k.tone) {
+            RpTone.money => PdfTone.good,
+            RpTone.debt => PdfTone.warn,
+            RpTone.loss => PdfTone.bad,
+            _ => PdfTone.plain,
+          },
+          hint: k.hint,
+        ),
+    ];
 
 /// رقمٌ مختصر لمحور الرسم: «1.5 مليون» · «500 ألف».
 String rpCompact(num v) {

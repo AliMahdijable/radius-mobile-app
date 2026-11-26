@@ -885,16 +885,20 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     final t = title.isEmpty ? 'reports.financial'.tr() : title;
     final rows = _exportRows(logs, v.showCost, companyOf);
     final details = _exportDetails(count: rows.length, drill: drill, withSearch: withSearch, gaps: gaps, sorted: main && _rowSort != rpDateDesc);
+    // بطاقات الشاشة في رأس الـPDF — حين تصف هذه الصفوف نفسها (لا بحث يحصرها ولا حركات بطاقة)
+    final summary = pick == null && (!withSearch || _q.trim().isEmpty) ? rpPdfSummary(FinanceView.kpis(v.kpis, null)) : const <PdfStat>[];
     switch (how) {
       case 'pdf':
         return ReportExportActions.pdf(context,
-            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial');
+            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial',
+            summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
             title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, fileNameBase: 'financial');
       default:
         return ReportExportActions.sharePdf(context,
-            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial');
+            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial',
+            summary: summary);
     }
   }
 

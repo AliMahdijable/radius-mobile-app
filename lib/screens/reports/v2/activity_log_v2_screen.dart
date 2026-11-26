@@ -624,16 +624,20 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
     final data = _exportRows(rows, v.co);
     final details = _exportDetails(count: data.length, drill: drill, withSearch: withSearch, complete: v.complete, sorted: main && _rowSort != rpDateDesc);
     final subtitle = '${_f!.range.name} · ${_f!.range.rangeText}';
+    // بطاقات الشاشة في رأس الـPDF — حين تصف هذه الصفوف نفسها (لا بحث يحصرها ولا حركات بطاقة)
+    final summary = pick == null && (!withSearch || _q.trim().isEmpty) ? rpPdfSummary(ActivityLogView.kpis(v.rows)) : const <PdfStat>[];
     switch (how) {
       case 'pdf':
         return ReportExportActions.pdf(context,
-            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activity_log');
+            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activity_log',
+            summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
             title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, fileNameBase: 'activity_log');
       default:
         return ReportExportActions.sharePdf(context,
-            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activity_log');
+            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activity_log',
+            summary: summary);
     }
   }
 

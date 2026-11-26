@@ -1201,6 +1201,7 @@ void main() {
         expect(got.single.rows.single, contains('زهراء محمود'));
         expect(got.single.details, contains('بحث: «زهراء»'));
         expect(got.single.columnWeights, isNotNull, reason: 'الاسم والوصف أعرض — كالتقرير السابق');
+        expect(got.single.summary, isEmpty, reason: 'بطاقات الشاشة لا تصف صفوف البحث ⇒ لا ملخّص في رأس الـPDF');
 
         got.clear();
         await t.scrollUntilVisible(find.text('تفعيل بالدين'), -600, scrollable: find.byType(Scrollable).first);
@@ -1217,6 +1218,28 @@ void main() {
         expect(got.single.title, 'تفعيل بالدين');
         expect([for (final r in got.single.rows) r[0]], ['حسن كاظم'], reason: 'حركات البطاقة وحدها، والبحث للقائمة لا للبطاقة');
         expect(got.single.details, contains('الحركات: تفعيل بالدين'));
+        expect(got.single.summary, isEmpty, reason: 'حركات بطاقةٍ وحدها ⇒ لا بطاقات الشاشة كلّها');
+        expect(t.takeException(), isNull);
+      } finally {
+        ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
+    // تصميم الـPDF (٢٦ نوفمبر — المالك: «معلومات اوضح»): رأس الملفّ يحمل بطاقات الشاشة نفسها — عناوينها وقيمها حرفاً.
+    testWidgets('PDF بلا بحث: بطاقات الشاشة في رأسه بقيمها كما على الشاشة', (t) async {
+      await up();
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        final onScreen = t.widget<RpKpiGrid>(find.byType(RpKpiGrid).first).kpis;
+        await tapExport(t, 'PDF');
+        final r = got.single;
+        expect(r.how, 'pdf');
+        expect([for (final s in r.summary) s.label], [for (final k in onScreen) k.label]);
+        expect([for (final s in r.summary) s.value], [for (final k in onScreen) k.text]);
+        expect(r.summary.firstWhere((s) => s.label == 'المصاريف').tone, PdfTone.bad);
         expect(t.takeException(), isNull);
       } finally {
         ReportExportActions.debugSink = null;
