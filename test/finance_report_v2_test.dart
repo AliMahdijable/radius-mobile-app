@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/core/util/ar_date.dart';
+import 'package:rad_mysvcs/screens/reports/v2/cash_by_via_card.dart';
 import 'package:rad_mysvcs/screens/reports/v2/finance_export.dart';
 import 'package:rad_mysvcs/screens/reports/v2/finance_report_v2_screen.dart';
 import 'package:rad_mysvcs/screens/reports/v2/finance_view.dart';
@@ -138,6 +139,12 @@ class _Server implements HttpClientAdapter {
   /// خادمٌ بعد dff8f91: يطبّق employee_ids ويعلّم ردّه بـdata.employee_filter — false = خادمٌ قديم يتجاهلها.
   bool echoEmployees = true;
 
+  /// مفاتيحٌ تُضاف لـkpis الفترة (لا المقارنة) — «الحوالات»: cash_by_via وtw (٢٦ نوفمبر).
+  Map<String, Object?>? kpisExtra;
+
+  /// كلّ مسارٍ طُلب بترتيبه.
+  final paths = <String>[];
+
   List<Map<String, Object?>> _slice(Map<String, dynamic> q) {
     final lo = '${q['date_from']}', hi = '${q['date_to']}';
     final limit = int.tryParse('${q['limit_logs']}') ?? 50;
@@ -156,6 +163,7 @@ class _Server implements HttpClientAdapter {
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
     final p = o.uri.path;
+    paths.add(p);
     final key = o.headers['x-company-key']?.toString();
     if (o.method.toUpperCase() == 'GET' && p == '/api/reports/finance') {
       finance.add((key, Map<String, dynamic>.from(o.queryParameters)));
@@ -163,6 +171,7 @@ class _Server implements HttpClientAdapter {
       final prev = o.queryParameters['limit_logs']?.toString() == '1';
       final rows = month == null ? null : _slice(Map<String, dynamic>.from(o.queryParameters));
       final b = _financeBody((key == _kEarth ? 0.73 : 1) * (prev ? 0.9 : 1), logs: rows, debt: debtFor.contains(key));
+      if (kpisExtra != null && !prev) (b['data'] as Map)['kpis'] = {...((b['data'] as Map)['kpis'] as Map).cast<String, Object?>(), ...kpisExtra!};
       final emps = o.queryParameters['employee_ids']?.toString();
       if (echoEmployees && emps != null) (b['data'] as Map)['employee_filter'] = [for (final s in emps.split(',')) int.parse(s)];
       if (strict && o.queryParameters['strict_types']?.toString() == '1') {
@@ -389,6 +398,50 @@ void main() {
       final plain = {for (final x in FinanceView.kpis(const FinanceKPIs(), null)) x.id};
       expect(plain.contains(FinanceKpiIds.creditCash), isFalse);
       expect(plain.contains(FinanceKpiIds.goodsRevenue), isFalse);
+    });
+
+    test('«الحوالات» (٢٦ نوفمبر): «المال المستلم» = الكاش + ما سُحب للصندوق، والمعلّقة بسطرٍ تحته — والصافي كما هو', () {
+      // شكل kpis.tw كما يرسله الخادم حرفاً (transferPay.financeTwOut — tests/finance-tw.unit.test.js)
+      const tw = {
+        'withdrawn': 30000,
+        'withdrawn_by_via': [
+          {'via': 'master', 'label': 'ماستر', 'sum': 30000},
+        ],
+        'pending_now': 60000,
+        'pending_by_via': [
+          {'via': 'zaincash', 'label': 'زين كاش', 'sum': 30000},
+          {'via': 'master', 'label': 'ماستر', 'sum': 30000},
+        ],
+      };
+      const byVia = {
+        'cash': 1250000,
+        'transfers_sum': 260000,
+        'transfers': [
+          {'key': 'zaincash', 'via': 'zaincash', 'label': 'زين كاش', 'sum': 175000, 'count': 5},
+          {'key': 'master', 'via': 'master', 'label': 'ماستر', 'sum': 85000, 'count': 2},
+        ],
+      };
+      final k = FinanceKPIs.fromJson({'activate_cash_sum': 1000000, 'debt_pay_sum': 510000, 'expenses_sum': 200000, 'cash_by_via': byVia, 'tw': tw});
+      expect([k.tw!.withdrawn, k.tw!.pendingNow, k.tw!.withdrawnByVia.single.label, k.tw!.pendingByVia.length], [30000, 60000, 'ماستر', 2]);
+      expect(k.totalCashRevenue, 1510000);
+      final cash = FinanceView.kpis(k, const FinanceKPIs(activateCashSum: 900000)).firstWhere((x) => x.id == FinanceKpiIds.cash);
+      expect(cash.label, 'المال المستلم');
+      expect(cash.value, 1280000, reason: '1,510,000 − 260,000 حوالات بالفترة + 30,000 سُحبت');
+      expect(cash.hint, 'كاش 1,250,000 • سُحب من الحوالات 30,000 • بالحوالات لم تُسحب 60,000');
+      expect(cash.delta, isNull, reason: 'السابقة بلا السحب — لا فرقٌ مضلّل');
+      expect(FinanceView.hero(k, null).value, 1310000, reason: 'الصافي كما هو: 1,510,000 − 200,000');
+      expect(FinanceView.heroNote(k), 'نقد + حوالات − المصاريف − إضافة الدين');
+      // سحبٌ بلا حوالةٍ بالفترة: الكاش كلّه + المسحوب
+      final only = FinanceKPIs.fromJson({'activate_cash_sum': 500000, 'tw': tw});
+      final c2 = FinanceView.kpis(only, null).firstWhere((x) => x.id == FinanceKpiIds.cash);
+      expect([c2.label, c2.value, c2.hint], ['المال المستلم', 530000, 'كاش 500,000 • سُحب من الحوالات 30,000 • بالحوالات لم تُسحب 60,000']);
+      expect(FinanceView.heroNote(only), 'الإيراد النقدي − المصاريف − إضافة الدين');
+      // بلا الاثنين (خادمٌ أقدم، فلتر موظّفٍ/نوع، «كل الشركات»): البطاقة كما كانت حرفاً
+      final plain = FinanceKPIs.fromJson({'activate_cash_sum': 500000});
+      expect(plain.tw, isNull);
+      final c3 = FinanceView.kpis(plain, const FinanceKPIs(activateCashSum: 400000)).firstWhere((x) => x.id == FinanceKpiIds.cash);
+      expect([c3.label, c3.value, c3.hint, c3.delta], ['الإيراد النقدي', 500000, null, closeTo(0.25, 1e-9)]);
+      expect(FinanceKPIs.fromJson({'tw': 'x'}).tw, isNull);
     });
 
     test('حركات البطاقة: ما يصنع رقمها وحده', () {
@@ -1240,6 +1293,59 @@ void main() {
         expect([for (final s in r.summary) s.label], [for (final k in onScreen) k.label]);
         expect([for (final s in r.summary) s.value], [for (final k in onScreen) k.text]);
         expect(r.summary.firstWhere((s) => s.label == 'المصاريف').tone, PdfTone.bad);
+        expect(t.takeException(), isNull);
+      } finally {
+        ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
+    testWidgets('«الحوالات» (٢٦ نوفمبر): «المال المستلم» وبطاقة الطرق بما سُحب ورصيد الآن من ردّ التقرير نفسه، والملفّ يسمّيهما', (t) async {
+      await up();
+      server.kpisExtra = {
+        'cash_by_via': {
+          'cash': 11200000,
+          'transfers_sum': 250000,
+          'transfers': [
+            {'key': 'zaincash', 'via': 'zaincash', 'label': 'زين كاش', 'sum': 175000, 'count': 5},
+            {'key': 'master', 'via': 'master', 'label': 'ماستر', 'sum': 75000, 'count': 2},
+          ],
+        },
+        'tw': {
+          'withdrawn': 100000,
+          'withdrawn_by_via': [
+            {'via': 'master', 'label': 'ماستر', 'sum': 100000},
+          ],
+          'pending_now': 210000,
+          'pending_by_via': [
+            {'via': 'zaincash', 'label': 'زين كاش', 'sum': 175000},
+            {'via': 'master', 'label': 'ماستر', 'sum': 35000},
+          ],
+        },
+      };
+      final got = <ReportExportRequest>[];
+      ReportExportActions.debugSink = (r) async => got.add(r);
+      try {
+        await open(t);
+        final cash = t.widget<RpKpiGrid>(find.byType(RpKpiGrid).first).kpis.firstWhere((k) => k.id == FinanceKpiIds.cash);
+        // 11,450,000 (كاش 11,200,000 + حوالات 250,000) ⇒ بيدك 11,200,000 + 100,000 سُحب = 11,300,000
+        expect([cash.label, cash.value, cash.hint], ['المال المستلم', 11300000, 'كاش 11,200,000 • سُحب من الحوالات 100,000 • بالحوالات لم تُسحب 210,000']);
+        expect(hero(t).kpi.value, 9850000, reason: 'الصافي لا يتغيّر');
+        expect(hero(t).note, 'نقد + حوالات − المصاريف − إضافة الدين');
+        if (find.byKey(const ValueKey('finance-tw-withdrawn')).evaluate().isEmpty) await unfold(t, CashByViaCard);
+        await t.ensureVisible(find.byKey(const ValueKey('finance-cash-by-via')));
+        await t.pump();
+        expect(find.descendant(of: find.byKey(const ValueKey('finance-cash-by-via')), matching: find.text('المستلم حسب الطريقة')), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('finance-tw-withdrawn')), matching: find.textContaining('100,000')), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('finance-transfer-pots-now')), matching: find.textContaining('210,000')), findsOneWidget);
+        expect(find.text('بالحوالات — لم تُسحب (الآن)، خارج «المال المستلم» حتى تسحبها'), findsOneWidget);
+        expect(server.paths, isNot(contains('/api/v2/transfer-pots')), reason: 'رصيد الآن من ردّ التقرير — لا طلبٌ ثانٍ');
+        await tapExport(t, 'PDF');
+        final r = got.single;
+        expect(r.details, contains('منه: كاش 11,200,000 د.ع · زين كاش 175,000 د.ع · ماستر 75,000 د.ع'));
+        expect(r.details, contains('المال المستلم: 11,300,000 د.ع (كاش 11,200,000 د.ع + سُحب من الحوالات 100,000 د.ع) · بالحوالات لم تُسحب: 210,000 د.ع'));
+        final s = r.summary.firstWhere((x) => x.label == 'المال المستلم');
+        expect(s.hint, cash.hint);
         expect(t.takeException(), isNull);
       } finally {
         ReportExportActions.debugSink = null;

@@ -289,6 +289,23 @@ class _BalancePeriodScreenState extends State<BalancePeriodScreen> {
               BalanceLine(key: const ValueKey('bal-sum-mgr-withdrawn'), label: 'سحب رصيد من المدراء', value: balanceSigned(mg.withdrawn, sign: '−'), valueColor: AppTone.danger.onSoft),
             rule(),
             BalanceLine(key: const ValueKey('bal-sum-collected'), label: 'المحصَّل', value: balanceIqd(p.collected), strong: true),
+            // «الحوالات» (٢٦ نوفمبر، كالموقع): ما ينتظر «سحب للصندوق» — خارج «المحصَّل»، ولكلّ طريقةٍ مبلغها
+            if (p.transfersPending case final tp? when tp.sum > 0) ...[
+              BalanceLine(
+                key: const ValueKey('bal-sum-tw-pending'),
+                label: 'بالحوالات — لم تُسحب (خارج المحصَّل)',
+                value: balanceIqd(tp.sum),
+                valueColor: AppTone.warning.onSoft,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  '${balanceTwPendingParts(tp)} — $balanceTwPendingHint',
+                  key: const ValueKey('bal-sum-tw-parts'),
+                  style: AppType.micro(color: AppColors.textMid),
+                ),
+              ),
+            ],
             if (p.adjustmentsSum > 0) BalanceLine(label: 'تسويات الرصيد', value: balanceIqd(p.adjustmentsSum)),
             // بلا مبلغ: المتبقّي والصافي لا يُعرفان قبل المبلغ («—» لا صفر ولا «مكتمل»)
             if (p.amountPending)
@@ -527,10 +544,18 @@ class BalanceMoveRow extends StatelessWidget {
           m.package,
           if (m.pay == BalancePay.partial) 'نقد ${formatIQD(m.cash)} · دين ${formatIQD(m.debt + m.untracked)}',
           if (m.excess > 0) 'وزيادة ${formatIQD(m.excess)} سدّت ديناً أقدم',
+          // «الحوالات» (٢٦ نوفمبر، كالموقع): ما لم يُسحب من نقده، ومتى سُحب ما دخل منه «المحصَّل»
+          if (m.twPending > 0) 'حوالة لم تُسحب ${formatIQD(m.twPending)}',
+          if (m.twAtMs != null) 'سُحبت للصندوق ${balanceDay(m.twAtMs!, nowMs: nowMs)}',
           if (m.by != null) 'نفّذها ${m.by}',
         ];
         final n = balanceDebtNote(m, nowMs: nowMs);
-        status = n == null ? null : (text: n.text, tone: balanceToneOf(n.tone));
+        status = n != null
+            ? (text: n.text, tone: balanceToneOf(n.tone))
+            // نقدٌ حوالةً لم يُسحب بعد ⇒ خارج «المحصَّل»
+            : m.twPending > 0
+                ? (text: balanceTwPendingStatus, tone: AppTone.warning)
+                : null;
       case BalancePayMove():
         tone = AppTone.success;
         icon = LucideIcons.handCoins;
@@ -539,8 +564,17 @@ class BalanceMoveRow extends StatelessWidget {
         tags = [(text: 'تسديد دين', tone: AppTone.success), if (via != null) (text: via, tone: AppTone.brand)];
         amount = balanceSigned(m.amount, sign: '+');
         amountColor = AppTone.success.onSoft;
-        details = [if (m.advance) 'من دفعةٍ مقدَّمة', if (m.by != null) 'استلمها ${m.by}'];
-        status = m.afterClose ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand) : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
+        details = [
+          if (m.advance) 'من دفعةٍ مقدَّمة',
+          if (m.twAtMs != null) 'سُحبت للصندوق ${balanceDay(m.twAtMs!, nowMs: nowMs)}',
+          if (m.by != null) 'استلمها ${m.by}',
+        ];
+        status = m.twPending
+            // «الحوالات» (٢٦ نوفمبر، كالموقع): بحوالةٍ لم تُسحب ⇒ خارج «المحصَّل» حتى السحب
+            ? (text: balanceTwPendingStatus, tone: AppTone.warning)
+            : m.afterClose
+                ? (text: 'بعد الإغلاق — صار ربح', tone: AppTone.brand)
+                : (text: 'أُضيف إلى «المحصَّل»', tone: AppTone.success);
       case BalanceMgrMove():
         // شحنٌ نقديّ وتسديد دين وفائدة الشحن النقديّ: نقدٌ دخل (+). سحب: رصيدٌ رجع ونقدٌ رُدّ (−). شحنٌ آجل وفائدته: دينٌ بحاله كدين التفعيل.
         tone = m.op.debtLike ? AppTone.warning : (m.op == BalanceMgrOp.withdraw ? AppTone.danger : AppTone.success);

@@ -246,6 +246,30 @@ class BalanceManagers {
   }
 }
 
+/// «بالحوالات — لم تُسحب» (٢٦ نوفمبر — المالك: «… وماينحسبن بالمال المستلم لان هنه بعدهن بالماستر الى ان يسحبهن … خذ مثال شحن
+/// الارصده» ثمّ «نعم موافق»؛ كالموقع TwPending): ما استُلم حوالةً لحركات الفترة ولم يُسحب للصندوق — خارج «المحصَّل» حتى السحب.
+class BalanceTwPending {
+  const BalanceTwPending({required this.sum, this.byVia = const []});
+  final double sum;
+
+  /// لكلّ طريقة: زين كاش / ماستر / «أخرى» باسمها ([label] كما يسمّيها الخادم).
+  final List<({String via, String? name, String label, double sum})> byVia;
+
+  /// null: غائبٌ (خادمٌ أقدم، أو لا حوالة معلّقة) ⇒ لا سطر.
+  static BalanceTwPending? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final list = j['by_via'];
+    return BalanceTwPending(
+      sum: _n(j['sum']),
+      byVia: [
+        if (list is List)
+          for (final v in list)
+            if (v is Map) (via: _s(v['via']) ?? '', name: _s(v['name']), label: _s(v['label']) ?? '', sum: _n(v['sum'])),
+      ],
+    );
+  }
+}
+
 class BalancePeriod {
   const BalancePeriod({
     required this.id,
@@ -283,9 +307,13 @@ class BalancePeriod {
     this.managers,
     this.amountPending = false,
     this.reopenLocked = false,
+    this.transfersPending,
   });
   final int id;
   final int startedAtMs;
+
+  /// «بالحوالات — لم تُسحب» (٢٦ نوفمبر): خارج [collected] حتى «سحب للصندوق» — null حين لا شيء معلّق.
+  final BalanceTwPending? transfersPending;
 
   /// وقت الشحنة التالية، أو null للأحدث.
   final int? endsAtMs;
@@ -389,6 +417,7 @@ class BalancePeriod {
       managers: BalanceManagers.fromJson(j['managers']),
       amountPending: j['amount_pending'] == true,
       reopenLocked: j['reopen_locked'] == true,
+      transfersPending: BalanceTwPending.fromJson(j['transfers_pending']),
     );
   }
 }
@@ -409,8 +438,16 @@ class BalanceOverview {
     this.managersIncluded = false,
     this.managersOldPaid = 0,
     this.autoNext = false,
+    this.transfersPendingTotal = 0,
+    this.twUnmatched = 0,
   });
   final bool featureEnabled;
+
+  /// «الحوالات» (٢٦ نوفمبر): كلّ ما ينتظر «سحب للصندوق» (الفترات وما سدّد ديوناً خارجها).
+  final double transfersPendingTotal;
+
+  /// ما سُحب من رصيد الحوالات بلا حوالةٍ نعرفها (قبل أيّ استلامٍ بطريقته) — لم يُحسب لأيّ فترة.
+  final double twUnmatched;
 
   /// الأحدث أوّلاً.
   final List<BalancePeriod> periods;
@@ -482,6 +519,7 @@ class BalanceOverview {
         if (noAmount > 0) '${formatIQD(noAmount)} حركة بلا مبلغٍ مسجَّل — لم تدخل الحساب',
         if (noSnapshot > 0) '${formatIQD(noSnapshot)} حركة بلا دين المشترك قبلها وبعدها — نسبتها للفترات تقريبيّة',
         if (transfersUnknown) 'تعذّرت قراءة تحويلات الرصيد للمدراء الفرعيّين',
+        if (twUnmatched > 0) 'سُحب ${formatIQD(twUnmatched)} من رصيد الحوالات بلا حوالةٍ نعرفها — لم يُحسب لأيّ فترة',
       ];
 
   /// null: ردٌّ بغير شكله (لا يُقرأ «لا شحنات»).
@@ -505,6 +543,8 @@ class BalanceOverview {
       managersIncluded: j['managers_included'] == true,
       managersOldPaid: _n(t['managers_old_paid']),
       autoNext: j['auto_next'] == true,
+      transfersPendingTotal: _n(t['transfers_pending']),
+      twUnmatched: _n(q['tw_unmatched']),
     );
   }
 }
@@ -534,6 +574,7 @@ sealed class BalanceMove {
           remaining: _n(j['remaining']),
           debtState: BalanceDebtState.of(j['debt_state']),
           turnedProfit: '${j['turned']}' == 'profit',
+          turnedCash: '${j['turned']}' == 'cash',
           paidIn: _n(j['paid_in']),
           paidLate: _n(j['paid_late']),
           untracked: _n(j['untracked']),
@@ -543,6 +584,9 @@ sealed class BalanceMove {
           by: _s(j['by']),
           via: _s(j['via']),
           viaName: _s(j['via_name']),
+          twPending: _n(j['tw_pending']),
+          twAtMs: _ms(j['tw_at_ms']),
+          paidTwPending: _n(j['paid_tw_pending']),
         );
       case 'payment':
         return BalancePayMove(
@@ -555,6 +599,8 @@ sealed class BalanceMove {
           by: _s(j['by']),
           via: _s(j['via']),
           viaName: _s(j['via_name']),
+          twPending: j['tw_pending'] == true,
+          twAtMs: _ms(j['tw_at_ms']),
         );
       case 'adjust':
         return BalanceAdjustMove(key: key, atMs: at, amount: _n(j['amount']), source: BalanceSource.of(j['source']), note: _s(j['note']));
@@ -605,11 +651,24 @@ class BalanceActMove extends BalanceMove {
     this.by,
     this.via,
     this.viaName,
+    this.turnedCash = false,
+    this.twPending = 0,
+    this.twAtMs,
+    this.paidTwPending = 0,
   });
 
   /// «الحوالات» (٢٤ نوفمبر): طريقة ما استُلم منها — zaincash · master · other (+ اسمها)، والكاش null.
   final String? via;
   final String? viaName;
+
+  /// «الحوالات» (٢٦ نوفمبر): ما لم يُسحب للصندوق من نقده المستلَم حوالةً (خارج «المحصَّل») · وقت آخر سحبٍ دخل منه ·
+  /// ما سُدّد من دينه بحوالةٍ لم تُسحب بعد.
+  final double twPending;
+  final int? twAtMs;
+  final double paidTwPending;
+
+  /// الدين تسدّد قبل الإغلاق بمالٍ دخل «المحصَّل» (turned: cash) — لا هذا ولا [turnedProfit]: لم يدخل منه شيءٌ بعد.
+  final bool turnedCash;
   final String username;
   final String? package;
   final double price;
@@ -631,7 +690,23 @@ class BalanceActMove extends BalanceMove {
 }
 
 class BalancePayMove extends BalanceMove {
-  const BalancePayMove({required super.key, required super.atMs, required this.username, required this.amount, required this.afterClose, required this.advance, this.by, this.via, this.viaName});
+  const BalancePayMove({
+    required super.key,
+    required super.atMs,
+    required this.username,
+    required this.amount,
+    required this.afterClose,
+    required this.advance,
+    this.by,
+    this.via,
+    this.viaName,
+    this.twPending = false,
+    this.twAtMs,
+  });
+
+  /// «الحوالات» (٢٦ نوفمبر): هذا الجزء من التسديد بحوالةٍ لم تُسحب بعد (خارج «المحصَّل») · وقت «سحب للصندوق» الذي أدخله.
+  final bool twPending;
+  final int? twAtMs;
 
   /// «الحوالات» (٢٤ نوفمبر): طريقة التسديد — zaincash · master · other (+ اسمها)، والكاش null.
   final String? via;
@@ -776,6 +851,8 @@ String balancePeriodRange(BalancePeriod p, {int? nowMs}) => p.endsAtMs == null
       remaining: m.remaining,
       lastPaidAtMs: m.lastPaidAtMs,
       nowMs: nowMs,
+      paidTwPending: m.paidTwPending,
+      turnedCash: m.turnedCash,
     );
 
 /// حال دين الشحن الآجل (أو فائدته) لمديرٍ فرعيّ — بالكلام نفسه (null لغيرهما).
@@ -802,19 +879,39 @@ String? balanceMgrFeeDetail(BalanceMgrMove m) {
   required double remaining,
   int? lastPaidAtMs,
   int? nowMs,
+  double paidTwPending = 0,
+  bool turnedCash = false,
 }) {
   final when = lastPaidAtMs == null ? '' : ' — ${balanceDay(lastPaidAtMs, nowMs: nowMs)}';
   return switch (state) {
+    // تسدّد بحوالةٍ لم تُسحب بعد (٢٦ نوفمبر، كالموقع): الدين انتهى، والمال خارج «المحصَّل» حتى السحب
+    BalanceDebtState.paid when !turnedProfit && !turnedCash && paidTwPending > 0 =>
+      (text: 'كان دين وتسدّد بحوالة — لم تُسحب بعد$when', tone: BalanceTone.warning),
     BalanceDebtState.paid => turnedProfit
         ? (text: 'كان دين وتسدّد بعد الإغلاق — صار ربح$when', tone: BalanceTone.brand)
         : (text: 'كان دين وتسدّد$when', tone: BalanceTone.success),
-    BalanceDebtState.partly => (text: 'تسدّد منه ${formatIQD(paid)} · باقي ${formatIQD(remaining)}', tone: BalanceTone.warning),
+    BalanceDebtState.partly => (text: 'تسدّد منه ${formatIQD(paid + paidTwPending)} · باقي ${formatIQD(remaining)}', tone: BalanceTone.warning),
     BalanceDebtState.open => (text: 'دين باقي ${formatIQD(remaining)}', tone: BalanceTone.danger),
     BalanceDebtState.writtenOff => (text: 'نقص الدين بلا تسديد', tone: BalanceTone.neutral),
     BalanceDebtState.untracked => (text: 'الدين لم يُسجَّل على المشترك', tone: BalanceTone.neutral),
     BalanceDebtState.none => null,
   };
 }
+
+/// «زين كاش 40,000 · ماستر 40,000» — ما ينتظر السحب لكلّ طريقة (٢٦ نوفمبر، كالموقع twPendingParts).
+String balanceTwPendingParts(BalanceTwPending t) => t.byVia.map((v) => '${v.label} ${formatIQD(v.sum)}').join(' · ');
+
+/// سطر «بالحوالات — لم تُسحب» للفترة، أو null (كالموقع twPendingLine).
+String? balanceTwPendingLine(BalancePeriod p) {
+  final t = p.transfersPending;
+  return t != null && t.sum > 0 ? 'بالحوالات — لم تُسحب ${formatIQD(t.sum)}' : null;
+}
+
+/// لماذا ليست في «المحصَّل» بعد.
+const balanceTwPendingHint = 'تدخل «المحصَّل» حين تسحبها للصندوق';
+
+/// حال الحركة الموسومة بحوالةٍ لم تُسحب.
+const balanceTwPendingStatus = 'بالحوالة — لم تُسحب بعد (خارج «المحصَّل»)';
 
 /// متى نعدّ الرصيد «خلص»: دون واحدٍ بالمئة من الشحنة أو عشرة آلاف (أقلّ من أرخص تفعيل).
 double balanceLowMark(double amount) => max(10000, (amount * 0.01).roundToDouble());
@@ -831,11 +928,14 @@ const balanceAmountPendingText = 'هذه الفترة بلا مبلغ شحن —
   // بلا مبلغ: لا «اكتمل» ولا «نفد رصيدك» (كلاهما يقيس على مبلغٍ لم يُكتب)
   if (p.amountPending) return (kind: BalanceBannerKind.amount, text: balanceAmountPendingText);
   if (p.canClose) return (kind: BalanceBannerKind.done, text: 'اكتمل مبلغ الشحن — يمكنك إغلاق الفترة');
+  // «الحوالات» (٢٦ نوفمبر، كالموقع): من المتبقّي ما ينتظر «سحب للصندوق» فقط
+  final t = p.transfersPending;
+  final tw = t != null && t.sum > 0 ? ' — منه ${balanceIqd(min(t.sum, p.remaining))} بالحوالات لم تُسحب' : '';
   if (p.state == BalanceState.waiting) {
-    return (kind: BalanceBannerKind.ended, text: 'انتهت هذه الفترة ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}');
+    return (kind: BalanceBannerKind.ended, text: 'انتهت هذه الفترة ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}$tw');
   }
   if (liveBalance != null && liveBalance <= balanceLowMark(p.amount)) {
-    return (kind: BalanceBannerKind.empty, text: 'نفد رصيدك ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}');
+    return (kind: BalanceBannerKind.empty, text: 'نفد رصيدك ولم يكتمل المبلغ — المتبقّي ${balanceIqd(p.remaining)}$tw');
   }
   return null;
 }

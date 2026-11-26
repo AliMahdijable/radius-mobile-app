@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show cashInHandOf;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../core/util/server_time.dart';
@@ -61,7 +62,8 @@ class FinanceView {
   static String heroNote(FinanceKPIs k, {bool mergedRule = false}) {
     final cost = k.packageCost;
     if (cost == null || k.profitAfterCost == null) {
-      return 'الإيراد النقدي − المصاريف − إضافة الدين${k.hasGoods ? ' − كلفة المواد' : ''}';
+      // «الحوالات» (٢٦ نوفمبر — كالموقع): البطاقة صارت «المال المستلم» (بلا الحوالة لم تُسحب) والصافي كما هو ⇒ يسمّي ما فيه
+      return '${k.cashByVia != null ? 'نقد + حوالات' : 'الإيراد النقدي'} − المصاريف − إضافة الدين${k.hasGoods ? ' − كلفة المواد' : ''}';
     }
     if (mergedRule) return 'merged.finance_profit_rule'.tr();
     final base = (!k.hasGoods
@@ -99,8 +101,26 @@ class FinanceView {
     RpKpi m(String id, String label, num Function(FinanceKPIs) f, dynamic icon, RpTone tone, {bool upIsGood = true}) =>
         RpKpi(id: id, label: label, value: f(k), icon: icon, tone: tone, delta: d(f), upIsGood: upIsGood);
     final cost = k.packageCost;
+    final inHand = cashInHandOf(k.totalCashRevenue, k.cashByVia, k.tw);
+    String sm(num v) => '${v < 0 ? '-' : ''}${formatIQD(v)}';
     return [
-      m(FinanceKpiIds.cash, 'الإيراد النقدي', (x) => x.totalCashRevenue, LucideIcons.wallet, RpTone.money),
+      if (inHand != null)
+        // «الحوالات» (٢٦ نوفمبر — المالك: «… ماينحسبن بالمال المستلم … الى ان يسحبهن … يلا ينزلن»؛ كالموقع): ما بيدك = الكاش + ما
+        // سحبته للصندوق بالفترة؛ الحوالة لم تُسحب بسطرٍ تحته لا داخله. بلا فرقٍ عن السابقة (تلك بلا السحب).
+        RpKpi(
+          id: FinanceKpiIds.cash,
+          label: 'المال المستلم',
+          value: inHand.inHand,
+          icon: LucideIcons.wallet,
+          tone: RpTone.money,
+          hint: [
+            'كاش ${sm(inHand.cash)}',
+            if (inHand.withdrawn != 0) 'سُحب من الحوالات ${sm(inHand.withdrawn)}',
+            if (inHand.pending != 0) 'بالحوالات لم تُسحب ${sm(inHand.pending)}',
+          ].join(' • '),
+        )
+      else
+        m(FinanceKpiIds.cash, 'الإيراد النقدي', (x) => x.totalCashRevenue, LucideIcons.wallet, RpTone.money),
       m(FinanceKpiIds.activateCash, 'تفعيل نقدي', (x) => x.activateCashSum, LucideIcons.zap, RpTone.money),
       // المقدّم نقداً داخلٌ في «تسديد الديون» عند الخادم — يُفصل عنه بسطره (١٧ نوفمبر).
       m(FinanceKpiIds.debtPay, 'تسديد الديون', (x) => x.totalDebtPayments - x.creditCashSum, LucideIcons.banknote, RpTone.money),

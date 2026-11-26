@@ -10,7 +10,7 @@ import '../core/util/edit_summary.dart';
 import '../services/pay_kinds.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
-import 'transfer_pay_api.dart' show CashByViaData;
+import 'transfer_pay_api.dart' show CashByViaData, FinanceTwData;
 
 /// ============================================================
 /// Reports API — موحّد لكل التقارير الـ8 في v2 web:
@@ -185,11 +185,16 @@ class FinanceKPIs {
     this.creditCashSum = 0,
     this.creditCompSum = 0,
     this.cashByVia,
+    this.tw,
   });
 
   /// «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — من الخادم حين توجد حوالةٌ بالفترة وحدها؛ null غير ذلك (وفي الحساب من
   /// السطور، و«كل الشركات») ⇒ لا بطاقة.
   final CashByViaData? cashByVia;
+
+  /// «الحوالات» (٢٦ نوفمبر): ما سُحب للصندوق بالفترة ورصيد كلّ طريقةٍ الآن — من الخادم حين يوجد منه شيءٌ وبلا فلتر موظّفٍ ولا نوع؛
+  /// null غير ذلك. «المال المستلم» = الكاش + ما سُحب ([cashInHandOf])، والربح كما هو.
+  final FinanceTwData? tw;
 
   /// «إضافة رصيد» مقدّماً نقداً (١٧ نوفمبر): **داخلةٌ أصلاً** في [debtPaySum] عند الخادم (نقدٌ محصَّل) — للعرض وحده.
   final num creditCashSum;
@@ -354,6 +359,7 @@ class FinanceKPIs {
       creditCashSum: _n(j['credit_cash_sum']),
       creditCompSum: _n(j['credit_comp_sum']),
       cashByVia: CashByViaData.fromJson(j['cash_by_via']),
+      tw: FinanceTwData.fromJson(j['tw']),
     );
   }
 }

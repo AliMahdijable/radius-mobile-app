@@ -617,6 +617,8 @@ class BalanceStats extends StatelessWidget {
           // المدراء الفرعيّون داخل الرقم (حين يفتح الخادم مفتاحهم): ما دخل منهم، وما رُدّ لهم بالسحب
           if (mg != null && mg.cash + mg.paidIn + mg.feesCash > 0) 'من المدراء الفرعيّين ${formatIQD(mg.cash + mg.paidIn + mg.feesCash)}',
           if (mg != null && mg.withdrawn > 0) 'ناقص سحبٍ من المدراء ${formatIQD(mg.withdrawn)}',
+          // «الحوالات» (٢٦ نوفمبر، كالموقع): ما استُلم حوالةً ولم يُسحب — خارج الرقم حتى السحب
+          if (balanceTwPendingLine(p) case final tw?) tw,
         ],
       ),
       // بلا مبلغ شحن بعد: المحصَّل والديون حقيقيّان؛ المتبقّي والربح لا يُعرفان قبل المبلغ («—» لا صفر)
@@ -958,6 +960,17 @@ class BalancePeriodHero extends StatelessWidget {
               if (!pending) Text('${(p.progress * 100).round()}%', key: const ValueKey('bal-percent'), style: AppType.microBold(color: AppColors.textMid)),
             ],
           ),
+          // «الحوالات» (٢٦ نوفمبر، كالموقع bal-tw-pending): ما استُلم حوالةً ولم يُسحب — خارج «المحصَّل» حتى «سحب للصندوق»
+          if (balanceTwPendingLine(p) case final tw?) ...[
+            const SizedBox(height: 2),
+            Text.rich(
+              key: const ValueKey('bal-tw-pending'),
+              TextSpan(children: [
+                TextSpan(text: tw, style: AppType.microBold(color: AppTone.warning.onSoft)),
+                TextSpan(text: ' — $balanceTwPendingHint', style: AppType.micro(color: AppColors.textMid)),
+              ]),
+            ),
+          ],
           if (banner != null) ...[
             const SizedBox(height: Sp.md),
             BalanceBannerBox(key: const ValueKey('bal-banner'), kind: banner.kind, text: banner.text),

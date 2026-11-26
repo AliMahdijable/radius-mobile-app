@@ -10,6 +10,7 @@ import '../../../api/merged_dashboard_api.dart';
 import '../../../api/merged_finance_api.dart';
 import '../../../api/report_people_api.dart';
 import '../../../api/reports_api.dart';
+import '../../../api/transfer_pay_api.dart' show cashInHandOf;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
@@ -881,11 +882,21 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       'عدد الحركات: $count',
       // «الحوالات»: التقسيم على الشاشة ⇒ في الملفّ
       if (byVia != null && kv != null) byVia.exportLine(kv.totalCashRevenue, (n) => '${formatIQD(n.round())} د.ع'),
+      // «المال المستلم» (٢٦ نوفمبر): الكاش + ما سُحب للصندوق بالفترة، والحوالة لم تُسحب بجانبه — كالبطاقة
+      if (kv != null && kv.tw != null) _inHandLine(kv),
       if (gaps.isNotEmpty) 'ناقص: ${gaps.join('؛ ')}',
     ];
   }
 
   bool get _busy => _merged ? _cos.values.any((c) => c.loading) || _cos.isEmpty : _loading;
+
+  /// سطر الملفّ لـ«المال المستلم» (٢٦ نوفمبر — كسطر الموقع): «المال المستلم: X (كاش Y + سُحب من الحوالات Z) · بالحوالات لم تُسحب: W».
+  static String _inHandLine(FinanceKPIs k) {
+    final h = cashInHandOf(k.totalCashRevenue, k.cashByVia, k.tw)!;
+    String m(num v) => '${v < 0 ? '-' : ''}${formatIQD(v.round())} د.ع';
+    return 'المال المستلم: ${m(h.inHand)} (كاش ${m(h.cash)}${h.withdrawn != 0 ? ' + سُحب من الحوالات ${m(h.withdrawn)}' : ''})'
+        '${h.pending != 0 ? ' · بالحوالات لم تُسحب: ${m(h.pending)}' : ''}';
+  }
 
   /// التصدير بالفلاتر المختارة حرفاً (المالك ٢٢ نوفمبر: «من يختار فلاتر … ويطبع أو ينقر إكسل أو PDF يطلع على حسب الفلاتر … وملف
   /// الPDF جاي يظهر مرات مقصوص مو كامل»): كلّ حركات الفترة — ما قصّه سقف الخادم (1000 لكلّ طلب) يُجلب مقسوماً
@@ -1352,7 +1363,7 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     // «عمولات الموظفين» (٢٦ نوفمبر): عمليّاتهم الكاملة بالفترة × ربحهم، و«صافي الربح بعد العمولات» — بلا سطور شرح («بس يظهر سعر الكلي والحركه»)
     if (!_merged && (_comm?.any ?? false)) parts.add(EmployeeCommissionsCard(c: _comm!, net: hero.value));
     // «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — الخادم يرسله حين توجد حوالةٌ بالفترة؛ «كل الشركات» بلا تقسيم
-    if (!_merged && v.kpis.cashByVia != null) parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue));
+    if (!_merged && v.kpis.cashByVia != null) parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue, tw: v.kpis.tw));
     parts.add(RpCountsRow(items: FinanceView.counts(v.kpis)));
     // «يوماً بيوم» (الرسم) أُلغي من التقرير الماليّ (المالك ٢٢ نوفمبر: «اكو قسم بالتقارير المالية يوما بيوم هذا الغي»)
     final b = _breakdown(v);

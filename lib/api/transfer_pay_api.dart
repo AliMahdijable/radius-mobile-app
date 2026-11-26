@@ -264,3 +264,49 @@ class CashByViaData {
   /// سطر التصدير: «منه: كاش X · زين كاش Y · …».
   String exportLine(num total, String Function(num) money) => 'منه: ${rows(total).map((r) => '${r.label} ${money(r.sum)}').join(' · ')}';
 }
+
+/// مبلغ طريقةٍ واحدة (زين كاش / ماستر / «أخرى» باسمها) في [FinanceTwData].
+typedef TwViaSum = ({String via, String? name, String label, num sum});
+
+/// «الحوالات» بالتقرير الماليّ (٢٦ نوفمبر — المالك: «… وماينحسبن بالمال المستلم لان هنه بعدهن بالماستر الى ان يسحبهن … يلا
+/// ينزلن» ثمّ «نعم موافق»؛ كالموقع FinanceTw): `kpis.tw` — ما سُحب للصندوق بالفترة (بتاريخ السحب؛ إلغاء السحب سالبٌ داخله) ورصيد
+/// كلّ طريقةٍ الآن (لم يُسحب). يرسله الخادم حين يوجد منه شيءٌ وحده، وبلا فلتر موظّفٍ ولا نوع (السحب للمدير ولا نوع له).
+class FinanceTwData {
+  const FinanceTwData({required this.withdrawn, this.withdrawnByVia = const [], required this.pendingNow, this.pendingByVia = const []});
+
+  final num withdrawn;
+  final List<TwViaSum> withdrawnByVia;
+  final num pendingNow;
+  final List<TwViaSum> pendingByVia;
+
+  static FinanceTwData? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    List<TwViaSum> list(Object? v) => [
+          if (v is List)
+            for (final x in v)
+              if (x is Map)
+                (
+                  via: x['via']?.toString() ?? '',
+                  name: (x['name']?.toString() ?? '').trim().isEmpty ? null : x['name'].toString().trim(),
+                  label: x['label']?.toString() ?? '',
+                  sum: _num(x['sum']),
+                ),
+        ];
+    return FinanceTwData(
+      withdrawn: _num(raw['withdrawn']),
+      withdrawnByVia: list(raw['withdrawn_by_via']),
+      pendingNow: _num(raw['pending_now']),
+      pendingByVia: list(raw['pending_by_via']),
+    );
+  }
+}
+
+/// «المال المستلم» (٢٦ نوفمبر، كالموقع cashInHandOf) = الكاش (المجموع [total] ناقص ما استُلم حوالةً بالفترة) + ما سُحب للصندوق
+/// بالفترة — null بلا حوالةٍ ولا سحب (البطاقة «الإيراد النقدي» كما كانت). الربح لا يتغيّر (الحوالة مالُك وإن لم تُسحب): هذا لما
+/// بيدك وحده.
+({num cash, num withdrawn, num inHand, num pending})? cashInHandOf(num total, CashByViaData? byVia, FinanceTwData? tw) {
+  if (byVia == null && tw == null) return null;
+  final cash = total - (byVia?.transfersSum ?? 0);
+  final withdrawn = tw?.withdrawn ?? 0;
+  return (cash: cash, withdrawn: withdrawn, inHand: cash + withdrawn, pending: tw?.pendingNow ?? 0);
+}
