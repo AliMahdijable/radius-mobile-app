@@ -55,6 +55,35 @@ class UpdateGate {
     'macos': 'https://apps.apple.com/app/id6770731907',
   };
 
+  /// صفحة التحديث المباشر (٢٦ نوفمبر، الخادم server/apkDist.js): «حدّث من Google Play» أو «تنزيل مباشر (APK)» — لأجهزة الكاشير بلا
+  /// خدمات كوكل ولكلّ تنصيبٍ من ملفّ. الخادم يرسلها رابطاً لأندرويد (app_gate.store.android)؛ هنا احتياطٌ إن غاب رابطه.
+  static const directPageUrl = 'https://pro.mysvcs.net/app/android';
+
+  /// مثبِّتا Google Play ([AppVersion.installerStore]): المتجر نفسه، و«feedback» على أجهزةٍ قديمة جدّاً.
+  static const _playInstallers = {'com.android.vending', 'com.google.android.feedback'};
+
+  /// رابط «حدّث» لنظام [platform] من رابط الخادم [server] (قد يغيب). أندرويد يختار بمصدر التنصيب [installer] — المالك عبر 39:
+  /// «من بلاي ⇒ بلاي مباشرة، غيره ⇒ الصفحة»:
+  /// - من Google Play ⇒ صفحة التطبيق في بلاي (رابط الخادم إن كان رابط بلاي، وإلّا الثابت) — بلا نقرةٍ زائدة في صفحة التحديث.
+  /// - غيره (APK مباشر، متجرٌ آخر، adb، أو لا يُعرف) ⇒ رابط الخادم (صفحة /app/android)، وبلا رابطٍ ⇒ [directPageUrl]. المجهول
+  ///   للصفحة لأنّها الأسلم: زرّ بلاي فيها أوّلاً، وAPK بمفتاح الرفع لا يُنصَّب فوق نسخة بلاي.
+  /// الأنظمة الأخرى كما كانت: رابط الخادم، وإلّا الافتراضيّ لنظامها.
+  @visibleForTesting
+  static String storeUrlFor(String platform, String? server, {String? installer}) {
+    final s = (server ?? '').trim();
+    if (platform == 'android') {
+      if (_playInstallers.contains(installer)) return _isPlayUrl(s) ? s : _fallbackStore['android']!;
+      return s.isNotEmpty ? s : directPageUrl;
+    }
+    return s.isNotEmpty ? s : (_fallbackStore[platform] ?? _fallbackStore['android']!);
+  }
+
+  static bool _isPlayUrl(String u) => u.startsWith('https://play.google.com/') || u.startsWith('market://');
+
+  /// رابط «حدّث» لهذا الجهاز: نظامه + مصدر تنصيبه (يُقرأ مع النسخة قبل runApp ⇒ معروفٌ قبل أوّل ردّ 409).
+  static String _storeFor(String platform, Object? server) =>
+      storeUrlFor(platform, server?.toString(), installer: AppVersion.installerStore);
+
   static int get build => int.tryParse(AppVersion.buildNumber) ?? 0;
 
   @visibleForTesting
@@ -90,7 +119,7 @@ class UpdateGate {
       return;
     }
     final store = d['store'] is Map ? (d['store'] as Map)[p]?.toString() : null;
-    available.value = UpdateAvailable(storeUrl: store ?? _fallbackStore[p] ?? _fallbackStore['android']!, latestBuild: latestBuild);
+    available.value = UpdateAvailable(storeUrl: _storeFor(p, store), latestBuild: latestBuild);
   }
 
   /// عند الإقلاع: الخادم يقول أقلّ نسخة لهذا النظام. خطأٌ أو خادمٌ أقدم ⇒ لا شيء (لا حجب بالظنّ).
@@ -110,7 +139,7 @@ class UpdateGate {
       final store = d['store'] is Map ? (d['store'] as Map)[p]?.toString() : null;
       required.value = UpdateRequired(
         message: (d['message']?.toString().trim().isNotEmpty ?? false) ? d['message'].toString() : _fallbackMessage,
-        storeUrl: store ?? _fallbackStore[p] ?? _fallbackStore['android']!,
+        storeUrl: _storeFor(p, store),
         minBuild: minBuild,
       );
     } catch (e) {
@@ -125,7 +154,7 @@ class UpdateGate {
     final min = data['min_build'];
     required.value = UpdateRequired(
       message: (data['message']?.toString().trim().isNotEmpty ?? false) ? data['message'].toString() : _fallbackMessage,
-      storeUrl: data['store_url']?.toString() ?? _fallbackStore[p] ?? _fallbackStore['android']!,
+      storeUrl: _storeFor(p, data['store_url']),
       minBuild: min is num ? min.toInt() : null,
     );
     return true;

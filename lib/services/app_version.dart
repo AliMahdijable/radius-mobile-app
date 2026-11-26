@@ -13,6 +13,7 @@ class AppVersion {
   static String _version = '';
   static String _buildNumber = '';
   static String _appName = '';
+  static String? _installer;
 
   /// يُستدعى من main.dart قبل runApp() لضمان توفّر النسخة synchronously.
   static Future<void> load() async {
@@ -21,16 +22,23 @@ class AppVersion {
       _version = info.version;
       _buildNumber = info.buildNumber;
       _appName = info.appName;
+      _installer = info.installerStore;
     } catch (e) {
       if (kDebugMode) debugPrint('[AppVersion] load failed: $e');
     }
   }
 
   @visibleForTesting
-  static void debugSet({String version = '', String build = ''}) {
+  static void debugSet({String version = '', String build = '', String? installer}) {
     _version = version;
     _buildNumber = build;
+    _installer = installer;
   }
+
+  /// من نصّب التطبيق (٢٦ نوفمبر — رابط «حدّث» بمصدر التنصيب، [UpdateGate.storeUrlFor]): اسم حزمة المثبِّت —
+  /// `com.android.vending` = Google Play؛ غيره = مثبّت الحزم لملفّ APK أو متجرٌ آخر؛ null = adb أو لا يُعرف (ونظامٌ غير أندرويد).
+  /// أندرويد 11+ يقرأ initiatingPackageName (لا يتغيّر بعد التنصيب)، وما قبله getInstallerPackageName.
+  static String? get installerStore => _installer;
 
   /// "2.0.1" — من pubspec.yaml `version: 2.0.1+88`
   static String get version => _version;
