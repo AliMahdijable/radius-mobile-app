@@ -1117,22 +1117,26 @@ class _EmployeeMoveSheetState extends State<EmployeeMoveSheet> {
 
 /// ورقة «كشف الراتب»: معاينةٌ طازجة من الخادم ← «صرف» بأرقامها نفسها. تُرجع نصّ النجاح أو null.
 /// [canSkip]: المدير وحده يتخطّى راتباً استحقّ بلا صرف.
-Future<String?> showEmployeePayslipSheet(BuildContext context, {required int employeeId, required String name, bool canSkip = false}) {
+/// [initialSource]: مصدرٌ مختارٌ سلفاً في خطوة «من أين تدفع الراتب؟» (٢٦ نوفمبر — «اصرفه من النقد الذي بيده» من «تسوية مع الموظف»)
+/// — يُختار فقط إن عرضه الخادم بين مصادره، والمدير يؤكّده بنفسه.
+Future<String?> showEmployeePayslipSheet(BuildContext context,
+    {required int employeeId, required String name, bool canSkip = false, String? initialSource}) {
   return showAppSheet<String>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => EmployeePayslipSheet(employeeId: employeeId, name: name, canSkip: canSkip),
+    builder: (_) => EmployeePayslipSheet(employeeId: employeeId, name: name, canSkip: canSkip, initialSource: initialSource),
   );
 }
 
 class EmployeePayslipSheet extends StatefulWidget {
-  const EmployeePayslipSheet({super.key, required this.employeeId, required this.name, this.canSkip = false});
+  const EmployeePayslipSheet({super.key, required this.employeeId, required this.name, this.canSkip = false, this.initialSource});
   final int employeeId;
   final String name;
   final bool canSkip;
+  final String? initialSource;
   @override
   State<EmployeePayslipSheet> createState() => _EmployeePayslipSheetState();
 }
@@ -1158,6 +1162,8 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
   @override
   void initState() {
     super.initState();
+    _paySrc = widget.initialSource;
+    _fromHand = widget.initialSource == 'hand';
     _load();
   }
 
@@ -1181,6 +1187,9 @@ class _EmployeePayslipSheetState extends State<EmployeePayslipSheet> {
       if (r.data != null) {
         _pv = r.data;
         _ref = EmployeeLedgerApi.newRef('s');
+        // المختار سلفاً ليس بين مصادر الخادم (أُطفئ أو لا يحقّ) ⇒ لا اختيار: يختار المدير بنفسه
+        final src = _paySrc;
+        if (src != null && r.data!.sources.isNotEmpty && !r.data!.sources.any((x) => x.key == src)) _paySrc = null;
       } else {
         _error = r.message ?? 'تعذّر تجهيز الكشف';
       }

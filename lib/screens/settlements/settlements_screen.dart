@@ -26,6 +26,8 @@ import '../../services/merged_text.dart';
 import '../../services/merged_mode.dart';
 import '../reports/v2/report_kit.dart';
 import '../reports/v2/report_prefs.dart';
+import '../../api/employee_ledger_api.dart';
+import '../employees/salary_due_card.dart';
 
 /// «تسوية الحساب» — صندوق المدير (2026-10-02).
 ///
@@ -64,6 +66,10 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   /// «رصيد الحوالات» (٢٣ نوفمبر): رصيد زين كاش/ماستر/أخرى خارج الصندوق و«سحب للصندوق» — للشركة المفتوحة وحدها (الخادم لا
   /// يوجّهه في «كل الشركات»). null = لم يُقرأ/تعذّر/قسمٌ لشركةٍ أخرى ⇒ لا بطاقة.
   TransferPotsData? _pots;
+
+  /// «رواتب مستحقّة» (٢٦ نوفمبر): من حلّ راتبه ولم يُصرف — للشركة المفتوحة وحدها (المسار لا يُوجَّه في «كل الشركات»، والموقع
+  /// يخفيها للموجَّهة). null أو بلا مستحقّ ⇒ لا بطاقة.
+  SalaryDue? _due;
 
   /// «إلغاء تسديد» (١١ نوفمبر): حال تسديدات الحركات المعروضة وهل يلغي هذا الفاعل — للشركة المفتوحة وحدها (الخادم لا يوجّه
   /// الإلغاء في «كل الشركات»، فقسمٌ يعرض شركةً أخرى بلا زرّ ولا شارة).
@@ -140,6 +146,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     final key = _companyKey;
     // «رصيد الحوالات» بالتوازي — للشركة المفتوحة وحدها
     final potsF = key == null ? TransferPayApi.pots() : Future<TransferPotsData?>.value(null);
+    final dueF = key == null ? EmployeeLedgerApi.salaryDue() : Future<SalaryDue?>.value(null);
     final r = await CompanyRoute.pin(key, SettlementsApi.current);
     if (!mounted) return;
     final cur = r.data;
@@ -171,9 +178,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       movMsg = m.message;
     }
     final pots = await potsF;
+    final due = await dueF;
     if (!mounted) return;
     setState(() {
       _cur = cur;
+      _due = key != null ? null : due;
       // تعذّرت قراءته هذه المرّة ⇒ يبقى ما كان (لا تختفي البطاقة لحظةً)؛ قسمٌ لشركةٍ أخرى ⇒ لا بطاقة
       _pots = key != null ? null : (pots ?? _pots);
       _error = null;
@@ -501,6 +510,15 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
               final ok = await showTransferVoidSheet(context, w);
               if (ok == true && mounted) _load();
             },
+          ),
+        ],
+        // «رواتب مستحقّة» (٢٦ نوفمبر): «صرف» صرفيّةٌ تدخل الصندوق فوراً ⇒ الصندوق يُقرأ من جديد
+        if (_companyKey == null && (_due?.any ?? false)) ...[
+          const SizedBox(height: Sp.lg),
+          SalaryDueCard(
+            due: _due!,
+            note: '«صرف» يسجّل الراتب صرفيّةً فيدخل الصندوق فوراً — اصرفها قبل التسوية ليطابق النقد ما بيدك.',
+            onPaid: _load,
           ),
         ],
         if (cur.hasEmployees) ...[

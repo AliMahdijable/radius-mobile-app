@@ -330,6 +330,12 @@ Map<String, dynamic> elsewhereSalaryJson() => {
 class LedgerServer implements HttpClientAdapter {
   bool ledgerFeature = true;
 
+  /// «الرواتب المستحقّة» (٢٦ نوفمبر): ردّ `GET /salary-due` — null ⇒ 404 كخادمٍ أقدم بلا المسار (الافتراض: الاختبارات كما كانت).
+  Map<String, dynamic>? salaryDue;
+
+  /// ردٌّ مفروض لـ`/salary-due` (403 بلا صلاحيّة الرواتب مثلاً) — يغلب [salaryDue].
+  (int, Map<String, dynamic>)? salaryDueReply;
+
   /// حساب الموظّف ٧ (و«حسابي») براتبٍ في صفحةٍ أخرى من صفحاته بدل راتبه هنا.
   bool salaryElsewhere = false;
   Map<String, dynamic> _account() {
@@ -406,7 +412,9 @@ class LedgerServer implements HttpClientAdapter {
     (int, Map<String, dynamic>) reply = (404, {'success': false});
     final p = o.path;
     final m = o.method;
-    if (p == '$base/me') {
+    if (p == '$base/salary-due' && m == 'GET') {
+      reply = salaryDueReply ?? (salaryDue == null ? (404, {'success': false}) : (200, {'success': true, 'data': salaryDue}));
+    } else if (p == '$base/me') {
       reply = meAsEmployee == null
           ? (200, {'success': true, 'data': {'is_employee': false, 'feature_enabled': ledgerFeature, 'can_manage': true, if (meOwnAllowed) 'own_allowed': true}})
           : (200, {

@@ -40,6 +40,8 @@ import 'report_sheets.dart';
 import 'cash_by_via_card.dart';
 import '../../../core/util/format.dart';
 import '../../../services/employee_visibility.dart';
+import '../../../api/employee_ledger_api.dart';
+import '../../employees/salary_due_card.dart';
 
 /// التقرير الماليّ على الشكل الموحّد (٢٢ نوفمبر — المالك: «اي التطبيق أوّلاً … وانطلق» بعد صور المقترح).
 ///
@@ -222,7 +224,23 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     _load();
   }
 
-  Future<void> _load() => _merged ? _loadMerged() : _loadSingle();
+  Future<void> _load() {
+    unawaited(_loadDue());
+    return _merged ? _loadMerged() : _loadSingle();
+  }
+
+  /// «رواتب مستحقّة» (٢٦ نوفمبر): للعلم تحت البطاقات — للصفحة المفتوحة وحدها (لا «كل الشركات»؛ المسار لا يُوجَّه).
+  SalaryDue? _due;
+
+  Future<void> _loadDue() async {
+    if (_merged) {
+      if (_due != null) setState(() => _due = null);
+      return;
+    }
+    final d = await EmployeeLedgerApi.salaryDue();
+    if (!mounted || _merged) return;
+    setState(() => _due = d);
+  }
 
   void _apply(RpFilterValue v) {
     setState(() {
@@ -1307,6 +1325,14 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
       onTap: () => _drill(hero, v),
     ));
     parts.add(RpKpiGrid(kpis: FinanceView.kpis(v.kpis, v.prev), compareWith: f.range.vsText, onTap: (k) => _drill(k, v)));
+    // «رواتب مستحقّة» (٢٦ نوفمبر): لا تدخل أرقام الفترة — تُحسب صرفيّةً يوم صرفها ⇒ «صرف» يعيد التقرير
+    if (!_merged && (_due?.any ?? false)) {
+      parts.add(SalaryDueCard(
+        due: _due!,
+        note: 'حتى اليوم، ولا تدخل الأرقام أعلاه — تُحسب صرفيّةً وفي صافي الربح يوم صرفها.',
+        onPaid: _load,
+      ));
+    }
     // «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — الخادم يرسله حين توجد حوالةٌ بالفترة؛ «كل الشركات» بلا تقسيم
     if (!_merged && v.kpis.cashByVia != null) parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue));
     parts.add(RpCountsRow(items: FinanceView.counts(v.kpis)));

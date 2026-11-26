@@ -609,6 +609,102 @@ class PayslipPreview {
   }
 }
 
+/// فترة راتبٍ مستحقّة في «الرواتب المستحقّة» — تسميتها بأرقامها كبقيّة التطبيق («2026/11»).
+class SalaryDuePeriod {
+  const SalaryDuePeriod({required this.key, required this.label, required this.dueDate});
+  final String key;
+  final String label;
+  final String dueDate;
+
+  static SalaryDuePeriod? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final key = _s(raw['key']);
+    if (key == null) return null;
+    return SalaryDuePeriod(key: key, label: _periodLabelOf(raw) ?? key, dueDate: _s(raw['due_date']) ?? '');
+  }
+}
+
+/// موظّفٌ حلّ راتبه ولم يُصرف — صفٌّ من `GET /salary-due` (الخادم 87574fe). المبلغ = الراتب الثابت × فتراته المستحقّة؛ العمولة
+/// تُحسب عند الصرف فلا تدخله.
+class SalaryDueRow {
+  const SalaryDueRow({
+    required this.employeeId,
+    required this.name,
+    required this.active,
+    required this.dueCount,
+    required this.dueAmount,
+    required this.withCommission,
+    this.firstDue,
+    this.lastDue,
+  });
+  final int employeeId;
+  final String name;
+  final bool active;
+  final int dueCount;
+  final double dueAmount;
+  final bool withCommission;
+  final SalaryDuePeriod? firstDue;
+  final SalaryDuePeriod? lastDue;
+
+  /// «2026/11» لراتبٍ واحد؛ «راتبان — من 2026/10» و«3 رواتب — من …» لأكثر (الأقدم أوّلاً كما يرتّبها الخادم — كالموقع).
+  String get when {
+    if (dueCount <= 1) return (lastDue ?? firstDue)?.label ?? '';
+    final n = dueCount == 2 ? 'راتبان' : '$dueCount رواتب';
+    final from = firstDue?.label;
+    return from == null ? n : '$n — من $from';
+  }
+
+  static SalaryDueRow? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final e = raw['employee'];
+    if (e is! Map) return null;
+    final id = _i(e['id']);
+    if (id <= 0) return null;
+    return SalaryDueRow(
+      employeeId: id,
+      name: _s(e['name']) ?? _s(e['username']) ?? '#$id',
+      active: raw['active'] != false,
+      dueCount: _i(raw['due_count']),
+      dueAmount: _n(raw['due_amount']),
+      withCommission: raw['with_commission'] == true,
+      firstDue: SalaryDuePeriod.fromJson(raw['first_due']),
+      lastDue: SalaryDuePeriod.fromJson(raw['last_due']),
+    );
+  }
+}
+
+/// «الرواتب المستحقّة» (٢٦ نوفمبر — المالك: «سويهن ال ٣»): ما حلّ من رواتب موظّفي الصفحة ولم يُصرف. قراءةٌ وحدها — الصرف بكشف
+/// الراتب نفسه («صرف») فيدخل الصندوق والتقرير صرفيّةً يوم صرفه (لا قبله).
+class SalaryDue {
+  const SalaryDue({required this.count, required this.amount, required this.employees});
+  final int count;
+  final double amount;
+  final List<SalaryDueRow> employees;
+
+  /// البطاقة تظهر: في الصفحة راتبٌ مستحقّ.
+  bool get any => count > 0 && employees.isNotEmpty;
+
+  /// صفّ موظّفٍ واحد (لـ«تسوية مع الموظف»).
+  SalaryDueRow? of(int employeeId) {
+    for (final r in employees) {
+      if (r.employeeId == employeeId) return r;
+    }
+    return null;
+  }
+
+  /// null = لا بطاقة: الميزة مطفأة لهذه الصفحة، أو ردٌّ بلا قائمة.
+  static SalaryDue? fromJson(Object? raw) {
+    if (raw is! Map || raw['feature_enabled'] != true) return null;
+    final list = raw['employees'];
+    if (list is! List) return null;
+    return SalaryDue(
+      count: _i(raw['count']),
+      amount: _n(raw['amount']),
+      employees: list.map(SalaryDueRow.fromJson).whereType<SalaryDueRow>().toList(),
+    );
+  }
+}
+
 /// من أنا في هذه الميزة.
 class LedgerMe {
   const LedgerMe({required this.isEmployee, required this.featureEnabled, required this.canManage, this.account, this.ownAllowed = false});
@@ -687,6 +783,20 @@ class EmployeeLedgerApi {
       );
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 employee-ledger me: $e');
+      return null;
+    }
+  }
+
+  /// «الرواتب المستحقّة» للصفحة المفتوحة. null = لا بطاقة: خادمٌ أقدم بلا المسار، أو بلا صلاحيّة الرواتب (403)، أو الميزة
+  /// مطفأة، أو تعذّر — قراءةٌ هادئة لا تُظهر خطأً.
+  static Future<SalaryDue?> salaryDue() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('$_base/salary-due', options: _open);
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      return SalaryDue.fromJson(body['data']);
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 employee-ledger salary-due: $e');
       return null;
     }
   }

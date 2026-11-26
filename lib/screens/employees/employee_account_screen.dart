@@ -136,7 +136,8 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
   }
 
   Future<void> _settle() async {
-    final done = await showEmployeeSettleSheet(context, employeeId: widget.employeeId, name: _s?.displayName ?? widget.title);
+    final done = await showEmployeeSettleSheet(context,
+        employeeId: widget.employeeId, name: _s?.displayName ?? widget.title, canPaySalary: widget.ledger?.canWrite ?? false);
     if (done != null) {
       if (mounted) showSheetSnack(context, 'سُوّي حساب الموظف — بدأت فترةٌ جديدة', isError: false);
       _load();
@@ -569,21 +570,24 @@ class _LimitsSheetState extends State<_LimitsSheet> {
 }
 
 /// شيت «تسوية مع الموظف»: معاينةٌ طازجة ← تأكيد بالحدّ والأرقام نفسها. يُرجع السند المحفوظ أو null.
-Future<EmployeeSettlement?> showEmployeeSettleSheet(BuildContext context, {required int employeeId, required String name}) {
+/// [canPaySalary]: يسجّل ويصرف بدفتره (المدير أو صاحب صلاحيّة الرواتب) ⇒ «راتبه المستحقّ» و«اصرفه من النقد الذي بيده».
+Future<EmployeeSettlement?> showEmployeeSettleSheet(BuildContext context,
+    {required int employeeId, required String name, bool canPaySalary = false}) {
   return showAppSheet<EmployeeSettlement>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => EmployeeSettleSheet(employeeId: employeeId, name: name),
+    builder: (_) => EmployeeSettleSheet(employeeId: employeeId, name: name, canPaySalary: canPaySalary),
   );
 }
 
 class EmployeeSettleSheet extends StatefulWidget {
-  const EmployeeSettleSheet({super.key, required this.employeeId, required this.name});
+  const EmployeeSettleSheet({super.key, required this.employeeId, required this.name, this.canPaySalary = false});
   final int employeeId;
   final String name;
+  final bool canPaySalary;
   @override
   State<EmployeeSettleSheet> createState() => _EmployeeSettleSheetState();
 }
@@ -595,6 +599,9 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
   bool _submitting = false;
   final _note = TextEditingController();
   String _key = _newKey();
+
+  /// «راتبه المستحقّ» (٢٦ نوفمبر — كالموقع): راتبٌ حلّ ولم يُصرف — يُصرف من النقد الذي بيده قبل التسوية. null ⇒ لا صندوق.
+  SalaryDueRow? _dueRow;
 
   static String _newKey() => 'el${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
 
@@ -615,15 +622,68 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
       _loading = true;
       _error = null;
     });
+    final dueF = widget.canPaySalary ? EmployeeLedgerApi.salaryDue() : Future<SalaryDue?>.value(null);
     final r = await EmployeeLimitsApi.preview(widget.employeeId);
+    final due = await dueF;
     if (!mounted) return;
     setState(() {
       _loading = false;
       _p = r.data;
       _error = r.data == null ? (r.message ?? 'تعذّرت المعاينة') : null;
       _key = _newKey();
+      _dueRow = due?.of(widget.employeeId);
     });
   }
+
+  /// «اصرفه من النقد الذي بيده»: كشف راتبه ومصدر «النقد الذي بيده» مختارٌ سلفاً (يؤكّده المدير) ⇒ يُخصم صافيه ممّا يسلّمه، ثمّ
+  /// معاينةٌ جديدة فتكمل التسوية بالباقي (الأرقام القديمة لا تُرسل — المفتاح يتجدّد).
+  Future<void> _paySalary() async {
+    final done = await showEmployeePayslipSheet(context, employeeId: widget.employeeId, name: widget.name, initialSource: 'hand');
+    if (done == null || !mounted) return;
+    showSheetSnack(context, done, isError: false);
+    _load();
+  }
+
+  Widget _salaryDueBox(SalaryDueRow d) => Container(
+        key: const ValueKey('emp-settle-salary-due'),
+        margin: const EdgeInsets.only(bottom: Sp.sm),
+        padding: const EdgeInsets.all(Sp.sm),
+        decoration: BoxDecoration(
+          color: AppColors.warningSoftBg,
+          border: Border.all(color: AppColors.warningSoftBorder),
+          borderRadius: BorderRadius.circular(R.md),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('راتبه المستحقّ — ${d.when}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.warningOnSoft)),
+                ),
+                const SizedBox(width: Sp.sm),
+                Text('${formatIQD(d.dueAmount)} د.ع',
+                    key: const ValueKey('emp-settle-salary-due-amount'), style: AppType.bodyBold(color: AppColors.warningOnSoft)),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            OutlinedButton(
+              key: const ValueKey('emp-settle-pay-salary'),
+              onPressed: _submitting ? null : _paySalary,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.warningOnSoft,
+                side: BorderSide(color: AppColors.warning),
+                minimumSize: const Size.fromHeight(42),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.button)),
+              ),
+              child: const Text('اصرفه من النقد الذي بيده', maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(height: 4),
+            Text('يُخصم صافيه من النقد الذي يسلّمه، ثمّ تكمل التسوية بالباقي.', style: AppType.micro(color: AppColors.textMid)),
+          ],
+        ),
+      );
 
   Future<void> _confirm() async {
     final p = _p;
@@ -700,6 +760,7 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
                       ),
                       const Divider(),
                     ],
+                    if (_dueRow != null) _salaryDueBox(_dueRow!),
                     _line('تفعيل نقديّ', b('cash_activations').sum, b('cash_activations').count),
                     _line('تسديد ديون', b('debt_payments').sum, b('debt_payments').count),
                     _line('بيع مواد نقداً', b('sales_cash').sum, b('sales_cash').count),

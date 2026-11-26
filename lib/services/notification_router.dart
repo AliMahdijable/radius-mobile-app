@@ -4,6 +4,7 @@ import '../api/big_subscribers_api.dart';
 import '../api/subscribers_api.dart';
 import '../models/app_notification.dart';
 import '../models/subscriber.dart';
+import '../screens/employees/salary_due_card.dart';
 import '../screens/field_team/field_ticket_task.dart';
 import '../screens/national/national_ticket_push.dart';
 import '../screens/whatsapp/connection_auto_widgets.dart';
@@ -112,6 +113,9 @@ class NotificationRouter {
 
     // (٠و) «عمليّات الموظّفين» (٢٣ نوفمبر): ما أجراه موظّف ⇒ «سجلّ الحركات» بفلتره وفترته.
     if (await openEmployeeOpsPush(nav, n.data)) return;
+
+    // (٠و٢) «رواتب مستحقّة اليوم» (٢٦ نوفمبر): يوم راتب موظّفٍ أو أكثر ⇒ قسم الموظّفين.
+    if (await openSalaryDuePush(nav, n.data)) return;
 
     // (٠ز) «متجر الوكيل» (٢٣ نوفمبر): طلب شراءٍ من مشترك ⇒ «المبيعات» على «المتجر» (الطلب في أوّل القائمة).
     if (await openStoreOrderPush(nav, n.data)) return;
