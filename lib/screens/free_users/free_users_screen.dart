@@ -669,6 +669,9 @@ class _SellSheetState extends State<_SellSheet> {
       setState(() => _repeat = r.message ?? 'بيعٌ قريب على هذا اليوزر');
     } else if (r.code == 'OUTCOME_UNKNOWN') {
       setState(() => _unknown = r.message ?? 'لم يتأكّد البيع — تحقّق قبل أيّ تكرار');
+    } else if (r.code == FreeUsersApi.noReply) {
+      // انقطع قبل ردّ الخادم ⇒ ربّما تمّ البيع (FreeUsersApi.noReply) — لا «تعذّر» ولا ضغطةٌ ثانية حتى يُراجَع
+      setState(() => _unknown = 'انقطع الاتّصال قبل ردّ الخادم — لم يتأكّد البيع. أغلق النافذة واسحب القائمة للتحديث، وتأكّد من «مدفوع لحدّ» قبل أيّ تكرار.');
     } else {
       showSheetSnack(context, r.message ?? 'تعذّر البيع', isError: true);
     }

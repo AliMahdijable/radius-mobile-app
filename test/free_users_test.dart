@@ -149,6 +149,32 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('البيع بلا ردّ (مهلة/انقطاع أو ٥xx) ⇒ «لم يتأكّد» والزرّ مقفل — لا «تعذّر» ولا ضغطةٌ ثانية', (t) async {
+      for (final drop in [true, false]) {
+        server.reply('GET', '/api/v2/free-users', 200, _list(_two));
+        if (drop) {
+          server.on('POST', '/api/v2/free-users/1/sell', simTimeout);
+        } else {
+          server.reply('POST', '/api/v2/free-users/1/sell', 502, 'Bad Gateway');
+        }
+        await open(t);
+        await t.tap(find.byKey(const ValueKey('free-btn-sell-1')));
+        await t.pumpAndSettle();
+        final sends = server.calls('POST', '/api/v2/free-users/1/sell').length;
+        await t.tap(find.text('بيع 35,000 د.ع'));
+        await t.pumpAndSettle();
+        expect(server.calls('POST', '/api/v2/free-users/1/sell').length, sends + 1);
+        expect(find.byKey(const ValueKey('free-unknown')), findsOneWidget, reason: drop ? 'مهلة' : '502');
+        expect(find.textContaining('لم يتأكّد البيع'), findsOneWidget);
+        expect(find.text('تعذّر البيع'), findsNothing);
+        await t.tap(find.text('بيع 35,000 د.ع'), warnIfMissed: false);
+        await t.pumpAndSettle();
+        expect(server.calls('POST', '/api/v2/free-users/1/sell').length, sends + 1, reason: 'الزرّ مقفل — لا بيع ثانٍ');
+        await t.pumpWidget(const SizedBox());
+        await simDrain(t);
+      }
+    });
+
     testWidgets('الترك والدين قائم ⇒ رسالة الخادم باسم الحامل ومبلغه، ولا تحديث', (t) async {
       server.reply('GET', '/api/v2/free-users', 200, _list(_two));
       server.reply('POST', '/api/v2/free-users/1/release', 409, {

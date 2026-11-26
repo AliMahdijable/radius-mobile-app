@@ -285,12 +285,18 @@ class FreeUsersApi {
     }
   }
 
+  /// لا ردّ من الخادم (مهلة أو انقطاع) أو ٥xx بلا جسمه ⇒ ربّما نُفّذ — للبيع «لم يتأكّد» لا «تعذّر» (٢٦ نوفمبر، d9 عند دمج 197:
+  /// كقاعدة ورقة التفعيل [_outcomeUnclear] — الزرّ يُقفل حتى يراجع المدير «مدفوع لحدّ»، ولا تغري ضغطةٌ ثانية ببيعٍ ثانٍ).
+  static const noReply = 'NO_REPLY';
+
   static FreeResult _fail(Object e, String fallback) {
     if (e is DioException) {
       final b = e.response?.data;
       if (b is Map) {
         return FreeResult(ok: false, code: _str(b['code']), message: _str(b['message']) ?? fallback, data: Map<String, dynamic>.from(b));
       }
+      final st = e.response?.statusCode ?? 0;
+      if (e.response == null || st >= 500) return FreeResult(ok: false, code: noReply, message: fallback);
     }
     return FreeResult(ok: false, message: fallback);
   }
