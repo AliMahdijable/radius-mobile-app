@@ -7,6 +7,7 @@ import '../api/field_team_api.dart';
 import '../api/jtpay_api.dart';
 import '../api/national_more_api.dart';
 import '../api/receipts_archive_api.dart';
+import '../api/free_users_api.dart';
 import '../api/renew_requests_api.dart';
 import '../api/balance_requests_api.dart';
 import '../api/sales_api.dart';
@@ -44,6 +45,7 @@ import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
 import 'debts_import/debts_import_screen.dart';
 import 'receipts/receipts_archive_screen.dart';
+import 'free_users/free_users_screen.dart';
 import 'renew/renew_requests_screen.dart';
 import 'reports_screen.dart';
 import 'sales/sales_screen.dart';
@@ -123,6 +125,8 @@ Listenable appModulesListenable() => Listenable.merge([
       NationalMoreState.gate,
       // «طلبات التفعيل» — المفتاح العامّ portal_renew وما يملكه المستخدم (الاستماع يطلبها).
       RenewRequestsState.gate,
+      // «اليوزرات الفري» — المفتاح free_users للصفحة (الاستماع يطلب حاله).
+      FreeUsersState.gate,
       // «التذاكر» — المفتاح العامّ portal_tickets وما يملكه المستخدم وأعدادها (الاستماع يطلبها)، وقائمة الجرس (رقم البطاقة منها أيضاً).
       TicketsState.gate,
       TicketsState.bell,
@@ -503,6 +507,23 @@ List<AppModule> buildAppModules() {
         },
         badge: FieldTeamState.canManage ? FieldTeamState.gate.value?.waiting : null,
         page: FieldTeamScreen.mergedPage,
+      ),
+    // «اليوزرات الفري» (٢٦ نوفمبر — المالك: «تمام كلشي يعني تطبيق وويب»): يوزرات الشركة الفري تُباع شهريّاً — حين يقول الخادم إنّه
+    // مفعّلٌ للصفحة (كالموقع useFreeNav)، ومقفلٌ بمكانه لموظّفٍ لا يملك «عرض اليوزرات الفري».
+    if (FreeUsersState.on && permShown(const ['free.view']))
+      AppModule(
+        id: 'free_users',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has('free.view'),
+        icon: LucideIcons.gift,
+        tone: AppTone.success,
+        title: FreeUsersScreen.title,
+        subtitle: switch (FreeUsersState.gate.value?.summary?.endingSoon ?? 0) {
+          0 => 'بِع يوزرات الشركة الفري شهريّاً — يُطفأ تلقائيّاً عند انتهاء مدّته',
+          final n => '$n ينتهي خلال يوم — يوزرات الشركة الفري المبيعة شهريّاً',
+        },
+        badge: FreeUsersState.gate.value?.summary?.endingSoon,
+        page: FreeUsersScreen.mergedPage,
       ),
     // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه
     // لموظّفٍ بلا «طلبات التفعيل»، والمقيَّد بمديرٍ فرعيّ بسببه (القسم يشمل كلّ مشتركي الحساب). الرقم: بانتظارك.

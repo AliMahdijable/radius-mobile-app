@@ -1169,15 +1169,18 @@ class SubscribersApi {
   ///
   /// Each row carries: action_type / action_description (or description)
   /// / action_data / target_name / admin_name / amount / created_at.
+  ///
+  /// [from] (٢٦ نوفمبر — «كشف حساب» يوزرٍ فري من بداية حامله): بدل نافذة السنوات الخمس.
   static Future<List<Map<String, dynamic>>?> loadMovements({
     required String username,
     String? idx,
+    DateTime? from,
   }) async {
     // «كل الشركات»: النداء الموجَّه بتوكن الحساب ومفتاح الشركة (المعترض يحذف Authorization) — لا يلزمه توكن جلسة مفتوحة.
     final token = await AuthStorage.readToken();
     if (token == null && CompanyRoute.currentKey == null) return null;
     final now = DateTime.now();
-    final from = DateTime(now.year - 5, now.month, now.day);
+    final start = from ?? DateTime(now.year - 5, now.month, now.day);
     String fmt(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
         '${d.month.toString().padLeft(2, '0')}-'
         '${d.day.toString().padLeft(2, '0')}';
@@ -1187,7 +1190,7 @@ class SubscribersApi {
         queryParameters: {
           'username': username,
           if (idx != null) 'user_id': idx,
-          'date_from': '${fmt(from)} 00:00:00',
+          'date_from': '${fmt(start)} 00:00:00',
           'date_to': '${fmt(now)} 23:59:59',
         },
         options: token == null ? null : Options(headers: {'Authorization': 'Bearer $token'}),

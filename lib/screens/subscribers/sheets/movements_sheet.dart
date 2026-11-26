@@ -37,20 +37,22 @@ import 'payment_void_sheet.dart';
 /// «إلغاء تسديد» (١١ نوفمبر ٢٠٢٦): سطر التسديد يحمل زرّ إلغائه حين تُفتح الميزة للصفحة (والموظّف بلا صلاحيّتها يراه مقفلاً)،
 /// والملغى بشارته ومبلغه مشطوب، وسطر الإلغاء نفسه (تسديدٌ بمبلغٍ سالب: رجع دينه) باسمه «إلغاء تسديد» تحت فلتر الديون.
 /// مشتركٌ من شركةٍ أخرى في «كل الشركات» بلا زرّ — الخادم لا يوجّه الإلغاء.
-Future<void> showMovementsSheet(BuildContext context, Subscriber sub) {
+/// [from] (٢٦ نوفمبر): يوزرٌ فري ⇒ من بداية حامله (قسم «اليوزرات الفري»)؛ غيابه ⇒ النافذة كاملةً كما كانت.
+Future<void> showMovementsSheet(BuildContext context, Subscriber sub, {DateTime? from}) {
   return showAppSheet(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _MovementsSheet(sub: sub),
+    builder: (_) => _MovementsSheet(sub: sub, from: from),
   );
 }
 
 class _MovementsSheet extends StatefulWidget {
-  const _MovementsSheet({required this.sub});
+  const _MovementsSheet({required this.sub, this.from});
   final Subscriber sub;
+  final DateTime? from;
 
   @override
   State<_MovementsSheet> createState() => _MovementsSheetState();
@@ -88,7 +90,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
     // وحدها»). الوضع العاديّ كما هو حرفاً (MergedOps.run بلا مفتاحٍ يشغّل النداء كما هو).
     final txs = await MergedOps.run(
       widget.sub,
-      () => SubscribersApi.loadMovements(username: widget.sub.username, idx: widget.sub.idx),
+      () => SubscribersApi.loadMovements(username: widget.sub.username, idx: widget.sub.idx, from: widget.from),
     );
     if (!mounted) return;
     setState(() {

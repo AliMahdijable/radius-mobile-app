@@ -18,6 +18,7 @@ import '../api/jtpay_api.dart';
 import '../api/sas_ftth_api.dart';
 import '../api/national_more_api.dart';
 import '../api/national_sheet_api.dart';
+import '../api/free_users_api.dart';
 import '../api/renew_requests_api.dart';
 import '../api/tickets_api.dart';
 import '../api/message_exclusions_api.dart';
@@ -136,6 +137,8 @@ class SessionManager {
     _guardSync('ReceiptsArchiveState.reset', () => ReceiptsArchiveState.reset());
     // «طلبات التفعيل» — طلبات حساب المدير السابق وصور تحويلاتهم.
     _guardSync('RenewRequestsState.reset', () => RenewRequestsState.reset());
+    // «اليوزرات الفري» — حال صفحة المدير السابق.
+    _guardSync('FreeUsersState.reset', () => FreeUsersState.reset());
     // «التذاكر» — ملخّص حساب المدير السابق وعدد غير المقروءة.
     _guardSync('TicketsState.reset', () => TicketsState.reset());
     // «الصيانة والمبيعات» — هل فُتح لصفحة المدير السابق وأعداد مهامّها.
