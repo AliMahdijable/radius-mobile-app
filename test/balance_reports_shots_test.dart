@@ -195,6 +195,23 @@ void main() {
     });
   }
 
+  // «بالحوالات — لم تُسحب» (٢٦ نوفمبر) من ردّ الخادم الحقيقيّ (server_contract_tw.json — أوقاته ٢٣–٢٥ نوفمبر، ماضيةٌ أصلاً):
+  // الصفحة بسطرها تحت «المحصَّل» وفي تفصيله، ثمّ تفاصيل الفترة بخلاصتها لكلّ طريقة وحركاتها بحالها.
+  for (final d in [_wide, _narrowDark]) {
+    shots('الحوالات — لم تُسحب ${d.tag}', (t) async {
+      final base = jsonDecode(File('test/balance_reports/server_contract.json').readAsStringSync()) as Map<String, dynamic>;
+      final tw = jsonDecode(File('test/balance_reports/server_contract_tw.json').readAsStringSync()) as Map<String, dynamic>;
+      await up(BalanceContractServer({...base, 'overview': tw['overview'], 'details': tw['details']}));
+      await pumpVisual(t, d, home: (_) => const BalanceReportsScreen());
+      await settle(t, seconds: 2);
+      await _fit(t, d);
+      await _shot(t, '30_tw_page', d);
+      await tap(t, find.descendant(of: k('bal-period-1'), matching: find.byType(InkWell)).first);
+      await _fit(t, d);
+      await _shot(t, '31_tw_detail', d);
+    });
+  }
+
   // «الفترة التالية تُفتح عند الإغلاق» (١٦ نوفمبر مساءً): تأكيد الإغلاق بجملته، الفترة بلا مبلغ بتنبيهها، ورقة «كتابة مبلغ الشحن»،
   // تفاصيلها، وتفاصيل المغلقة بسطر قفلها.
   for (final d in [_wide, _narrowDark]) {

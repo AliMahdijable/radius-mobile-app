@@ -145,6 +145,12 @@ class _Server implements HttpClientAdapter {
   /// كلّ مسارٍ طُلب بترتيبه.
   final paths = <String>[];
 
+  /// «رصيد الحوالات» (GET /api/v2/transfer-pots) — null = لا يُجاب (الحاضنة).
+  Map<String, Object?>? pots;
+
+  /// أجسام «سحب للصندوق» بترتيبها.
+  final withdraws = <Map<String, dynamic>>[];
+
   List<Map<String, Object?>> _slice(Map<String, dynamic> q) {
     final lo = '${q['date_from']}', hi = '${q['date_to']}';
     final limit = int.tryParse('${q['limit_logs']}') ?? 50;
@@ -186,6 +192,11 @@ class _Server implements HttpClientAdapter {
     }
     if (key != null) return _json({'success': true, 'data': const []}, key);
     if (managers != null && p == '/api/v2/managers') return _json({'success': true, 'data': managers}, null);
+    if (pots != null && p == '/api/v2/transfer-pots' && o.method.toUpperCase() == 'GET') return _json({'success': true, 'data': pots}, null);
+    if (p == '/api/v2/transfer-pots/withdraw' && o.method.toUpperCase() == 'POST') {
+      withdraws.add(Map<String, dynamic>.from(o.data as Map));
+      return _json({'success': true, 'duplicate': false, 'data': {'withdrawal': {'id': 8}, 'pots': pots?['pots'] ?? const []}}, null);
+    }
     return inner.fetch(o, body, cancel);
   }
 
@@ -1323,6 +1334,18 @@ void main() {
           ],
         },
       };
+      server.pots = {
+        'available': true,
+        'pots': [
+          {'key': 'zaincash', 'via': 'zaincash', 'name': null, 'label': 'زين كاش', 'received': 175000, 'withdrawn': 0, 'balance': 175000, 'count': 5},
+          {'key': 'master', 'via': 'master', 'name': null, 'label': 'ماستر', 'received': 135000, 'withdrawn': 100000, 'balance': 35000, 'count': 3},
+        ],
+        'total': 210000,
+        'withdrawals': [
+          {'id': 7, 'via': 'master', 'name': null, 'label': 'ماستر', 'amount': 100000, 'kind': 'withdraw', 'ref_id': null, 'voided': false, 'note': null, 'created_at': '2026-11-20 18:10:00'},
+        ],
+        'can_withdraw': true,
+      };
       final got = <ReportExportRequest>[];
       ReportExportActions.debugSink = (r) async => got.add(r);
       try {
@@ -1337,9 +1360,31 @@ void main() {
         await t.pump();
         expect(find.descendant(of: find.byKey(const ValueKey('finance-cash-by-via')), matching: find.text('المستلم حسب الطريقة')), findsOneWidget);
         expect(find.descendant(of: find.byKey(const ValueKey('finance-tw-withdrawn')), matching: find.textContaining('100,000')), findsOneWidget);
-        expect(find.descendant(of: find.byKey(const ValueKey('finance-transfer-pots-now')), matching: find.textContaining('210,000')), findsOneWidget);
-        expect(find.text('بالحوالات — لم تُسحب (الآن)، خارج «المال المستلم» حتى تسحبها'), findsOneWidget);
-        expect(server.paths, isNot(contains('/api/v2/transfer-pots')), reason: 'رصيد الآن من ردّ التقرير — لا طلبٌ ثانٍ');
+        // «رصيد الحوالات» بأزراره تحت بطاقة الطرق (بطاقة «تسوية الحساب» نفسها) — وسطر المجموع لا يتكرّر فيها
+        expect(server.paths.where((x) => x == '/api/v2/transfer-pots').length, 1, reason: 'tw يقول إنّ شيئاً ينتظر السحب');
+        expect(find.byKey(const ValueKey('finance-transfer-pots-now')), findsNothing);
+        await t.ensureVisible(find.byKey(const ValueKey('transfer-pots-card')));
+        await t.pump();
+        expect(find.byKey(const ValueKey('transfer-pot-zaincash')), findsOneWidget);
+        expect(find.byKey(const ValueKey('transfer-pot-master')), findsOneWidget);
+        expect(t.widget<Text>(find.byKey(const ValueKey('transfer-pots-total'))).data, '210,000 د.ع');
+        // «سحب للصندوق» من التقرير ⇒ السحب نفسه (كامل الرصيد افتراضاً) ثمّ يُقرأ التقرير من جديد
+        final reads = server.finance.length;
+        await t.ensureVisible(find.byKey(const ValueKey('transfer-withdraw-zaincash')));
+        await t.pump();
+        await t.tap(find.byKey(const ValueKey('transfer-withdraw-zaincash')));
+        for (var i = 0; i < 6; i++) {
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        await t.tap(find.byKey(const ValueKey('transfer-withdraw-confirm')));
+        for (var i = 0; i < 12; i++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+          await t.pump(const Duration(milliseconds: 100));
+        }
+        expect(server.withdraws.length, 1);
+        expect([server.withdraws.single['paid_via'], server.withdraws.single['amount']], ['zaincash', 175000]);
+        expect(server.finance.length, greaterThan(reads), reason: '«المال المستلم» يُقرأ من جديد بعد السحب');
+        expect(server.paths.where((x) => x == '/api/v2/transfer-pots').length, greaterThanOrEqualTo(2));
         await tapExport(t, 'PDF');
         final r = got.single;
         expect(r.details, contains('منه: كاش 11,200,000 د.ع · زين كاش 175,000 د.ع · ماستر 75,000 د.ع'));
@@ -1349,6 +1394,39 @@ void main() {
         expect(t.takeException(), isNull);
       } finally {
         ReportExportActions.debugSink = null;
+        await down(t);
+      }
+    });
+
+    testWidgets('«الحوالات»: لا شيء ينتظر السحب (tw.pending_now = 0) ⇒ لا طلب رصيدٍ ولا بطاقة، وسطر المسحوب وحده', (t) async {
+      await up();
+      server.pots = {'available': true, 'pots': [], 'total': 0, 'withdrawals': [], 'can_withdraw': true};
+      server.kpisExtra = {
+        'cash_by_via': {
+          'cash': 11400000,
+          'transfers_sum': 50000,
+          'transfers': [
+            {'key': 'master', 'via': 'master', 'label': 'ماستر', 'sum': 50000, 'count': 1},
+          ],
+        },
+        'tw': {
+          'withdrawn': 50000,
+          'withdrawn_by_via': [
+            {'via': 'master', 'label': 'ماستر', 'sum': 50000},
+          ],
+          'pending_now': 0,
+          'pending_by_via': [],
+        },
+      };
+      try {
+        await open(t);
+        final cash = t.widget<RpKpiGrid>(find.byType(RpKpiGrid).first).kpis.firstWhere((k) => k.id == FinanceKpiIds.cash);
+        expect([cash.label, cash.value, cash.hint], ['المال المستلم', 11450000, 'كاش 11,400,000 • سُحب من الحوالات 50,000']);
+        expect(server.paths, isNot(contains('/api/v2/transfer-pots')));
+        expect(find.byKey(const ValueKey('transfer-pots-card')), findsNothing);
+        expect(find.byKey(const ValueKey('finance-transfer-pots-now')), findsNothing);
+        expect(t.takeException(), isNull);
+      } finally {
         await down(t);
       }
     });

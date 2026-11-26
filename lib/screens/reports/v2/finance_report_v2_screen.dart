@@ -10,7 +10,7 @@ import '../../../api/merged_dashboard_api.dart';
 import '../../../api/merged_finance_api.dart';
 import '../../../api/report_people_api.dart';
 import '../../../api/reports_api.dart';
-import '../../../api/transfer_pay_api.dart' show cashInHandOf;
+import '../../../api/transfer_pay_api.dart' show TransferPayApi, TransferPotsData, cashInHandOf;
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/order_rules.dart';
 import '../../../core/util/server_time.dart';
@@ -24,6 +24,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../settlements/transfer_pots.dart' show TransferPotsCard, showTransferVoidSheet, showTransferWithdrawSheet;
 import '../../settlements/widgets/archive_bar.dart';
 import '../widgets/action_labels.dart';
 import '../widgets/finance_logs.dart';
@@ -230,7 +231,28 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
   Future<void> _load() {
     unawaited(_loadDue());
     unawaited(_loadComm());
-    return _merged ? _loadMerged() : _loadSingle();
+    if (_merged) {
+      if (_pots != null) setState(() => _pots = null);
+      return _loadMerged();
+    }
+    return _loadSingle().then((_) => _loadPots());
+  }
+
+  /// «رصيد الحوالات» بزرّ «سحب للصندوق» لكلّ طريقة (٢٦ نوفمبر — المقترح المعتمد: «بطاقة «بالحوالات — لم تُسحب» لكل طريقة، ويمّها زر
+  /// «سحب»»): حين ينتظر السحب شيء — الخادم يقوله بـkpis.tw (وخادمٌ أقدم بلا tw: حين بالفترة حوالة). للصفحة المفتوحة وحدها، ومن له
+  /// «تسوية الحساب» (غيره: لا ردّ ⇒ لا بطاقة). السحب أو إلغاؤه يعيد قراءة التقرير («المال المستلم» = الكاش + ما سُحب).
+  TransferPotsData? _pots;
+
+  Future<void> _loadPots() async {
+    final k = _merged ? null : _view()?.kpis;
+    final want = k != null && (k.tw != null ? k.tw!.pendingNow != 0 : k.cashByVia != null);
+    if (!want) {
+      if (_pots != null && mounted) setState(() => _pots = null);
+      return;
+    }
+    final p = await TransferPayApi.pots();
+    if (!mounted || _merged) return;
+    setState(() => _pots = p);
   }
 
   /// «عمولات الموظفين» (٢٦ نوفمبر — المالك: «شون رح يميز ٥ الالف رحت للموظف»): للعلم تحت البطاقات — للصفحة المفتوحة وحدها.
@@ -1363,7 +1385,24 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
     // «عمولات الموظفين» (٢٦ نوفمبر): عمليّاتهم الكاملة بالفترة × ربحهم، و«صافي الربح بعد العمولات» — بلا سطور شرح («بس يظهر سعر الكلي والحركه»)
     if (!_merged && (_comm?.any ?? false)) parts.add(EmployeeCommissionsCard(c: _comm!, net: hero.value));
     // «الحوالات» (٢٣ نوفمبر): «النقد المُستلم» حسب الطريقة — الخادم يرسله حين توجد حوالةٌ بالفترة؛ «كل الشركات» بلا تقسيم
-    if (!_merged && v.kpis.cashByVia != null) parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue, tw: v.kpis.tw));
+    final potsOn = !_merged && _pots != null && !_pots!.hidden && _pots!.total != 0;
+    if (!_merged && v.kpis.cashByVia != null) {
+      parts.add(CashByViaCard(byVia: v.kpis.cashByVia!, total: v.kpis.totalCashRevenue, tw: v.kpis.tw, showPending: !potsOn));
+    }
+    // «رصيد الحوالات» بأزرار «سحب للصندوق» (٢٦ نوفمبر) — بطاقة «تسوية الحساب» نفسها
+    if (potsOn) {
+      parts.add(TransferPotsCard(
+        data: _pots!,
+        onWithdraw: (p) async {
+          final ok = await showTransferWithdrawSheet(context, p);
+          if (ok == true && mounted) unawaited(_load());
+        },
+        onVoid: (w) async {
+          final ok = await showTransferVoidSheet(context, w);
+          if (ok == true && mounted) unawaited(_load());
+        },
+      ));
+    }
     parts.add(RpCountsRow(items: FinanceView.counts(v.kpis)));
     // «يوماً بيوم» (الرسم) أُلغي من التقرير الماليّ (المالك ٢٢ نوفمبر: «اكو قسم بالتقارير المالية يوما بيوم هذا الغي»)
     final b = _breakdown(v);

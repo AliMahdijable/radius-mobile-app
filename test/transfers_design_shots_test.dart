@@ -11,8 +11,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/api/transfer_pay_api.dart';
 import 'package:rad_mysvcs/screens/reports/v2/cash_by_via_card.dart';
+import 'package:rad_mysvcs/screens/reports/v2/finance_view.dart';
 import 'package:rad_mysvcs/screens/reports/v2/report_kit.dart';
 import 'package:rad_mysvcs/screens/settlements/transfer_pots.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/activate_sheet.dart';
@@ -158,6 +160,47 @@ Widget _financeMock() => Scaffold(
       ]),
     );
 
+/// التقرير الماليّ بالحوالات (٢٦ نوفمبر): «المال المستلم» بتلميحه، «المستلم حسب الطريقة» بسطر ما سُحب، و«رصيد الحوالات» بأزراره
+/// تحتها (سطر المجموع لا يتكرّر) — البطاقات الحقيقيّة بأرقامٍ بشكل ردّ الخادم.
+Widget _financeTwMock() {
+  final k = FinanceKPIs.fromJson({
+    'activate_cash_sum': 1335000,
+    'debt_pay_sum': 175000,
+    'expenses_sum': 90000,
+    'cash_by_via': {
+      'cash': 1250000,
+      'transfers_sum': 260000,
+      'transfers': [
+        {'key': 'zaincash', 'via': 'zaincash', 'label': 'زين كاش', 'sum': 175000, 'count': 5},
+        {'key': 'master', 'via': 'master', 'label': 'ماستر', 'sum': 60000, 'count': 2},
+        {'key': 'other:آسيا حوالة', 'via': 'other', 'label': 'آسيا حوالة', 'sum': 25000, 'count': 1},
+      ],
+    },
+    'tw': {
+      'withdrawn': 50000,
+      'withdrawn_by_via': [
+        {'via': 'zaincash', 'label': 'زين كاش', 'sum': 50000},
+      ],
+      'pending_now': 210000,
+      'pending_by_via': [
+        {'via': 'zaincash', 'label': 'زين كاش', 'sum': 125000},
+        {'via': 'master', 'label': 'ماستر', 'sum': 60000},
+        {'via': 'other', 'name': 'آسيا حوالة', 'label': 'آسيا حوالة', 'sum': 25000},
+      ],
+    },
+  });
+  return Scaffold(
+    appBar: AppBar(title: const Text('التقرير المالي')),
+    body: ListView(padding: const EdgeInsets.all(Sp.lg), children: [
+      RpKpiGrid(kpis: FinanceView.kpis(k, null).take(4).toList(), compareWith: ''),
+      const SizedBox(height: Sp.lg),
+      CashByViaCard(byVia: k.cashByVia!, total: k.totalCashRevenue, tw: k.tw, showPending: false),
+      const SizedBox(height: Sp.lg),
+      TransferPotsCard(data: _pots, onWithdraw: (_) {}, onVoid: (_) {}),
+    ]),
+  );
+}
+
 const _potsJson = {
   'available': true,
   'pots': [
@@ -280,6 +323,15 @@ void main() {
       await t.tap(find.text('كامل الرصيد'));
       await settle(t, seconds: 1);
       await _shot(t, '08_سحب_للصندوق', d);
+      expect(t.takeException(), isNull);
+      await _down(t);
+    });
+
+    testWidgets('التقرير المالي: المال المستلم ورصيد الحوالات بأزراره — ${d.tag}', (t) async {
+      await _up();
+      await pumpVisual(t, d, home: (_) => _financeTwMock());
+      await settle(t, seconds: 2);
+      await _shot(t, '10_التقرير_المالي_الحوالات', d);
       expect(t.takeException(), isNull);
       await _down(t);
     });

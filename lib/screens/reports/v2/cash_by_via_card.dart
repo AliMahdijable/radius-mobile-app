@@ -14,9 +14,12 @@ import 'report_kit.dart';
 /// يتغيّر)، مقسوماً كاش/زين كاش/ماستر/أخرى — يظهر حين يرسل الخادم `cash_by_via` (حوالةٌ بالفترة)، وتحته ما سُحب للصندوق بالفترة
 /// ورصيد الحوالات الآن (٢٦ نوفمبر: من ردّ التقرير نفسه [tw] حين يرسله، وإلّا من «تسوية الحساب»).
 class CashByViaCard extends StatefulWidget {
-  const CashByViaCard({super.key, required this.byVia, required this.total, this.tw});
+  const CashByViaCard({super.key, required this.byVia, required this.total, this.tw, this.showPending = true});
 
   final CashByViaData byVia;
+
+  /// false: بطاقة «رصيد الحوالات» بأزرارها تحت هذه (التقرير الماليّ، ٢٦ نوفمبر) ⇒ لا سطر مجموعٍ مكرَّر هنا ولا طلب رصيد.
+  final bool showPending;
 
   /// `kpis.tw` (٢٦ نوفمبر) — null: الخادم لم يرسله (فلتر موظّفٍ/نوع، أو لا سحب ولا رصيد).
   final FinanceTwData? tw;
@@ -46,7 +49,7 @@ class _CashByViaCardState extends State<CashByViaCard> {
 
   /// رصيد الحوالات الآن (صلاحيّة «تسوية الحساب») حين لا يحمله ردّ التقرير — تعذّر/لا صلاحيّة ⇒ لا سطر. مرّةً للبطاقة.
   void _askPots() {
-    if (widget.tw != null || _asked) return;
+    if (!widget.showPending || widget.tw != null || _asked) return;
     _asked = true;
     TransferPayApi.pots().then((p) {
       if (mounted && p != null) setState(() => _potsTotal = p.total);
@@ -98,7 +101,7 @@ class _CashByViaCardState extends State<CashByViaCard> {
               key: const ValueKey('finance-tw-withdrawn'),
               child: line(LucideIcons.banknote, 'سُحب من الحوالات للصندوق بالفترة — داخلٌ في «المال المستلم»', '${sm(tw.withdrawn)} $cur'),
             ),
-          if ((potsTotal ?? 0) != 0) ...[
+          if (widget.showPending && (potsTotal ?? 0) != 0) ...[
             const SizedBox(height: Sp.sm),
             Container(
               key: const ValueKey('finance-transfer-pots-now'),
