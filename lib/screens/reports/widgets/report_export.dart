@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../services/pdf_kit.dart';
+import '../../../services/report_xlsx.dart';
 import '../../../services/print_output.dart';
 
 export '../../../services/pdf_kit.dart' show PdfStat, PdfTone;
@@ -180,6 +180,8 @@ class ReportExportActions {
         ...rows,
       ];
 
+  /// زرّ «Excel»: ملفّ xlsx حقيقيّ ([ReportXlsx] — ٢٦ نوفمبر؛ كان CSV يفتحه Excel من اليسار بلا تنسيق ويُسقط صفر الهاتف). الاسم
+  /// `csv` باقٍ لكلّ من يناديه.
   static Future<void> csv(
     BuildContext context, {
     required String title,
@@ -188,30 +190,36 @@ class ReportExportActions {
     required List<String> columns,
     required List<List<String>> rows,
     String fileNameBase = 'report',
+    List<PdfStat> summary = const [],
   }) async {
     final sink = debugSink;
     if (sink != null) {
-      return sink(ReportExportRequest(how: 'csv', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows));
+      return sink(ReportExportRequest(
+          how: 'csv', title: title, subtitle: subtitle, details: details, columns: columns, rows: rows, summary: summary));
     }
-    // CSV مع BOM لإجبار Excel يفتحه Unicode/UTF-8 (يعرض العربية صح).
-    final data = csvTable(title: title, subtitle: subtitle, details: details, columns: columns, rows: rows);
-    final csvString = const ListToCsvConverter().convert(data);
-    final withBom = '\uFEFF$csvString';
-
     try {
+      final bytes = ReportXlsx.build(
+        title: title,
+        subtitle: subtitle,
+        details: details,
+        columns: columns,
+        rows: rows,
+        money: [for (final c in columns) ReportPdf.moneyColumn(c)],
+        summary: summary,
+      );
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${dir.path}/${fileNameBase}_$ts.csv');
-      await file.writeAsString(withBom);
+      final file = File('${dir.path}/${fileNameBase}_$ts.xlsx');
+      await file.writeAsBytes(bytes);
       await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'text/csv')],
+        [XFile(file.path, mimeType: ReportXlsx.mime)],
         subject: title,
         text: subtitle ?? title,
       );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل تصدير CSV: $e')),
+          SnackBar(content: Text('فشل تصدير Excel: $e')),
         );
       }
     }

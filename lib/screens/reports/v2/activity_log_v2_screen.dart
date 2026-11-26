@@ -633,7 +633,8 @@ class _ActivityLogV2State extends State<ActivityLogV2Screen> {
             summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
-            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, fileNameBase: 'activity_log');
+            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, fileNameBase: 'activity_log',
+            summary: summary);
       default:
         return ReportExportActions.sharePdf(context,
             title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activity_log',

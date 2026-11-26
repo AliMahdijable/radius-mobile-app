@@ -350,7 +350,8 @@ class _StatementV2State extends State<AccountStatementV2Screen> {
             summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
-            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, fileNameBase: 'statement');
+            title: title, subtitle: subtitle, details: details, columns: columns, rows: data, fileNameBase: 'statement',
+            summary: summary);
       default:
         return ReportExportActions.sharePdf(context,
             title: title, subtitle: subtitle, details: details, columns: columns, rows: data, columnWeights: weights, fileNameBase: 'statement',

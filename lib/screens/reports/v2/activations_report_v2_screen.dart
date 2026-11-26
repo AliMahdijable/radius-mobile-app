@@ -659,7 +659,8 @@ class _ActivationsReportV2State extends State<ActivationsReportV2Screen> {
             summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
-            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, fileNameBase: 'activations');
+            title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, fileNameBase: 'activations',
+            summary: summary);
       default:
         return ReportExportActions.sharePdf(context,
             title: t, subtitle: subtitle, details: details, columns: _columns, rows: data, columnWeights: _weights, fileNameBase: 'activations',

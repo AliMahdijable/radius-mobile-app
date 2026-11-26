@@ -894,7 +894,8 @@ class _FinanceReportV2State extends State<FinanceReportV2Screen> {
             summary: summary);
       case 'excel':
         return ReportExportActions.csv(context,
-            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, fileNameBase: 'financial');
+            title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, fileNameBase: 'financial',
+            summary: summary);
       default:
         return ReportExportActions.sharePdf(context,
             title: t, subtitle: _exportSubtitle, details: details, columns: _columns, rows: rows, columnWeights: _weights(v.showCost), fileNameBase: 'financial',
